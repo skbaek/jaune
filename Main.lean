@@ -33,9 +33,9 @@ def Lean.Json.toString? : Lean.Json → Option String
   | .str s => some s
   | _ => none
 
-def Lean.Json.toB256? (j : Json) : Option B256 := do
+def Lean.Json.toU256? (j : Json) : Option U256 := do
   let x ← toString? j >>= .remove0x
-  Hex.toB256? x
+  Hex.toU256? x
 
 /-- A JSON quantity field as a `UInt64`, when present and readable.
 
@@ -43,10 +43,10 @@ def Lean.Json.toB256? (j : Json) : Option B256 := do
 written minimally, so a small slot number is a one-byte string, and the
 exact-width decoder would reject it. Over-long input is still refused rather
 than truncated. -/
-def Lean.Json.toB64? (j : Json) : Option UInt64 := do
+def Lean.Json.toUInt64? (j : Json) : Option UInt64 := do
   let x ← toString? j >>= .remove0x
   let bytes ← Hex.toBytes x
-  Bytes.toQuantityB64? bytes
+  Bytes.toQuantityUInt64? bytes
 
 private inductive FixtureExpectationError where
   | unsupportedField | multipleApplicable | nonString
@@ -110,35 +110,35 @@ def Lean.Json.toIoBlockAccessList (j : Lean.Json) : IO BlockAccessList := do
   let accounts ← j.toIoList
   accounts.mapM fun acc => do
     let indexOf (c : Lean.Json) : IO Nat :=
-      (c.find "blockAccessIndex" >>= Lean.Json.toIoQuantityB64 "blockAccessIndex")
+      (c.find "blockAccessIndex" >>= Lean.Json.toIoQuantityUInt64 "blockAccessIndex")
         <&> UInt64.toNat
-    let address ← acc.find "address" >>= Lean.Json.toIoAdr
+    let address ← acc.find "address" >>= Lean.Json.toIoAddress
     let storageChanges ← (acc.find "storageChanges" >>= Lean.Json.toIoList) >>=
       List.mapM fun sc => do
-        let slot ← sc.find "slot" >>= Lean.Json.toIoQuantityB256 "slot"
+        let slot ← sc.find "slot" >>= Lean.Json.toIoQuantityU256 "slot"
         let changes ← (sc.find "slotChanges" >>= Lean.Json.toIoList) >>= List.mapM fun c => do
           let i ← indexOf c
-          let v ← c.find "postValue" >>= Lean.Json.toIoQuantityB256 "postValue"
+          let v ← c.find "postValue" >>= Lean.Json.toIoQuantityU256 "postValue"
           pure (i, v)
         pure (slot, changes)
     let storageReads ← (acc.find "storageReads" >>= Lean.Json.toIoList) >>=
-      List.mapM (Lean.Json.toIoQuantityB256 "storageReads")
+      List.mapM (Lean.Json.toIoQuantityU256 "storageReads")
     let balanceChanges ← (acc.find "balanceChanges" >>= Lean.Json.toIoList) >>=
       List.mapM fun c => do
         let i ← indexOf c
-        let v ← c.find "postBalance" >>= Lean.Json.toIoQuantityB256 "postBalance"
+        let v ← c.find "postBalance" >>= Lean.Json.toIoQuantityU256 "postBalance"
         pure (i, v)
     let nonceChanges ← (acc.find "nonceChanges" >>= Lean.Json.toIoList) >>=
       List.mapM fun c => do
         let i ← indexOf c
-        let n ← c.find "postNonce" >>= Lean.Json.toIoQuantityB64 "postNonce"
+        let n ← c.find "postNonce" >>= Lean.Json.toIoQuantityUInt64 "postNonce"
         pure (i, n)
     let codeChanges ← (acc.find "codeChanges" >>= Lean.Json.toIoList) >>=
       List.mapM fun c => do
         let i ← indexOf c
         let code ← c.find "newCode" >>= Lean.Json.toIoBytes
         pure (i, code.toByteArray)
-    pure { address, storageChanges, storageReads, balanceChanges, nonceChanges, codeChanges }
+    pure { address := address, storageChanges := storageChanges, storageReads := storageReads, balanceChanges := balanceChanges, nonceChanges := nonceChanges, codeChanges := codeChanges }
 
 /-- Refine a consensus `blockAccessListHash` rejection with the list the fixture
 publishes (goal C, fixed decision 9).
@@ -194,12 +194,12 @@ def Lean.Json.findIo? {α : Type} (json : Lean.Json) (key : String)
   | some v => some <$> read v
 
 def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
-  let parentHash ← json.find "parentHash" >>= Lean.Json.toIoB256
-  let ommersHash ← json.find "uncleHash" >>= Lean.Json.toIoB256
-  let coinbase ← json.find "coinbase" >>= Lean.Json.toIoAdr
-  let stateRoot ← json.find "stateRoot" >>= Lean.Json.toIoB256
-  let txsRoot ← json.find "transactionsTrie" >>= Lean.Json.toIoB256
-  let receiptRoot ← json.find "receiptTrie" >>= Lean.Json.toIoB256
+  let parentHash ← json.find "parentHash" >>= Lean.Json.toIoU256
+  let ommersHash ← json.find "uncleHash" >>= Lean.Json.toIoU256
+  let coinbase ← json.find "coinbase" >>= Lean.Json.toIoAddress
+  let stateRoot ← json.find "stateRoot" >>= Lean.Json.toIoU256
+  let txsRoot ← json.find "transactionsTrie" >>= Lean.Json.toIoU256
+  let receiptRoot ← json.find "receiptTrie" >>= Lean.Json.toIoU256
   let bloom ← json.find "bloom" >>= Lean.Json.toIoBytes
   let difficulty ← (json.find "difficulty" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
   let number ← (json.find "number" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
@@ -207,20 +207,20 @@ def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
   let gasUsed ← (json.find "gasUsed" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
   let timestamp ← (json.find "timestamp" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
   let extraData ← json.find "extraData" >>= Lean.Json.toIoBytes
-  let prevRandao ← json.find "mixHash" >>= Lean.Json.toIoB256
-  let nonce ← json.find "nonce" >>= Lean.Json.toIoB64
+  let prevRandao ← json.find "mixHash" >>= Lean.Json.toIoU256
+  let nonce ← json.find "nonce" >>= Lean.Json.toIoUInt64
   -- The fork-dependent fields: absent in a fixture whose fork does not define
   -- them, present otherwise, and read exactly when present.
   let baseFeePerGas ←
     json.findIo? "baseFeePerGas" fun v => Bytes.toNat <$> v.toIoBytes
-  let withdrawalsRoot ← json.findIo? "withdrawalsRoot" Lean.Json.toIoB256
+  let withdrawalsRoot ← json.findIo? "withdrawalsRoot" Lean.Json.toIoU256
   let blobGasUsed ←
     json.findIo? "blobGasUsed" fun v => Bytes.toNat <$> v.toIoBytes
   let excessBlobGas ←
     json.findIo? "excessBlobGas" fun v => Bytes.toNat <$> v.toIoBytes
   let parentBeaconBlockRoot ←
-    json.findIo? "parentBeaconBlockRoot" Lean.Json.toIoB256
-  let requestsHash := (json.find? "requestsHash" >>= Lean.Json.toB256?)
+    json.findIo? "parentBeaconBlockRoot" Lean.Json.toIoU256
+  let requestsHash := (json.find? "requestsHash" >>= Lean.Json.toU256?)
   -- The two Amsterdam header fields, read exactly as `requestsHash` is: absent
   -- in a fixture whose fork does not define them, present otherwise. Reading
   -- them is not running them -- an Amsterdam case is refused before this point
@@ -228,16 +228,16 @@ def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
   -- and silently dropping two fields would make every such header re-encode to
   -- a different hash.
   let blockAccessListHash :=
-    (json.find? "blockAccessListHash" >>= Lean.Json.toB256?)
-  let slotNumber := (json.find? "slotNumber" >>= Lean.Json.toB64?)
+    (json.find? "blockAccessListHash" >>= Lean.Json.toU256?)
+  let slotNumber := (json.find? "slotNumber" >>= Lean.Json.toUInt64?)
   .ok {
     parentHash := parentHash
     ommersHash := ommersHash
     coinbase := coinbase
     stateRoot := stateRoot
-    txsRoot := txsRoot
-    receiptRoot := receiptRoot
-    bloom := bloom
+    transactionsRoot := txsRoot
+    receiptsRoot := receiptRoot
+    logsBloom := bloom
     difficulty := difficulty
     number := number
     gasLimit := gasLimit
@@ -275,7 +275,7 @@ classified. -/
 Written here rather than reused from `Adr.toHex`, which pads and cases for
 human display: this string is compared byte-for-byte against a generator's
 output, so its shape is part of the gate and is pinned by a `#guard`. -/
-def Adr.toGateHex (a : Adr) : String :=
+def Address.toGateHex (a : Address) : String :=
   let digits := "0123456789abcdef".toList
   let rec go (fuel n : Nat) (acc : List Char) : List Char :=
     match fuel with
@@ -283,11 +283,11 @@ def Adr.toGateHex (a : Adr) : String :=
     | fuel + 1 => go fuel (n / 16) (digits[n % 16]! :: acc)
   "0x" ++ String.ofList (go 40 a.toNat [])
 
-#guard Adr.toGateHex (0x00000961Ef480Eb55e80D19ad83579A64c007002 : Adr)
+#guard Address.toGateHex (0x00000961Ef480Eb55e80D19ad83579A64c007002 : Address)
   = "0x00000961ef480eb55e80d19ad83579a64c007002"
-#guard Adr.toGateHex (0 : Adr)
+#guard Address.toGateHex (0 : Address)
   = "0x0000000000000000000000000000000000000000"
-#guard Adr.toGateHex (0x01 : Adr)
+#guard Address.toGateHex (0x01 : Address)
   = "0x0000000000000000000000000000000000000001"
 
 private def jNat (n : Nat) : Lean.Json := Lean.toJson n
@@ -339,20 +339,20 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("modexp.iterationCoeff", jNat r.modexp.iterationCoeff),
     ("modexp.gasDivisor", jNat r.modexp.gasDivisor),
     ("modexp.minGas", jNat r.modexp.minGas),
-    ("op.clz", Lean.Json.bool r.op.clz),
-    ("op.slotnum", Lean.Json.bool r.op.slotnum),
-    ("op.stackAccess", Lean.Json.bool r.op.stackAccess),
-    ("op.shifts", Lean.Json.bool r.op.shifts),
-    ("op.extCodeHash", Lean.Json.bool r.op.extCodeHash),
-    ("op.create2", Lean.Json.bool r.op.create2),
-    ("op.chainId", Lean.Json.bool r.op.chainId),
-    ("op.selfBalance", Lean.Json.bool r.op.selfBalance),
-    ("op.baseFee", Lean.Json.bool r.op.baseFee),
-    ("op.push0", Lean.Json.bool r.op.push0),
-    ("op.transient", Lean.Json.bool r.op.transient),
-    ("op.mcopy", Lean.Json.bool r.op.mcopy),
-    ("op.blobHash", Lean.Json.bool r.op.blobHash),
-    ("op.blobBaseFee", Lean.Json.bool r.op.blobBaseFee),
+    ("op.clz", Lean.Json.bool r.opcodes.clz),
+    ("op.slotnum", Lean.Json.bool r.opcodes.slotnum),
+    ("op.stackAccess", Lean.Json.bool r.opcodes.stackAccess),
+    ("op.shifts", Lean.Json.bool r.opcodes.shifts),
+    ("op.extCodeHash", Lean.Json.bool r.opcodes.extCodeHash),
+    ("op.create2", Lean.Json.bool r.opcodes.create2),
+    ("op.chainId", Lean.Json.bool r.opcodes.chainId),
+    ("op.selfBalance", Lean.Json.bool r.opcodes.selfBalance),
+    ("op.baseFee", Lean.Json.bool r.opcodes.baseFee),
+    ("op.push0", Lean.Json.bool r.opcodes.push0),
+    ("op.transient", Lean.Json.bool r.opcodes.transient),
+    ("op.mcopy", Lean.Json.bool r.opcodes.mcopy),
+    ("op.blobHash", Lean.Json.bool r.opcodes.blobHash),
+    ("op.blobBaseFee", Lean.Json.bool r.opcodes.blobBaseFee),
     ("precompiles",
       Lean.Json.arr ((r.precompiles.map (fun a => jNat a.toNat)).toArray)),
     ("gas.coldAccountAccess", jNat r.gas.coldAccountAccess),
@@ -363,7 +363,7 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("gas.txAccessListAddress", jNat r.gas.txAccessListAddress),
     ("gas.txAccessListStorageKey", jNat r.gas.txAccessListStorageKey),
     ("gas.floorTokenCost", jNat r.gas.floorTokenCost),
-    ("gas.perAuthIntrinsic", jNat r.gas.perAuthIntrinsic),
+    ("gas.perAuthIntrinsic", jNat r.gas.perAuthorizationIntrinsic),
     ("gas.codeReadSurcharge", jNat r.gas.codeReadSurcharge),
     -- EIP-8037's state-gas dimension. One key per field, `null` on a fork
     -- that meters in one dimension, exactly as `blob.reserveBaseCost` is
@@ -401,8 +401,8 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("header.requestsHash", Lean.Json.bool r.header.requestsHash),
     -- EIP-7928's block-level access-list rules, under the same `present` +
     -- per-field `null` convention as `stateGas`.
-    ("bal.present", Lean.Json.bool r.bal.isSome),
-    ("bal.itemCost", jOptNat (r.bal.map BalRules.itemCost)),
+    ("bal.present", Lean.Json.bool r.blockAccessListRules.isSome),
+    ("bal.itemCost", jOptNat (r.blockAccessListRules.map BlockAccessListRules.itemCost)),
     -- The Byzantium..Cancun extension (goal U1). Flat access prices print
     -- under the same `present` + per-field `null` convention as `stateGas`:
     -- under EIP-2929 pricing there are no flat prices to print.
@@ -421,25 +421,25 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
       jOptNat (match r.access with | .flat g => some g.call | _ => none)),
     ("sstore.netMetering", Lean.Json.bool r.sstore.netMetering),
     ("sstore.stipendSentry", Lean.Json.bool r.sstore.stipendSentry),
-    ("settle.refundQuotient", jNat r.settle.refundQuotient),
-    ("settle.selfdestructRefund", jNat r.settle.selfdestructRefund),
+    ("settle.refundQuotient", jNat r.settlement.refundQuotient),
+    ("settle.selfdestructRefund", jNat r.settlement.selfdestructRefund),
     ("settle.selfdestructOnlyCreated",
-      Lean.Json.bool r.settle.selfdestructOnlyCreated),
-    ("settle.touchedSweep", Lean.Json.bool r.settle.touchedSweep),
-    ("settle.eraseEmptyOnModify", Lean.Json.bool r.settle.eraseEmptyOnModify),
-    ("txr.maxType", jNat r.txr.maxType),
-    ("txr.dataNonZero", jNat r.txr.dataNonZero),
-    ("txr.calldataFloor", Lean.Json.bool r.txr.calldataFloor),
-    ("txr.warmCoinbase", Lean.Json.bool r.txr.warmCoinbase),
+      Lean.Json.bool r.settlement.selfdestructOnlyCreated),
+    ("settle.touchedSweep", Lean.Json.bool r.settlement.touchedSweep),
+    ("settle.eraseEmptyOnModify", Lean.Json.bool r.settlement.eraseEmptyOnModify),
+    ("txr.maxType", jNat r.transactionRules.maxType),
+    ("txr.dataNonZero", jNat r.transactionRules.dataNonZero),
+    ("txr.calldataFloor", Lean.Json.bool r.transactionRules.calldataFloor),
+    ("txr.warmCoinbase", Lean.Json.bool r.transactionRules.warmCoinbase),
     ("creation.initCodeLimit", Lean.Json.bool r.creation.initCodeLimit),
     ("creation.rejectEf", Lean.Json.bool r.creation.rejectEf),
     -- Proof of work under the same `present` + `null` convention: no numbers
     -- once the seal leaves the execution layer.
-    ("pow.present", Lean.Json.bool r.pow.isSome),
-    ("pow.blockReward", jOptNat (r.pow.map PowRules.blockReward)),
-    ("pow.bombDelay", jOptNat (r.pow.map PowRules.bombDelay)),
-    ("sys.beaconRoots", Lean.Json.bool r.sys.beaconRoots),
-    ("sys.historyStorage", Lean.Json.bool r.sys.historyStorage),
+    ("pow.present", Lean.Json.bool r.proofOfWork.isSome),
+    ("pow.blockReward", jOptNat (r.proofOfWork.map ProofOfWorkRules.blockReward)),
+    ("pow.bombDelay", jOptNat (r.proofOfWork.map ProofOfWorkRules.bombDelay)),
+    ("sys.beaconRoots", Lean.Json.bool r.systemCalls.beaconRoots),
+    ("sys.historyStorage", Lean.Json.bool r.systemCalls.historyStorage),
     ("bn254.add", jNat r.bn254.add),
     ("bn254.mul", jNat r.bn254.mul),
     ("bn254.pairingBase", jNat r.bn254.pairingBase),
@@ -450,7 +450,7 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("requests",
       Lean.Json.arr ((r.requests.map (fun p =>
         Lean.Json.arr #[jNat p.fst.toNat,
-          Lean.Json.str (Adr.toGateHex p.snd)])).toArray))
+          Lean.Json.str (Address.toGateHex p.snd)])).toArray))
   ]
 
 /-- `jaune --rules <fork>`.
@@ -587,14 +587,14 @@ inductive FixturePostSource where
 
 /-- Return the source actually selected by the existing post-state reader.
 A successfully converted postState wins; any conversion failure falls back. -/
-def getPostStateRootWithSource (json : Lean.Json) : IO (B256 × FixturePostSource) :=
+def getPostStateRootWithSource (json : Lean.Json) : IO (U256 × FixturePostSource) :=
   ( do let stateJson ← json.find "postState"
        let state ← stateJson.toWorld
        .ok (state.root, .postState) ) <|>
-  (do let root ← json.find "postStateHash" >>= Lean.Json.toIoB256
+  (do let root ← json.find "postStateHash" >>= Lean.Json.toIoU256
       pure (root, .postStateHash))
 
-def getPostStateRoot (json : Lean.Json) : IO B256 :=
+def getPostStateRoot (json : Lean.Json) : IO U256 :=
   Prod.fst <$> getPostStateRootWithSource json
 
 def Except.toIO {ξ : Type} : Except String ξ → IO ξ
@@ -649,13 +649,13 @@ the scored `decode` verdict, exactly as the single-shape decoder's failures
 were; only the rule lookup itself is an import failure. -/
 def decodeFixtureBlockBody (spec : NetworkSpec) (chainId : UInt64)
     (blockRlp : Bytes) : Except ImportFailure (Except DecodeError Block) :=
-  match (Bytes.toBLT? blockRlp).toExcept
+  match (Bytes.toRlpItem? blockRlp).toExcept
       (DecodeError.structure "block RLP" "cannot decode the outer RLP item") with
   | .error e => .ok (.error e)
   | .ok blt =>
     match blt with
     | .list (headerBlt :: _) =>
-      match headerBlt.toExHeader with
+      match headerBlt.toExceptHeader with
       | .error e => .ok (.error e)
       | .ok header =>
         match spec with
@@ -692,7 +692,7 @@ def evaluateFixtureBlockObserved (spec : NetworkSpec) (chainId : UInt64)
   | .error failure => ⟨none, none, .error failure⟩
   | .ok (.error reason) => ⟨none, none, .ok (.inr (.decode reason))⟩
   | .ok (.ok block) =>
-    match hnorm : rlpToBlock (block.toBLT.toBytes) with
+    match hnorm : rlpToBlock (block.toRlpItem.toBytes) with
     | .error _ => ⟨none, none, .error (.internal (.assertion (.text
         "normalised fixture block does not strictly re-decode")))⟩
     | .ok ⟨canon, _⟩ =>
@@ -739,7 +739,7 @@ theorem evaluateFixtureBlockObserved_erases (spec : NetworkSpec) (chainId : UInt
       -- failure here is a stated invariant not holding, never a verdict. The
       -- parent is already a checked snapshot, so no state root is recomputed
       -- for it.
-      match hnorm : rlpToBlock (block.toBLT.toBytes) with
+      match hnorm : rlpToBlock (block.toRlpItem.toBytes) with
       | .error _ =>
         .error (.internal (.assertion (.text
           "normalised fixture block does not strictly re-decode")))
@@ -906,12 +906,12 @@ def checkFixtureBlobSchedule (spec : FixtureNetwork) (json : Lean.Json) : IO Uni
     let target ← declared.find "target" >>= Lean.Json.toIoHexNat
     let ceiling ← declared.find "max" >>= Lean.Json.toIoHexNat
     let fraction ← declared.find "baseFeeUpdateFraction" >>= Lean.Json.toIoHexNat
-    .guard (rules.blob.target = target * gasPerBlob)
+    .guard (rules.blob.target = target * Gas.perBlob)
       s!"error : {f} blob target = {rules.blob.target}, fixture declares \
-         {target} blobs = {target * gasPerBlob}"
-    .guard (rules.blob.max = ceiling * gasPerBlob)
+         {target} blobs = {target * Gas.perBlob}"
+    .guard (rules.blob.max = ceiling * Gas.perBlob)
       s!"error : {f} blob maximum = {rules.blob.max}, fixture declares \
-         {ceiling} blobs = {ceiling * gasPerBlob}"
+         {ceiling} blobs = {ceiling * Gas.perBlob}"
     .guard (rules.blob.baseFeeUpdateFraction = fraction)
       s!"error : {f} blob base-fee update fraction = \
          {rules.blob.baseFeeUpdateFraction}, fixture declares {fraction}"
@@ -937,9 +937,9 @@ private def prepareFixtureCase (spec : FixtureNetwork) (json : Lean.Json) :
 
   let gbh_json ← json.find "genesisBlockHeader"
   let gbh ← gbh_json.toHeader
-  let gb : Block := {header := gbh, txs := [], ommers := [], wds := []}
-  let gbh_hash ← gbh_json.find "hash" >>= Lean.Json.toIoB256
-  let gbh_hash' := (BLT.toBytes (Header.toBLT gbh)).keccak
+  let gb : Block := {header := gbh, transactions := [], ommers := [], withdrawals := []}
+  let gbh_hash ← gbh_json.find "hash" >>= Lean.Json.toIoU256
+  let gbh_hash' := (Rlp.Item.toBytes (Header.toRlpItem gbh)).keccak
 
   .guard
     (gbh_hash = gbh_hash')
@@ -957,15 +957,15 @@ private def prepareFixtureCase (spec : FixtureNetwork) (json : Lean.Json) :
   -- form, textually unchanged.
   let genesisFork ← IO.ofExcept (spec.genesisFork.rules.mapError SupportError.render)
   let genesisRLP' :=
-    if genesisFork.header.withdrawalsRoot then gb.toBLT.toBytes
-    else (BLT.list [Header.toBLT gb.header,
-      .list (gb.txs.map B8LOrTxToBLT),
-      .list (gb.ommers.map Header.toBLT)]).toBytes
+    if genesisFork.header.withdrawalsRoot then gb.toRlpItem.toBytes
+    else (Rlp.Item.list [Header.toRlpItem gb.header,
+      .list (gb.transactions.map BytesOrTransactionToRlpItem),
+      .list (gb.ommers.map Header.toRlpItem)]).toBytes
   .guard (genesisRLP = genesisRLP') "error : unexpected genesis block RLP."
   let (chainId : Nat) ←
     match gbh_json.find? "chainId" with
     | .none => .ok 1
-    | .some chainIdJson => chainIdJson.toIoB64 <&> UInt64.toNat
+    | .some chainIdJson => chainIdJson.toIoUInt64 <&> UInt64.toNat
 
   let preState ← json.find "pre" >>= Lean.Json.toWorldAt genesisFork
 
@@ -986,7 +986,7 @@ private def prepareFixtureCase (spec : FixtureNetwork) (json : Lean.Json) :
     | .ok ⟨block, _⟩ => pure block
     | .error _ => .throw "error : genesis RLP is not canonical block RLP"
   let genesisEnvelope ←
-    (CanonicalBlock.ofRlp? (genesisBlock.toBLT.toBytes)).toIO
+    (CanonicalBlock.ofRlp? (genesisBlock.toRlpItem.toBytes)).toIO
     "error : genesis RLP is not canonical block RLP"
   .guard (genesisEnvelope.headerHash = gbh_hash)
     s!"error : decoded genesis header hash does not match\n  \
@@ -1016,19 +1016,19 @@ private def prepareFixtureCase (spec : FixtureNetwork) (json : Lean.Json) :
 
 private structure FixtureFinalObservation where
   lastSnapshotFound : Bool
-  lastExpected : B256
-  lastComputed : Option B256 := none
+  lastExpected : U256
+  lastComputed : Option U256 := none
   postSourceKind : Option FixturePostSource := none
-  postExpected : Option B256 := none
-  postComputed : Option B256 := none
+  postExpected : Option U256 := none
+  postComputed : Option U256 := none
   postRootChecked : Bool := false
 
 /-- Shared original final assertions. The optional observer records the values
 at the assertion site, including a partial failure, without recomputing roots. -/
 private def verifyFixtureFinal (json : Lean.Json)
-    (findLast : B256 → Except ImportFailure CheckedBlockChain)
+    (findLast : U256 → Except ImportFailure CheckedBlockChain)
     (observe : FixtureFinalObservation → IO Unit := fun _ => pure ()) : IO Unit := do
-  let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoB256
+  let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoU256
   let chain ← match findLast lastBlockHash with
     | .error failure => do
       observe { lastSnapshotFound := false, lastExpected := lastBlockHash }
@@ -1058,7 +1058,7 @@ def runBlockchainStTest (spec : FixtureNetwork) : (Nat × String × Lean.Json) �
     .println s!"TEST INDEX : {idx}"
     let caseNetwork ← json.find "network" >>= Lean.Json.toIoString
     let (genesisChecked, chainId, blockJsons) ← prepareFixtureCase spec json
-    let findLast : B256 → Except ImportFailure CheckedBlockChain ←
+    let findLast : U256 → Except ImportFailure CheckedBlockChain ←
       match spec with
       | .scheduled scheduled => do
         let store ← processBlockJsons caseNetwork scheduled chainId (.init genesisChecked)
@@ -1074,9 +1074,9 @@ def runBlockchainStTest (spec : FixtureNetwork) : (Nat × String × Lean.Json) �
 this report changes fork selection, checked import, expectation vocabulary or
 strict mode. Hash custody belongs to the external evidence collector. -/
 
-private def closureHash (hash : B256) : Lean.Json := .str ("0x" ++ hash.toHex)
+private def closureHash (hash : U256) : Lean.Json := .str ("0x" ++ hash.toHex)
 
-private def closureOptHash : Option B256 → Lean.Json
+private def closureOptHash : Option U256 → Lean.Json
   | none => .null
   | some hash => closureHash hash
 
@@ -1170,7 +1170,7 @@ private inductive ClosureDisposition where
 private def closureCandidateJson (idx : Nat) (selected : FixtureExpectationSelection)
     (expected : FixtureClosure.Expected) (rawHex : String) (reached : Bool)
     (actual : ClosureActual) (identity : FixtureClosure.Identity)
-    (disposition : ClosureDisposition) (decodedParent : Option B256 := none)
+    (disposition : ClosureDisposition) (decodedParent : Option U256 := none)
     (parent : Option CheckedBlockChain := none) : Lean.Json :=
   let (channel, tag, canonical, detail) : String × Lean.Json × Lean.Json × Lean.Json :=
     match actual with
@@ -1406,11 +1406,11 @@ never add one. `paths` is not a filter -- it collects the non-option arguments
 so that options may appear before or after the fixture path, and `main` can
 report "exactly one file" as its own error rather than as an unknown option. It
 is accumulated in reverse, as the parser prepends. -/
-structure FixtureOpts where
-  net : Option FixtureNetworkSelection := none
-  testIdx : Option Nat := none
-  incls : List String := []
-  excls : List String := []
+structure FixtureOptions where
+  network : Option FixtureNetworkSelection := none
+  testIndex : Option Nat := none
+  includes : List String := []
+  excludes : List String := []
   paths : List String := []
   identityClosure : Option System.FilePath := none
 
@@ -1428,18 +1428,18 @@ The selection model is three rules, and this function is the first two of them:
 There is deliberately no default fork. The spec returned is the one the case's
 own `network` label names, so each selected case runs under its own rules and
 nothing downstream falls back to a hardcoded one. -/
-def fixtureCaseSpec? (o : FixtureOpts) :
+def fixtureCaseSpec? (o : FixtureOptions) :
     (Nat × String × Lean.Json) → IO (Option FixtureNetwork)
   | ⟨idx, name, json⟩ => do
-    if let some specIdx := o.testIdx then
+    if let some specIdx := o.testIndex then
       if specIdx ≠ idx then return none
-    if ¬ (o.incls.isEmpty ∨ name ∈ o.incls) then
+    if ¬ (o.includes.isEmpty ∨ name ∈ o.includes) then
       return none
-    if name ∈ o.excls then
+    if name ∈ o.excludes then
       return none
     let label ← json.find "network" >>= Lean.Json.toIoString
     let some spec := supportedSpec? label | return none
-    if let some requested := o.net then
+    if let some requested := o.network then
       if spec ≠ requested.spec then return none
     return some spec
 
@@ -1483,7 +1483,7 @@ def blockchainTestSibling? (path : String) : Option String :=
     let rewritten := path.replace s!"/{tree}/" "/blockchain_tests/"
     if rewritten == path then none else some rewritten
 
-private def selectFixtureCases (o : FixtureOpts) (path : String) :
+private def selectFixtureCases (o : FixtureOptions) (path : String) :
     IO (List (FixtureNetwork × (Nat × String × Lean.Json))) := do
   .println "\n================================================================\n"
   .println s!"TEST FILE : {path}\n"
@@ -1548,7 +1548,7 @@ private def writeClosureReport (reportPath : System.FilePath) (report : Lean.Jso
     finally
       IO.FS.removeFile temporary
 
-def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
+def runTestFile (o : FixtureOptions) (path : String) : IO Unit := do
   match o.identityClosure with
   | none =>
     let selected ← selectFixtureCases o path
@@ -1564,7 +1564,7 @@ def runTestFile (o : FixtureOpts) (path : String) : IO Unit := do
     let results ← selected.mapM (fun p => runClosureCase p.fst p.snd)
     let report := Lean.Json.mkObj [
       ("schema", .str "jaune-original-identity-closure-v2"), ("input_path", .str path),
-      ("network_filter", .str ((o.net.map (·.rawLabel)).getD "")),
+      ("network_filter", .str ((o.network.map (·.rawLabel)).getD "")),
       ("cases", .arr ((results.map Prod.fst).toArray))]
     writeClosureReport reportPath report
     if !(results.all Prod.snd) then IO.Process.exit 1
@@ -1581,34 +1581,34 @@ network, so a second one could only ever select nothing. An arity error reports
 that far better than an empty selection would. `--name` and `--notName` do
 repeat -- they accumulate within their own dimension, which stays limitative
 because the dimension as a whole still only removes cases. -/
-def parseFixtureOpts : FixtureOpts → List String → IO FixtureOpts
+def parseFixtureOptions : FixtureOptions → List String → IO FixtureOptions
   | o, [] => do
     if o.identityClosure.isSome then
-      .guard o.net.isSome "error : --identity-closure requires explicit --network"
-      .guard (o.testIdx.isNone && o.incls.isEmpty && o.excls.isEmpty)
+      .guard o.network.isSome "error : --identity-closure requires explicit --network"
+      .guard (o.testIndex.isNone && o.includes.isEmpty && o.excludes.isEmpty)
         "error : --identity-closure forbids --name, --notName and --index"
     return o
   | o, "--identity-closure" :: report :: rest => do
     .guard (!o.identityClosure.isSome) "error : --identity-closure given more than once"
     .guard (!report.isEmpty && !report.startsWith "-")
       "error : --identity-closure takes a report path"
-    parseFixtureOpts { o with identityClosure := some (report : System.FilePath) } rest
+    parseFixtureOptions { o with identityClosure := some (report : System.FilePath) } rest
   | _, "--identity-closure" :: [] =>
     .throw "error : --identity-closure takes a report path"
   | o, "--network" :: label :: rest => do
-    if o.net.isSome then
+    if o.network.isSome then
       .throw
         s!"error : --network given more than once; a case has exactly one \
            network, so a second one can only select nothing"
-    parseFixtureOpts { o with net := some ⟨label, ← requireSupportedSpec label⟩ } rest
+    parseFixtureOptions { o with network := some ⟨label, ← requireSupportedSpec label⟩ } rest
   | o, "--name" :: name :: rest =>
-    parseFixtureOpts { o with incls := name :: o.incls } rest
+    parseFixtureOptions { o with includes := name :: o.includes } rest
   | o, "--notName" :: name :: rest =>
-    parseFixtureOpts { o with excls := name :: o.excls } rest
+    parseFixtureOptions { o with excludes := name :: o.excludes } rest
   | o, "--index" :: idx :: rest => do
     let some n := idx.toNat?
       | .throw s!"error : --index expects a natural number, got {repr idx}"
-    parseFixtureOpts { o with testIdx := some n } rest
+    parseFixtureOptions { o with testIndex := some n } rest
   | o, arg :: rest => do
     -- Anything left that looks like an option is either misspelled or missing
     -- its argument; anything else is a positional. Testing the shape here is
@@ -1617,7 +1617,7 @@ def parseFixtureOpts : FixtureOpts → List String → IO FixtureOpts
       .throw
         s!"error : unknown or incomplete option {repr arg}; run with --help \
            for usage"
-    parseFixtureOpts { o with paths := arg :: o.paths } rest
+    parseFixtureOptions { o with paths := arg :: o.paths } rest
 
 def getNetwork : List String → Option String
   | "--network" :: network :: _ => some network
@@ -1646,7 +1646,7 @@ def getFork (opts : List String) : IO Fork :=
            {Fork.supported.map Fork.toString}"
 
 def createMinimalEvm
-    (fork : Fork) (adr : Adr) (input : Bytes) (gasLimit : Nat) : Evm := {
+    (fork : Fork) (adr : Address) (input : Bytes) (gasLimit : Nat) : Evm := {
   pc := 0
   sta := {
     caller := default
@@ -1688,7 +1688,7 @@ def createMinimalEvm
   }
 }
 
-def processVector (fork : Fork) (adr : Adr) : (Nat × Lean.Json) → IO Bool
+def processVector (fork : Fork) (adr : Address) : (Nat × Lean.Json) → IO Bool
   | ⟨idx, json⟩ => do
     let name ← (json.find? "Name" >>= Lean.Json.toString?).toIO s!"missing Name at index {idx}"
     let inputStr ← (json.find? "Input" >>= Lean.Json.toString?).toIO s!"missing Input for {name}"
@@ -1733,9 +1733,9 @@ The activation check is part of the gate, not a convenience: a vector file
 listed against a fork whose rules do not carry its address is a manifest
 error, and reporting it as such is what stops a fork-gated precompile from
 being silently exercised under a fork that does not have it. -/
-def runVectorFile (f : Fork) (addr : Adr) (path : String) : IO Bool := do
+def runVectorFile (f : Fork) (addr : Address) (path : String) : IO Bool := do
   let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
-  if ¬ rules.isPrecomp addr then
+  if ¬ rules.isPrecompile addr then
     IO.println
       s!"RED — vectors: no precompile is active at {addr.toHex} under {f}"
     return false
@@ -1768,36 +1768,36 @@ def Lean.Json.toIoU256Vectors (j : Lean.Json) : IO (List Lean.Json) :=
   | .arr _ => Lean.Json.toIoList j -- accepted for simple external differential files
   | _ => IO.throw "u256 vector file must be an object or array"
 
-def b256VectorResult (op : String) (xs : List B256) : Option B256 :=
+def b256VectorResult (op : String) (xs : List U256) : Option U256 :=
   match op, xs with
   | "add", [x, y] => some (x + y)
   | "sub", [x, y] => some (x - y)
   | "mul", [x, y] => some (x * y)
   | "div", [x, y] => some (x / y)
   | "mod", [x, y] => some (x % y)
-  | "sdiv", [x, y] => some (B256.sdiv x y)
-  | "smod", [x, y] => some (B256.smod x y)
-  | "addmod", [x, y, z] => some (B256.addmod x y z)
-  | "mulmod", [x, y, z] => some (B256.mulmod x y z)
+  | "sdiv", [x, y] => some (U256.sdiv x y)
+  | "smod", [x, y] => some (U256.smod x y)
+  | "addmod", [x, y, z] => some (U256.addmod x y z)
+  | "mulmod", [x, y, z] => some (U256.mulmod x y z)
   | "exp", [x, y] => some (x ^ y)
-  | "signextend", [x, y] => some (B256.signext x y)
-  | "lt", [x, y] => some (B256.ltCheck x y)
-  | "gt", [x, y] => some (B256.gtCheck x y)
-  | "slt", [x, y] => some (B256.sltCheck x y)
-  | "sgt", [x, y] => some (B256.sgtCheck x y)
-  | "eq", [x, y] => some (B256.eqCheck x y)
-  | "iszero", [x] => some (B256.eqCheck x 0)
+  | "signextend", [x, y] => some (U256.signext x y)
+  | "lt", [x, y] => some (U256.ltCheck x y)
+  | "gt", [x, y] => some (U256.gtCheck x y)
+  | "slt", [x, y] => some (U256.sltCheck x y)
+  | "sgt", [x, y] => some (U256.sgtCheck x y)
+  | "eq", [x, y] => some (U256.eqCheck x y)
+  | "iszero", [x] => some (U256.eqCheck x 0)
   | "and", [x, y] => some (x &&& y)
   | "or", [x, y] => some (x ||| y)
   | "xor", [x, y] => some (x ^^^ y)
   | "not", [x] => some (~~~ x)
-  | "byte", [x, y] => some (List.getD y.toBytes x.toNat 0).toB256
+  | "byte", [x, y] => some (List.getD y.toBytes x.toNat 0).toU256
   | "shl", [x, y] => some (y <<< x.toNat)
   | "shr", [x, y] => some (y >>> x.toNat)
-  | "sar", [x, y] => some (B256.arithShiftRight y x.toNat)
-  | "codec", [x] => some x.toBytes.toB256
-  | "bytecount", [x] => some x.bytecount.toB256
-  | "exp_gas", [x] => some (gExp + gExpbyte * x.bytecount).toB256
+  | "sar", [x, y] => some (U256.arithShiftRight y x.toNat)
+  | "codec", [x] => some x.toBytes.toU256
+  | "bytecount", [x] => some x.bytecount.toU256
+  | "exp_gas", [x] => some (Gas.exp + Gas.expByte * x.bytecount).toU256
   | _, _ => none
 
 def processU256Vector : (Nat × Lean.Json) → IO Bool
@@ -1806,10 +1806,10 @@ def processU256Vector : (Nat × Lean.Json) → IO Bool
     let argsJ ← (json.find? "args").toIO s!"u256 vector {idx}: missing args" >>= Lean.Json.toIoList
     let expectedJ ← (json.find? "expected").toIO s!"u256 vector {idx}: missing expected"
     let expected ← match expectedJ with
-      | .str _ => Lean.Json.toIoB256 expectedJ
+      | .str _ => Lean.Json.toIoU256 expectedJ
       | _ => do
         let n ← (String.toNat? (toString expectedJ)).toIO s!"u256 vector {idx}: invalid numeric expected"
-        pure n.toB256
+        pure n.toU256
     let actual? ← match op with
       | "keccak" => match argsJ with
         | [arg] => pure (some ((← Lean.Json.toIoBytes arg).keccak))
@@ -1820,9 +1820,9 @@ def processU256Vector : (Nat × Lean.Json) → IO Bool
           pure (some (ByteArray.keccak 0 bs.length ⟨bs.toArray⟩))
         | _ => pure none
       | "ofB8L" => match argsJ with
-        | [arg] => pure (some (Bytes.toB256 (← Lean.Json.toIoBytes arg)))
+        | [arg] => pure (some (Bytes.toU256 (← Lean.Json.toIoBytes arg)))
         | _ => pure none
-      | _ => pure (b256VectorResult op (← argsJ.mapM Lean.Json.toIoB256))
+      | _ => pure (b256VectorResult op (← argsJ.mapM Lean.Json.toIoU256))
     match actual? with
     | some actual =>
       if actual = expected then IO.println s!"PASS\t{idx}\t{op}"; return true
@@ -1847,7 +1847,7 @@ def runU256VectorFile (path : String) : IO Bool := do
 -- value the pinned EELS `taylor_exponential` computed (see
 -- scripts/gen-fake-exp-vectors.py); the binary evaluates the total `fakeExp`.
 -- All four fields are decimal strings, so the grid is not bounded by B256.
-def processFakeExpVector : (Nat × Lean.Json) → IO Bool
+def processFakeExponentialVector : (Nat × Lean.Json) → IO Bool
   | ⟨idx, json⟩ => do
     let get : String → IO Nat := fun field => do
       let s ← (json.find? field >>= Lean.Json.toString?).toIO
@@ -1857,7 +1857,7 @@ def processFakeExpVector : (Nat × Lean.Json) → IO Bool
     let num ← get "numerator"
     let den ← get "denominator"
     let expected ← get "expected"
-    let actual := fakeExp fac num den
+    let actual := fakeExponential fac num den
     if actual = expected then
       IO.println s!"PASS\t{idx}\tfakeExp {fac} {num} {den}"
       return true
@@ -1866,10 +1866,10 @@ def processFakeExpVector : (Nat × Lean.Json) → IO Bool
         s!"FAIL\t{idx}\tfakeExp {fac} {num} {den}\texpected={expected}\tactual={actual}"
       return false
 
-def runFakeExpVectorFile (path : String) : IO Bool := do
+def runFakeExponentialVectorFile (path : String) : IO Bool := do
   -- Same {"vectors": [...]} envelope as the U256 oracle file.
   let js ← readJsonFile path >>= Lean.Json.toIoU256Vectors
-  let results ← js.putIndex.mapM processFakeExpVector
+  let results ← js.putIndex.mapM processFakeExponentialVector
   let passes := results.count true
   -- Same vacuous-pass hole as runVectorFile, same answer.
   if results.length == 0 then
@@ -1971,14 +1971,14 @@ def main : List String → IO Unit
   | "--jumpdest-control" :: _ =>
     .throw "error : --jumpdest-control takes exactly <seed> <blobs> <size>"
   | "--fake-exp" :: pathStr :: [] => do
-    if !(← runFakeExpVectorFile pathStr) then IO.Process.exit 1
+    if !(← runFakeExponentialVectorFile pathStr) then IO.Process.exit 1
   | "--vectors" :: addrStr :: pathStr :: opts => do
     .guard (!opts.contains "--identity-closure")
       "error : --identity-closure is only available in fixture mode"
     let addrStr2 := remove0x addrStr
     let paddedAddrStr :=
       String.ofList (List.replicate (40 - addrStr2.length) '0') ++ addrStr2
-    let addr ← (Hex.toAdr? paddedAddrStr).toIO "invalid address"
+    let addr ← (Hex.toAddress? paddedAddrStr).toIO "invalid address"
     let f ← getFork opts
     if !(← runVectorFile f addr pathStr) then
       IO.Process.exit 1
@@ -1996,7 +1996,7 @@ def main : List String → IO Unit
   -- enumerator that has all four. `--skip`, which dropped leading *files*,
   -- went with it -- it could not mean anything for a single file.
   | args => do
-    let o ← parseFixtureOpts {} args
+    let o ← parseFixtureOptions {} args
     match o.paths with
     | [path] => runTestFile o path
     | [] => .throw "error : no fixture file given; run with --help for usage"

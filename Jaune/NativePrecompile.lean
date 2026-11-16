@@ -9,7 +9,7 @@ native failure outcomes. It neither constructs a call nor asserts native success
 
 namespace Jaune
 
-private theorem accessDelegation_direct {rules : ForkRules} {d : Devm} {target : Adr}
+private theorem accessDelegation_direct {rules : ForkRules} {d : Devm} {target : Address}
     (direct : rules.delegatedCodeAddress (d.getCode target) = none) :
     rules.accessDelegation d target = ⟨false, target, d.getCode target, 0, d⟩ := by
   cases enabled : rules.delegationEnabled with
@@ -23,9 +23,9 @@ private theorem accessDelegation_direct {rules : ForkRules} {d : Devm} {target :
       simp only [GasSchedule.accessDelegation, ← Devm.getCode_state, nodeleg]
 
 private theorem genericCall_native_not_run
-    {sevm : Sevm} {d : Devm} {target : Adr} {gas ii isz oi osz : Nat} {code : ByteArray}
+    {sevm : Sevm} {d : Devm} {target : Address} {gas ii isz oi osz : Nat} {code : ByteArray}
     {frame : Frame} {resume : Resume} {child : Evm}
-    (active : decide (sevm.benvStat.rules.isPrecomp target) = true)
+    (active : decide (sevm.benvStat.rules.isPrecompile target) = true)
     (spawn : genericCall.step sevm d gas 0 sevm.currentTarget target target true true
       ii isz oi osz code false = .spawn frame resume)
     (enter : frame.enter = .run child) : False := by
@@ -49,27 +49,27 @@ private theorem genericCall_native_not_run
 /-- The actual six-operand STATICCALL to an enabled, effectively direct native
 precompile cannot enter an interpreter child. The original no-state-gas lane,
 real spawn and real entry equations remain explicit; native errors are included. -/
-theorem Xinst.step_staticcall_not_run_of_precompile
+theorem MessageOp.step_staticcall_not_run_of_precompile
     {sevm : Sevm} {pre : Devm} {frame : Frame} {resume : Resume} {child : Evm}
-    {g t ii size oi outSize : B256} {rest : List B256}
+    {g t ii size oi outSize : U256} {rest : List U256}
     (operands : pre.stack = g :: t :: ii :: size :: oi :: outSize :: rest)
     (stateGas : sevm.benvStat.rules.stateGas = none)
-    (active : decide (sevm.benvStat.rules.isPrecomp t.toAdr) = true)
-    (direct : sevm.benvStat.rules.delegatedCodeAddress (pre.getCode t.toAdr) = none)
-    (spawn : Xinst.step sevm pre .staticcall = .spawn frame resume)
+    (active : decide (sevm.benvStat.rules.isPrecompile t.toAddress) = true)
+    (direct : sevm.benvStat.rules.delegatedCodeAddress (pre.getCode t.toAddress) = none)
+    (spawn : MessageOp.step sevm pre .staticcall = .spawn frame resume)
     (enter : frame.enter = .run child) : False := by
   rcases pre with ⟨⟨stack, memory, gasLeft, stateGasLeft⟩, metadata, world⟩
   change stack = _ at operands
   subst stack
-  simp only [Xinst.step, stateGas, bind, Except.bind, Devm.popToNat_def,
+  simp only [MessageOp.step, stateGas, bind, Except.bind, Devm.popToNat_def,
     Devm.popToAdr_def, Devm.pop_def, Prod.mapFst, Devm.stack, Devm.setMach,
     Functor.mapRev, Except.map_ok, Prod.map, id_eq] at spawn
   let d : Devm := ⟨⟨rest, memory, gasLeft, stateGasLeft⟩, metadata, world⟩
   let accessed : Devm := match sevm.benvStat.rules.access with
-    | .eip2929 => addAccessedAddress d t.toAdr
+    | .eip2929 => addAccessedAddress d t.toAddress
     | .flat _ => d
   have directAccessed :
-      sevm.benvStat.rules.delegatedCodeAddress (accessed.getCode t.toAdr) = none := by
+      sevm.benvStat.rules.delegatedCodeAddress (accessed.getCode t.toAddress) = none := by
     dsimp only [accessed, d]
     cases sevm.benvStat.rules.access <;> exact direct
   have route := accessDelegation_direct directAccessed

@@ -10,7 +10,7 @@ the window, its live entry (weight `0` by G3-07, so not appended since the quoru
 leaves `pend` exactly when `expo` takes `L.value`.
 -/
 
-namespace JauneConsensus.Facts.Gloas.Inv
+namespace JauneConsensus.Facts.Gloas.Invariant
 
 open JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas
 
@@ -35,20 +35,20 @@ theorem filter_sum_le_of_excluded {α : Type} (c : α → Bool) (f : α → Nat)
     · simp only [List.filter_cons, ha, Bool.false_eq_true, ↓reduceIte, List.map_cons, List.sum_cons]
       omega
 
-theorem expo_congr {s s' : GSt P} (hL : s'.latest_execution_payload_bid = s.latest_execution_payload_bid)
+theorem exposure_congr {s s' : GloasState P} (hL : s'.latest_execution_payload_bid = s.latest_execution_payload_bid)
     (hp : s'.builder_pending_payments = s.builder_pending_payments) (hs : s'.slot = s.slot) (i : Nat) :
-    expo s' i = expo s i := by
-  unfold expo Exposed BidLive bidIndex curEpoch; rw [hL, hp, hs]
+    exposure s' i = exposure s i := by
+  unfold exposure Exposed BidLive bidIndex currentEpoch; rw [hL, hp, hs]
 
-theorem pend_congr {s s' : GSt P} (hf : InvFrame s s') (i : Nat) : pend s' i = pend s i :=
-  pend_of_eqs hf.2.2.1 hf.2.1 i
+theorem pendingBalance_congr {s s' : GloasState P} (hf : InvariantFrame s s') (i : Nat) : pendingBalance s' i = pendingBalance s i :=
+  pendingBalance_of_equalities hf.2.2.1 hf.2.1 i
 
-theorem expo_le_live {s : GSt P} {i : Nat} (h : BidLive s) : expo s i = 0 := by
-  unfold expo; rw [if_neg (fun e => e.2.2 h)]
+theorem exposure_le_live {s : GloasState P} {i : Nat} (h : BidLive s) : exposure s i = 0 := by
+  unfold exposure; rw [if_neg (fun e => e.2.2 h)]
 
-theorem expo_of_not_live {s : GSt P} {i : Nat} (h : ¬ BidLive s) :
-    expo s i = wAmt i (bidWithdrawal s.latest_execution_payload_bid) := by
-  unfold expo Exposed wAmt bidWithdrawal
+theorem exposure_of_not_live {s : GloasState P} {i : Nat} (h : ¬ BidLive s) :
+    exposure s i = withdrawalAmount i (bidWithdrawal s.latest_execution_payload_bid) := by
+  unfold exposure Exposed withdrawalAmount bidWithdrawal
   simp only []
   by_cases hb : s.latest_execution_payload_bid.builder_index.toNat = i
   · by_cases hv : 0 < s.latest_execution_payload_bid.value.toNat
@@ -58,11 +58,11 @@ theorem expo_of_not_live {s : GSt P} {i : Nat} (h : ¬ BidLive s) :
 
 /-- **The epoch rotation with the slot's advance does not raise `pend + expo`.** -/
 theorem rotation_cover (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
-    (hspe : 0 < P.SLOTS_PER_EPOCH) {cfg : Config} {a b : GSt P} {next : U64}
+    (hspe : 0 < P.SLOTS_PER_EPOCH) {cfg : Config} {a b : GloasState P} {next : U64}
     (hb : JauneConsensus.Gloas.processBuilderPendingPayments cfg a = .ok b)
     (g7 : NoLiveWeightOnLatestBid a) (hn : next.toNat = a.slot.toNat + 1)
     (h0 : next.toNat % P.SLOTS_PER_EPOCH = 0) (i : Nat) :
-    pend b i + expo { b with slot := next } i ≤ pend a i + expo a i := by
+    pendingBalance b i + exposure { b with slot := next } i ≤ pendingBalance a i + exposure a i := by
   obtain ⟨_, q, hqh, hW, hP⟩ := processBuilderPendingPayments_frame hb
   have hq0 := quorum_pos hq hqh
   have hsz : a.builder_pending_payments.toArray.size = 2 * P.SLOTS_PER_EPOCH :=
@@ -79,24 +79,24 @@ theorem rotation_cover (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCRE
         A.toList.drop P.SLOTS_PER_EPOCH := List.take_of_length_le (by simp)
     rw [e]
     exact (List.take_append_drop _ _).symm
-  have hpa : pend a i = pendW a.builder_pending_withdrawals.toArray.toList i +
-      ((A.extract 0 P.SLOTS_PER_EPOCH).toList.map (fun p => wAmt i p.withdrawal)).sum +
-      ((A.extract P.SLOTS_PER_EPOCH A.size).toList.map (fun p => wAmt i p.withdrawal)).sum := by
-    unfold pend; rw [hsplit, pendP_append]; unfold pendP; omega
-  have hpb : pend b i = pendW a.builder_pending_withdrawals.toArray.toList i +
+  have hpa : pendingBalance a i = pendingWithdrawalBalance a.builder_pending_withdrawals.toArray.toList i +
+      ((A.extract 0 P.SLOTS_PER_EPOCH).toList.map (fun p => withdrawalAmount i p.withdrawal)).sum +
+      ((A.extract P.SLOTS_PER_EPOCH A.size).toList.map (fun p => withdrawalAmount i p.withdrawal)).sum := by
+    unfold pendingBalance; rw [hsplit, pendingPaymentBalance_append]; unfold pendingPaymentBalance; omega
+  have hpb : pendingBalance b i = pendingWithdrawalBalance a.builder_pending_withdrawals.toArray.toList i +
       ((((A.extract 0 P.SLOTS_PER_EPOCH).toList.filter (fun p => decide (q ≤ p.weight))).map
-        (fun p => wAmt i p.withdrawal)).sum) +
-      ((A.extract P.SLOTS_PER_EPOCH A.size).toList.map (fun p => wAmt i p.withdrawal)).sum := by
-    unfold pend; rw [hW, hP, pendW_append, Array.toList_append, pendP_append]
-    have hrep : pendP (Array.replicate P.SLOTS_PER_EPOCH
+        (fun p => withdrawalAmount i p.withdrawal)).sum) +
+      ((A.extract P.SLOTS_PER_EPOCH A.size).toList.map (fun p => withdrawalAmount i p.withdrawal)).sum := by
+    unfold pendingBalance; rw [hW, hP, pendingWithdrawalBalance_append, Array.toList_append, pendingPaymentBalance_append]
+    have hrep : pendingPaymentBalance (Array.replicate P.SLOTS_PER_EPOCH
         JauneConsensus.Gloas.BuilderPendingPayment.empty).toList i = 0 := by
-      simp [pendP, wAmt_empty]
+      simp [pendingPaymentBalance, withdrawalAmount_empty]
     rw [hrep]
-    simp only [pendW, List.map_map, pendP]
+    simp only [pendingWithdrawalBalance, List.map_map, pendingPaymentBalance]
     rfl
   have hfil := filter_map_sum_le (fun p : JauneConsensus.Gloas.BuilderPendingPayment =>
-    decide (q ≤ p.weight)) (fun p => wAmt i p.withdrawal) (A.extract 0 P.SLOTS_PER_EPOCH).toList
-  have hle : pend b i ≤ pend a i := by
+    decide (q ≤ p.weight)) (fun p => withdrawalAmount i p.withdrawal) (A.extract 0 P.SLOTS_PER_EPOCH).toList
+  have hle : pendingBalance b i ≤ pendingBalance a i := by
     rw [hpa, hpb]; omega
   -- epochs
   have hdiv : next.toNat / P.SLOTS_PER_EPOCH = a.slot.toNat / P.SLOTS_PER_EPOCH + 1 := by
@@ -112,11 +112,11 @@ theorem rotation_cover (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCRE
         some (P.SLOTS_PER_EPOCH + L.slot.toNat % P.SLOTS_PER_EPOCH)
       else if L.slot.toNat / P.SLOTS_PER_EPOCH + 1 = a.slot.toNat / P.SLOTS_PER_EPOCH + 1 then
         some (L.slot.toNat % P.SLOTS_PER_EPOCH) else none) := by
-    unfold bidIndex curEpoch; simp only []; rw [hLb, hdiv]
-  have hbp : ({ b with slot := next } : GSt P).builder_pending_payments.toArray =
+    unfold bidIndex currentEpoch; simp only []; rw [hLb, hdiv]
+  have hbp : ({ b with slot := next } : GloasState P).builder_pending_payments.toArray =
       A.extract P.SLOTS_PER_EPOCH A.size ++
         Array.replicate P.SLOTS_PER_EPOCH JauneConsensus.Gloas.BuilderPendingPayment.empty := hP
-  have hLb' : ({ b with slot := next } : GSt P).latest_execution_payload_bid = L := hLb
+  have hLb' : ({ b with slot := next } : GloasState P).latest_execution_payload_bid = L := hLb
   by_cases e1 : L.slot.toNat / P.SLOTS_PER_EPOCH = a.slot.toNat / P.SLOTS_PER_EPOCH
   · -- L in the current epoch: its entry moves to the first half, unchanged
     have hka : bidIndex a = some (P.SLOTS_PER_EPOCH + L.slot.toNat % P.SLOTS_PER_EPOCH) := by
@@ -130,16 +130,16 @@ theorem rotation_cover (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCRE
         have hE' : (A.extract P.SLOTS_PER_EPOCH A.size ++ Array.replicate P.SLOTS_PER_EPOCH
             JauneConsensus.Gloas.BuilderPendingPayment.empty)[L.slot.toNat % P.SLOTS_PER_EPOCH]? =
             some E := by rw [← hbp]; exact hE
-        rw [shifted_lo hsz hLm] at hE'
+        rw [shifted_low hsz hLm] at hE'
         exact ⟨_, E, hka, hE', by rw [hLb'] at hw; exact hw⟩
       · rintro ⟨k, E, hk, hE, hw⟩
         rw [hka] at hk; cases hk
         refine ⟨_, E, hkb, ?_, by rw [hLb']; exact hw⟩
-        show ({ b with slot := next } : GSt P).builder_pending_payments.toArray[_]? = _
-        rw [hbp, shifted_lo hsz hLm]; exact hE
+        show ({ b with slot := next } : GloasState P).builder_pending_payments.toArray[_]? = _
+        rw [hbp, shifted_low hsz hLm]; exact hE
     by_cases hl : BidLive a
-    · rw [expo_le_live hl, expo_le_live (hiff.mpr hl)]; omega
-    · rw [expo_of_not_live hl, expo_of_not_live (fun h => hl (hiff.mp h)), hLb', ← hL]; omega
+    · rw [exposure_le_live hl, exposure_le_live (hiff.mpr hl)]; omega
+    · rw [exposure_of_not_live hl, exposure_of_not_live (fun h => hl (hiff.mp h)), hLb', ← hL]; omega
   · by_cases e2 : L.slot.toNat / P.SLOTS_PER_EPOCH + 1 = a.slot.toNat / P.SLOTS_PER_EPOCH
     · -- L in the previous epoch: it leaves the window
       have hka : bidIndex a = some (L.slot.toNat % P.SLOTS_PER_EPOCH) := by
@@ -148,9 +148,9 @@ theorem rotation_cover (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCRE
         rw [hbi_b, if_neg (by omega), if_neg (by omega)]
       have hnl : ¬ BidLive { b with slot := next } := by
         rintro ⟨_, _, h, _⟩; rw [hkb] at h; cases h
-      rw [expo_of_not_live hnl, hLb']
+      rw [exposure_of_not_live hnl, hLb']
       by_cases hlive : BidLive a
-      · rw [expo_le_live hlive]
+      · rw [exposure_le_live hlive]
         obtain ⟨k, E, hk, hE, hEw⟩ := hlive
         rw [hka] at hk; cases hk
         obtain ⟨E', hE', hw0, _⟩ := g7 _ hka
@@ -161,11 +161,11 @@ theorem rotation_cover (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCRE
           rw [if_pos (by omega)]
           simpa using hE
         have hex := filter_sum_le_of_excluded (fun p : JauneConsensus.Gloas.BuilderPendingPayment =>
-          decide (q ≤ p.weight)) (fun p => wAmt i p.withdrawal) _ _ E hEf
+          decide (q ≤ p.weight)) (fun p => withdrawalAmount i p.withdrawal) _ _ E hEf
           (by simp only [decide_eq_false_iff_not]; rw [hw0]; show ¬ q.toNat ≤ 0; omega)
         rw [hEw, ← hL] at hex
         rw [hpa, hpb]; omega
-      · rw [expo_of_not_live hlive, ← hL]
+      · rw [exposure_of_not_live hlive, ← hL]
         omega
     · -- L older (or later): out of the window before; after, either still out or in the
       -- emptied second half
@@ -182,7 +182,7 @@ theorem rotation_cover (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCRE
             have hE' : (A.extract P.SLOTS_PER_EPOCH A.size ++ Array.replicate P.SLOTS_PER_EPOCH
                 JauneConsensus.Gloas.BuilderPendingPayment.empty)[P.SLOTS_PER_EPOCH +
                   L.slot.toNat % P.SLOTS_PER_EPOCH]? = some E := by rw [← hbp]; exact hE
-            rw [shifted_hi hsz (by omega) (by omega)] at hE'
+            rw [shifted_high hsz (by omega) (by omega)] at hE'
             cases hE'
             rw [hLb'] at hEw
             apply hv
@@ -192,17 +192,17 @@ theorem rotation_cover (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCRE
         · refine Or.inl ?_
           rintro ⟨_, _, h, _⟩
           rw [hbi_b, if_neg e3, if_neg (by omega)] at h; cases h
-      rw [expo_of_not_live hnla, ← hL]
+      rw [exposure_of_not_live hnla, ← hL]
       rcases hnlb with hnlb | hv
-      · rw [expo_of_not_live hnlb, hLb']; omega
-      · have : expo { b with slot := next } i = 0 := by
-          unfold expo; rw [if_neg (fun e => by have := e.2.1; rw [hLb'] at this; omega)]
+      · rw [exposure_of_not_live hnlb, hLb']; omega
+      · have : exposure { b with slot := next } i = 0 := by
+          unfold exposure; rw [if_neg (fun e => by have := e.2.1; rw [hLb'] at this; omega)]
         omega
 
-theorem noLiveWeight_congr {s s' : GSt P} (hf : InvFrame s s') (h : NoLiveWeightOnLatestBid s) :
+theorem noLiveWeight_congr {s s' : GloasState P} (hf : InvariantFrame s s') (h : NoLiveWeightOnLatestBid s) :
     NoLiveWeightOnLatestBid s' := by
   have hb : bidIndex s' = bidIndex s := by
-    unfold bidIndex curEpoch; rw [hf.2.2.2.1, hf.2.2.2.2.2.2.1]
+    unfold bidIndex currentEpoch; rw [hf.2.2.2.1, hf.2.2.2.2.2.2.1]
   intro k hk
   rw [hb] at hk
   rw [hf.2.1, hf.2.2.2.1]
@@ -211,53 +211,53 @@ theorem noLiveWeight_congr {s s' : GSt P} (hf : InvFrame s s') (h : NoLiveWeight
 /-- **G3-05 over `process_slots`**, together with G3-07 and FutureEmpty (needs quorum
 positivity and `0 < SLOTS_PER_EPOCH`). -/
 theorem processSlots_pendingCovered (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT)
-    (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx} {s s' : GSt P} {slot : U64}
+    (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Context} {s s' : GloasState P} {slot : U64}
     (h : JauneConsensus.Gloas.processSlots ctx s slot = .ok s')
     (hu : PendingCovered s ∧ NoLiveWeightOnLatestBid s ∧ FutureEmpty s) :
     PendingCovered s' ∧ NoLiveWeightOnLatestBid s' ∧ FutureEmpty s' :=
-  processSlots_ind (ctx := ctx) (fun m => PendingCovered m ∧ NoLiveWeightOnLatestBid m ∧ FutureEmpty m)
+  processSlots_induction (ctx := ctx) (fun m => PendingCovered m ∧ NoLiveWeightOnLatestBid m ∧ FutureEmpty m)
     (fun st st1 st2 next hI f1 hn hc => by
       obtain ⟨g5, g7, fe⟩ := hI
-      have h7 := slotIter_noLiveWeight hspe ⟨g7, fe⟩ f1 hn hc
+      have h7 := slotIteration_noLiveWeight hspe ⟨g7, fe⟩ f1 hn hc
       refine ⟨?_, h7⟩
-      have hb2 : st2.builders = st.builders := (slotIter_core f1 hc).1
-      have key : ∀ i, pend { st2 with slot := next } i + expo { st2 with slot := next } i ≤
-          pend st i + expo st i := by
+      have hb2 : st2.builders = st.builders := (slotIteration_core f1 hc).1
+      have key : ∀ i, pendingBalance { st2 with slot := next } i + exposure { st2 with slot := next } i ≤
+          pendingBalance st i + exposure st i := by
         intro i
         rcases hc with ⟨rfl, hne⟩ | ⟨h0, he⟩
         · rw [hn] at hne
           obtain ⟨hdiv, _⟩ := div_succ_of_mod_ne hne
           have hbi : bidIndex { st2 with slot := next } = bidIndex st := by
-            unfold bidIndex curEpoch; simp only []; rw [f1.2.2.2.1, hn, hdiv]
+            unfold bidIndex currentEpoch; simp only []; rw [f1.2.2.2.1, hn, hdiv]
           have hiff : BidLive { st2 with slot := next } ↔ BidLive st := by
             unfold BidLive
             rw [hbi]
             show (∃ k E, bidIndex st = some k ∧ st2.builder_pending_payments.toArray[k]? = some E ∧
               E.withdrawal = bidWithdrawal st2.latest_execution_payload_bid) ↔ _
             rw [f1.2.1, f1.2.2.2.1]
-          have hp : pend { st2 with slot := next } i = pend st i := pend_congr f1 i
+          have hp : pendingBalance { st2 with slot := next } i = pendingBalance st i := pendingBalance_congr f1 i
           by_cases hl : BidLive st
-          · rw [expo_le_live hl, expo_le_live (hiff.mpr hl), hp]
-          · rw [expo_of_not_live hl, expo_of_not_live (fun h => hl (hiff.mp h)), hp]
-            show _ + wAmt i (bidWithdrawal st2.latest_execution_payload_bid) ≤ _
+          · rw [exposure_le_live hl, exposure_le_live (hiff.mpr hl), hp]
+          · rw [exposure_of_not_live hl, exposure_of_not_live (fun h => hl (hiff.mp h)), hp]
+            show _ + withdrawalAmount i (bidWithdrawal st2.latest_execution_payload_bid) ≤ _
             rw [f1.2.2.2.1]
         · obtain ⟨a, b, fa, hb, fb⟩ := processEpoch_phases he
-          have fa' := invFrame.trans f1 fa
+          have fa' := invariantFrame.trans f1 fa
           have g7a := noLiveWeight_congr fa' g7
           have hn' : next.toNat = a.slot.toNat + 1 := by rw [fa'.2.2.2.2.2.2.1]; exact hn
           have rc := rotation_cover hq hspe hb g7a hn' h0 i
-          have e1 : pend { st2 with slot := next } i = pend b i := pend_congr fb i
-          have e2 : expo { st2 with slot := next } i = expo { b with slot := next } i :=
-            expo_congr (s := { b with slot := next }) (s' := { st2 with slot := next })
+          have e1 : pendingBalance { st2 with slot := next } i = pendingBalance b i := pendingBalance_congr fb i
+          have e2 : exposure { st2 with slot := next } i = exposure { b with slot := next } i :=
+            exposure_congr (s := { b with slot := next }) (s' := { st2 with slot := next })
               fb.2.2.2.1 fb.2.1 rfl i
-          have e3 : pend a i = pend st i := pend_congr fa' i
-          have e4 : expo a i = expo st i :=
-            expo_congr fa'.2.2.2.1 fa'.2.1 fa'.2.2.2.2.2.2.1 i
+          have e3 : pendingBalance a i = pendingBalance st i := pendingBalance_congr fa' i
+          have e4 : exposure a i = exposure st i :=
+            exposure_congr fa'.2.2.2.1 fa'.2.1 fa'.2.2.2.2.2.2.1 i
           omega
       intro i bb hbb
       have hbb' : st.builders.toArray[i]? = some bb := by
-        have : ({ st2 with slot := next } : GSt P).builders = st.builders := hb2
+        have : ({ st2 with slot := next } : GloasState P).builders = st.builders := hb2
         rw [← this]; exact hbb
       exact Nat.le_trans (key i) (g5 i bb hbb')) h hu
 
-end JauneConsensus.Facts.Gloas.Inv
+end JauneConsensus.Facts.Gloas.Invariant

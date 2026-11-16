@@ -12,18 +12,18 @@ namespace Jaune
 -- opening it lets generalized field notation (`code.getInst`) find them.
 open Jaune
 
-def Jinst.Run (evm : Evm) :
-    Jinst → Except (EvmError × Devm) (Nat × Devm) → Prop :=
+def JumpOp.Run (evm : Evm) :
+    JumpOp → Except (EvmError × Devm) (Nat × Devm) → Prop :=
   λ j ex => j.run evm = ex
 
-def Linst.Run (sevm : Sevm) (devm : Devm) : Linst → Execution → Prop :=
+def HaltOp.Run (sevm : Sevm) (devm : Devm) : HaltOp → Execution → Prop :=
   λ l ex => l.run sevm devm = ex
 
 @[implicit_reducible] def Xlot : Type := Option (Evm × Execution)
 
 /-- Fieldwise relations used to assemble the canonical `Devm.Rel` frames. -/
 structure Devm.Rels : Type where
-  (stack : List B256 → List B256 → Prop)
+  (stack : List U256 → List U256 → Prop)
   (memory : Mem → Mem → Prop)
   (gasLeft : Nat → Nat → Prop)
   (logs : List Log → List Log → Prop)
@@ -36,7 +36,7 @@ structure Devm.Rels : Type where
   (accessedStorageKeys : KeySet → KeySet → Prop)
   (state : State → State → Prop)
   (createdAccounts : AdrSet → AdrSet → Prop)
-  (transientStorage : Tra → Tra → Prop)
+  (transientStorage : TransientStorage → TransientStorage → Prop)
   (stateGas : StateGasMeter → StateGasMeter → Prop)
   (accountReads : AdrSet → AdrSet → Prop)
   (storageReads : KeySet → KeySet → Prop)
@@ -163,7 +163,7 @@ theorem Devm.rel_trans {r : Devm.Rels} (hr : Devm.Rels.Trans r) :
 /-- A relation that is equality off the machine fields relates `d` only to
 `d` with a new `Mach`. Consumers read the equation instead of unpacking the
 fields positionally. -/
-theorem Devm.Rel.eq_setMach {stack : List B256 → List B256 → Prop}
+theorem Devm.Rel.eq_setMach {stack : List U256 → List U256 → Prop}
     {memory : Mem → Mem → Prop} {gasLeft : Nat → Nat → Prop}
     {stateGas : StateGasMeter → StateGasMeter → Prop} {d d' : Devm}
     (h : Devm.Rel {Devm.Rels.eq with
@@ -187,11 +187,11 @@ theorem Devm.Burn.eq_setMach {d d' : Devm} (h : Devm.Burn d d') :
   Devm.Rel.eq_setMach h
 
 
-def Linst.At (code : ByteArray) (pc : Nat) (l : Linst) : Prop := code.getInst pc = some (.last l)
-def Ninst.At (code : ByteArray) (pc : Nat) (n : Ninst) : Prop := code.getInst pc = some (.next n)
-def Jinst.At (code : ByteArray) (pc : Nat) (j : Jinst) : Prop := code.getInst pc = some (.jump j)
-def Rinst.At (code : ByteArray) (pc : Nat) (r : Rinst) : Prop := code.getInst pc = some (.next (.reg r))
-def Xinst.At (code : ByteArray) (pc : Nat) (x : Xinst) : Prop := code.getInst pc = some (.next (.exec x))
+def HaltOp.At (code : ByteArray) (pc : Nat) (l : HaltOp) : Prop := code.getOp pc = some (.halt l)
+def NextOp.At (code : ByteArray) (pc : Nat) (n : NextOp) : Prop := code.getOp pc = some (.next n)
+def JumpOp.At (code : ByteArray) (pc : Nat) (j : JumpOp) : Prop := code.getOp pc = some (.jump j)
+def PlainOp.At (code : ByteArray) (pc : Nat) (r : PlainOp) : Prop := code.getOp pc = some (.next (.plain r))
+def MessageOp.At (code : ByteArray) (pc : Nat) (x : MessageOp) : Prop := code.getOp pc = some (.next (.message x))
 
 /-! ### The recursion-facing relational layer.
 
@@ -201,13 +201,13 @@ generic frame relation; the named mirrors specialize it so that the statements
 consumed by `Common.lean` and `Solvent.lean` keep their current shape. -/
 
 def RunFrame (f : Frame) (xl : Xlot)
-    (r : Except (EvmError × State × AdrSet × Tra) Devm) : Prop :=
+    (r : Except (EvmError × State × AdrSet × TransientStorage) Devm) : Prop :=
   match f.enter with
   | .done r' => xl = .none ∧ r = r'
   | .run evm => ∃ raw, xl = .some ⟨evm, raw⟩ ∧ r = f.settle raw
 
 def ExecuteCode (msg : Msg) (xl : Xlot)
-    (ex : Except (EvmError × State × AdrSet × Tra) Devm) : Prop :=
+    (ex : Except (EvmError × State × AdrSet × TransientStorage) Devm) : Prop :=
   match executeCode.enter msg with
   | .inl evm => ∃ raw, xl = .some ⟨evm, raw⟩ ∧
     ex = executeCode.handleErrorWith msg.benv.stat.rules.stateGas raw
@@ -215,11 +215,11 @@ def ExecuteCode (msg : Msg) (xl : Xlot)
     ex = executeCode.handleErrorWith msg.benv.stat.rules.stateGas raw
 
 def ProcessMessage (msg : Msg) (xl : Xlot)
-    (ex : Except (EvmError × State × AdrSet × Tra) Devm) : Prop :=
+    (ex : Except (EvmError × State × AdrSet × TransientStorage) Devm) : Prop :=
   RunFrame (Frame.ofCall msg) xl ex
 
 def ProcessCreateMessage (msg : Msg) (xl : Xlot)
-    (ex : Except (EvmError × State × AdrSet × Tra) Devm) : Prop :=
+    (ex : Except (EvmError × State × AdrSet × TransientStorage) Devm) : Prop :=
   RunFrame (Frame.ofCreate msg) xl ex
 
 def XStep.Run (s : XStep) (xl : Xlot) (ex : Execution) : Prop :=
@@ -227,7 +227,7 @@ def XStep.Run (s : XStep) (xl : Xlot) (ex : Execution) : Prop :=
   | .done ex' => xl = .none ∧ ex = ex'
   | .spawn f rsm => ∃ r, RunFrame f xl r ∧ ex = rsm.run r
 
-def GenericCreate (sevm : Sevm) (devm : Devm) (endowment : B256) (newAddress : Adr)
+def GenericCreate (sevm : Sevm) (devm : Devm) (endowment : U256) (newAddress : Address)
     (memoryIndex memorySize : Nat) (xl : Xlot) (ex : Execution) : Prop :=
   XStep.Run
     (genericCreate.step sevm devm endowment newAddress memoryIndex memorySize)
@@ -237,10 +237,10 @@ def GenericCall
     (sevm: Sevm)
     (devm: Devm)
     (gas: Nat)
-    (value: B256)
-    (caller: Adr)
-    (target: Adr)
-    (codeAddress: Adr)
+    (value: U256)
+    (caller: Address)
+    (target: Address)
+    (codeAddress: Address)
     (shouldTransferValue: Bool)
     (isStaticcall: Bool)
     (input_index:  Nat)
@@ -258,7 +258,7 @@ def GenericCall
     xl ex
 
 def GenericCreateAmsterdam (sevm : Sevm) (state : StateGasRules) (devm : Devm)
-    (endowment : B256) (newAddress : Adr) (memoryIndex memorySize : Nat)
+    (endowment : U256) (newAddress : Address) (memoryIndex memorySize : Nat)
     (xl : Xlot) (ex : Execution) : Prop :=
   XStep.Run
     (genericCreateAmsterdam.step sevm state devm endowment newAddress
@@ -266,8 +266,8 @@ def GenericCreateAmsterdam (sevm : Sevm) (state : StateGasRules) (devm : Devm)
     xl ex
 
 def GenericCallAmsterdam (sevm : Sevm) (state : StateGasRules) (devm : Devm)
-    (gas reservoir : Nat) (value : B256)
-    (caller target codeAddress : Adr) (shouldTransferValue isStaticcall : Bool)
+    (gas reservoir : Nat) (value : U256)
+    (caller target codeAddress : Address) (shouldTransferValue isStaticcall : Bool)
     (input_index input_size output_index output_size : Nat) (code : ByteArray)
     (disablePrecompiles newAccountCharged insufficientBalance : Bool)
     (xl : Xlot) (ex : Execution) : Prop :=
@@ -278,9 +278,9 @@ def GenericCallAmsterdam (sevm : Sevm) (state : StateGasRules) (devm : Devm)
       newAccountCharged insufficientBalance)
     xl ex
 
-def Xinst.Run (sevm : Sevm) (devm : Devm) :
-    Xinst → Xlot → Execution → Prop :=
-  fun x xl ex => XStep.Run (Xinst.step sevm devm x) xl ex
+def MessageOp.Run (sevm : Sevm) (devm : Devm) :
+    MessageOp → Xlot → Execution → Prop :=
+  fun x xl ex => XStep.Run (MessageOp.step sevm devm x) xl ex
 
 def Step.Run (s : Step) (xl : Xlot) (ex : Execution) : Prop :=
   match s with
@@ -288,9 +288,9 @@ def Step.Run (s : Step) (xl : Xlot) (ex : Execution) : Prop :=
   | .cont _ devm => xl = .none ∧ ex = .ok devm
   | .spawn f rsm _ => ∃ r, RunFrame f xl r ∧ ex = rsm.run r
 
-def Ninst.StepRun (pc : Nat) (sevm : Sevm) (devm : Devm)
-    (n : Ninst) (xl : Xlot) (ex : Execution) : Prop :=
-  Step.Run (Ninst.step ⟨pc, sevm, devm⟩ n) xl ex
+def NextOp.StepRun (pc : Nat) (sevm : Sevm) (devm : Devm)
+    (n : NextOp) (xl : Xlot) (ex : Execution) : Prop :=
+  Step.Run (NextOp.step ⟨pc, sevm, devm⟩ n) xl ex
 
 /-- A childless step outcome built from a plain `Execution` carries exactly
 that result.  This is the workhorse for the non-spawning instruction kinds. -/
@@ -363,9 +363,9 @@ lemma Step.ofJump_ne_halt_ok {j : Except (EvmError × Devm) (Nat × Devm)}
 /-- Every step outcome of an ordinary instruction resumes at `pc + n.size`;
 the program-counter arithmetic that used to live in `exec` now lives in
 `Ninst.step`, so it is recovered here once. -/
-lemma Ninst.step_cont_pc {evm : Evm} {n : Ninst} {pc' : Nat} {devm' : Devm}
-    (h : Ninst.step evm n = .cont pc' devm') : pc' = evm.pc + n.size := by
-  unfold Ninst.step at h
+lemma NextOp.step_cont_pc {evm : Evm} {n : NextOp} {pc' : Nat} {devm' : Devm}
+    (h : NextOp.step evm n = .cont pc' devm') : pc' = evm.pc + n.size := by
+  unfold NextOp.step at h
   rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [] at h
   · exact (Step.ofExecution_cont h).1
   · unfold XStep.toStep at h
@@ -377,10 +377,10 @@ lemma Ninst.step_cont_pc {evm : Evm} {n : Ninst} {pc' : Nat} {devm' : Devm}
   · exact (Step.ofExecution_cont h).1
   · exact (Step.ofExecution_cont h).1
 
-lemma Ninst.step_spawn_pc {evm : Evm} {n : Ninst}
+lemma NextOp.step_spawn_pc {evm : Evm} {n : NextOp}
     {f : Frame} {rsm : Resume} {pc' : Nat}
-    (h : Ninst.step evm n = .spawn f rsm pc') : pc' = evm.pc + n.size := by
-  unfold Ninst.step at h
+    (h : NextOp.step evm n = .spawn f rsm pc') : pc' = evm.pc + n.size := by
+  unfold NextOp.step at h
   rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [] at h
   · cases Step.ofExecution_ne_spawn h
   · unfold XStep.toStep at h
@@ -392,9 +392,9 @@ lemma Ninst.step_spawn_pc {evm : Evm} {n : Ninst}
   · cases Step.ofExecution_ne_spawn h
   · cases Step.ofExecution_ne_spawn h
 
-lemma Ninst.step_ne_halt_ok {evm : Evm} {n : Ninst} {devm' : Devm} :
-    Ninst.step evm n ≠ .halt (.ok devm') := by
-  unfold Ninst.step
+lemma NextOp.step_ne_halt_ok {evm : Evm} {n : NextOp} {devm' : Devm} :
+    NextOp.step evm n ≠ .halt (.ok devm') := by
+  unfold NextOp.step
   rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only []
   · exact Step.ofExecution_ne_halt_ok
   · unfold XStep.toStep
@@ -408,28 +408,28 @@ lemma Ninst.step_ne_halt_ok {evm : Evm} {n : Ninst} {devm' : Devm} :
 
 /-! ### The six branches of `Ninst.step`, made explicit. -/
 
-lemma Ninst.step_reg {evm : Evm} {r : Rinst} :
-    Ninst.step evm (.reg r) = Step.ofExecution (evm.pc + 1) (r.run evm) := rfl
+lemma NextOp.step_reg {evm : Evm} {r : PlainOp} :
+    NextOp.step evm (.plain r) = Step.ofExecution (evm.pc + 1) (r.run evm) := rfl
 
-lemma Ninst.step_push {evm : Evm} {xs : Bytes} {le : xs.length ≤ 32} :
-    Ninst.step evm (.push xs le) =
-      if xs = [] && !evm.sta.benvStat.rules.op.push0 then
+lemma NextOp.step_push {evm : Evm} {xs : Bytes} {le : xs.length ≤ 32} :
+    NextOp.step evm (.push xs le) =
+      if xs = [] && !evm.sta.benvStat.rules.opcodes.push0 then
         Step.ofExecution (evm.pc + xs.length + 1)
           (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
       else
         Step.ofExecution (evm.pc + xs.length + 1)
-          (do let d ← chargeGas (if xs = [] then gBase else gVerylow) evm.dyna
-              d.push xs.toB256) := rfl
+          (do let d ← chargeGas (if xs = [] then Gas.base else Gas.veryLow) evm.dyna
+              d.push xs.toU256) := rfl
 
-lemma Ninst.step_exec {evm : Evm} {x : Xinst} :
-    Ninst.step evm (.exec x) =
-      XStep.toStep (evm.pc + 1) (Xinst.step evm.sta evm.dyna x) := rfl
+lemma NextOp.step_exec {evm : Evm} {x : MessageOp} :
+    NextOp.step evm (.message x) =
+      XStep.toStep (evm.pc + 1) (MessageOp.step evm.sta evm.dyna x) := rfl
 
-lemma Ninst.step_dupn {evm : Evm} {imm : UInt8} :
-    Ninst.step evm (.dupn imm) =
+lemma NextOp.step_dupn {evm : Evm} {imm : UInt8} :
+    NextOp.step evm (.dupn imm) =
       Step.ofExecution (evm.pc + 2)
-        (do if evm.sta.benvStat.rules.op.stackAccess then
-              let devm ← chargeGas gVerylow evm.dyna
+        (do if evm.sta.benvStat.rules.opcodes.stackAccess then
+              let devm ← chargeGas Gas.veryLow evm.dyna
               match decodeSingle imm with
               | none => .error ⟨.halt (.invalidOpcode .none), devm⟩
               | some n =>
@@ -439,11 +439,11 @@ lemma Ninst.step_dupn {evm : Evm} {imm : UInt8} :
             else
               .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩) := rfl
 
-lemma Ninst.step_swapn {evm : Evm} {imm : UInt8} :
-    Ninst.step evm (.swapn imm) =
+lemma NextOp.step_swapn {evm : Evm} {imm : UInt8} :
+    NextOp.step evm (.swapn imm) =
       Step.ofExecution (evm.pc + 2)
-        (do if evm.sta.benvStat.rules.op.stackAccess then
-              let devm ← chargeGas gVerylow evm.dyna
+        (do if evm.sta.benvStat.rules.opcodes.stackAccess then
+              let devm ← chargeGas Gas.veryLow evm.dyna
               match decodeSingle imm with
               | none => .error ⟨.halt (.invalidOpcode .none), devm⟩
               | some n =>
@@ -453,11 +453,11 @@ lemma Ninst.step_swapn {evm : Evm} {imm : UInt8} :
             else
               .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩) := rfl
 
-lemma Ninst.step_exchange {evm : Evm} {imm : UInt8} :
-    Ninst.step evm (.exchange imm) =
+lemma NextOp.step_exchange {evm : Evm} {imm : UInt8} :
+    NextOp.step evm (.exchange imm) =
       Step.ofExecution (evm.pc + 2)
-        (do if evm.sta.benvStat.rules.op.stackAccess then
-              let devm ← chargeGas gVerylow evm.dyna
+        (do if evm.sta.benvStat.rules.opcodes.stackAccess then
+              let devm ← chargeGas Gas.veryLow evm.dyna
               match decodePair imm with
               | none => .error ⟨.halt (.invalidOpcode .none), devm⟩
               | some (n, m) =>
@@ -552,7 +552,7 @@ lemma of_benvAfterTransfer {msg : Msg} {benv' : Benv}
 
 /-- Value transfer changes balances but preserves code. -/
 lemma benvAfterTransfer_ok_getCode {msg : Msg} {benv : Benv}
-    (h : msg.benvAfterTransfer = .ok benv) (a : Adr) :
+    (h : msg.benvAfterTransfer = .ok benv) (a : Address) :
     benv.state.getCode a = msg.benv.state.getCode a := by
   by_cases hzero : msg.value = 0
   · rw [Msg.benvAfterTransfer_of_value_zero hzero] at h
@@ -566,7 +566,7 @@ lemma benvAfterTransfer_ok_getCode {msg : Msg} {benv : Benv}
 /-- Zero-value entry preserves storage everywhere. Nonzero value transfer preserves
 storage at an account protected by a nonzero nonce or nonempty code. -/
 lemma benvAfterTransfer_ok_getStor {msg : Msg} {benv : Benv}
-    (h : msg.benvAfterTransfer = .ok benv) (a : Adr)
+    (h : msg.benvAfterTransfer = .ok benv) (a : Address)
     (hpreserved : msg.value = 0 ∨ (msg.benv.state.get a).nonce ≠ 0 ∨
       (msg.benv.state.get a).code.size ≠ 0) :
     benv.state.getStor a = msg.benv.state.getStor a := by
@@ -575,9 +575,9 @@ lemma benvAfterTransfer_ok_getStor {msg : Msg} {benv : Benv}
     cases h
     rfl
   have hprotected := hpreserved.resolve_left hzero
-  have preserve {st : State} {b : Adr} {v : B256}
+  have preserve {st : State} {b : Address} {v : U256}
       (hp : (st.get a).nonce ≠ 0 ∨ (st.get a).code.size ≠ 0) :
-      ((st.setBal b v).get a).stor = (st.get a).stor := by
+      ((st.setBal b v).get a).storage = (st.get a).storage := by
     rw [State.setBal_get_stor]
     split
     · rename_i he
@@ -592,7 +592,7 @@ lemma benvAfterTransfer_ok_getStor {msg : Msg} {benv : Benv}
       rw [(State.of_subBal h_sub).2]
       by_cases ha : msg.caller = a
       · rw [ha, State.setBal_get_self]
-        simpa only [Acct.clearIfEmpty_nonce, Acct.clearIfEmpty_code, Acct.withBal]
+        simpa only [Account.clearIfEmpty_nonce, Account.clearIfEmpty_code, Account.withBalance]
           using hprotected
       · rw [State.setBal_get_ne ha]
         exact hprotected
@@ -704,18 +704,18 @@ lemma Step.Run.some_inv {s : Step} {evm_ : Evm} {exn_ : Execution} {ex : Executi
     exact ⟨f, rsm, pc', rfl, henter, by rw [hex, hr]⟩
 
 /-- Only a call-type instruction spawns, and it delegates to `Xinst.step`. -/
-lemma Ninst.step_spawn_inv {evm : Evm} {n : Ninst}
+lemma NextOp.step_spawn_inv {evm : Evm} {n : NextOp}
     {f : Frame} {rsm : Resume} {pc' : Nat}
-    (h : Ninst.step evm n = .spawn f rsm pc') :
-    ∃ x, n = .exec x ∧ Xinst.step evm.sta evm.dyna x = .spawn f rsm := by
+    (h : NextOp.step evm n = .spawn f rsm pc') :
+    ∃ x, n = .message x ∧ MessageOp.step evm.sta evm.dyna x = .spawn f rsm := by
   rcases n with r | x | ⟨xs, hxs⟩ | a | a | a
-  · rw [Ninst.step_reg] at h; cases Step.ofExecution_ne_spawn h
-  · rw [Ninst.step_exec] at h; exact ⟨x, rfl, XStep.toStep_spawn h⟩
-  · rw [Ninst.step_push] at h
+  · rw [NextOp.step_reg] at h; cases Step.ofExecution_ne_spawn h
+  · rw [NextOp.step_exec] at h; exact ⟨x, rfl, XStep.toStep_spawn h⟩
+  · rw [NextOp.step_push] at h
     split at h <;> cases Step.ofExecution_ne_spawn h
-  · unfold Ninst.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
-  · unfold Ninst.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
-  · unfold Ninst.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
+  · unfold NextOp.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
+  · unfold NextOp.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
+  · unfold NextOp.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
 
 /-- The initial machine of an entered code frame is `initEvm` of the message,
 whichever decode branch `executeCode.enter` took. -/
@@ -744,7 +744,7 @@ lemma Frame.enter_run_inv {f : Frame} {cevm : Evm} (h : f.enter = .run cevm) :
     · cases h
 
 lemma ExecuteCode.some_inv {msg : Msg} {evm_ : Evm} {exn_ : Execution}
-    {ex : Except (EvmError × State × AdrSet × Tra) Devm}
+    {ex : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     (run : ExecuteCode msg (.some ⟨evm_, exn_⟩) ex) :
     evm_ = initEvm msg ∧
       ex = executeCode.handleErrorWith msg.benv.stat.rules.stateGas exn_ := by
@@ -759,7 +759,7 @@ lemma ExecuteCode.some_inv {msg : Msg} {evm_ : Evm} {exn_ : Execution}
 machine and produces no child derivation. -/
 lemma executeCode.enter_inr {msg : Msg} {raw : Execution}
     (h : executeCode.enter msg = .inr raw) :
-    ∃ adr, raw = executePrecomp (initEvm msg) adr := by
+    ∃ adr, raw = executePrecompile (initEvm msg) adr := by
   unfold executeCode.enter at h
   split at h
   · cases h
@@ -797,7 +797,7 @@ code execution, before the frame's own settlement is applied.  Splitting
 `ProcessMessage`/`ProcessCreateMessage` arguments be phrased once and reused
 for both frame kinds. -/
 def FrameBody (m : Msg) (xl : Xlot)
-    (r : Except (EvmError × State × AdrSet × Tra) Devm) : Prop :=
+    (r : Except (EvmError × State × AdrSet × TransientStorage) Devm) : Prop :=
   match m.benvAfterTransfer with
   | .error e => xl = .none ∧ r = .error e
   | .ok benv => ExecuteCode (m.withBenv benv) xl r
@@ -807,7 +807,7 @@ frame relation decomposes into a transfer failure or a code-execution relation
 on the transferred message.  This is the bridge that lets every former
 `ProcessMessage`/`ProcessCreateMessage` argument be phrased once. -/
 lemma RunFrame.decompose {f : Frame} {xl : Xlot}
-    {r : Except (EvmError × State × AdrSet × Tra) Devm}
+    {r : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     (run : RunFrame f xl r) :
     (∃ e, f.inner.benvAfterTransfer = .error e ∧ xl = .none ∧
         r = f.settleMsg (.error e)) ∨
@@ -835,7 +835,7 @@ lemma RunFrame.decompose {f : Frame} {xl : Xlot}
 
 /-- `RunFrame` is exactly `FrameBody` composed with the frame's settlement. -/
 lemma RunFrame.iff_settleMsg {f : Frame} {xl : Xlot}
-    {r : Except (EvmError × State × AdrSet × Tra) Devm} :
+    {r : Except (EvmError × State × AdrSet × TransientStorage) Devm} :
     RunFrame f xl r ↔ ∃ r0, FrameBody f.inner xl r0 ∧ r = f.settleMsg r0 := by
   constructor
   · intro run
@@ -866,13 +866,13 @@ lemma RunFrame.iff_settleMsg {f : Frame} {xl : Xlot}
         exact Frame.settle_eq_settleMsg_handleErrorWith.symm
 
 lemma ProcessMessage.iff_body {msg : Msg} {xl : Xlot}
-    {r : Except (EvmError × State × AdrSet × Tra) Devm} :
+    {r : Except (EvmError × State × AdrSet × TransientStorage) Devm} :
     ProcessMessage msg xl r ↔
       ∃ r0, FrameBody msg xl r0 ∧ r = processMessage.settle msg r0 :=
   RunFrame.iff_settleMsg
 
 lemma ProcessCreateMessage.iff_processMessage {msg : Msg} {xl : Xlot}
-    {r : Except (EvmError × State × AdrSet × Tra) Devm} :
+    {r : Except (EvmError × State × AdrSet × TransientStorage) Devm} :
     ProcessCreateMessage msg xl r ↔
       ∃ r', ProcessMessage (processCreateMessage.msg msg) xl r' ∧
         r = processCreateMessage.settle msg r' := by
@@ -893,40 +893,40 @@ equations are what let the former per-instruction relational reasoning survive
 against the single step function. -/
 
 lemma Evm.step_invOp {pc : Nat} {sevm : Sevm} {devm : Devm}
-    (h : sevm.code.getInst pc = none) :
+    (h : sevm.code.getOp pc = none) :
     Evm.step ⟨pc, sevm, devm⟩ = .halt (.error ⟨.halt (.invalidOpcode .none), devm⟩) := by
   unfold Evm.step
   rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = none from h]
 
-lemma Evm.step_next {pc : Nat} {sevm : Sevm} {devm : Devm} {n : Ninst}
-    (h : Ninst.At sevm.code pc n) :
-    Evm.step ⟨pc, sevm, devm⟩ = Ninst.step ⟨pc, sevm, devm⟩ n := by
+lemma Evm.step_next {pc : Nat} {sevm : Sevm} {devm : Devm} {n : NextOp}
+    (h : NextOp.At sevm.code pc n) :
+    Evm.step ⟨pc, sevm, devm⟩ = NextOp.step ⟨pc, sevm, devm⟩ n := by
   unfold Evm.step
   rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.next n) from h]
 
-lemma Evm.step_jump {pc : Nat} {sevm : Sevm} {devm : Devm} {j : Jinst}
-    (h : Jinst.At sevm.code pc j) :
+lemma Evm.step_jump {pc : Nat} {sevm : Sevm} {devm : Devm} {j : JumpOp}
+    (h : JumpOp.At sevm.code pc j) :
     Evm.step ⟨pc, sevm, devm⟩ = Step.ofJump (j.run ⟨pc, sevm, devm⟩) := by
   unfold Evm.step
   rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.jump j) from h]
 
-lemma Evm.step_last {pc : Nat} {sevm : Sevm} {devm : Devm} {l : Linst}
-    (h : Linst.At sevm.code pc l) :
+lemma Evm.step_last {pc : Nat} {sevm : Sevm} {devm : Devm} {l : HaltOp}
+    (h : HaltOp.At sevm.code pc l) :
     Evm.step ⟨pc, sevm, devm⟩ = .halt (l.run sevm devm) := by
   unfold Evm.step
-  rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.last l) from h]
+  rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.halt l) from h]
 
 /-- Only a call-type instruction spawns a child frame. -/
 lemma Evm.step_spawn_inv {pc : Nat} {sevm : Sevm} {devm : Devm}
     {f : Frame} {rsm : Resume} {pc' : Nat}
     (hs : Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc') :
-    ∃ x : Xinst, Xinst.At sevm.code pc x ∧
-      Xinst.step sevm devm x = .spawn f rsm ∧ pc' = pc + 1 := by
+    ∃ x : MessageOp, MessageOp.At sevm.code pc x ∧
+      MessageOp.step sevm devm x = .spawn f rsm ∧ pc' = pc + 1 := by
   unfold Evm.step at hs
   split at hs
   · cases hs
   · rename_i n hgi
-    rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [Ninst.step] at hs
+    rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [NextOp.step] at hs
     · cases Step.ofExecution_ne_spawn hs
     · refine ⟨x, hgi, XStep.toStep_spawn hs, ?_⟩
       unfold XStep.toStep at hs

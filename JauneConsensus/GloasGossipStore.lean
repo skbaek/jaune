@@ -28,8 +28,8 @@ fields beyond the store-free ones are `GloasStoreSeen`.
 -/
 
 namespace JauneConsensus.Gloas
-open Jaune (Bytes B256)
-open JauneConsensus.Gossip (GM ignore reject outcome Outcome Seen lookupSet addToSet
+open Jaune (Bytes U256)
+open JauneConsensus.Gossip (Validation ignore reject outcome Outcome Seen lookupSet addToSet
   isNonStrictSuperset isFutureSlot isCurrentSlot isCurrentOrPreviousEpoch isCurrentOrNextSlot
   isPastSlot isGasLimitTargetCompatible computeSubnetForDataColumnSidecar
   computeSubnetForAttestation PayloadValidationStatus liftModel TARGET_AGGREGATORS_PER_COMMITTEE)
@@ -54,7 +54,7 @@ structure GloasStoreSeen (P : Preset) where
   proposer_preferences : List ((Slot × Root) × ProposerPreferences) := []
 
 /-- The Gloas gossip cache. -/
-abbrev GSeen (P : Preset) := Seen (GloasStoreSeen P)
+abbrev SeenWithStore (P : Preset) := Seen (GloasStoreSeen P)
 
 /-- `DOMAIN_PROPOSER_PREFERENCES = DomainType('0x0D000000')` (`specs/gloas/beacon-chain.md:564`). -/
 def DOMAIN_PROPOSER_PREFERENCES : DomainType := #v[0x0D, 0x00, 0x00, 0x00]
@@ -70,21 +70,21 @@ def assocGet {κ α : Type} [BEq κ] (d : List (κ × α)) (k : κ) : Option α 
 /-! ## Helpers -/
 
 /-- `store.block_states[get_head(store).root]`. -/
-def gossipHeadState (ctx : Ctx) (store : Store P) : M (BeaconState P) := do
-  lookup store.block_states (← getHead ctx.cfg store).root
+def gossipHeadState (ctx : Context) (store : Store P) : Fallible (BeaconState P) := do
+  lookup store.block_states (← getHead ctx.config store).root
     "store.block_states[get_head(store).root]"
 
 /-- `is_aggregator(state, slot, index, slot_signature)` (`specs/phase0/validator.md:733`) over
 the Gloas committee. -/
 def isAggregatorGloas (state : BeaconState P) (slot : Slot) (index : CommitteeIndex)
-    (slotSignature : BLSSignature) : M Bool := do
+    (slotSignature : BLSSignature) : Fallible Bool := do
   let committee ← getBeaconCommittee state slot index
   let modulo := max 1 (committee.size / TARGET_AGGREGATORS_PER_COMMITTEE)
   let v ← bytesToUint64 ((hashBytes slotSignature.toArray.toList).take 8)
   pure (v.toNat % modulo == 0)
 
 /-- `verify_block_body_operation_limits(body)` (`:470`). -/
-def verifyBlockBodyOperationLimits (body : BeaconBlockBody P) : GM Unit := do
+def verifyBlockBodyOperationLimits (body : BeaconBlockBody P) : Validation Unit := do
   -- [REJECT] The proposer slashing count is within the limit
   if body.proposer_slashings.length > P.MAX_PROPOSER_SLASHINGS then
     reject "too many proposer slashings"
@@ -105,7 +105,7 @@ def verifyBlockBodyOperationLimits (body : BeaconBlockBody P) : GM Unit := do
     reject "too many payload attestations"
 
 /-- `verify_execution_requests_limits(execution_requests)` (`:509`). -/
-def verifyExecutionRequestsLimits (executionRequests : ExecutionRequests) : GM Unit := do
+def verifyExecutionRequestsLimits (executionRequests : ExecutionRequests) : Validation Unit := do
   -- [REJECT] The withdrawal request count is within the limit
   if executionRequests.withdrawals.length > P.MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD then
     reject "too many withdrawal requests"
@@ -121,7 +121,7 @@ def verifyExecutionRequestsLimits (executionRequests : ExecutionRequests) : GM U
 
 /-- `verify_attestation_payload_status(store, data, block_payload_statuses)` (`:429`). -/
 def verifyAttestationPayloadStatus (store : Store P) (data : AttestationData)
-    (blockPayloadStatuses : Root → Option PayloadValidationStatus) : GM Unit := do
+    (blockPayloadStatuses : Root → Option PayloadValidationStatus) : Validation Unit := do
   let blockRoot := data.beacon_block_root
   let block : BeaconBlock P ← liftModel (lookup store.blocks blockRoot "store.blocks[block_root]")
   -- [REJECT] For same-slot attestations, the payload cannot yet be present
@@ -141,8 +141,8 @@ def verifyAttestationPayloadStatus (store : Store P) (data : AttestationData)
   if payloadStatus == .invalidated then reject "attested payload is invalid"
 
 /-- `is_bid_compatible_with_head(store, bid)` (`:401`). -/
-def isBidCompatibleWithHead (ctx : Ctx) (store : Store P) (bid : ExecutionPayloadBid) : M Bool := do
-  let headNode ← getHead ctx.cfg store
+def isBidCompatibleWithHead (ctx : Context) (store : Store P) (bid : ExecutionPayloadBid) : Fallible Bool := do
+  let headNode ← getHead ctx.config store
   let headBlock ← lookup store.blocks headNode.root "store.blocks[head_node.root]"
   let headBid := headBlock.body.signed_execution_payload_bid.message
   let buildsOnParentBlock := bid.parent_block_root == headBlock.parent_root
@@ -156,9 +156,9 @@ def isBidCompatibleWithHead (ctx : Ctx) (store : Store P) (bid : ExecutionPayloa
 /-! ## `beacon_block` -/
 
 /-- `validate_beacon_block_gossip` (Gloas, `:565`). -/
-def validateBeaconBlockGossip (ctx : Ctx) (seen : GSeen P) (store : Store P)
-    (signedBeaconBlock : SignedBeaconBlock P) (currentTimeMs : U64) : GM (GSeen P) := do
-  let cfg := ctx.cfg
+def validateBeaconBlockGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
+    (signedBeaconBlock : SignedBeaconBlock P) (currentTimeMs : U64) : Validation (SeenWithStore P) := do
+  let cfg := ctx.config
   let block := signedBeaconBlock.message
   let bid := block.body.signed_execution_payload_bid.message
   -- [IGNORE] The block is the first block with valid signature received for the slot and proposer
@@ -224,10 +224,10 @@ def validateBeaconBlockGossip (ctx : Ctx) (seen : GSeen P) (store : Store P)
 /-! ## `beacon_aggregate_and_proof`, `beacon_attestation_{subnet_id}` -/
 
 /-- `validate_beacon_aggregate_and_proof_gossip` (Gloas, `:681`). -/
-def validateBeaconAggregateAndProofGossip (ctx : Ctx) (seen : GSeen P) (store : Store P)
+def validateBeaconAggregateAndProofGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
     (signedAggregateAndProof : SignedAggregateAndProof P) (currentTimeMs : U64)
-    (blockPayloadStatuses : Root → Option PayloadValidationStatus) : GM (GSeen P) := do
-  let cfg := ctx.cfg
+    (blockPayloadStatuses : Root → Option PayloadValidationStatus) : Validation (SeenWithStore P) := do
+  let cfg := ctx.config
   let aggregateAndProof := signedAggregateAndProof.message
   let aggregate := aggregateAndProof.aggregate
   let aggregationBits := aggregate.aggregation_bits.bits.toList
@@ -314,10 +314,10 @@ def validateBeaconAggregateAndProofGossip (ctx : Ctx) (seen : GSeen P) (store : 
       addToSet seen.ext.aggregate_data_roots aggregateCacheKey aggregationBits } }
 
 /-- `validate_beacon_attestation_gossip` (Gloas, `:1187`). -/
-def validateBeaconAttestationGossip (ctx : Ctx) (seen : GSeen P) (store : Store P)
+def validateBeaconAttestationGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
     (attestation : SingleAttestation) (currentTimeMs : U64) (subnetId : U64)
-    (blockPayloadStatuses : Root → Option PayloadValidationStatus) : GM (GSeen P) := do
-  let cfg := ctx.cfg
+    (blockPayloadStatuses : Root → Option PayloadValidationStatus) : Validation (SeenWithStore P) := do
+  let cfg := ctx.config
   let data := attestation.data
   let committeeIndex := attestation.committee_index
   let attesterIndex := attestation.attester_index
@@ -378,8 +378,8 @@ def validateBeaconAttestationGossip (ctx : Ctx) (seen : GSeen P) (store : Store 
 /-! ## `execution_payload`, `payload_attestation_message` -/
 
 /-- `validate_execution_payload_envelope_gossip` (`:817`). -/
-def validateExecutionPayloadEnvelopeGossip (ctx : Ctx) (seen : GSeen P) (store : Store P)
-    (signedEnvelope : SignedExecutionPayloadEnvelope P) : GM (GSeen P) := do
+def validateExecutionPayloadEnvelopeGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
+    (signedEnvelope : SignedExecutionPayloadEnvelope P) : Validation (SeenWithStore P) := do
   let envelope := signedEnvelope.message
   let payload := envelope.payload
   let blockRoot := envelope.beacon_block_root
@@ -416,7 +416,7 @@ def validateExecutionPayloadEnvelopeGossip (ctx : Ctx) (seen : GSeen P) (store :
   -- [REJECT] The number of withdrawals is within the limit
   if payload.withdrawals.length > P.MAX_WITHDRAWALS_PER_PAYLOAD then reject "too many withdrawals"
   -- [REJECT] The envelope signature is valid
-  if !(← verifyExecutionPayloadEnvelopeSignatureB ctx.blsActive state signedEnvelope) then
+  if !(← verifyExecutionPayloadEnvelopeSignatureWithBls ctx.blsActive state signedEnvelope) then
     reject "invalid envelope signature"
   -- Mark this envelope as seen and store its payload
   pure { seen with ext := { seen.ext with
@@ -424,9 +424,9 @@ def validateExecutionPayloadEnvelopeGossip (ctx : Ctx) (seen : GSeen P) (store :
     execution_payloads := assocSet seen.ext.execution_payloads payload.block_hash payload } }
 
 /-- `validate_payload_attestation_message_gossip` (`:891`). -/
-def validatePayloadAttestationMessageGossip (ctx : Ctx) (seen : GSeen P) (store : Store P)
-    (message : PayloadAttestationMessage) (currentTimeMs : U64) : GM (GSeen P) := do
-  let cfg := ctx.cfg
+def validatePayloadAttestationMessageGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
+    (message : PayloadAttestationMessage) (currentTimeMs : U64) : Validation (SeenWithStore P) := do
+  let cfg := ctx.config
   let data := message.data
   let validatorIndex := message.validator_index
   -- [REJECT] The payload attestation's slot is at or after the Gloas fork
@@ -470,9 +470,9 @@ def validatePayloadAttestationMessageGossip (ctx : Ctx) (seen : GSeen P) (store 
 /-! ## `execution_payload_bid`, `proposer_preferences` -/
 
 /-- `validate_execution_payload_bid_gossip` (`:956`). -/
-def validateExecutionPayloadBidGossip (ctx : Ctx) (seen : GSeen P) (store : Store P)
-    (signedBid : SignedExecutionPayloadBid) (currentTimeMs : U64) : GM (GSeen P) := do
-  let cfg := ctx.cfg
+def validateExecutionPayloadBidGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
+    (signedBid : SignedExecutionPayloadBid) (currentTimeMs : U64) : Validation (SeenWithStore P) := do
+  let cfg := ctx.config
   let bid := signedBid.message
   -- [IGNORE] This is the first bid for this slot, parent, and builder
   let bidKey := (bid.slot, bid.parent_block_hash, bid.parent_block_root, bid.builder_index)
@@ -508,7 +508,7 @@ def validateExecutionPayloadBidGossip (ctx : Ctx) (seen : GSeen P) (store : Stor
   let state : BeaconState P ← liftModel (lookup store.block_states bid.parent_block_root
     "store.block_states[bid.parent_block_root]")
   -- [IGNORE] The bid's slot is within the parent's proposer lookahead
-  if proposalEpoch > (← U64.add? (← getCurrentEpoch state) (← c64 P.MIN_SEED_LOOKAHEAD)
+  if proposalEpoch > (← U64.add? (← getCurrentEpoch state) (← u64Checked P.MIN_SEED_LOOKAHEAD)
       "get_current_epoch(state) + MIN_SEED_LOOKAHEAD") then
     ignore "bid's slot is past the parent's proposer lookahead"
   -- [IGNORE] The matching proposer preferences have been seen
@@ -558,9 +558,9 @@ def validateExecutionPayloadBidGossip (ctx : Ctx) (seen : GSeen P) (store : Stor
     best_execution_payload_bid := assocSet seen.ext.best_execution_payload_bid bestBidKey bid.value } }
 
 /-- `validate_proposer_preferences_gossip` (`:1103`). -/
-def validateProposerPreferencesGossip (ctx : Ctx) (seen : GSeen P) (store : Store P)
-    (signed : SignedProposerPreferences) (currentTimeMs : U64) : GM (GSeen P) := do
-  let cfg := ctx.cfg
+def validateProposerPreferencesGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
+    (signed : SignedProposerPreferences) (currentTimeMs : U64) : Validation (SeenWithStore P) := do
+  let cfg := ctx.config
   let preferences := signed.message
   -- [IGNORE] These are the first valid preferences seen for this dependent root and slot
   let prefsKey := (preferences.proposal_slot, preferences.dependent_root)
@@ -618,9 +618,9 @@ def validateProposerPreferencesGossip (ctx : Ctx) (seen : GSeen P) (store : Stor
 /-! ## Sidecars -/
 
 /-- `validate_data_column_sidecar_gossip` (Gloas, `:1297`). -/
-def validateDataColumnSidecarGossip (ctx : Ctx) (seen : GSeen P) (store : Store P)
-    (sidecar : DataColumnSidecar P) (currentTimeMs : U64) (subnetId : U64) : GM (GSeen P) := do
-  let cfg := ctx.cfg
+def validateDataColumnSidecarGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
+    (sidecar : DataColumnSidecar P) (currentTimeMs : U64) (subnetId : U64) : Validation (SeenWithStore P) := do
+  let cfg := ctx.config
   -- [IGNORE] This is the first sidecar seen for this block root and column index
   let sidecarKey := (sidecar.beacon_block_root, sidecar.index)
   if seen.ext.data_column_sidecar_tuples.contains sidecarKey then
@@ -654,19 +654,19 @@ def validateDataColumnSidecarGossip (ctx : Ctx) (seen : GSeen P) (store : Store 
 /-- `verify_partial_data_column_sidecar_kzg_proofs(sidecar, all_commitments, column_index)`
 (Fulu's, over the Gloas partial sidecar): `all_commitments[index]` raises past the end. -/
 def verifyPartialDataColumnSidecarKzgProofsGloas (sidecar : PartialDataColumnSidecar P)
-    (allCommitments : List KZGCommitment) (columnIndex : ColumnIndex) : M Bool := do
+    (allCommitments : List KZGCommitment) (columnIndex : ColumnIndex) : Fallible Bool := do
   let blobIndices := ((sidecar.cells_present_bitmap.bits.toList.zipIdx).filter (·.1)).map (·.2)
   let cellIndices := List.replicate blobIndices.length columnIndex.toNat
   let commitments ← blobIndices.mapM fun i =>
     getAt allCommitments.toArray i "verify_partial_data_column_sidecar_kzg_proofs: all_commitments"
-  verifyCellKzgProofBatchM (commitments.map (·.toArray.toList)) cellIndices
+  verifyCellKzgProofBatchFallible (commitments.map (·.toArray.toList)) cellIndices
     (sidecar.partial_column.toArray.toList.map (·.toArray.toList))
     (sidecar.kzg_proofs.toArray.toList.map (·.toArray.toList))
 
 /-- `validate_partial_data_column_sidecar_gossip` (`specs/gloas/partial-columns/
 p2p-interface.md`): no `Seen` and no `current_time_ms`. -/
 def validatePartialDataColumnSidecarGossip (store : Store P) (sidecar : PartialDataColumnSidecar P)
-    (groupId : PartialDataColumnGroupID) (columnIndex : ColumnIndex) : GM Unit := do
+    (groupId : PartialDataColumnGroupID) (columnIndex : ColumnIndex) : Validation Unit := do
   let numCellsPresent := (sidecar.cells_present_bitmap.bits.toList.filter id).length
   -- [REJECT] The message contains at least one cell
   if numCellsPresent == 0 then reject "partial message is semantically empty"

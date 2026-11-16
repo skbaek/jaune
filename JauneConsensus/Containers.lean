@@ -37,17 +37,17 @@ abbrev BlobIndex := U64
 abbrev ColumnIndex := U64
 abbrev RowIndex := U64
 /-- `Root`, `Bytes32`, `Hash32`, `Domain`: a 32-byte chunk. -/
-abbrev Root := Jaune.B256
-abbrev Bytes32 := Jaune.B256
-abbrev Hash32 := Jaune.B256
-abbrev Domain := Jaune.B256
+abbrev Root := Jaune.U256
+abbrev Bytes32 := Jaune.U256
+abbrev Hash32 := Jaune.U256
+abbrev Domain := Jaune.U256
 abbrev Version := SszVector UInt8 4
 abbrev BLSPubkey := SszVector UInt8 48
 abbrev BLSSignature := SszVector UInt8 96
 abbrev KZGCommitment := SszVector UInt8 48
 abbrev KZGProof := SszVector UInt8 48
 /-- `ExecutionAddress` is Jaune's execution-layer address type (outcome O7). -/
-abbrev ExecutionAddress := Jaune.Adr
+abbrev ExecutionAddress := Jaune.Address
 abbrev ParticipationFlags := U8
 
 /-! ## Constants -/
@@ -66,26 +66,26 @@ def BYTES_PER_FIELD_ELEMENT : Nat := 32
 /-- `Attestation.aggregation_bits` and `IndexedAttestation.attesting_indices` limit:
 `MAX_VALIDATORS_PER_COMMITTEE` (phase0) or `MAX_VALIDATORS_PER_COMMITTEE *
 MAX_COMMITTEES_PER_SLOT` (`specs/electra/beacon-chain.md`, EIP-7549). -/
-def attestationBitsLimit (P : Preset) (f : CFork) : Nat :=
+def attestationBitsLimit (P : Preset) (f : ConsensusFork) : Nat :=
   if f.atLeast .electra then P.MAX_VALIDATORS_PER_COMMITTEE * P.MAX_COMMITTEES_PER_SLOT
   else P.MAX_VALIDATORS_PER_COMMITTEE
 
 /-- `BeaconBlockBody.attester_slashings` limit: `MAX_ATTESTER_SLASHINGS`, or
 `MAX_ATTESTER_SLASHINGS_ELECTRA` from Electra. -/
-def maxAttesterSlashings (P : Preset) (f : CFork) : Nat :=
+def maxAttesterSlashings (P : Preset) (f : ConsensusFork) : Nat :=
   if f.atLeast .electra then P.MAX_ATTESTER_SLASHINGS_ELECTRA else P.MAX_ATTESTER_SLASHINGS
 
 /-- `BeaconBlockBody.attestations` limit: `MAX_ATTESTATIONS`, or `MAX_ATTESTATIONS_ELECTRA`. -/
-def maxAttestations (P : Preset) (f : CFork) : Nat :=
+def maxAttestations (P : Preset) (f : ConsensusFork) : Nat :=
   if f.atLeast .electra then P.MAX_ATTESTATIONS_ELECTRA else P.MAX_ATTESTATIONS
 
 /-- `floorlog2` of the light-client generalized indices: `FINALIZED_ROOT_GINDEX` (105) before
 Electra, `FINALIZED_ROOT_GINDEX_ELECTRA` (169) from Electra (`specs/electra/light-client/
 sync-protocol.md`). -/
-def finalityBranchDepth (f : CFork) : Nat := if f.atLeast .electra then 7 else 6
+def finalityBranchDepth (f : ConsensusFork) : Nat := if f.atLeast .electra then 7 else 6
 /-- `floorlog2(CURRENT_SYNC_COMMITTEE_GINDEX)`: 54 before Electra, 86 from Electra; and
 `NEXT_SYNC_COMMITTEE_GINDEX`: 55 and 87. Both give the same depth. -/
-def syncCommitteeBranchDepth (f : CFork) : Nat := if f.atLeast .electra then 6 else 5
+def syncCommitteeBranchDepth (f : ConsensusFork) : Nat := if f.atLeast .electra then 6 else 5
 /-- `floorlog2(EXECUTION_PAYLOAD_GINDEX)` with `EXECUTION_PAYLOAD_GINDEX = 25`
 (`specs/capella/light-client/sync-protocol.md`). -/
 def executionBranchDepth : Nat := 4
@@ -129,7 +129,7 @@ ssz_container AttestationData where
 
 /-- `specs/phase0/beacon-chain.md` (`IndexedAttestation`); the limit of `attesting_indices`
 grows at Electra (`specs/electra/beacon-chain.md`). -/
-ssz_container IndexedAttestation (P : Preset) (f : CFork) where
+ssz_container IndexedAttestation (P : Preset) (f : ConsensusFork) where
   attesting_indices : (SszList ValidatorIndex (attestationBitsLimit P f))
   data : AttestationData
   signature : BLSSignature
@@ -190,18 +190,18 @@ ssz_container ProposerSlashing where
 
 /-- `specs/phase0/beacon-chain.md`; Electra's `IndexedAttestation` sizes
 (`specs/electra/beacon-chain.md`). -/
-ssz_container AttesterSlashing (P : Preset) (f : CFork) where
+ssz_container AttesterSlashing (P : Preset) (f : ConsensusFork) where
   attestation_1 : (IndexedAttestation P f)
   attestation_2 : (IndexedAttestation P f)
 
 /-- `specs/electra/beacon-chain.md` (`Attestation`, EIP-7549): `aggregation_bits` spans every
 committee of the slot and `committee_bits` names them; before Electra
 (`specs/phase0/beacon-chain.md`) there is one committee and no `committee_bits`. -/
-ssz_container Attestation (P : Preset) (f : CFork) where
+ssz_container Attestation (P : Preset) (f : ConsensusFork) where
   aggregation_bits : (Bitlist (attestationBitsLimit P f))
   data : AttestationData
   signature : BLSSignature
-  committee_bits : (Gated (f.atLeast .electra) (Bitvector P.MAX_COMMITTEES_PER_SLOT))
+  committee_bits : (ForkField (f.atLeast .electra) (Bitvector P.MAX_COMMITTEES_PER_SLOT))
 
 /-- `specs/phase0/beacon-chain.md` -/
 ssz_container Deposit where
@@ -225,13 +225,13 @@ ssz_container Eth1Block where
   deposit_count : U64
 
 /-- `specs/phase0/validator.md`, with Electra's `Attestation` (`specs/electra/validator.md`). -/
-ssz_container AggregateAndProof (P : Preset) (f : CFork) where
+ssz_container AggregateAndProof (P : Preset) (f : ConsensusFork) where
   aggregator_index : ValidatorIndex
   aggregate : (Attestation P f)
   selection_proof : BLSSignature
 
 /-- `specs/phase0/validator.md`, `specs/electra/validator.md` -/
-ssz_container SignedAggregateAndProof (P : Preset) (f : CFork) where
+ssz_container SignedAggregateAndProof (P : Preset) (f : ConsensusFork) where
   message : (AggregateAndProof P f)
   signature : BLSSignature
 
@@ -439,7 +439,7 @@ ssz_container SszNewPayloadRequest (P : Preset) where
 /-- `specs/electra/beacon-chain.md` (`BeaconBlockBody`); the Deneb body
 (`specs/deneb/beacon-chain.md`) has the phase0 slashing and attestation limits and no
 `execution_requests`. -/
-ssz_container BeaconBlockBody (P : Preset) (f : CFork) where
+ssz_container BeaconBlockBody (P : Preset) (f : ConsensusFork) where
   randao_reveal : BLSSignature
   eth1_data : Eth1Data
   graffiti : Bytes32
@@ -452,10 +452,10 @@ ssz_container BeaconBlockBody (P : Preset) (f : CFork) where
   execution_payload : (ExecutionPayload P)
   bls_to_execution_changes : (SszList SignedBLSToExecutionChange P.MAX_BLS_TO_EXECUTION_CHANGES)
   blob_kzg_commitments : (SszList KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
-  execution_requests : (Gated (f.atLeast .electra) (ExecutionRequests P))
+  execution_requests : (ForkField (f.atLeast .electra) (ExecutionRequests P))
 
 /-- `specs/phase0/beacon-chain.md` -/
-ssz_container BeaconBlock (P : Preset) (f : CFork) where
+ssz_container BeaconBlock (P : Preset) (f : ConsensusFork) where
   slot : Slot
   proposer_index : ValidatorIndex
   parent_root : Root
@@ -463,7 +463,7 @@ ssz_container BeaconBlock (P : Preset) (f : CFork) where
   body : (BeaconBlockBody P f)
 
 /-- `specs/phase0/beacon-chain.md` -/
-ssz_container SignedBeaconBlock (P : Preset) (f : CFork) where
+ssz_container SignedBeaconBlock (P : Preset) (f : ConsensusFork) where
   message : (BeaconBlock P f)
   signature : BLSSignature
 
@@ -472,7 +472,7 @@ ssz_container SignedBeaconBlock (P : Preset) (f : CFork) where
 /-- `specs/fulu/beacon-chain.md` (`BeaconState`). Electra's fields
 (`specs/electra/beacon-chain.md`) are gated at Electra and `proposer_lookahead` at Fulu; the
 Deneb state (`specs/deneb/beacon-chain.md`) has neither. -/
-ssz_container BeaconState (P : Preset) (f : CFork) where
+ssz_container BeaconState (P : Preset) (f : ConsensusFork) where
   genesis_time : U64
   genesis_validators_root : Root
   slot : Slot
@@ -501,19 +501,19 @@ ssz_container BeaconState (P : Preset) (f : CFork) where
   next_withdrawal_index : WithdrawalIndex
   next_withdrawal_validator_index : ValidatorIndex
   historical_summaries : (SszList HistoricalSummary P.HISTORICAL_ROOTS_LIMIT)
-  deposit_requests_start_index : (Gated (f.atLeast .electra) U64)
-  deposit_balance_to_consume : (Gated (f.atLeast .electra) Gwei)
-  exit_balance_to_consume : (Gated (f.atLeast .electra) Gwei)
-  earliest_exit_epoch : (Gated (f.atLeast .electra) Epoch)
-  consolidation_balance_to_consume : (Gated (f.atLeast .electra) Gwei)
-  earliest_consolidation_epoch : (Gated (f.atLeast .electra) Epoch)
-  pending_deposits : (Gated (f.atLeast .electra) (SszList PendingDeposit P.PENDING_DEPOSITS_LIMIT))
+  deposit_requests_start_index : (ForkField (f.atLeast .electra) U64)
+  deposit_balance_to_consume : (ForkField (f.atLeast .electra) Gwei)
+  exit_balance_to_consume : (ForkField (f.atLeast .electra) Gwei)
+  earliest_exit_epoch : (ForkField (f.atLeast .electra) Epoch)
+  consolidation_balance_to_consume : (ForkField (f.atLeast .electra) Gwei)
+  earliest_consolidation_epoch : (ForkField (f.atLeast .electra) Epoch)
+  pending_deposits : (ForkField (f.atLeast .electra) (SszList PendingDeposit P.PENDING_DEPOSITS_LIMIT))
   pending_partial_withdrawals :
-    (Gated (f.atLeast .electra) (SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT))
+    (ForkField (f.atLeast .electra) (SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT))
   pending_consolidations :
-    (Gated (f.atLeast .electra) (SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT))
+    (ForkField (f.atLeast .electra) (SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT))
   proposer_lookahead :
-    (Gated (f.atLeast .fulu) (SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)))
+    (ForkField (f.atLeast .fulu) (SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)))
 
 /-! ## Light client (`specs/capella/light-client/sync-protocol.md`, branch depths from
 `specs/electra/light-client/sync-protocol.md`) -/
@@ -525,13 +525,13 @@ ssz_container LightClientHeader (P : Preset) where
   execution_branch : (SszVector Bytes32 executionBranchDepth)
 
 /-- `specs/altair/light-client/sync-protocol.md`, Capella header, Electra branch depth. -/
-ssz_container LightClientBootstrap (P : Preset) (f : CFork) where
+ssz_container LightClientBootstrap (P : Preset) (f : ConsensusFork) where
   header : (LightClientHeader P)
   current_sync_committee : (SyncCommittee P)
   current_sync_committee_branch : (SszVector Bytes32 (syncCommitteeBranchDepth f))
 
 /-- `specs/altair/light-client/sync-protocol.md`, Capella header, Electra branch depths. -/
-ssz_container LightClientUpdate (P : Preset) (f : CFork) where
+ssz_container LightClientUpdate (P : Preset) (f : ConsensusFork) where
   attested_header : (LightClientHeader P)
   next_sync_committee : (SyncCommittee P)
   next_sync_committee_branch : (SszVector Bytes32 (syncCommitteeBranchDepth f))
@@ -541,7 +541,7 @@ ssz_container LightClientUpdate (P : Preset) (f : CFork) where
   signature_slot : Slot
 
 /-- `specs/altair/light-client/sync-protocol.md`, Capella header, Electra branch depth. -/
-ssz_container LightClientFinalityUpdate (P : Preset) (f : CFork) where
+ssz_container LightClientFinalityUpdate (P : Preset) (f : ConsensusFork) where
   attested_header : (LightClientHeader P)
   finalized_header : (LightClientHeader P)
   finality_branch : (SszVector Bytes32 (finalityBranchDepth f))

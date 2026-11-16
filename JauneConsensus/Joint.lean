@@ -24,12 +24,12 @@ variable {P : Preset}
 
 /-- A joint state: the beacon state at its consensus fork, and Jaune's execution chain. -/
 structure JointState (P : Preset) where
-  fork : CFork
+  fork : ConsensusFork
   beacon : BeaconState P fork
-  exec : Jaune.BlockChain
+  execution : Jaune.BlockChain
 
 /-- A signed beacon block of whichever consensus fork its slot is in. -/
-abbrev AnySignedBlock (P : Preset) := Σ f : CFork, SignedBeaconBlock P f
+abbrev AnySignedBlock (P : Preset) := Σ f : ConsensusFork, SignedBeaconBlock P f
 
 /-- `state_transition` for `signedBlock` with the engine's verdict on the block's payload,
 returning the beacon state and the execution chain after it. `atSlot` is the post-upgrade case
@@ -37,16 +37,16 @@ of a fork crossing: the state is already at the block's slot, so `process_slots`
 (the signature and state-root checks still apply). The engine's verdict is computed from the
 block and the execution chain alone; `process_execution_payload` reads it through
 `Ctx.executionValid`. -/
-def jointTransitionAt (cfg : ChainConfig) (ccfg : Config) (bls : Bool) {f : CFork}
+def jointTransitionAt (cfg : ChainConfig) (ccfg : Config) (bls : Bool) {f : ConsensusFork}
     (beacon : BeaconState P f) (exec : BlockChain) (signedBlock : SignedBeaconBlock P f)
-    (atSlot : Bool := false) : M (BeaconState P f × BlockChain) := do
+    (atSlot : Bool := false) : Fallible (BeaconState P f × BlockChain) := do
   let req ← NewPayloadRequest.ofBlock signedBlock.message
   let verdict := engineVerdict cfg f exec req
-  let ctx : Ctx := { cfg := ccfg, blsActive := bls, executionValid := verdict.isOk }
+  let ctx : Context := { config := ccfg, blsActive := bls, executionValid := verdict.isOk }
   let beacon ← if atSlot then do
       require (← verifyBlockSignature bls beacon signedBlock) "state_transition: verify_block_signature"
       let s ← processBlock ctx beacon signedBlock.message
-      require (B256.beq signedBlock.message.state_root (Ssz.hashTreeRoot s))
+      require (Bytes32.beq signedBlock.message.state_root (Ssz.hashTreeRoot s))
         "state_transition: block.state_root"
       pure s
     else do
@@ -61,7 +61,7 @@ def fuluForkSlot (ccfg : Config) : Nat := ccfg.FULU_FORK_EPOCH * P.SLOTS_PER_EPO
 
 /-- One joint step: the joint state after the signed block `b`. -/
 def jointStep (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (s : JointState P)
-    (b : AnySignedBlock P) : M (JointState P) :=
+    (b : AnySignedBlock P) : Fallible (JointState P) :=
   match s, b with
   | ⟨.electra, beacon, exec⟩, ⟨.electra, signedBlock⟩ => do
     require (decide (signedBlock.message.slot.toNat < fuluForkSlot (P := P) ccfg))
@@ -76,7 +76,7 @@ def jointStep (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (s : JointState P
     require (decide (beacon.slot.toNat ≤ forkSlotNat ∧ forkSlotNat ≤ signedBlock.message.slot.toNat))
       "joint step: a Fulu block crossing from an Electra state"
     let forkSlot ← U64.ofNat? forkSlotNat "joint step: Fulu fork slot"
-    let ctx : Ctx := { cfg := ccfg, blsActive := bls }
+    let ctx : Context := { config := ccfg, blsActive := bls }
     let beacon ← if beacon.slot < forkSlot then do processSlots ctx beacon forkSlot else pure beacon
     let beacon ← upgradeToFulu ccfg beacon
     let (beacon, exec) ← jointTransitionAt cfg ccfg bls beacon exec signedBlock

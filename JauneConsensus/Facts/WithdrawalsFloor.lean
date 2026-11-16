@@ -1,12 +1,12 @@
 import JauneConsensus.Block
 import JauneConsensus.Facts.ExpectedWithdrawals
-import JauneConsensus.Facts.AnchorInv
+import JauneConsensus.Facts.AnchorInvariant
 import JauneConsensus.Facts.Operations
 
 namespace JauneConsensus
 namespace Facts
 
-variable {P : Preset} {f : CFork}
+variable {P : Preset} {f : ConsensusFork}
 
 /-!
 # Balance floor after `processWithdrawals` (P4 clause 2)
@@ -19,7 +19,7 @@ Combined with the `decreaseBalance` fold, the post-state balance stays at the fl
 /-- Public copy of the private `withdrawnFor` fold in `Block.lean` (same body).
 Any `.ok` hypothesis about the private fold can be used at this type by `exact`
 (defeq unfolds both copies to the same `foldlM`). -/
-def withdrawnSumU64 (ws : Array Withdrawal) (index : ValidatorIndex) : M Gwei :=
+def withdrawnSumU64 (ws : Array Withdrawal) (index : ValidatorIndex) : Fallible Gwei :=
   ws.foldlM (fun acc w => if w.validator_index == index then U64.add? acc w.amount "total_withdrawn"
     else pure acc) U64.zero
 
@@ -150,7 +150,7 @@ theorem epoch_lt_far (state : BeaconState P f) (epoch : U64)
   omega
 
 /-- `getMaxEffectiveBalance` is at least `MIN_ACTIVATION_BALANCE` under the preset premise. -/
-theorem maxEb_ge_minAct (v : Validator)
+theorem maxEffectiveBalance_ge_minActivationBalance (v : Validator)
     (hle : P.MIN_ACTIVATION_BALANCE ≤ P.MAX_EFFECTIVE_BALANCE_ELECTRA) :
     P.MIN_ACTIVATION_BALANCE ≤ getMaxEffectiveBalance P v := by
   unfold getMaxEffectiveBalance
@@ -210,7 +210,7 @@ theorem sumForArray_eq_zero_of_no_withdrawn (ws : Array Withdrawal) (idx : Valid
 /-- Per-validator floor invariant across both loops of `getExpectedWithdrawals`.
 For a validator with `exit_epoch = FAR_FUTURE_EPOCH`, once anything has been withdrawn,
 `state.balances[i] - (sum for i) ≥ MIN_ACTIVATION_BALANCE`. -/
-def FloorInv (state : BeaconState P f) (ws : Array Withdrawal) : Prop :=
+def FloorInvariant (state : BeaconState P f) (ws : Array Withdrawal) : Prop :=
   ∀ (i : ValidatorIndex),
     (∃ v, state.validators.toArray[i.toNat]? = some v ∧ v.exit_epoch = FAR_FUTURE_EPOCH) →
     (∃ w ∈ ws.toList, w.validator_index = i) →
@@ -218,7 +218,7 @@ def FloorInv (state : BeaconState P f) (ws : Array Withdrawal) : Prop :=
       sBalU.toNat - sumFor ws i ≥ P.MIN_ACTIVATION_BALANCE
 
 /-- `FloorInv` holds vacuously for the empty accumulator. -/
-theorem floorInv_nil (state : BeaconState P f) : FloorInv state #[] := by
+theorem floorInvariant_nil (state : BeaconState P f) : FloorInvariant state #[] := by
   intro i _ hHas _ _
   obtain ⟨w, hmem, _⟩ := hHas
   simp at hmem
@@ -270,14 +270,14 @@ theorem floor_partial_preserved (sBal sum_old balance maxEb minAct : Nat)
 /-- Per-validator invariant across both loops (Electra): once anything has been withdrawn
 for `i` with `exit_epoch = FAR`, `state.balances[i] - sum ≥ MIN_ACTIVATION_BALANCE`.
 Uses `ExitImpliesWithdrawable` (weaker than `AnchorInv`) plus the two preset premises. -/
-theorem getExpected_floorInv (state : BeaconState P f)
+theorem getExpected_floorInvariant (state : BeaconState P f)
     (he : f.atLeast .electra = true)
     (hExit : ExitImpliesWithdrawable state)
     (hle2 : 2 ≤ P.SLOTS_PER_EPOCH)
     (hleMin : P.MIN_ACTIVATION_BALANCE ≤ P.MAX_EFFECTIVE_BALANCE_ELECTRA)
     (ws : Array Withdrawal) (processed : Nat)
     (h : getExpectedWithdrawals state = .ok (ws, processed)) :
-    FloorInv state ws := by
+    FloorInvariant state ws := by
   unfold getExpectedWithdrawals at h
   dsimp at h
   obtain ⟨epoch, hepoch, h1⟩ := bind_ok_elim h
@@ -292,10 +292,10 @@ theorem getExpected_floorInv (state : BeaconState P f)
     have hPair : (s2.2.2, s1.2.2) = (ws, processed) := hMap
     exact Prod.mk.inj hPair
   -- Loop 1 preserves `FloorInv`.
-  have hFloor1 : FloorInv state s1.2.1 := by
-    have hInit : FloorInv state (#[] : Array Withdrawal) := floorInv_nil state
+  have hFloor1 : FloorInvariant state s1.2.1 := by
+    have hInit : FloorInvariant state (#[] : Array Withdrawal) := floorInvariant_nil state
     -- The loop-1 accumulator is `(wid, wsAcc, proc)`; the invariant is on `wsAcc`.
-    refine array_forIn_ok_inv (Inv := fun s : WithdrawalIndex × Array Withdrawal × Nat => FloorInv state s.2.1) hInit ?hy1 ?hd1 hForIn1
+    refine array_forIn_ok_invariant (Inv := fun s : WithdrawalIndex × Array Withdrawal × Nat => FloorInvariant state s.2.1) hInit ?hy1 ?hd1 hForIn1
     · intro w hw b hb b' hstep
       by_cases hBreak : (epoch < w.withdrawable_epoch ∨ b.2.1.size = min P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP (P.MAX_WITHDRAWALS_PER_PAYLOAD - 1))
       · rw [if_pos hBreak] at hstep
@@ -399,10 +399,10 @@ theorem getExpected_floorInv (state : BeaconState P f)
           have hEq : ForInStep.yield (b.1, b.2.1, b.2.2 + 1) = ForInStep.done b' := Except.ok.inj h4
           cases hEq
   -- Loop 2 preserves `FloorInv` starting from `s1.2.1`.
-  have hFloor2 : FloorInv state s2.2.2 := by
-    have hInit2 : FloorInv state s1.2.1 := hFloor1
+  have hFloor2 : FloorInvariant state s2.2.2 := by
+    have hInit2 : FloorInvariant state s1.2.1 := hFloor1
     -- Loop-2 accumulator is `(wid, vid, wsAcc)`; invariant on `wsAcc`.
-    refine list_forIn_ok_inv (Inv := fun s : WithdrawalIndex × ValidatorIndex × Array Withdrawal => FloorInv state s.2.2) hInit2 ?hy2 ?hd2 hForIn2
+    refine list_forIn_ok_invariant (Inv := fun s : WithdrawalIndex × ValidatorIndex × Array Withdrawal => FloorInvariant state s.2.2) hInit2 ?hy2 ?hd2 hForIn2
     · intro x hx b hb2 b' hstep
       obtain ⟨validator, hval, h1⟩ := bind_ok_elim hstep
       obtain ⟨sBalU, hbal, h2⟩ := bind_ok_elim h1
@@ -474,7 +474,7 @@ theorem getExpected_floorInv (state : BeaconState P f)
           obtain ⟨amt, hamt, h7⟩ := bind_ok_elim h6
           obtain ⟨wid', hwid, h8⟩ := bind_ok_elim h7
           have hmaxNat : maxEbU.toNat = getMaxEffectiveBalance P validator := by
-            have hmax' : c64 (getMaxEffectiveBalance P validator) = .ok maxEbU := by simpa [he] using hmax
+            have hmax' : u64Checked (getMaxEffectiveBalance P validator) = .ok maxEbU := by simpa [he] using hmax
             exact U64.ofNat?_toNat hmax'
           have hamtNat : amt.toNat = balance.toNat - maxEbU.toNat := U64.toNat_sub? hamt
           by_cases hCap : b.2.2.size + 1 = P.MAX_WITHDRAWALS_PER_PAYLOAD
@@ -493,7 +493,7 @@ theorem getExpected_floorInv (state : BeaconState P f)
               cases hPartGt with
               | inl h => exact h
               | inr h => cases h.left he
-            have hMaxGe : P.MIN_ACTIVATION_BALANCE ≤ getMaxEffectiveBalance P validator := maxEb_ge_minAct validator hleMin
+            have hMaxGe : P.MIN_ACTIVATION_BALANCE ≤ getMaxEffectiveBalance P validator := maxEffectiveBalance_ge_minActivationBalance validator hleMin
             by_cases hiEq : i = b.2.1
             · subst hiEq
               have hBalU_eq : sBalU = sBal0 := hBalEqInit sBal0 hget0
@@ -613,7 +613,7 @@ theorem getExpected_floorInv (state : BeaconState P f)
                 cases hPartGt with
                 | inl h => exact h
                 | inr h => cases h.left he
-              have hMaxGe : P.MIN_ACTIVATION_BALANCE ≤ getMaxEffectiveBalance P validator := maxEb_ge_minAct validator hleMin
+              have hMaxGe : P.MIN_ACTIVATION_BALANCE ≤ getMaxEffectiveBalance P validator := maxEffectiveBalance_ge_minActivationBalance validator hleMin
               have hwdPub : withdrawnSumU64 b.2.2 b.2.1 = .ok wdrawnU := hwdPriv
               have hwdNat : wdrawnU.toNat = sumFor b.2.2 b.2.1 := withdrawnSumU64_toNat b.2.2 b.2.1 wdrawnU hwdPub
               have hbalNat : balance.toNat = sBalU.toNat - wdrawnU.toNat := U64.toNat_sub? hbal2
@@ -625,7 +625,7 @@ theorem getExpected_floorInv (state : BeaconState P f)
                 rfl
               subst sBalU
               have hmaxNat : maxEbU.toNat = getMaxEffectiveBalance P validator := by
-                have hmax' : c64 (getMaxEffectiveBalance P validator) = .ok maxEbU := by simpa [he] using hmax
+                have hmax' : u64Checked (getMaxEffectiveBalance P validator) = .ok maxEbU := by simpa [he] using hmax
                 exact U64.ofNat?_toNat hmax'
               have hamtNat : amt.toNat = balance.toNat - maxEbU.toNat := U64.toNat_sub? hamt
               have hSumNew : sumFor (b.2.2.push ⟨b.1, b.2.1, addr, amt⟩) b.2.1 = sumFor b.2.2 b.2.1 + amt.toNat := by
@@ -916,7 +916,7 @@ theorem processWithdrawals_balances_toArray (st : BeaconState P f) (payload : Ex
   obtain ⟨mid, hFor, hTail⟩ := bind_ok_elim hRest2
   -- Convert the always-yield `forIn` to `foldlM`.
   have hFold : List.foldlM (fun s w => decreaseBalance s w.validator_index w.amount) st ws.toList = .ok mid := by
-    have hEq := forArr_yield ws (fun s w => decreaseBalance s w.validator_index w.amount) st
+    have hEq := forArray_yield ws (fun s w => decreaseBalance s w.validator_index w.amount) st
     -- `hFor : forIn ws st body = ok mid`, `hEq : forIn ... = foldlM ...`, so `foldlM ... = ok mid`.
     rw [hEq] at hFor
     exact hFor
@@ -1027,7 +1027,7 @@ theorem processWithdrawals_floor (st : BeaconState P f) (payload : ExecutionPayl
         post.balances.get i.toNat "processWithdrawals_floor" = .ok b1 →
         P.MIN_ACTIVATION_BALANCE ≤ b1.toNat := by
   intro i hiExit hiHas b0 b1 h0 h1
-  have hFloor : FloorInv st ws := getExpected_floorInv st he hExit hle2 hleMin ws processed hExp
+  have hFloor : FloorInvariant st ws := getExpected_floorInvariant st he hExit hle2 hleMin ws processed hExp
   have hInv := hFloor i hiExit hiHas b0 (by
     have h0arr := get_ok h0
     -- `FloorInv` expects site `"get_expected_withdrawals"`; convert via `toArray`.

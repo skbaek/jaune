@@ -29,7 +29,7 @@ sufficient-condition lemma naming the abstract state conditions under which
 
 namespace JauneConsensus.Facts
 
-variable {P : Preset} {f : CFork}
+variable {P : Preset} {f : ConsensusFork}
 
 /-- `bind` on an `ok` result, as a rewrite (cf `WithdrawalRequest.bind_ok_cons`,
 which is private to that file). -/
@@ -44,15 +44,15 @@ private theorem ok_inj_of_pure {ε α : Type} {a b : α}
   Except.ok.inj h
 
 /-- `bind` on an `error` result, as a rewrite (cf `WithdrawalRequest.bind_err_cons`). -/
-private theorem bind_err_cons {α β ε : Type} (e : ε) (k : α → Except ε β) :
+private theorem bind_error_cons {α β ε : Type} (e : ε) (k : α → Except ε β) :
     Bind.bind (Except.error e) k = Except.error e := rfl
 
 /-- Inversion for one `bind` layer (cf `WithdrawalRequest.bind_ok_inv`). -/
-private theorem bind_ok_inv {α β ε : Type} {m : Except ε α} {f : α → Except ε β}
+private theorem bind_ok_invariant {α β ε : Type} {m : Except ε α} {f : α → Except ε β}
     {y : β} (h : Bind.bind m f = .ok y) : ∃ a, m = .ok a ∧ f a = .ok y := by
   cases m with
   | ok a => exact ⟨a, rfl, h⟩
-  | error e => rw [bind_err_cons] at h; cases h
+  | error e => rw [bind_error_cons] at h; cases h
 
 /-- A successful `getAt` read pins the `Option` read. -/
 theorem getAt_some {α : Type} {arr : Array α} {i : Nat} {site : String} {x : α}
@@ -86,7 +86,7 @@ private theorem far_bne_self_false :
   decide
 
 /-- A successful `getAt` read replays under another site string. -/
-theorem getAt_resite {α : Type} {arr : Array α} {i : Nat} {s1 s2 : String}
+theorem getAt_replaceSite {α : Type} {arr : Array α} {i : Nat} {s1 s2 : String}
     {x : α} (h : getAt arr i s1 = .ok x) : getAt arr i s2 = .ok x := by
   have e := getAt_some h
   unfold getAt
@@ -129,56 +129,56 @@ theorem computeExitEpoch_mid {cfg : Config} {s : BeaconState P f} {b : Gwei}
     (h : computeExitEpochAndUpdateChurn cfg s b = .ok (mid, eqE)) :
     ∃ r ee, mid = { s with exit_balance_to_consume := r, earliest_exit_epoch := ee } := by
   unfold computeExitEpochAndUpdateChurn at h
-  obtain ⟨e0, hE0, h1⟩ := bind_ok_inv h
-  obtain ⟨cur, hcur, h2⟩ := bind_ok_inv h1
-  obtain ⟨actExit, hact, h3⟩ := bind_ok_inv h2
-  obtain ⟨churn, hchurn, h4⟩ := bind_ok_inv h3
+  obtain ⟨e0, hE0, h1⟩ := bind_ok_invariant h
+  obtain ⟨cur, hcur, h2⟩ := bind_ok_invariant h1
+  obtain ⟨actExit, hact, h3⟩ := bind_ok_invariant h2
+  obtain ⟨churn, hchurn, h4⟩ := bind_ok_invariant h3
   dsimp only at h4
   by_cases hout : e0 < (if e0 < actExit then actExit else e0)
   · rw [ite_eq_left hout] at h4
-    obtain ⟨tcA, htcA, h5A⟩ := bind_ok_inv h4
+    obtain ⟨tcA, htcA, h5A⟩ := bind_ok_invariant h4
     have htcAv : tcA = churn := (ok_inj_of_pure htcA).symm
     subst htcAv
     by_cases hinA : tcA < b
     · rw [ite_eq_left hinA] at h5A
-      obtain ⟨btpA, hbtpA, h6A⟩ := bind_ok_inv h5A
-      obtain ⟨soA, hsoA, h7A⟩ := bind_ok_inv h6A
-      obtain ⟨dqA, hdqA, h8A⟩ := bind_ok_inv h7A
-      obtain ⟨addA, haddA, h9A⟩ := bind_ok_inv h8A
-      obtain ⟨exA, hexA, h10A⟩ := bind_ok_inv h9A
-      obtain ⟨mqA, hmqA, h11A⟩ := bind_ok_inv h10A
-      obtain ⟨tcA2, htcA2, h12A⟩ := bind_ok_inv h11A
-      obtain ⟨remA, hremA, h13A⟩ := bind_ok_inv h12A
-      obtain ⟨w1A, hw1A, h14A⟩ := bind_ok_inv h13A
-      obtain ⟨w2A, hw2A, h15A⟩ := bind_ok_inv h14A
+      obtain ⟨btpA, hbtpA, h6A⟩ := bind_ok_invariant h5A
+      obtain ⟨soA, hsoA, h7A⟩ := bind_ok_invariant h6A
+      obtain ⟨dqA, hdqA, h8A⟩ := bind_ok_invariant h7A
+      obtain ⟨addA, haddA, h9A⟩ := bind_ok_invariant h8A
+      obtain ⟨exA, hexA, h10A⟩ := bind_ok_invariant h9A
+      obtain ⟨mqA, hmqA, h11A⟩ := bind_ok_invariant h10A
+      obtain ⟨tcA2, htcA2, h12A⟩ := bind_ok_invariant h11A
+      obtain ⟨remA, hremA, h13A⟩ := bind_ok_invariant h12A
+      obtain ⟨w1A, hw1A, h14A⟩ := bind_ok_invariant h13A
+      obtain ⟨w2A, hw2A, h15A⟩ := bind_ok_invariant h14A
       obtain ⟨hmidA, -⟩ := Prod.mk.inj (ok_inj_of_pure h15A)
       exact ⟨w1A, w2A, hmidA.symm⟩
     · rw [ite_eq_right hinA] at h5A
-      obtain ⟨remA, hremA, h13A⟩ := bind_ok_inv h5A
-      obtain ⟨w1A, hw1A, h14A⟩ := bind_ok_inv h13A
-      obtain ⟨w2A, hw2A, h15A⟩ := bind_ok_inv h14A
+      obtain ⟨remA, hremA, h13A⟩ := bind_ok_invariant h5A
+      obtain ⟨w1A, hw1A, h14A⟩ := bind_ok_invariant h13A
+      obtain ⟨w2A, hw2A, h15A⟩ := bind_ok_invariant h14A
       obtain ⟨hmidA, -⟩ := Prod.mk.inj (ok_inj_of_pure h15A)
       exact ⟨w1A, w2A, hmidA.symm⟩
   · rw [ite_eq_right hout] at h4
-    obtain ⟨tcB, htcB, h5B⟩ := bind_ok_inv h4
+    obtain ⟨tcB, htcB, h5B⟩ := bind_ok_invariant h4
     by_cases hinB : tcB < b
     · rw [ite_eq_left hinB] at h5B
-      obtain ⟨btpB, hbtpB, h6B⟩ := bind_ok_inv h5B
-      obtain ⟨soB, hsoB, h7B⟩ := bind_ok_inv h6B
-      obtain ⟨dqB, hdqB, h8B⟩ := bind_ok_inv h7B
-      obtain ⟨addB, haddB, h9B⟩ := bind_ok_inv h8B
-      obtain ⟨exB, hexB, h10B⟩ := bind_ok_inv h9B
-      obtain ⟨mqB, hmqB, h11B⟩ := bind_ok_inv h10B
-      obtain ⟨tcB2, htcB2, h12B⟩ := bind_ok_inv h11B
-      obtain ⟨remB, hremB, h13B⟩ := bind_ok_inv h12B
-      obtain ⟨w1B, hw1B, h14B⟩ := bind_ok_inv h13B
-      obtain ⟨w2B, hw2B, h15B⟩ := bind_ok_inv h14B
+      obtain ⟨btpB, hbtpB, h6B⟩ := bind_ok_invariant h5B
+      obtain ⟨soB, hsoB, h7B⟩ := bind_ok_invariant h6B
+      obtain ⟨dqB, hdqB, h8B⟩ := bind_ok_invariant h7B
+      obtain ⟨addB, haddB, h9B⟩ := bind_ok_invariant h8B
+      obtain ⟨exB, hexB, h10B⟩ := bind_ok_invariant h9B
+      obtain ⟨mqB, hmqB, h11B⟩ := bind_ok_invariant h10B
+      obtain ⟨tcB2, htcB2, h12B⟩ := bind_ok_invariant h11B
+      obtain ⟨remB, hremB, h13B⟩ := bind_ok_invariant h12B
+      obtain ⟨w1B, hw1B, h14B⟩ := bind_ok_invariant h13B
+      obtain ⟨w2B, hw2B, h15B⟩ := bind_ok_invariant h14B
       obtain ⟨hmidB, -⟩ := Prod.mk.inj (ok_inj_of_pure h15B)
       exact ⟨w1B, w2B, hmidB.symm⟩
     · rw [ite_eq_right hinB] at h5B
-      obtain ⟨remB, hremB, h12B⟩ := bind_ok_inv h5B
-      obtain ⟨w1B, hw1B, h13B⟩ := bind_ok_inv h12B
-      obtain ⟨w2B, hw2B, h14B⟩ := bind_ok_inv h13B
+      obtain ⟨remB, hremB, h12B⟩ := bind_ok_invariant h5B
+      obtain ⟨w1B, hw1B, h13B⟩ := bind_ok_invariant h12B
+      obtain ⟨w2B, hw2B, h14B⟩ := bind_ok_invariant h13B
       obtain ⟨hmidB, -⟩ := Prod.mk.inj (ok_inj_of_pure h14B)
       exact ⟨w1B, w2B, hmidB.symm⟩
 
@@ -198,12 +198,12 @@ theorem applyPartial_push {cfg : Config} {s : BeaconState P f}
       s1.slot = s.slot ∧
       sList.toArray.size + 1 ≤ P.PENDING_PARTIAL_WITHDRAWALS_LIMIT := by
   unfold applyWithdrawalOutcome at happ
-  obtain ⟨me, hcomp, hrest⟩ := bind_ok_inv happ
+  obtain ⟨me, hcomp, hrest⟩ := bind_ok_invariant happ
   obtain ⟨mid, eqE⟩ := me
-  obtain ⟨delay, hcd, hrest1⟩ := bind_ok_inv hrest
-  obtain ⟨wd, hwd, hrest2⟩ := bind_ok_inv hrest1
-  obtain ⟨midList, hmidread, hset⟩ := bind_ok_inv hrest2
-  obtain ⟨pushed, hpushok, hsetrest⟩ := bind_ok_inv hset
+  obtain ⟨delay, hcd, hrest1⟩ := bind_ok_invariant hrest
+  obtain ⟨wd, hwd, hrest2⟩ := bind_ok_invariant hrest1
+  obtain ⟨midList, hmidread, hset⟩ := bind_ok_invariant hrest2
+  obtain ⟨pushed, hpushok, hsetrest⟩ := bind_ok_invariant hset
   obtain ⟨r, ee, hmid⟩ := computeExitEpoch_mid hcomp
   have hseq : mid.pending_partial_withdrawals =
       s.pending_partial_withdrawals := by rw [hmid]
@@ -222,17 +222,17 @@ theorem applyPartial_push {cfg : Config} {s : BeaconState P f}
     unfold BeaconState.setPendingPartialWithdrawals at hsetrest
     cases f with
     | deneb =>
-      obtain ⟨wval, hwrite, hs1eq⟩ := bind_ok_inv hsetrest
-      have hwriteF : Gated.write false pushed "pending_partial_withdrawals" =
+      obtain ⟨wval, hwrite, hs1eq⟩ := bind_ok_invariant hsetrest
+      have hwriteF : ForkField.write false pushed "pending_partial_withdrawals" =
           .ok wval := hwrite
-      unfold Gated.write at hwriteF
+      unfold ForkField.write at hwriteF
       dsimp only at hwriteF
       simp at hwriteF
     | electra | fulu | gloas =>
-      obtain ⟨wval, hwrite, hs1eq⟩ := bind_ok_inv hsetrest
-      have hwriteT : Gated.write true pushed "pending_partial_withdrawals" =
+      obtain ⟨wval, hwrite, hs1eq⟩ := bind_ok_invariant hsetrest
+      have hwriteT : ForkField.write true pushed "pending_partial_withdrawals" =
           .ok wval := hwrite
-      unfold Gated.write at hwriteT
+      unfold ForkField.write at hwriteT
       dsimp only at hwriteT
       have hwval : wval = pushed := (ok_inj_of_pure hwriteT).symm
       rw [hwval] at hs1eq
@@ -242,7 +242,7 @@ theorem applyPartial_push {cfg : Config} {s : BeaconState P f}
       have hframeS : s1.slot = s.slot := by rw [hs1, hmid]
       have hs1read : s1.pendingPartialWithdrawals = .ok pushed := by
         rw [hs1]
-        unfold BeaconState.pendingPartialWithdrawals Gated.read
+        unfold BeaconState.pendingPartialWithdrawals ForkField.read
         rfl
       refine ⟨midList, pushed, wd, hsread, ?_, hs1read, hframeV, hframeS, hle⟩
       rw [hparr]
@@ -266,7 +266,7 @@ theorem partial_applied_pending_pos {cfg : Config} {s : BeaconState P f}
       pushed.toArray.foldlM (fun acc w => if w.validator_index == V then
         U64.add? acc w.amount "get_pending_balance_to_withdraw"
         else pure acc) U64.zero := by
-    have hs1r : Gated.read s1.pending_partial_withdrawals
+    have hs1r : ForkField.read s1.pending_partial_withdrawals
         "pending_partial_withdrawals" = .ok pushed := hs1read
     unfold getPendingBalanceToWithdraw
     rw [hs1r]
@@ -277,7 +277,7 @@ theorem partial_applied_pending_pos {cfg : Config} {s : BeaconState P f}
       U64.add? acc w.amount "get_pending_balance_to_withdraw"
       else pure acc) U64.zero with
   | error e =>
-    rw [hfoldS, bind_err_cons] at hcon
+    rw [hfoldS, bind_error_cons] at hcon
     cases hcon
   | ok old =>
     rw [hfoldS] at hcon
@@ -306,12 +306,12 @@ theorem initiateExit_sets_epoch {cfg : Config} {s : BeaconState P f}
     (hgetc : s.validators.get V.toNat "process_withdrawal_request" = .ok vc)
     (hexit : vc.exit_epoch = FAR_FUTURE_EPOCH) :
     ∃ (eqE delay wd : Epoch) (vl : SszList Validator P.VALIDATOR_REGISTRY_LIMIT),
-      c64 cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok delay ∧
+      u64Checked cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok delay ∧
       U64.add? eqE delay "initiate_validator_exit" = .ok wd ∧
       s1.validators.get V.toNat "initiate_validator_exit" =
         .ok { vc with exit_epoch := eqE, withdrawable_epoch := wd } := by
   unfold initiateValidatorExit at h
-  obtain ⟨v', hgetv, h1⟩ := bind_ok_inv h
+  obtain ⟨v', hgetv, h1⟩ := bind_ok_invariant h
   have hgetv' : getAt s.validators.toArray V.toNat "initiate_validator_exit" =
       .ok v' := hgetv
   have hgetc' : getAt s.validators.toArray V.toNat "process_withdrawal_request" =
@@ -322,11 +322,11 @@ theorem initiateExit_sets_epoch {cfg : Config} {s : BeaconState P f}
   have hcond : ¬ (((vc.exit_epoch != FAR_FUTURE_EPOCH)) = true) := by
     simp [hexit, far_bne_self_false]
   rw [ite_eq_right hcond, ite_eq_left he] at h1
-  obtain ⟨me, hcomp, h2⟩ := bind_ok_inv h1
+  obtain ⟨me, hcomp, h2⟩ := bind_ok_invariant h1
   obtain ⟨mid, eqE⟩ := me
-  obtain ⟨delay, hcd, h3⟩ := bind_ok_inv h2
-  obtain ⟨wd, hwd, h4⟩ := bind_ok_inv h3
-  obtain ⟨vl, hset, h5⟩ := bind_ok_inv h4
+  obtain ⟨delay, hcd, h3⟩ := bind_ok_invariant h2
+  obtain ⟨wd, hwd, h4⟩ := bind_ok_invariant h3
+  obtain ⟨vl, hset, h5⟩ := bind_ok_invariant h4
   have hs1 : s1 = { mid with validators := vl } := (Except.ok.inj h5).symm
   have hback := SszList.get_set_eq (site1 := "initiate_validator_exit")
     (site2 := "initiate_validator_exit") hset
@@ -338,7 +338,7 @@ addition keeps below `FAR_FUTURE_EPOCH`. -/
 theorem fullExit_applied_exit_ne {cfg : Config} {s : BeaconState P f}
     {wf : WithdrawalRequest} {V : ValidatorIndex} {s1 : BeaconState P f}
     (he : f.atLeast .electra = true)
-    (hdelay : ∃ d, c64 cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok d ∧
+    (hdelay : ∃ d, u64Checked cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok d ∧
       d ≠ U64.zero)
     (hclass : classifyWithdrawalRequest cfg s wf = .ok (.fullExit V))
     (happ : applyWithdrawalOutcome cfg s wf (.fullExit V) = .ok s1) :
@@ -357,7 +357,7 @@ theorem fullExit_applied_exit_ne {cfg : Config} {s : BeaconState P f}
   have hne : eqE ≠ FAR_FUTURE_EPOCH := exitEpoch_ne_far_of_add_ok hwd hdn
   have hreadP : s1.validators.get V.toNat "process_withdrawal_request" =
       .ok { vc with exit_epoch := eqE, withdrawable_epoch := wd } :=
-    getAt_resite hread
+    getAt_replaceSite hread
   refine ⟨_, hreadP, ?_⟩
   have hexit' : ({ vc with exit_epoch := eqE, withdrawable_epoch := wd } :
       Validator).exit_epoch = eqE := rfl
@@ -375,18 +375,18 @@ theorem initiateValidatorExit_frame {cfg : Config}
     s2.pending_partial_withdrawals = s.pending_partial_withdrawals ∧
       s2.slot = s.slot := by
   unfold initiateValidatorExit at h
-  obtain ⟨v, hgetv, h1⟩ := bind_ok_inv h
+  obtain ⟨v, hgetv, h1⟩ := bind_ok_invariant h
   by_cases hret : ((v.exit_epoch != FAR_FUTURE_EPOCH) = true)
   · rw [ite_eq_left hret] at h1
     have hs2 : s2 = s := (ok_inj_of_pure h1).symm
     subst hs2
     exact ⟨rfl, rfl⟩
   · rw [ite_eq_right hret, ite_eq_left he] at h1
-    obtain ⟨me, hcomp, h2⟩ := bind_ok_inv h1
+    obtain ⟨me, hcomp, h2⟩ := bind_ok_invariant h1
     obtain ⟨mid, eqE⟩ := me
-    obtain ⟨delay, hcd, h3⟩ := bind_ok_inv h2
-    obtain ⟨wd, hwd, h4⟩ := bind_ok_inv h3
-    obtain ⟨vl, hset, h5⟩ := bind_ok_inv h4
+    obtain ⟨delay, hcd, h3⟩ := bind_ok_invariant h2
+    obtain ⟨wd, hwd, h4⟩ := bind_ok_invariant h3
+    obtain ⟨vl, hset, h5⟩ := bind_ok_invariant h4
     have hs2 : s2 = { mid with validators := vl } := (ok_inj_of_pure h5).symm
     obtain ⟨r, ee, hmid⟩ := computeExitEpoch_mid hcomp
     refine ⟨?_, ?_⟩ <;> rw [hs2, hmid]
@@ -532,7 +532,7 @@ theorem classify_ignored_tooEarly {cfg : Config} {s : BeaconState P f}
     (hcur : getCurrentEpoch s = .ok cur)
     (hact : (isActiveValidator v cur) = true)
     (hnoexit : (v.exit_epoch != FAR_FUTURE_EPOCH) = false)
-    (hper : c64 cfg.SHARD_COMMITTEE_PERIOD = .ok period)
+    (hper : u64Checked cfg.SHARD_COMMITTEE_PERIOD = .ok period)
     (hsum : U64.add? v.activation_epoch period
       "process_withdrawal_request" = .ok actSum)
     (hlt : cur < actSum) :
@@ -574,7 +574,7 @@ theorem classify_ignored_fullExitPendingBalance {cfg : Config}
     (hcur : getCurrentEpoch s = .ok cur)
     (hact : (isActiveValidator v cur) = true)
     (hnoexit : (v.exit_epoch != FAR_FUTURE_EPOCH) = false)
-    (hper : c64 cfg.SHARD_COMMITTEE_PERIOD = .ok period)
+    (hper : u64Checked cfg.SHARD_COMMITTEE_PERIOD = .ok period)
     (hsum : U64.add? v.activation_epoch period
       "process_withdrawal_request" = .ok actSum)
     (hearly : ¬ cur < actSum)
@@ -623,13 +623,13 @@ theorem classify_ignored_notCompounding {cfg : Config} {s : BeaconState P f}
     (hcur : getCurrentEpoch s = .ok cur)
     (hact : (isActiveValidator v cur) = true)
     (hnoexit : (v.exit_epoch != FAR_FUTURE_EPOCH) = false)
-    (hper : c64 cfg.SHARD_COMMITTEE_PERIOD = .ok period)
+    (hper : u64Checked cfg.SHARD_COMMITTEE_PERIOD = .ok period)
     (hsum : U64.add? v.activation_epoch period
       "process_withdrawal_request" = .ok actSum)
     (hearly : ¬ cur < actSum)
     (hpend : getPendingBalanceToWithdraw s V = .ok pb)
     (hnofull : (wr.amount == FULL_EXIT_REQUEST_AMOUNT) = false)
-    (hmin : c64 P.MIN_ACTIVATION_BALANCE = .ok minAct)
+    (hmin : u64Checked P.MIN_ACTIVATION_BALANCE = .ok minAct)
     (hbal : s.balances.get V.toNat "process_withdrawal_request" = .ok balance)
     (hsum2 : U64.add? minAct pb "process_withdrawal_request" = .ok sum)
     (hcomp : (hasCompoundingWithdrawalCredential v) = false) :
@@ -680,13 +680,13 @@ theorem classify_ignored_insufficientEffectiveBalance {cfg : Config}
     (hcur : getCurrentEpoch s = .ok cur)
     (hact : (isActiveValidator v cur) = true)
     (hnoexit : (v.exit_epoch != FAR_FUTURE_EPOCH) = false)
-    (hper : c64 cfg.SHARD_COMMITTEE_PERIOD = .ok period)
+    (hper : u64Checked cfg.SHARD_COMMITTEE_PERIOD = .ok period)
     (hsum : U64.add? v.activation_epoch period
       "process_withdrawal_request" = .ok actSum)
     (hearly : ¬ cur < actSum)
     (hpend : getPendingBalanceToWithdraw s V = .ok pb)
     (hnofull : (wr.amount == FULL_EXIT_REQUEST_AMOUNT) = false)
-    (hmin : c64 P.MIN_ACTIVATION_BALANCE = .ok minAct)
+    (hmin : u64Checked P.MIN_ACTIVATION_BALANCE = .ok minAct)
     (hbal : s.balances.get V.toNat "process_withdrawal_request" = .ok balance)
     (hsum2 : U64.add? minAct pb "process_withdrawal_request" = .ok sum)
     (hcomp : (hasCompoundingWithdrawalCredential v) = true)
@@ -739,13 +739,13 @@ theorem classify_ignored_noExcess {cfg : Config} {s : BeaconState P f}
     (hcur : getCurrentEpoch s = .ok cur)
     (hact : (isActiveValidator v cur) = true)
     (hnoexit : (v.exit_epoch != FAR_FUTURE_EPOCH) = false)
-    (hper : c64 cfg.SHARD_COMMITTEE_PERIOD = .ok period)
+    (hper : u64Checked cfg.SHARD_COMMITTEE_PERIOD = .ok period)
     (hsum : U64.add? v.activation_epoch period
       "process_withdrawal_request" = .ok actSum)
     (hearly : ¬ cur < actSum)
     (hpend : getPendingBalanceToWithdraw s V = .ok pb)
     (hnofull : (wr.amount == FULL_EXIT_REQUEST_AMOUNT) = false)
-    (hmin : c64 P.MIN_ACTIVATION_BALANCE = .ok minAct)
+    (hmin : u64Checked P.MIN_ACTIVATION_BALANCE = .ok minAct)
     (hbal : s.balances.get V.toNat "process_withdrawal_request" = .ok balance)
     (hsum2 : U64.add? minAct pb "process_withdrawal_request" = .ok sum)
     (hcomp : (hasCompoundingWithdrawalCredential v) = true)
@@ -786,31 +786,31 @@ theorem classify_ignored_noExcess {cfg : Config} {s : BeaconState P f}
 /-- A classified partial withdrawal withdraws a nonzero amount: the excess gate
 `MIN_ACTIVATION_BALANCE + pending < balance` makes the available amount
 positive, and a partial request's amount is not the (zero) full-exit amount. -/
-theorem classify_partial_amt_ne_zero {cfg : Config} {state : BeaconState P f}
+theorem classify_partial_amount_ne_zero {cfg : Config} {state : BeaconState P f}
     {wr : WithdrawalRequest} {i : ValidatorIndex} {amt : Gwei}
     (h : classifyWithdrawalRequest cfg state wr = .ok (.partialWithdrawal i amt)) :
     amt ≠ U64.zero := by
   unfold classifyWithdrawalRequest at h
   dsimp only at h
-  obtain ⟨q1, h1ok, h1c⟩ := bind_ok_inv h
+  obtain ⟨q1, h1ok, h1c⟩ := bind_ok_invariant h
   by_cases hb1 : ((q1.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
     !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)
   · rw [ite_eq_left hb1] at h1c
     cases h1c
   · rw [ite_eq_right hb1] at h1c
-    obtain ⟨v2, h2ok, h2c⟩ := bind_ok_inv h1c
+    obtain ⟨v2, h2ok, h2c⟩ := bind_ok_invariant h1c
     cases v2 with
     | none => cases h2c
     | some j =>
       dsimp only at h2c
-      obtain ⟨validator, h3ok, h3c⟩ := bind_ok_inv h2c
+      obtain ⟨validator, h3ok, h3c⟩ := bind_ok_invariant h2c
       by_cases hb3 : ((!(hasExecutionWithdrawalCredential validator &&
         validator.withdrawal_credentials.toBytes.drop 12 ==
           wr.source_address.toBytes)) = true)
       · rw [ite_eq_left hb3] at h3c
         cases h3c
       · rw [ite_eq_right hb3] at h3c
-        obtain ⟨current, h4ok, h4c⟩ := bind_ok_inv h3c
+        obtain ⟨current, h4ok, h4c⟩ := bind_ok_invariant h3c
         by_cases hb4 : ((!isActiveValidator validator current) = true)
         · rw [ite_eq_left hb4] at h4c
           cases h4c
@@ -819,13 +819,13 @@ theorem classify_partial_amt_ne_zero {cfg : Config} {state : BeaconState P f}
           · rw [ite_eq_left hb5] at h4c
             cases h4c
           · rw [ite_eq_right hb5] at h4c
-            obtain ⟨period, h5aok, h5ac⟩ := bind_ok_inv h4c
-            obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_inv h5ac
+            obtain ⟨period, h5aok, h5ac⟩ := bind_ok_invariant h4c
+            obtain ⟨actSum, h5bok, h5bc⟩ := bind_ok_invariant h5ac
             by_cases hc6 : (current < actSum)
             · rw [ite_eq_left hc6] at h5bc
               cases h5bc
             · rw [ite_eq_right hc6] at h5bc
-              obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_inv h5bc
+              obtain ⟨pendingBalance, h6ok, h6c⟩ := bind_ok_invariant h5bc
               by_cases hb7 : ((wr.amount == FULL_EXIT_REQUEST_AMOUNT) = true)
               · rw [ite_eq_left hb7] at h6c
                 by_cases hb8 : ((pendingBalance == U64.zero) = true)
@@ -834,15 +834,15 @@ theorem classify_partial_amt_ne_zero {cfg : Config} {state : BeaconState P f}
                 · rw [ite_eq_right hb8] at h6c
                   cases h6c
               · rw [ite_eq_right hb7] at h6c
-                obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_inv h6c
-                obtain ⟨balance, h8ok, h8c⟩ := bind_ok_inv h7c
-                obtain ⟨sum, h9ok, h9c⟩ := bind_ok_inv h8c
+                obtain ⟨minAct, h7ok, h7c⟩ := bind_ok_invariant h6c
+                obtain ⟨balance, h8ok, h8c⟩ := bind_ok_invariant h7c
+                obtain ⟨sum, h9ok, h9c⟩ := bind_ok_invariant h8c
                 by_cases hg : ((hasCompoundingWithdrawalCredential validator &&
                   decide (minAct ≤ validator.effective_balance) &&
                   decide (sum < balance)) = true)
                 · rw [ite_eq_left hg] at h9c
-                  obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_inv h9c
-                  obtain ⟨avail, h11ok, h11c⟩ := bind_ok_inv h10c
+                  obtain ⟨sub1, h10ok, h10c⟩ := bind_ok_invariant h9c
+                  obtain ⟨avail, h11ok, h11c⟩ := bind_ok_invariant h10c
                   cases h11c
                   intro hz
                   have hn := congrArg U64.toNat hz
@@ -886,7 +886,7 @@ theorem pending_after_partial_of_zero {cfg : Config} {s : BeaconState P f}
   have hs0 : sList.toArray.foldlM (fun acc w => if w.validator_index == V then
       U64.add? acc w.amount "get_pending_balance_to_withdraw"
       else pure acc) U64.zero = .ok U64.zero := by
-    have hsr : Gated.read s.pending_partial_withdrawals
+    have hsr : ForkField.read s.pending_partial_withdrawals
         "pending_partial_withdrawals" = .ok sList := hsread
     have h0 := hpend
     unfold getPendingBalanceToWithdraw at h0
@@ -896,7 +896,7 @@ theorem pending_after_partial_of_zero {cfg : Config} {s : BeaconState P f}
       pushed.toArray.foldlM (fun acc w => if w.validator_index == V then
         U64.add? acc w.amount "get_pending_balance_to_withdraw"
         else pure acc) U64.zero := by
-    have hs1r : Gated.read s1.pending_partial_withdrawals
+    have hs1r : ForkField.read s1.pending_partial_withdrawals
         "pending_partial_withdrawals" = .ok pushed := hs1read
     unfold getPendingBalanceToWithdraw
     rw [hs1r]
@@ -937,7 +937,7 @@ theorem validatorIndexOf_pubkey {s : BeaconState P f} {p : BLSPubkey}
     cases h
   | some i =>
     rw [hf] at h
-    obtain ⟨x, hx, hxe⟩ := bind_ok_inv h
+    obtain ⟨x, hx, hxe⟩ := bind_ok_invariant h
     have hxV : x = V := Option.some.inj (ok_inj_of_pure hxe)
     have hi : x.toNat = i := U64.toNat_ofNat? hx
     rw [Array.findIdx?_eq_some_iff_getElem] at hf
@@ -962,7 +962,7 @@ successful outcome of the partial keeps that registry. -/
 theorem order_sensitive {cfg : Config} {s s1 s2 : BeaconState P f}
     {wp wf : WithdrawalRequest} {V : ValidatorIndex} {amt : Gwei}
     (he : f.atLeast .electra = true)
-    (hdelay : ∃ d, c64 cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok d ∧
+    (hdelay : ∃ d, u64Checked cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok d ∧
       d ≠ U64.zero)
     (hcp : classifyWithdrawalRequest cfg s wp = .ok (.partialWithdrawal V amt))
     (hcf : classifyWithdrawalRequest cfg s wf = .ok (.fullExit V))
@@ -985,7 +985,7 @@ theorem order_sensitive {cfg : Config} {s s1 s2 : BeaconState P f}
     rw [← hvp, ← hvf, hpf]
   refine ⟨hpk, ?_⟩
   -- first order: the full exit after the partial is ignored
-  have hamt0 : amt ≠ U64.zero := classify_partial_amt_ne_zero hcp
+  have hamt0 : amt ≠ U64.zero := classify_partial_amount_ne_zero hcp
   have hpb1 : getPendingBalanceToWithdraw s1 V = .ok amt :=
     pending_after_partial_of_zero hpend0 hap
   have hcur1 : getCurrentEpoch s1 = .ok cur := by
@@ -1030,7 +1030,7 @@ theorem order_sensitive {cfg : Config} {s s1 s2 : BeaconState P f}
       r.validators = s2.validators := by
     intro r hr
     rw [processWithdrawalRequest_eq] at hr
-    obtain ⟨o, ho, hra⟩ := bind_ok_inv hr
+    obtain ⟨o, ho, hra⟩ := bind_ok_invariant hr
     cases o with
     | ignored _ =>
       have hrs : s2 = r := Except.ok.inj hra

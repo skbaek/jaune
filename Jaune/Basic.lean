@@ -71,50 +71,50 @@ def UInt32.lowBit  (x : UInt32) : Bool := (x &&& 0x00000001) != 0
 def UInt64.highBit (x : UInt64) : Bool := (x &&& 0x8000000000000000) != 0
 def UInt64.lowBit  (x : UInt64) : Bool := (x &&& 0x0000000000000001) != 0
 
-def B128 : Type := UInt64 × UInt64
+def U128 : Type := UInt64 × UInt64
 deriving DecidableEq
 
-instance : Inhabited B128 := ⟨⟨0, 0⟩⟩
+instance : Inhabited U128 := ⟨⟨0, 0⟩⟩
 
-def B256 : Type := B128 × B128
+def U256 : Type := U128 × U128
 deriving DecidableEq
 
-instance : Inhabited B256 := ⟨⟨Inhabited.default, Inhabited.default⟩⟩
+instance : Inhabited U256 := ⟨⟨Inhabited.default, Inhabited.default⟩⟩
 
-def B128.highBit (x : B128) : Bool := x.1.highBit
-def B128.lowBit  (x : B128) : Bool := x.2.lowBit
+def U128.highBit (x : U128) : Bool := x.1.highBit
+def U128.lowBit  (x : U128) : Bool := x.2.lowBit
 
-def B256.highBit (x : B256) : Bool := x.1.highBit
-def B256.lowBit  (x : B256) : Bool := x.2.lowBit
+def U256.highBit (x : U256) : Bool := x.1.highBit
+def U256.lowBit  (x : U256) : Bool := x.2.lowBit
 
 def UInt64.max : UInt64 := 0xFFFFFFFFFFFFFFFF
-def B128.max : B128 := ⟨.max, .max⟩
-def B256.max : B256 := ⟨.max, .max⟩
+def U128.max : U128 := ⟨.max, .max⟩
+def U256.max : U256 := ⟨.max, .max⟩
 
-def B128.LT (x y : B128) : Prop :=
+def U128.LT (x y : U128) : Prop :=
   x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 < y.2)
-instance : @LT B128 := ⟨B128.LT⟩
-instance {x y : B128} : Decidable (x < y) := instDecidableOr
+instance : @LT U128 := ⟨U128.LT⟩
+instance {x y : U128} : Decidable (x < y) := instDecidableOr
 
-def B256.LT (x y : B256) : Prop :=
+def U256.LT (x y : U256) : Prop :=
   x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 < y.2)
 
-instance : @LT B256 := ⟨B256.LT⟩
-instance {x y : B256} : Decidable (x < y) := instDecidableOr
+instance : @LT U256 := ⟨U256.LT⟩
+instance {x y : U256} : Decidable (x < y) := instDecidableOr
 
-def Nat.toB128 (n : Nat) : B128 :=
+def Nat.toU128 (n : Nat) : U128 :=
   ⟨(n >>> 64).toUInt64, n.toUInt64⟩
 
-def Nat.toB256 (n : Nat) : B256 :=
-  ⟨(n >>> 128).toB128, n.toB128⟩
+def Nat.toU256 (n : Nat) : U256 :=
+  ⟨(n >>> 128).toU128, n.toU128⟩
 
-instance {n} : OfNat B128 n := ⟨n.toB128⟩
-instance {n} : OfNat B256 n := ⟨n.toB256⟩
+instance {n} : OfNat U128 n := ⟨n.toU128⟩
+instance {n} : OfNat U256 n := ⟨n.toU256⟩
 
-theorem B256.kernel_decidable_comparisons :
-    ((0x06fdde03 : B256) < (0x095ea7b3 : B256)) ∧
-    ((0x095ea7b3 : B256) = (0x095ea7b3 : B256)) ∧
-    ¬ ((0x095ea7b3 : B256) < (0x06fdde03 : B256)) := by
+theorem U256.kernel_decidable_comparisons :
+    ((0x06fdde03 : U256) < (0x095ea7b3 : U256)) ∧
+    ((0x095ea7b3 : U256) = (0x095ea7b3 : U256)) ∧
+    ¬ ((0x095ea7b3 : U256) < (0x06fdde03 : U256)) := by
   decide +kernel
 
 def UInt8.toHexit : UInt8 → Char
@@ -157,27 +157,27 @@ def UInt64.highs (x : UInt64) : UInt32 := (x >>> 32).toUInt32
 def UInt64.lows : UInt64 → UInt32 := UInt64.toUInt32
 def UInt64.toHex (x : UInt64) : String := x.highs.toHex ++ x.lows.toHex
 
-def B128.toHex (x : B128) : String := x.1.toHex ++ x.2.toHex
-def B256.toHex (x : B256) : String := x.1.toHex ++ x.2.toHex
+def U128.toHex (x : U128) : String := x.1.toHex ++ x.2.toHex
+def U256.toHex (x : U256) : String := x.1.toHex ++ x.2.toHex
 
 instance : ToString UInt8 := ⟨UInt8.toHex⟩
 instance : ToString UInt16 := ⟨UInt16.toHex⟩
 instance : ToString UInt32 := ⟨UInt32.toHex⟩
 instance : ToString UInt64 := ⟨UInt64.toHex⟩
-instance : ToString B128 := ⟨B128.toHex⟩
-instance : ToString B256 := ⟨B256.toHex⟩
+instance : ToString U128 := ⟨U128.toHex⟩
+instance : ToString U256 := ⟨U256.toHex⟩
 
-def B128.LE (x y : B128) : Prop :=
+def U128.LE (x y : U128) : Prop :=
   x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 ≤ y.2)
-instance : @LE B128 := ⟨B128.LE⟩
-instance {x y : B128} : Decidable (x ≤ y) := instDecidableOr
+instance : @LE U128 := ⟨U128.LE⟩
+instance {x y : U128} : Decidable (x ≤ y) := instDecidableOr
 
-def B256.LE (x y : B256) : Prop :=
+def U256.LE (x y : U256) : Prop :=
   x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 ≤ y.2)
-instance : @LE B256 := ⟨B256.LE⟩
-instance {x y : B256} : Decidable (x ≤ y) := instDecidableOr
+instance : @LE U256 := ⟨U256.LE⟩
+instance {x y : U256} : Decidable (x ≤ y) := instDecidableOr
 
-def B128.shiftLeft : B128 → Nat → B128
+def U128.shiftLeft : U128 → Nat → U128
   | ⟨xs, ys⟩, os =>
     if os = 0
     then ⟨xs, ys⟩
@@ -187,9 +187,9 @@ def B128.shiftLeft : B128 → Nat → B128
          else if os < 128
               then ⟨ys <<< (os - 64).toUInt64, 0⟩
               else ⟨0, 0⟩
-instance : HShiftLeft B128 Nat B128 := ⟨B128.shiftLeft⟩
+instance : HShiftLeft U128 Nat U128 := ⟨U128.shiftLeft⟩
 
-def B128.shiftRight : B128 → Nat → B128
+def U128.shiftRight : U128 → Nat → U128
   | ⟨xs, ys⟩, os =>
     if os = 0
     then ⟨xs, ys⟩
@@ -199,31 +199,31 @@ def B128.shiftRight : B128 → Nat → B128
          else if os < 128
               then ⟨0, xs >>> (os - 64).toUInt64⟩
               else ⟨0, 0⟩
-instance : HShiftRight B128 Nat B128 := ⟨B128.shiftRight⟩
+instance : HShiftRight U128 Nat U128 := ⟨U128.shiftRight⟩
 
-def B128.or : B128 → B128 → B128
+def U128.or : U128 → U128 → U128
   | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh ||| yh, xl ||| yl⟩
-instance : HOr B128 B128 B128 := ⟨B128.or⟩
+instance : HOr U128 U128 U128 := ⟨U128.or⟩
 
-def B128.and : B128 → B128 → B128
+def U128.and : U128 → U128 → U128
   | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh &&& yh, xl &&& yl⟩
-instance : HAnd B128 B128 B128 := ⟨B128.and⟩
+instance : HAnd U128 U128 U128 := ⟨U128.and⟩
 
-def B256.or : B256 → B256 → B256
+def U256.or : U256 → U256 → U256
   | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh ||| yh, xl ||| yl⟩
-instance : HOr B256 B256 B256 := ⟨B256.or⟩
-def B256.and : B256 → B256 → B256
+instance : HOr U256 U256 U256 := ⟨U256.or⟩
+def U256.and : U256 → U256 → U256
   | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh &&& yh, xl &&& yl⟩
-instance : HAnd B256 B256 B256 := ⟨B256.and⟩
+instance : HAnd U256 U256 U256 := ⟨U256.and⟩
 
-def B128.xor : B128 → B128 → B128
+def U128.xor : U128 → U128 → U128
   | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh ^^^ yh, xl ^^^ yl⟩
-instance : HXor B128 B128 B128 := ⟨B128.xor⟩
-def B256.xor : B256 → B256 → B256
+instance : HXor U128 U128 U128 := ⟨U128.xor⟩
+def U256.xor : U256 → U256 → U256
   | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh ^^^ yh, xl ^^^ yl⟩
-instance : HXor B256 B256 B256 := ⟨B256.xor⟩
+instance : HXor U256 U256 U256 := ⟨U256.xor⟩
 
-def B256.shiftRight : B256 → Nat → B256
+def U256.shiftRight : U256 → Nat → U256
   | ⟨xs, ys⟩, os =>
     if os = 0
     then ⟨xs, ys⟩
@@ -233,10 +233,10 @@ def B256.shiftRight : B256 → Nat → B256
          else if os < 256
               then ⟨0, xs >>> (os - 128)⟩
               else ⟨0, 0⟩
-instance : HShiftRight B256 Nat B256 := ⟨B256.shiftRight⟩
+instance : HShiftRight U256 Nat U256 := ⟨U256.shiftRight⟩
 
 
-def B256.shiftLeft : B256 → Nat → B256
+def U256.shiftLeft : U256 → Nat → U256
   | ⟨xs, ys⟩, os =>
     if os = 0
     then ⟨xs, ys⟩
@@ -245,86 +245,86 @@ def B256.shiftLeft : B256 → Nat → B256
          else if os < 256
               then ⟨ys <<< (os - 128), 0⟩
               else ⟨0, 0⟩
-instance : HShiftLeft B256 Nat B256 := ⟨B256.shiftLeft⟩
+instance : HShiftLeft U256 Nat U256 := ⟨U256.shiftLeft⟩
 
-def B256.isNeg : B256 → Bool := B256.highBit
+def U256.isNeg : U256 → Bool := U256.highBit
 
-def B256.arithShiftRight (xs : B256) (os : Nat) : B256 :=
+def U256.arithShiftRight (xs : U256) (os : Nat) : U256 :=
   let xs' := xs >>> os
   if xs.isNeg
   then
-    let mask := B256.max <<< (256 - os)
+    let mask := U256.max <<< (256 - os)
     xs' ||| mask
   else xs'
 
-def B256.Slt (xs ys : B256) : Prop :=
+def U256.SignedLt (xs ys : U256) : Prop :=
   let x := xs.highBit
   let y := ys.highBit
-  let xs' : B256 := xs &&& (B256.max >>> 1)
-  let ys' : B256 := ys &&& (B256.max >>> 1)
+  let xs' : U256 := xs &&& (U256.max >>> 1)
+  let ys' : U256 := ys &&& (U256.max >>> 1)
   y < x ∨ (x = y ∧ xs' < ys')
-instance {xs ys : B256} : Decidable (B256.Slt xs ys) := instDecidableOr
+instance {xs ys : U256} : Decidable (U256.SignedLt xs ys) := instDecidableOr
 
-def B256.Sgt (xs ys : B256) : Prop := B256.Slt ys xs
-instance {xs ys : B256} : Decidable (B256.Sgt xs ys) := instDecidableOr
+def U256.SignedGt (xs ys : U256) : Prop := U256.SignedLt ys xs
+instance {xs ys : U256} : Decidable (U256.SignedGt xs ys) := instDecidableOr
 
-def B128.complement : B128 → B128
+def U128.complement : U128 → U128
   | ⟨xs, ys⟩ => ⟨~~~ xs, ~~~ ys⟩
-instance : Complement B128 := ⟨B128.complement⟩
+instance : Complement U128 := ⟨U128.complement⟩
 
-def B256.complement : B256 → B256
+def U256.complement : U256 → U256
   | ⟨xs, ys⟩ => ⟨~~~ xs, ~~~ ys⟩
-instance : Complement B256 := ⟨B256.complement⟩
+instance : Complement U256 := ⟨U256.complement⟩
 
-def UInt8.toB256  (x : UInt8)  : B256 := ⟨0, ⟨0, x.toUInt64⟩⟩
-def UInt16.toB256 (x : UInt16) : B256 := ⟨0, ⟨0, x.toUInt64⟩⟩
-def UInt32.toB256 (x : UInt32) : B256 := ⟨0, ⟨0, x.toUInt64⟩⟩
-def UInt64.toB256 (x : UInt64) : B256 := ⟨0, ⟨0, x⟩⟩
+def UInt8.toU256  (x : UInt8)  : U256 := ⟨0, ⟨0, x.toUInt64⟩⟩
+def UInt16.toU256 (x : UInt16) : U256 := ⟨0, ⟨0, x.toUInt64⟩⟩
+def UInt32.toU256 (x : UInt32) : U256 := ⟨0, ⟨0, x.toUInt64⟩⟩
+def UInt64.toU256 (x : UInt64) : U256 := ⟨0, ⟨0, x⟩⟩
 
-def B128.zero : B128 := ⟨0, 0⟩
-instance : Zero B128 := ⟨.zero⟩
-def B128.one : B128 := ⟨0, 1⟩
-instance : One B128 := ⟨.one⟩
-def B256.zero : B256 := ⟨0, 0⟩
-instance : Zero B256 := ⟨.zero⟩
-def B256.one : B256 := ⟨0, 1⟩
-instance : One B256 := ⟨.one⟩
+def U128.zero : U128 := ⟨0, 0⟩
+instance : Zero U128 := ⟨.zero⟩
+def U128.one : U128 := ⟨0, 1⟩
+instance : One U128 := ⟨.one⟩
+def U256.zero : U256 := ⟨0, 0⟩
+instance : Zero U256 := ⟨.zero⟩
+def U256.one : U256 := ⟨0, 1⟩
+instance : One U256 := ⟨.one⟩
 
-def B128.sub (x y : B128) : B128 :=
+def U128.sub (x y : U128) : U128 :=
   let l := x.2 - y.2
   let c : UInt64 := if x.2 < y.2 then 1 else 0
   ⟨(x.1 - y.1) - c, l⟩
-instance : HSub B128 B128 B128 := ⟨B128.sub⟩
+instance : HSub U128 U128 U128 := ⟨U128.sub⟩
 
-def B128.add (x y : B128) : B128 :=
+def U128.add (x y : U128) : U128 :=
   let l := x.2 + y.2
   let c : UInt64 := if l < x.2 then 1 else 0
   ⟨x.1 + y.1 + c, l⟩
-instance : HAdd B128 B128 B128 := ⟨B128.add⟩
+instance : HAdd U128 U128 U128 := ⟨U128.add⟩
 
-def B256.add (x y : B256) : B256 :=
+def U256.add (x y : U256) : U256 :=
   let l := x.2 + y.2
-  let c : B128 := if l < x.2 then 1 else 0
+  let c : U128 := if l < x.2 then 1 else 0
   ⟨x.1 + y.1 + c, l⟩
-instance : HAdd B256 B256 B256 := ⟨B256.add⟩
+instance : HAdd U256 U256 U256 := ⟨U256.add⟩
 
-def B256.sub (x y : B256) : B256 :=
+def U256.sub (x y : U256) : U256 :=
   let l := x.2 - y.2
-  let c : B128 := if x.2 < y.2 then 1 else 0
+  let c : U128 := if x.2 < y.2 then 1 else 0
   ⟨(x.1 - y.1) - c, l⟩
-instance : HSub B256 B256 B256 := ⟨B256.sub⟩
-instance : Sub B256 := ⟨B256.sub⟩
+instance : HSub U256 U256 U256 := ⟨U256.sub⟩
+instance : Sub U256 := ⟨U256.sub⟩
 
-def B256.neg (xs : B256) : B256 := (~~~ xs) + B256.one
+def U256.neg (xs : U256) : U256 := (~~~ xs) + U256.one
 
 -- minimum possible value in 2's complement
-def UInt64.smin : UInt64 := 0x8000000000000000
-def B128.smin : B128 := ⟨.smin, 0⟩
-def B256.smin : B256 := ⟨.smin, 0⟩
+def UInt64.signedMin : UInt64 := 0x8000000000000000
+def U128.signedMin : U128 := ⟨.signedMin, 0⟩
+def U256.signedMin : U256 := ⟨.signedMin, 0⟩
 
 def UInt64.negOne  : UInt64  := .max
-def B128.negOne : B128 := .max
-def B256.negOne : B256 := .max
+def U128.negOne : U128 := .max
+def U256.negOne : U256 := .max
 
 def Nat.toBool : Nat → Bool
   | 0 => 0
@@ -349,8 +349,8 @@ def UInt64.byteswap (w : UInt64) : UInt64 :=
   ((w >>> 40) &&& (0x000000000000FF00 : UInt64)) |||
   ((w >>> 56) &&& (0x00000000000000FF : UInt64))
 
-def B128.toBytes (x : B128) : Bytes := x.1.toBytes ++ x.2.toBytes
-def B256.toBytes (x : B256) : Bytes := x.1.toBytes ++ x.2.toBytes
+def U128.toBytes (x : U128) : Bytes := x.1.toBytes ++ x.2.toBytes
+def U256.toBytes (x : U256) : Bytes := x.1.toBytes ++ x.2.toBytes
 
 def List.ekat {ξ : Type u} (n : Nat) (xs : List ξ) : List ξ :=
   (xs.reverse.take n).reverse
@@ -392,26 +392,26 @@ theorem Bytes.getElem_packV (xs : Bytes) (n i : Nat) (h : i < n) :
   simp [Bytes.packV, Bytes.pack, List.takeRightV,
     List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hlen]
 
-def B128.toNat (x : B128) : Nat := (x.1.toNat <<< 64) ||| x.2.toNat
-def B256.toNat (x : B256) : Nat := (x.1.toNat <<< 128) ||| x.2.toNat
+def U128.toNat (x : U128) : Nat := (x.1.toNat <<< 64) ||| x.2.toNat
+def U256.toNat (x : U256) : Nat := (x.1.toNat <<< 128) ||| x.2.toNat
 
-def B256.addmod (x y z : B256) : B256 :=
+def U256.addmod (x y z : U256) : U256 :=
   if z = 0
   then 0
-  else ((x.toNat + y.toNat) % z.toNat).toB256 -- (x + y) % z
+  else ((x.toNat + y.toNat) % z.toNat).toU256 -- (x + y) % z
 
-def B256.mulmod (x y z : B256) : B256 :=
+def U256.mulmod (x y z : U256) : U256 :=
   if z = 0
   then 0
-  else ((x.toNat * y.toNat) % z.toNat).toB256 -- (x + y) % z
+  else ((x.toNat * y.toNat) % z.toNat).toU256 -- (x + y) % z
 
-def B256.signext (x y : B256) : B256 :=
+def U256.signext (x y : U256) : U256 :=
   if h : x < 31 then
     have h : (32 - (x.toNat + 1)) < 32 := by omega
     let z : UInt8 := (Bytes.pack y.toBytes 32)[32 - (x.toNat + 1)]
     cond z.highBit
-      ((B256.max <<< (8 * (x.toNat + 1))) ||| y)
-      ((B256.max >>> (256 - (8 * (x.toNat + 1)))) &&& y)
+      ((U256.max <<< (8 * (x.toNat + 1))) ||| y)
+      ((U256.max >>> (256 - (8 * (x.toNat + 1)))) &&& y)
   else y
 
 instance {ξ : Type u} {ρ : ξ → Prop} {xs : List ξ}
@@ -621,31 +621,31 @@ lemma List.of_get?_succ_eq_some {X} {l : List X} {k : ℕ} {x} :
       exact ⟨y', h'⟩
 
 
-def B256.mul (x y : B256) : B256 := (x.toNat * y.toNat).toB256
-instance : HMul B256 B256 B256 := ⟨B256.mul⟩
+def U256.mul (x y : U256) : U256 := (x.toNat * y.toNat).toU256
+instance : HMul U256 U256 U256 := ⟨U256.mul⟩
 
-def B256.divMod (x y : B256) : B256 × B256 :=
+def U256.divMod (x y : U256) : U256 × U256 :=
   if y = 0
   then ⟨0, 0⟩
-  else ⟨(x.toNat / y.toNat).toB256, (x.toNat % y.toNat).toB256⟩
+  else ⟨(x.toNat / y.toNat).toU256, (x.toNat % y.toNat).toU256⟩
 
-instance : HDiv B256 B256 B256 := ⟨λ x y => (B256.divMod x y).fst⟩
-instance : HMod B256 B256 B256 := ⟨λ x y => (B256.divMod x y).snd⟩
+instance : HDiv U256 U256 U256 := ⟨λ x y => (U256.divMod x y).fst⟩
+instance : HMod U256 U256 U256 := ⟨λ x y => (U256.divMod x y).snd⟩
 
-def B256.sdiv (xs ys : B256) : B256 :=
+def U256.sdiv (xs ys : U256) : U256 :=
   if ys = 0
   then 0
-  else if xs = smin ∧ ys = negOne
-       then smin
+  else if xs = signedMin ∧ ys = negOne
+       then signedMin
        else match (isNeg xs, isNeg ys) with
             | (0, 0) => xs / ys
             | (1, 0) => neg ((neg xs) / ys)
             | (0, 1) => neg (xs / (neg ys))
             | (1, 1) => (neg xs) / (neg ys)
 
-def B256.abs (xs : B256) : B256 := if isNeg xs then neg xs else xs
+def U256.abs (xs : U256) : U256 := if isNeg xs then neg xs else xs
 
-def B256.smod (xs ys : B256) : B256 :=
+def U256.smod (xs ys : U256) : U256 :=
   if ys = 0
   then 0
   else let mod := (abs xs) % (abs ys)
@@ -654,12 +654,12 @@ def B256.smod (xs ys : B256) : B256 :=
 def UInt64.testBit (xs : UInt64) (n : Nat) : Bool :=
   ((xs >>> n.toUInt64) &&& 0x0000000000000001) != 0
 
-def B128.testBit (xs : B128) (n : Nat) : Bool :=
+def U128.testBit (xs : U128) (n : Nat) : Bool :=
   if n < 64
   then xs.2.testBit n
   else xs.1.testBit (n - 64)
 
-def B256.testBit (xs : B256) (n : Nat) : Bool :=
+def U256.testBit (xs : U256) (n : Nat) : Bool :=
   if n < 128
   then xs.2.testBit n
   else xs.1.testBit (n - 128)
@@ -676,26 +676,26 @@ theorem Nat.powMod_eq (base exp m : Nat) :
     Nat.powMod base exp m = if m ≤ 1 then 0 else base ^ exp % m := by
   simp only [Nat.powMod, _root_.Nat.powMod_def]
 
-def B256.bexp (xs ys : B256) : B256 :=
-  (Nat.powMod xs.toNat ys.toNat (2 ^ 256)).toB256
+def U256.exp (xs ys : U256) : U256 :=
+  (Nat.powMod xs.toNat ys.toNat (2 ^ 256)).toU256
 
 /-- Reason about word exponentiation without unfolding its implementation. -/
-theorem B256.bexp_eq (x y : B256) :
-    B256.bexp x y = (x.toNat ^ y.toNat % (2 ^ 256)).toB256 := by
-  simp only [B256.bexp, Nat.powMod_eq, show ¬ (2 : Nat) ^ 256 ≤ 1 by decide,
+theorem U256.exp_eq (x y : U256) :
+    U256.exp x y = (x.toNat ^ y.toNat % (2 ^ 256)).toU256 := by
+  simp only [U256.exp, Nat.powMod_eq, show ¬ (2 : Nat) ^ 256 ≤ 1 by decide,
     ite_false]
 
 /-- The zero exponent is independent of the base word. -/
-theorem B256.bexp_zero (x : B256) : B256.bexp x 0 = 1 := by
-  rw [B256.bexp_eq, show (0 : B256).toNat = 0 from rfl, Nat.pow_zero]
+theorem U256.exp_zero (x : U256) : U256.exp x 0 = 1 := by
+  rw [U256.exp_eq, show (0 : U256).toNat = 0 from rfl, Nat.pow_zero]
   rfl
 
-instance : HPow B256 B256 B256 := ⟨B256.bexp⟩
+instance : HPow U256 U256 U256 := ⟨U256.exp⟩
 
 def String.joinln : List String → String :=
   String.intercalate "\n"
 
-def Hexit.toB4 : Char → Option UInt8
+def Hexit.toNibble : Char → Option UInt8
   | '0' => some 0x00
   | '1' => some 0x01
   | '2' => some 0x02
@@ -722,15 +722,15 @@ def Hexit.toB4 : Char → Option UInt8
 
 -- Tail-recursive: inputs are whole transaction payloads, so the naive
 -- `(xy :: ·) <$> toBytes xs` shape overflows the stack past ~64 KB.
-def B4L.toBytes.go : Bytes → Bytes → Option Bytes
+def Nibbles.toBytes.go : Bytes → Bytes → Option Bytes
   | acc, [] => some acc.reverse
   | _, [_] => none
-  | acc, x :: y :: xs => B4L.toBytes.go (((x <<< 4) ||| y) :: acc) xs
+  | acc, x :: y :: xs => Nibbles.toBytes.go (((x <<< 4) ||| y) :: acc) xs
 
-def B4L.toBytes (xs : Bytes) : Option Bytes := B4L.toBytes.go [] xs
+def Nibbles.toBytes (xs : Bytes) : Option Bytes := Nibbles.toBytes.go [] xs
 
 def Hex.toBytes (s : String) : Option Bytes :=
-  s.toList.mapM Hexit.toB4 >>= B4L.toBytes
+  s.toList.mapM Hexit.toNibble >>= Nibbles.toBytes
 
 def Option.toIO {ξ} (o : Option ξ)
   (msg : String := "error : option-to-IO lift failed, input is 'none'") :
@@ -784,7 +784,7 @@ example : Std.LawfulEqCmp (compare : Bytes → Bytes → Ordering) := inferInsta
 def UInt8.compareLows (x y : UInt8) : Ordering :=
   Ord.compare x.lows y.lows
 
-def B4L.toHex : Bytes → String
+def Nibbles.toHex : Bytes → String
   | [] => ""
   | [b] => String.ofList [b.toHexit]
   | b :: bs => String.ofList ([b.toHexit] ++ (toHex bs).toList)
@@ -862,7 +862,7 @@ def UInt32.concat (x y : UInt32) : UInt64 :=
 def Bytes.toUInt64? (xs : Bytes) : Option UInt64 :=
   if xs.length = 8 then some (Bytes.toUInt64 xs) else none
 
-def Bytes.toB128Diff : Bytes → Option (B128 × Bytes)
+def Bytes.toU128Diff : Bytes → Option (U128 × Bytes)
   | x0 :: x1 :: x2 :: x3 ::
     x4 :: x5 :: x6 :: x7 ::
     y0 :: y1 :: y2 :: y3 ::
@@ -875,22 +875,22 @@ def Bytes.toB128Diff : Bytes → Option (B128 × Bytes)
       ⟩
   | _ => none
 
-def Bytes.toB256? (xs : Bytes) : Option B256 := do
-  let ⟨h, xs'⟩ ← xs.toB128Diff
-  let ⟨l, []⟩ ← xs'.toB128Diff | none
+def Bytes.toU256? (xs : Bytes) : Option U256 := do
+  let ⟨h, xs'⟩ ← xs.toU128Diff
+  let ⟨l, []⟩ ← xs'.toU128Diff | none
   some ⟨h, l⟩
 
 def Hex.toUInt64? (hx : String) : Option UInt64 := do
   Hex.toBytes hx >>= Bytes.toUInt64?
 
-def Hex.toB256? (hx : String) : Option B256 := do
-  Hex.toBytes hx >>= Bytes.toB256?
+def Hex.toU256? (hx : String) : Option U256 := do
+  Hex.toBytes hx >>= Bytes.toU256?
 
 lemma UInt16.length_toBytes (x : UInt16) : x.toBytes.length = 2 := rfl
 lemma UInt32.length_toBytes (x : UInt32) : x.toBytes.length = 4 := rfl
 lemma UInt64.length_toBytes (x : UInt64) : x.toBytes.length = 8 := rfl
-lemma B128.length_toBytes (x : B128) : x.toBytes.length = 16 := rfl
-lemma B256.length_toBytes (w : B256) : w.toBytes.length = 32 := rfl
+lemma U128.length_toBytes (x : U128) : x.toBytes.length = 16 := rfl
+lemma U256.length_toBytes (w : U256) : w.toBytes.length = 32 := rfl
 
 theorem List.takeD_eq_self {ξ : Type u} {n : ℕ} {xs : List ξ} (x : ξ)
     (h : n = xs.length) : List.takeD n xs x = xs := by
@@ -1222,7 +1222,7 @@ lemma UInt64.toUInt64_toBytes (x : UInt64) : x.toBytes.toUInt64 = x := by
   apply high_or_low_eq_self
   apply UInt64.toNat_lt
 
-def Bytes.toB128 (xs : Bytes) : B128 :=
+def Bytes.toU128 (xs : Bytes) : U128 :=
   let xs' := xs.pack 16
   let xh := xs'.take 8
   let xl := xs'.drop 8
@@ -1234,7 +1234,7 @@ def Bytes.toB128 (xs : Bytes) : B128 :=
 -- off the top, so this agrees with the old `pack 32`-then-split codec on both
 -- of its behaviors: left zero-extension of short lists, and truncation to the
 -- last 32 bytes of long ones. No `pack`, `take`, `drop`, or reversal.
-def Bytes.toB256.go (l3 l2 l1 l0 : UInt64) : Bytes → B256
+def Bytes.toU256.go (l3 l2 l1 l0 : UInt64) : Bytes → U256
   | [] => ⟨⟨l3, l2⟩, ⟨l1, l0⟩⟩
   | b :: bs =>
     go ((l3 <<< 8) ||| (l2 >>> 56))
@@ -1243,17 +1243,17 @@ def Bytes.toB256.go (l3 l2 l1 l0 : UInt64) : Bytes → B256
        ((l0 <<< 8) ||| b.toUInt64)
        bs
 
-def Bytes.toB256 (xs : Bytes) : B256 := Bytes.toB256.go 0 0 0 0 xs
+def Bytes.toU256 (xs : Bytes) : U256 := Bytes.toU256.go 0 0 0 0 xs
 
 -- Equation lemmas for the codec: leading zero bytes are inert, and the short
 -- concrete case that downstream proofs unfold. These replace the `pack`/`take`/
 -- `drop` reasoning the old definition invited.
-lemma Bytes.toB256_zero_cons (xs : Bytes) : Bytes.toB256 (0 :: xs) = Bytes.toB256 xs :=
+lemma Bytes.toU256_zero_cons (xs : Bytes) : Bytes.toU256 (0 :: xs) = Bytes.toU256 xs :=
   rfl
 
-lemma Bytes.toB256_pair (b0 b1 : UInt8) :
-    Bytes.toB256 [b0, b1] = ⟨⟨0, 0⟩, ⟨0, (b0.toUInt64 <<< 8) ||| b1.toUInt64⟩⟩ := by
-  simp only [Bytes.toB256, Bytes.toB256.go]
+lemma Bytes.toU256_pair (b0 b1 : UInt8) :
+    Bytes.toU256 [b0, b1] = ⟨⟨0, 0⟩, ⟨0, (b0.toUInt64 <<< 8) ||| b1.toUInt64⟩⟩ := by
+  simp only [Bytes.toU256, Bytes.toU256.go]
   simp
   apply Prod.ext
   · rfl
@@ -1478,10 +1478,10 @@ lemma UInt64.ofBytes_eq_toUInt64 (a b c d e f g h : UInt8) :
   rw [UInt32.ofBytes_eq_halves, UInt32.ofBytes_eq_halves]
   rfl
 
-lemma Bytes.toB256_go_eight (l3 l2 l1 l0 : UInt64) (a b c d e f g h : UInt8) :
-    Bytes.toB256.go l3 l2 l1 l0 [a, b, c, d, e, f, g, h] =
+lemma Bytes.toU256_go_eight (l3 l2 l1 l0 : UInt64) (a b c d e f g h : UInt8) :
+    Bytes.toU256.go l3 l2 l1 l0 [a, b, c, d, e, f, g, h] =
       ⟨⟨l2, l1⟩, ⟨l0, UInt64.ofBytes a b c d e f g h⟩⟩ := by
-  simp only [Bytes.toB256.go]
+  simp only [Bytes.toU256.go]
   refine Prod.ext (Prod.ext ?_ ?_) (Prod.ext ?_ ?_)
   · apply UInt64.spill_eight (h := 0)
     all_goals apply UInt64.shr56_lt
@@ -1491,31 +1491,31 @@ lemma Bytes.toB256_go_eight (l3 l2 l1 l0 : UInt64) (a b c d e f g h : UInt8) :
     all_goals first | apply UInt64.shr56_lt | exact UInt8.toNat_lt _
   · exact UInt64.shiftIn_eight l0 a b c d e f g h
 
-lemma Bytes.toB256_go_eight_cons (l3 l2 l1 l0 : UInt64) (a b c d e f g h : UInt8)
+lemma Bytes.toU256_go_eight_cons (l3 l2 l1 l0 : UInt64) (a b c d e f g h : UInt8)
     (tail : Bytes) :
-    Bytes.toB256.go l3 l2 l1 l0 (a :: b :: c :: d :: e :: f :: g :: h :: tail) =
-      Bytes.toB256.go l2 l1 l0 (UInt64.ofBytes a b c d e f g h) tail := by
-  have hs := Bytes.toB256_go_eight l3 l2 l1 l0 a b c d e f g h
-  simp only [Bytes.toB256.go] at hs ⊢
+    Bytes.toU256.go l3 l2 l1 l0 (a :: b :: c :: d :: e :: f :: g :: h :: tail) =
+      Bytes.toU256.go l2 l1 l0 (UInt64.ofBytes a b c d e f g h) tail := by
+  have hs := Bytes.toU256_go_eight l3 l2 l1 l0 a b c d e f g h
+  simp only [Bytes.toU256.go] at hs ⊢
   rcases Prod.mk.inj hs with ⟨hhi, hlo⟩
   rcases Prod.mk.inj hhi with ⟨h3, h2⟩
   rcases Prod.mk.inj hlo with ⟨h1, h0⟩
   rw [h3, h2, h1, h0]
 
-lemma Bytes.toB256_go_append_toBytes (l3 l2 l1 l0 y : UInt64) (tail : Bytes) :
-    Bytes.toB256.go l3 l2 l1 l0 (y.toBytes ++ tail) =
-      Bytes.toB256.go l2 l1 l0 y tail := by
+lemma Bytes.toU256_go_append_toBytes (l3 l2 l1 l0 y : UInt64) (tail : Bytes) :
+    Bytes.toU256.go l3 l2 l1 l0 (y.toBytes ++ tail) =
+      Bytes.toU256.go l2 l1 l0 y tail := by
   simp only [UInt64.toBytes, UInt32.toBytes, UInt16.toBytes, List.cons_append, List.nil_append]
-  rw [Bytes.toB256_go_eight_cons, UInt64.ofBytes_eq_toUInt64]
-  exact congrArg (fun z => Bytes.toB256.go l2 l1 l0 z tail) (UInt64.toUInt64_toBytes y)
+  rw [Bytes.toU256_go_eight_cons, UInt64.ofBytes_eq_toUInt64]
+  exact congrArg (fun z => Bytes.toU256.go l2 l1 l0 z tail) (UInt64.toUInt64_toBytes y)
 
-lemma B256.toB256_toBytes (x : B256) : x.toBytes.toB256 = x := by
-  show Bytes.toB256.go 0 0 0 0 (B256.toBytes x) = ((x.1.1, x.1.2), (x.2.1, x.2.2))
-  simp only [B256.toBytes, B128.toBytes, List.append_assoc]
-  rw [Bytes.toB256_go_append_toBytes, Bytes.toB256_go_append_toBytes,
-      Bytes.toB256_go_append_toBytes]
+lemma U256.toU256_toBytes (x : U256) : x.toBytes.toU256 = x := by
+  show Bytes.toU256.go 0 0 0 0 (U256.toBytes x) = ((x.1.1, x.1.2), (x.2.1, x.2.2))
+  simp only [U256.toBytes, U128.toBytes, List.append_assoc]
+  rw [Bytes.toU256_go_append_toBytes, Bytes.toU256_go_append_toBytes,
+      Bytes.toU256_go_append_toBytes]
   rw [show x.2.2.toBytes = x.2.2.toBytes ++ [] by simp]
-  rw [Bytes.toB256_go_append_toBytes]
+  rw [Bytes.toU256_go_append_toBytes]
   rfl
 
 def IO.guard (φ : Prop) [Decidable φ] (msg : String) : IO Unit :=
@@ -1573,16 +1573,16 @@ def Array.sliceD {ξ : Type u} (xs : Array ξ) : Nat → Nat → ξ → List ξ 
       aux xs (xs.getD (m + n) d :: Acc) m n d
   aux xs []
 
-def B256.min : B256 → B256 → B256
+def U256.min : U256 → U256 → U256
   | xs, ys => if xs ≤ ys then xs else ys
-instance : Min B256 := ⟨.min⟩
+instance : Min U256 := ⟨.min⟩
 
 def UInt8.toNibbles (x : UInt8) : List UInt8 := [x.highs, x.lows]
 def UInt16.toNibbles (x : UInt16) : List UInt8 := x.highs.toNibbles ++ x.lows.toNibbles
 def UInt32.toNibbles (x : UInt32) : List UInt8 := x.highs.toNibbles ++ x.lows.toNibbles
 def UInt64.toNibbles (x : UInt64) : List UInt8 := x.highs.toNibbles ++ x.lows.toNibbles
-def B128.toNibbles (x : B128) : List UInt8 := x.1.toNibbles ++ x.2.toNibbles
-def B256.toNibbles (x : B256) : List UInt8 := x.1.toNibbles ++ x.2.toNibbles
+def U128.toNibbles (x : U128) : List UInt8 := x.1.toNibbles ++ x.2.toNibbles
+def U256.toNibbles (x : U256) : List UInt8 := x.1.toNibbles ++ x.2.toNibbles
 
 def Bytes.toNibbles : Bytes → Bytes
   | [] => []
@@ -1651,9 +1651,9 @@ def Option.toExcept {ξ : Type u} {υ : Type v} (x : ξ) : Option υ → Except 
 inductive Except.IsOk {ξ υ} : Except ξ υ → Prop
   | intro {x : υ} : Except.IsOk (Except.ok x)
 
-inductive BLT : Type
-  | bytes : Bytes → BLT
-  | list : List BLT → BLT
+inductive Rlp.Item : Type
+  | bytes : Bytes → Rlp.Item
+  | list : List Rlp.Item → Rlp.Item
 
 def UInt8.toBools (x0 : UInt8) :
     Bool × Bool × Bool × Bool × Bool × Bool × Bool × Bool :=
@@ -1669,7 +1669,7 @@ def UInt8.toBools (x0 : UInt8) :
 
 mutual
 
-  def Bytes.toBLTDiff? : Nat → Bytes → Option (BLT × Bytes)
+  def Bytes.toRlpItemDiff? : Nat → Bytes → Option (Rlp.Item × Bytes)
     | _, [] => none
     | 0, _ :: _ => none
     | k + 1, b :: bs =>
@@ -1684,45 +1684,45 @@ mutual
     | ⟨1, 1, 1, 1, 1, _, _, _⟩ => do
       let (lbs, bs') ← List.splitAt? (b - 0xF7).toNat bs
       let (rbs, bs'') ← List.splitAt? (Bytes.toNat lbs) bs'
-      let rs ← Bytes.toBLTs? k rbs
+      let rs ← Bytes.toRlpItems? k rbs
       return ⟨.list rs, bs''⟩
     | ⟨1, 1, _, _, _, _, _, _⟩ => do
       let (rbs, bs') ← List.splitAt? (b - 0xC0).toNat bs
-      let rs ← Bytes.toBLTs? k rbs
+      let rs ← Bytes.toRlpItems? k rbs
       return ⟨.list rs, bs'⟩
 
-  def Bytes.toBLTs? : Nat → Bytes → Option (List BLT)
+  def Bytes.toRlpItems? : Nat → Bytes → Option (List Rlp.Item)
     | _, [] => some []
     | 0, _ :: _ => none
     | k + 1, bs@(_ :: _) => do
-      let (r, bs') ← Bytes.toBLTDiff? (k + 1) bs
-      let rs ← Bytes.toBLTs? k bs'
+      let (r, bs') ← Bytes.toRlpItemDiff? (k + 1) bs
+      let rs ← Bytes.toRlpItems? k bs'
       return (r :: rs)
 
 end
 
-def Bytes.toBLT? (bs : Bytes) : Option BLT :=
-  match Bytes.toBLTDiff? bs.length bs with
+def Bytes.toRlpItem? (bs : Bytes) : Option Rlp.Item :=
+  match Bytes.toRlpItemDiff? bs.length bs with
   | some (r, []) => some r
   | _ => none
 
 mutual
 
-  def BLT.toBytes : BLT → Bytes
+  def Rlp.Item.toBytes : Rlp.Item → Bytes
     | .bytes [b] => if b < (0x80) then [b] else [0x81, b]
     | .bytes bs =>
       if bs.length < 56
       then (0x80 + bs.length.toUInt8) :: bs
       else let lbs : Bytes := bs.length.toBytesPack
            (0xB7 + lbs.length.toUInt8) :: (lbs ++ bs)
-    | .list rs => BLTs.toBytes rs
+    | .list rs => Rlp.Items.toBytes rs
 
-  def BLTs.toBytesJoin : List BLT → Bytes
+  def Rlp.Items.toBytesJoin : List Rlp.Item → Bytes
     | .nil => []
-    | .cons r rs => r.toBytes ++ BLTs.toBytesJoin rs
+    | .cons r rs => r.toBytes ++ Rlp.Items.toBytesJoin rs
 
-  def BLTs.toBytes (rs : List BLT) : Bytes :=
-    let bs := BLTs.toBytesJoin rs
+  def Rlp.Items.toBytes (rs : List Rlp.Item) : Bytes :=
+    let bs := Rlp.Items.toBytesJoin rs
     let len := bs.length
     if len < 56
     then (0xC0 + len.toUInt8) :: bs
@@ -1754,11 +1754,11 @@ def readJsonFile (filename : System.FilePath) : IO Lean.Json := do
   | .ok json => pure json
   | .error err => throw (IO.userError err)
 
-def B256.ltCheck  (x y : B256) : B256 := if x < y then 1 else 0
-def B256.gtCheck  (x y : B256) : B256 := if x > y then 1 else 0
-def B256.sltCheck (x y : B256) : B256 := if B256.Slt x y then 1 else 0
-def B256.sgtCheck (x y : B256) : B256 := if B256.Sgt x y then 1 else 0
-def B256.eqCheck  (x y : B256) : B256 := if x = y then 1 else 0
+def U256.ltCheck  (x y : U256) : U256 := if x < y then 1 else 0
+def U256.gtCheck  (x y : U256) : U256 := if x > y then 1 else 0
+def U256.sltCheck (x y : U256) : U256 := if U256.SignedLt x y then 1 else 0
+def U256.sgtCheck (x y : U256) : U256 := if U256.SignedGt x y then 1 else 0
+def U256.eqCheck  (x y : U256) : U256 := if x = y then 1 else 0
 
 def ceilDiv (m n : Nat) := m / n + if m % n = 0 then 0 else 1
 
@@ -1769,14 +1769,14 @@ def ceilDiv (m n : Nat) := m / n + if m % n = 0 then 0 else 1
 @[inline] def UInt32.ror (x n : UInt32): UInt32 :=
   x >>> n ||| (x <<< (32 - n))
 
-def B32s.toUInt64 (x y : UInt32) : UInt64 :=
+def UInt32s.toUInt64 (x y : UInt32) : UInt64 :=
   x.toUInt64 <<< 32 ||| y.toUInt64
 
-def B32s.toB128 (x0 x1 y0 y1 : UInt32) : B128 :=
-  ⟨B32s.toUInt64 x0 x1, B32s.toUInt64 y0 y1⟩
+def UInt32s.toU128 (x0 x1 y0 y1 : UInt32) : U128 :=
+  ⟨UInt32s.toUInt64 x0 x1, UInt32s.toUInt64 y0 y1⟩
 
-def B32s.toB256 (x0 x1 x2 x3 y0 y1 y2 y3: UInt32) : B256 :=
-  ⟨B32s.toB128 x0 x1 x2 x3, B32s.toB128 y0 y1 y2 y3⟩
+def UInt32s.toU256 (x0 x1 x2 x3 y0 y1 y2 y3: UInt32) : U256 :=
+  ⟨UInt32s.toU128 x0 x1 x2 x3, UInt32s.toU128 y0 y1 y2 y3⟩
 
 /-- Take the first `sz` entries of `xs` into an array of exactly `sz` slots,
 padded with `x`, and return the rest of the list.

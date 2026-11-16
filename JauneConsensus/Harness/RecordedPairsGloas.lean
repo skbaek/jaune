@@ -41,7 +41,7 @@ open Jaune
 open JauneConsensus
 
 /-- The mainnet preset, which the devnet runs. -/
-abbrev MP : Preset := Preset.mainnet
+abbrev MainnetPreset : Preset := Preset.mainnet
 
 /-! ## `SHA256SUMS` -/
 
@@ -79,7 +79,7 @@ def hexNat? (s : String) : Option Nat :=
   else t.foldl (fun acc c => acc.bind fun n => (hexDigit? c).map (n * 16 + ·)) (some 0)
 
 /-- A string field of the recorded block, lower-cased. -/
-def elField (r : Json) (k : String) : Except String String :=
+def executionLayerField (r : Json) (k : String) : Except String String :=
   match r.getObjValAs? String k with
   | .ok s => .ok s.toLower
   | .error _ => .error s!"EL block: missing string field '{k}'"
@@ -91,32 +91,32 @@ inductive Want where
   /-- Byte data, as lower-case `0x` hex. -/
   | bytes (hex : String)
   /-- A quantity. -/
-  | qty (n : Nat)
+  | quantity (n : Nat)
   /-- The computed header has no such field. -/
   | absent
 
-private def hx (bs : Bytes) : String := "0x" ++ bs.toHex
-private def hb (b : B256) : String := "0x" ++ b.toHex
+private def hexBytes (bs : Bytes) : String := "0x" ++ bs.toHex
+private def hexBytes32 (b : Jaune.U256) : String := "0x" ++ b.toHex
 
 /-- The computed header's fields, keyed by the `eth_getBlockByHash` names. -/
 def headerFields (h : Header) : List (String × Want) :=
-  let ob : Option B256 → Want := fun o => match o with | some b => .bytes (hb b) | none => .absent
-  let on : Option Nat → Want := fun o => match o with | some n => .qty n | none => .absent
-  [("parentHash", .bytes (hb h.parentHash)),
-   ("sha3Uncles", .bytes (hb h.ommersHash)),
+  let ob : Option Jaune.U256 → Want := fun o => match o with | some b => .bytes (hexBytes32 b) | none => .absent
+  let on : Option Nat → Want := fun o => match o with | some n => .quantity n | none => .absent
+  [("parentHash", .bytes (hexBytes32 h.parentHash)),
+   ("sha3Uncles", .bytes (hexBytes32 h.ommersHash)),
    ("miner", .bytes ("0x" ++ h.coinbase.toHex)),
-   ("stateRoot", .bytes (hb h.stateRoot)),
-   ("transactionsRoot", .bytes (hb h.txsRoot)),
-   ("receiptsRoot", .bytes (hb h.receiptRoot)),
-   ("logsBloom", .bytes (hx h.bloom)),
-   ("difficulty", .qty h.difficulty),
-   ("number", .qty h.number),
-   ("gasLimit", .qty h.gasLimit),
-   ("gasUsed", .qty h.gasUsed),
-   ("timestamp", .qty h.timestamp),
-   ("extraData", .bytes (hx h.extraData)),
-   ("mixHash", .bytes (hb h.prevRandao)),
-   ("nonce", .qty h.nonce.toNat),
+   ("stateRoot", .bytes (hexBytes32 h.stateRoot)),
+   ("transactionsRoot", .bytes (hexBytes32 h.transactionsRoot)),
+   ("receiptsRoot", .bytes (hexBytes32 h.receiptsRoot)),
+   ("logsBloom", .bytes (hexBytes h.logsBloom)),
+   ("difficulty", .quantity h.difficulty),
+   ("number", .quantity h.number),
+   ("gasLimit", .quantity h.gasLimit),
+   ("gasUsed", .quantity h.gasUsed),
+   ("timestamp", .quantity h.timestamp),
+   ("extraData", .bytes (hexBytes h.extraData)),
+   ("mixHash", .bytes (hexBytes32 h.prevRandao)),
+   ("nonce", .quantity h.nonce.toNat),
    ("baseFeePerGas", on h.baseFeePerGas),
    ("withdrawalsRoot", ob h.withdrawalsRoot),
    ("blobGasUsed", on h.blobGasUsed),
@@ -129,10 +129,10 @@ def headerFields (h : Header) : List (String × Want) :=
 /-- The header fields that differ from the recorded block, each with both values. -/
 def headerDiff (h : Header) (r : Json) : List String :=
   (headerFields h).filterMap fun (k, w) =>
-    match elField r k, w with
+    match executionLayerField r k, w with
     | .error e, _ => some e
     | .ok rec, .bytes c => if c == rec then none else some s!"{k}: computed {c}, recorded {rec}"
-    | .ok rec, .qty n =>
+    | .ok rec, .quantity n =>
       if hexNat? rec == some n then none else some s!"{k}: computed {n}, recorded {rec}"
     | .ok rec, .absent => some s!"{k}: computed header has none, recorded {rec}"
 
@@ -162,23 +162,23 @@ does. Since SEAMFIX (`Engine.lean` `payloadTx`/`payloadTxDecode`) it decodes leg
 transactions through the legacy route, so on the recorded pairs this note no longer fires; it
 stays as a diagnostic for any transaction neither route decodes. Reported, not gated: no header
 field reads it. -/
-def engineTxDecodeNote (payload : Gloas.ExecutionPayload MP) : Option String :=
+def engineTransactionDecodeNote (payload : Gloas.ExecutionPayload MainnetPreset) : Option String :=
   match blobVersionedHashesOf payload.txBytes with
   | .ok _ => none
   | .error e =>
-    let bad := payload.txBytes.zipIdx.filter fun (t, _) => !(payloadTxDecode t).isOk
+    let bad := payload.txBytes.zipIdx.filter fun (t, _) => !(payloadTransactionDecode t).isOk
     let at_ := bad.map fun (t, i) => s!"{i} (first byte 0x{(t.headD 0).toHex}, {t.length} bytes)"
     some s!"blobVersionedHashesOf refuses transaction(s) {at_}: {repr e}"
 
 /-- The `Gloas.NewPayloadRequest` an envelope stands for, with `execution_requests := reqs`. The
 versioned hashes are the engine's own `blobVersionedHashesOf` over the payload's transactions
 (since SEAMFIX it decodes legacy RLP-list transactions too, which carry none). -/
-def newPayloadRequest (env : Gloas.ExecutionPayloadEnvelope MP) (reqs : Gloas.ExecutionRequests) :
-    Except String (Gloas.NewPayloadRequest MP) := do
+def newPayloadRequest (env : Gloas.ExecutionPayloadEnvelope MainnetPreset) (reqs : Gloas.ExecutionRequests) :
+    Except String (Gloas.NewPayloadRequest MainnetPreset) := do
   let hashes ← (blobVersionedHashesOf env.payload.txBytes).mapError fun e =>
     s!"transactions: {repr e}"
   let arr := hashes.toArray
-  if h : arr.size ≤ MP.MAX_BLOB_COMMITMENTS_PER_BLOCK then
+  if h : arr.size ≤ MainnetPreset.MAX_BLOB_COMMITMENTS_PER_BLOCK then
     pure { execution_payload := env.payload
            versioned_hashes := ⟨arr, h⟩
            parent_beacon_block_root := env.parent_beacon_block_root
@@ -191,7 +191,7 @@ private def lookup (files : List (String × ByteArray)) (p : String) : Except St
   | none => .error s!"{p} is not listed in SHA256SUMS"
 
 private def decode (α : Type) [Ssz α] (what : String) (b : ByteArray) : Except String α :=
-  match (deserialize b.toList : M α) with
+  match (deserialize b.toList : Fallible α) with
   | .ok v => .ok v
   | .error e => .error s!"{what}: SSZ decode failed ({repr e})"
 
@@ -200,8 +200,8 @@ rejected by both hash checks. -/
 def runPair (files : List (String × ByteArray)) (slot : Nat) : Except String (Bool × List String) := do
   let blkPath := s!"ssz/blk_{slot}.ssz"
   let envPath := s!"ssz/env_{slot - 1}.ssz"
-  let blk ← decode (Gloas.SignedBeaconBlock MP) blkPath (← lookup files blkPath)
-  let senv ← decode (Gloas.SignedExecutionPayloadEnvelope MP) envPath (← lookup files envPath)
+  let blk ← decode (Gloas.SignedBeaconBlock MainnetPreset) blkPath (← lookup files blkPath)
+  let senv ← decode (Gloas.SignedExecutionPayloadEnvelope MainnetPreset) envPath (← lookup files envPath)
   let env := senv.message
   let payload := env.payload
   let elPath := s!"json/el_0x{payload.block_hash.toHex}.json"
@@ -210,9 +210,9 @@ def runPair (files : List (String × ByteArray)) (slot : Nat) : Except String (B
     | none => throw s!"{elPath}: not UTF-8"
   let elJson ← (Json.parse elText).mapError (fun e => s!"{elPath}: {e}")
   let r ← (elJson.getObjVal? "result").mapError (fun _ => s!"{elPath}: no result")
-  let recHash ← elField r "hash"
-  let recReqs ← elField r "requestsHash"
-  let recBal ← elField r "blockAccessListHash"
+  let recHash ← executionLayerField r "hash"
+  let recReqs ← executionLayerField r "requestsHash"
+  let recBal ← executionLayerField r "blockAccessListHash"
   -- link and requests
   let linkRoot := blk.message.parent_root == env.beacon_block_root
   let linkFull := blk.message.body.signed_execution_payload_bid.message.parent_block_hash ==
@@ -222,20 +222,20 @@ def runPair (files : List (String × ByteArray)) (slot : Nat) : Except String (B
   let nBD := env.execution_requests.builder_deposits.toArray.size
   let nBE := env.execution_requests.builder_exits.toArray.size
   let has8282 := nBD + nBE > 0
-  let note := engineTxDecodeNote payload
+  let note := engineTransactionDecodeNote payload
   -- the real request
   let req ← newPayloadRequest env env.execution_requests
-  let hdr := (payloadToBlockG req).header
+  let hdr := (payloadToBlockGloas req).header
   let hash := hdr.hash
-  let okBlockHash := hash == payload.block_hash && hb hash == recHash
-  let okReqs := (hdr.requestsHash.map hb) == some recReqs
-  let okBal := (hdr.blockAccessListHash.map hb) == some recBal
+  let okBlockHash := hash == payload.block_hash && hexBytes32 hash == recHash
+  let okReqs := (hdr.requestsHash.map hexBytes32) == some recReqs
+  let okBal := (hdr.blockAccessListHash.map hexBytes32) == some recBal
   -- the control mutant
   let (mreqs, what) ← flipFirstBuilderRequest env.execution_requests
   let mreq ← newPayloadRequest env mreqs
-  let mhdr := (payloadToBlockG mreq).header
-  let mutRejHash := !(mhdr.hash == payload.block_hash) && hb mhdr.hash != recHash
-  let mutRejReqs := (mhdr.requestsHash.map hb) != some recReqs
+  let mhdr := (payloadToBlockGloas mreq).header
+  let mutRejHash := !(mhdr.hash == payload.block_hash) && hexBytes32 mhdr.hash != recHash
+  let mutRejReqs := (mhdr.requestsHash.map hexBytes32) != some recReqs
   let real := linkRoot && linkFull && reqsEq && has8282 && okBlockHash && okReqs && okBal
   let control := mutRejHash && mutRejReqs
   let label := s!"slot {slot} / envelope {slot - 1} / EL #{payload.block_number.toNat} \
@@ -243,7 +243,7 @@ def runPair (files : List (String × ByteArray)) (slot : Nat) : Except String (B
   let mut lines := [s!"{if real && control then "PASS" else "FAIL"} {label}",
     s!"  real: link={linkRoot && linkFull} parent_execution_requests==envelope.requests={reqsEq} \
       block_hash={okBlockHash} requests_hash={okReqs} block_access_list_hash={okBal} \
-      ({hb hash}, requests_hash {(hdr.requestsHash.map hb).getD "none"})",
+      ({hexBytes32 hash}, requests_hash {(hdr.requestsHash.map hexBytes32).getD "none"})",
     s!"  control ({what}): block_hash rejected={mutRejHash} requests_hash rejected={mutRejReqs}"]
   if let some n := note then lines := lines ++ [s!"  note (not gated): {n}"]
   if !(okBlockHash && okReqs && okBal) then
@@ -254,7 +254,7 @@ def runPair (files : List (String × ByteArray)) (slot : Nat) : Except String (B
 
 /-- `recorded-pairs-gloas`: check `SHA256SUMS`, then every pair; exit 0 only when every pair
 passes and every control mutant is rejected. -/
-def cmdRecordedPairsGloas (dir : System.FilePath) : IO UInt32 := do
+def commandRecordedPairsGloas (dir : System.FilePath) : IO UInt32 := do
   let sums ← IO.ofExcept ((parseSums (← IO.FS.readFile (dir / "SHA256SUMS"))).mapError IO.userError)
   let files ← readVerified dir sums
   IO.println s!"recorded-pairs-gloas: SHA256SUMS OK ({files.length} files) in {dir}"

@@ -24,7 +24,7 @@ structure FinField (p : Nat) : Type where
   (val : Nat)
 deriving DecidableEq
 
-abbrev BNF : Type := FinField altBn128Prime
+abbrev Bn254Fp : Type := FinField altBn128Prime
 
 instance {p} : ToString (FinField p) := ⟨fun x => toString x.val⟩
 
@@ -55,7 +55,7 @@ instance {p m} : ToString (GaloisField p m) := ⟨
     "  [" :: (x.val.map <| fun y => "    " ++ toString y ++ ",") ++ ["  ]"]
 ⟩
 
-abbrev BNF2 : Type :=
+abbrev Bn254Fp2 : Type :=
   GaloisField altBn128Prime [1, 0, 1]
 
 def GaloisField.ofNat {p} {m} : Nat → GaloisField p m
@@ -87,7 +87,7 @@ instance {p} : HMul (FinField p) (FinField p) (FinField p) := ⟨FinField.mul⟩
 def trimZero {ξ} [Zero ξ] [DecidableEq ξ] (xs : List ξ) : List ξ :=
   List.dropWhile (· = 0) xs
 
-def BNF2.mk (x y : Nat) : BNF2 :=
+def Bn254Fp2.mk (x y : Nat) : Bn254Fp2 :=
   ⟨trimZero [.ofNat x, .ofNat y]⟩
 
 def extEuclid (x y : Nat) : Int × Int × Nat :=
@@ -310,23 +310,23 @@ def GaloisField.div {p} {m} (xs ys : GaloisField p m) : GaloisField p m :=
 instance {p m} : HDiv (GaloisField p m) (GaloisField p m) (GaloisField p m) :=
   ⟨GaloisField.div⟩
 
-abbrev BNP2 : Type := EllipticCurve BNF2 0 ((3 : BNF2) / ⟨[1, 9]⟩)
+abbrev Bn254G2 : Type := EllipticCurve Bn254Fp2 0 ((3 : Bn254Fp2) / ⟨[1, 9]⟩)
 
-abbrev BNP : Type := EllipticCurve BNF (0 : BNF) (3 : BNF)
+abbrev Bn254G1 : Type := EllipticCurve Bn254Fp (0 : Bn254Fp) (3 : Bn254Fp)
 
-abbrev BNF12 : Type :=
+abbrev Bn254Fp12 : Type :=
   GaloisField
     altBn128Prime
     [1, 0, 0, 0, 0, 0, .ofInt (-18 : Int), 0, 0, 0, 0, 0, 82]
 
-abbrev BLSF12 : Type :=
+abbrev Bls12Fp12 : Type :=
   GaloisField
     bls12Prime
     [1, 0, 0, 0, 0, 0, .ofInt (-2 : Int), 0, 0, 0, 0, 0, 2]
 
-abbrev BNP12 : Type := EllipticCurve BNF12 (0 : BNF12) (3 : BNF12)
+abbrev Bn254Fp12Pair : Type := EllipticCurve Bn254Fp12 (0 : Bn254Fp12) (3 : Bn254Fp12)
 
-abbrev BLSP12 : Type := EllipticCurve BLSF12 (0 : BLSF12) (4 : BLSF12)
+abbrev Bls12Fp12Pair : Type := EllipticCurve Bls12Fp12 (0 : Bls12Fp12) (4 : Bls12Fp12)
 
 def EllipticCurve.toString {F} {a b} [ToString F] : EllipticCurve F a b → String
   | ⟨x, y⟩ => s!"⟨{x},{y}\n⟩"
@@ -353,7 +353,7 @@ def EllipticCurve.mk? {F} [Zero F] [DecidableEq F]
   else
     none
 
-def BNP.mk? (x : Nat) (y : Nat) : Option BNP :=
+def Bn254G1.mk? (x : Nat) (y : Nat) : Option Bn254G1 :=
   EllipticCurve.mk? (FinField.ofNat x) (FinField.ofNat y)
 
 def FinField.neg {p} (x : FinField p) : FinField p :=
@@ -608,7 +608,7 @@ instance {F} [Zero F] [DecidableEq F] [HAdd F F F] [HSub F F F]
   HMul (EllipticCurve F a b) Nat (EllipticCurve F a b) :=
   ⟨EllipticCurve.mulBy⟩
 
-def BNP.toBytes (p : BNP) : Bytes :=
+def Bn254G1.toBytes (p : Bn254G1) : Bytes :=
   p.x.val.toBytes.pack 32 ++ p.y.val.toBytes.pack 32
 
 
@@ -622,16 +622,16 @@ def BNP.toBytes (p : BNP) : Bytes :=
 -- total. The former unpadded right-slice did neither: on a trimmed coordinate
 -- it read the surviving low coefficient as though it were the high one, and
 -- had no second entry to read at all.
-def twist (p : BNP2) : BNP12 :=
-  let xs := List.takeRightV 2 p.x.val (0 : BNF)
-  let ys := List.takeRightV 2 p.y.val (0 : BNF)
+def twist (p : Bn254G2) : Bn254Fp12Pair :=
+  let xs := List.takeRightV 2 p.x.val (0 : Bn254Fp)
+  let ys := List.takeRightV 2 p.y.val (0 : Bn254Fp)
   let x0 := xs[0]
   let x1 := xs[1]
   let y0 := ys[0]
   let y1 := ys[1]
-  let nx : BNF12 := ⟨[x0, 0, 0, 0, 0, 0, x1 - (x0 * 9)]⟩
-  let ny : BNF12 := ⟨[y0, 0, 0, 0, 0, 0, y1 - (y0 * 9)]⟩
-  let w : BNF12 := ⟨[1, 0]⟩
+  let nx : Bn254Fp12 := ⟨[x0, 0, 0, 0, 0, 0, x1 - (x0 * 9)]⟩
+  let ny : Bn254Fp12 := ⟨[y0, 0, 0, 0, 0, 0, y1 - (y0 * 9)]⟩
+  let w : Bn254Fp12 := ⟨[1, 0]⟩
   ⟨nx * (w ^ 2), ny * (w ^ 3)⟩
 
 -- Trimming is representational, not semantic: a coordinate written with its
@@ -640,7 +640,7 @@ def twist (p : BNP2) : BNP12 :=
 #guard twist ⟨⟨trimZero [0, 5]⟩, ⟨trimZero [0, 7]⟩⟩
         = twist ⟨⟨[0, 5]⟩, ⟨[0, 7]⟩⟩
 #guard twist ⟨⟨[]⟩, ⟨[]⟩⟩ = twist ⟨⟨[0, 0]⟩, ⟨[0, 0]⟩⟩
-#guard trimZero [(0 : BNF), 5] = [(5 : BNF)]
+#guard trimZero [(0 : Bn254Fp), 5] = [(5 : Bn254Fp)]
 
 def pseudoBinaryEncoding : List Int :=
   [
@@ -666,10 +666,10 @@ def linefunc(
 ) -> Optimized_Point2D[Optimized_Field]:
     zero = P1[0].zero()
 -/
-def linefunc : BNP12 →  BNP12 → BNP12 → BNP12
+def linefunc : Bn254Fp12Pair →  Bn254Fp12Pair → Bn254Fp12Pair → Bn254Fp12Pair
   | ⟨x1, y1⟩, ⟨x2, y2⟩, ⟨xt, yt⟩ =>
-    let mNumerator : BNF12 := y2 - y1
-    let mDenominator : BNF12 := x2 - x1
+    let mNumerator : Bn254Fp12 := y2 - y1
+    let mDenominator : Bn254Fp12 := x2 - x1
     if mDenominator ≠ 0
     then
       ⟨
@@ -715,10 +715,10 @@ instance {F} [Neg F] [Zero F] [DecidableEq F]
   HSub (EllipticCurve F a b) (EllipticCurve F a b) (EllipticCurve F a b) :=
   ⟨EllipticCurve.sub⟩
 
-def millerLoop (q p : BNP12) (finalExp : Bool := true) : Option BNF12 := do
-  let mut r : BNP12 := q
-  let mut fNum : BNF12 := 1
-  let mut fDen : BNF12 := 1
+def millerLoop (q p : Bn254Fp12Pair) (finalExp : Bool := true) : Option Bn254Fp12 := do
+  let mut r : Bn254Fp12Pair := q
+  let mut fNum : Bn254Fp12 := 1
+  let mut fDen : Bn254Fp12 := 1
   for v in (pseudoBinaryEncoding.take 64).reverse do
     let ⟨_n, _d⟩ := linefunc r r p
     fNum := fNum * fNum * _n
@@ -736,8 +736,8 @@ def millerLoop (q p : BNP12) (finalExp : Bool := true) : Option BNF12 := do
       fNum := fNum * _n
       fDen := fDen * _d
       r := r + nq
-  let q1 : BNP12 := ⟨q.x ^ altBn128Prime, q.y ^ altBn128Prime⟩
-  let nq2 : BNP12 := ⟨q1.x ^ altBn128Prime , (-q1.y) ^ altBn128Prime⟩
+  let q1 : Bn254Fp12Pair := ⟨q.x ^ altBn128Prime, q.y ^ altBn128Prime⟩
+  let nq2 : Bn254Fp12Pair := ⟨q1.x ^ altBn128Prime , (-q1.y) ^ altBn128Prime⟩
   let ⟨_n1, _d1⟩ := linefunc r q1 p
   r := r + q1
   let ⟨_n2, _d2⟩ := linefunc r nq2 p
@@ -748,15 +748,15 @@ def millerLoop (q p : BNP12) (finalExp : Bool := true) : Option BNF12 := do
     else f
   )
 
-def BNP.toBNP12 : BNP → BNP12
+def Bn254G1.toBn254Fp12Pair : Bn254G1 → Bn254Fp12Pair
   | ⟨x, y⟩ => ⟨⟨[x]⟩, ⟨[y]⟩⟩
 
-def pairing (q : BNP2) (p : BNP) (finalExp : Bool := true) : Option BNF12 := do
+def pairing (q : Bn254G2) (p : Bn254G1) (finalExp : Bool := true) : Option Bn254Fp12 := do
   guard q.isOnCurve
   guard p.isOnCurve
   if p = ⟨0, 0⟩ ∨ q = ⟨0, 0⟩ then
     return 1
-  millerLoop (twist q) (p.toBNP12) finalExp
+  millerLoop (twist q) (p.toBn254Fp12Pair) finalExp
 
 namespace secp256k1
 
@@ -787,7 +787,7 @@ def sqrt (x : Coord) : Option Coord :=
 `r = 0` and `r ≥ curveOrder`, where multiplication by `r⁻¹` is not injective
 and moving the historical `sR - zG = ∞` check would change public behavior. -/
 private def recoverAffine
-    (h : B256) (v : Bool) (r : B256) (s : B256) : Option Adr := do
+    (h : U256) (v : Bool) (r : U256) (s : U256) : Option Address := do
   let x : Coord := .ofNat r.toNat
   let ySquared : Coord := (x * x) * x + 7
   let yFst ← sqrt ySquared
@@ -806,8 +806,8 @@ private def recoverAffine
   if O = ⟨0, 0⟩ then none
   let Q : Point :=
     EllipticCurve.mulBy O rInv
-  let hash := Bytes.keccak <| Q.x.val.toB256.toBytes ++ Q.y.val.toB256.toBytes
-  Bytes.toAdr? <| List.drop 12 <| hash.toBytes
+  let hash := Bytes.keccak <| Q.x.val.toU256.toBytes ++ Q.y.val.toU256.toBytes
+  Bytes.toAddress? <| List.drop 12 <| hash.toBytes
 
 /-!
 The valid-domain recovery equation is
@@ -848,7 +848,7 @@ def jointMul (rPoint gPoint : Point) (rScalar gScalar : Nat) :
   let rgJacobian := EllipticCurve.Jacobian.add rJacobian gJacobian
   jointMulLoop rPoint gPoint rgJacobian 256 rScalar gScalar
 
-def recover (h : B256) (v : Bool) (r : B256) (s : B256) : Option Adr :=
+def recover (h : U256) (v : Bool) (r : U256) (s : U256) : Option Address :=
   if 0 < r.toNat ∧ r.toNat < curveOrder then do
     let x : Coord := .ofNat r.toNat
     let ySquared : Coord := (x * x) * x + 7
@@ -866,8 +866,8 @@ def recover (h : B256) (v : Bool) (r : B256) (s : B256) : Option Adr :=
     let qJacobian := jointMul R generator rCoefficient gCoefficient
     if EllipticCurve.Jacobian.isInfinity qJacobian then none
     let Q : Point := EllipticCurve.Jacobian.toAffine qJacobian
-    let hash := Bytes.keccak <| Q.x.val.toB256.toBytes ++ Q.y.val.toB256.toBytes
-    Bytes.toAdr? <| List.drop 12 <| hash.toBytes
+    let hash := Bytes.keccak <| Q.x.val.toU256.toBytes ++ Q.y.val.toU256.toBytes
+    Bytes.toAddress? <| List.drop 12 <| hash.toBytes
   else
     recoverAffine h v r s
 

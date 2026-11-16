@@ -60,7 +60,7 @@ def instruction (cfg : Config) (context : Trace.Context) (refundBase : Int)
     ("pc", number before.pc), ("op", number (opcode before)),
     ("depth", number context.depth), ("gas", quantity before.dyna.gasLeft),
     ("memSize", number before.dyna.memory.size),
-    ("stack", .arr (before.dyna.stack.reverse.map (quantity ∘ B256.toNat)).toArray),
+    ("stack", .arr (before.dyna.stack.reverse.map (quantity ∘ U256.toNat)).toArray),
     ("returnData", bytes before.dyna.returnData)]
   if let some cost := gasCost? before step then
     fields := fields ++ [("gasCost", quantity cost)]
@@ -112,7 +112,7 @@ private def rootSummary (cfg : Config) (frame : Frame) (result : Devm) :
   let some used := safeSub frame.inner.gas result.gasLeft
     | throw "settled gas exceeds root grant"
   return Json.mkObj [
-    ("stateRoot", .str (T8n.hexB256 result.state.root)),
+    ("stateRoot", .str (T8n.hexU256 result.state.root)),
     ("output", bytes result.output), ("gasUsed", quantity used),
     ("pass", .bool result.error.isNone)]
 

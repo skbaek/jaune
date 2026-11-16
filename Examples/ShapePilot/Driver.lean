@@ -10,9 +10,9 @@ namespace Examples.ShapePilot.Prototype
 open Jaune
 
 structure CallContext where
-  caller : Adr
-  recipient : Adr
-  value : B256
+  caller : Address
+  recipient : Address
+  value : U256
   calldata : Bytes
   code : ByteArray
   depthLeft : Nat
@@ -34,7 +34,7 @@ def CallContext.toLegacy (c : CallContext) : Sevm := {
   shouldTransferValue := false, disablePrecompiles := false }
 
 inductive MessageKind where
-  | call (codeAddress : Option Adr)
+  | call (codeAddress : Option Address)
   | create
   deriving DecidableEq
 
@@ -42,7 +42,7 @@ inductive MessageKind where
 structure Message where
   context : CallContext
   kind : MessageKind
-  target : Option Adr
+  target : Option Address
   gasLimit : Nat
   stateGasGrant : Nat
   transferValue : Bool
@@ -54,7 +54,7 @@ def Message.ofLegacy (msg : Msg) (creating : Bool) : Message := {
   target := msg.target, gasLimit := msg.gas, stateGasGrant := msg.stateGasGrant,
   transferValue := msg.shouldTransferValue, disablePrecompiles := msg.disablePrecompiles }
 
-def Message.codeAddress (m : Message) : Option Adr := match m.kind with
+def Message.codeAddress (m : Message) : Option Address := match m.kind with
   | .call address => address
   | .create => none
 
@@ -163,8 +163,8 @@ def enter (f : Frame) : Entry :=
     let runtime := Runtime.mk 0 f.message.context (Dynamic.ofLegacy d)
     match f.message.codeAddress with
     | some adr =>
-      if !f.message.disablePrecompiles && f.message.context.block.rules.isPrecomp adr then
-        .done (settle f (executePrecomp ⟨0, initSevm msg, d⟩ adr))
+      if !f.message.disablePrecompiles && f.message.context.block.rules.isPrecompile adr then
+        .done (settle f (executePrecompile ⟨0, initSevm msg, d⟩ adr))
       else .run runtime
     | none => .run runtime
 

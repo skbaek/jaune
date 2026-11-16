@@ -199,7 +199,7 @@ private def hex (s : String) : Bytes := (Hex.toBytes s).getD []
 private def mEmpty : Bytes := []
 private def mA : Bytes := [0x61]
 private def mAbc : Bytes := [0x61, 0x62, 0x63]
-private def mMsg : Bytes :=
+private def mMessageDigest : Bytes :=
   "message digest".toList.map (fun c => c.val.toUInt8)
 private def mAlpha : Bytes :=
   "abcdefghijklmnopqrstuvwxyz".toList.map (fun c => c.val.toUInt8)
@@ -217,7 +217,7 @@ committed in the `"ripemd160"` table of `scripts/gen-hash-precompile-vectors.py`
 private def dEmpty : Bytes := hex "9c1185a5c5e9fc54612808977ee8f548b2258d31"
 private def dA : Bytes := hex "0bdc9d2d256b3ee9daae347be6f4dc835a467ffe"
 private def dAbc : Bytes := hex "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc"
-private def dMsg : Bytes := hex "5d0689ef49d2fae572b881b123a85ffa21595f36"
+private def dMessageDigest : Bytes := hex "5d0689ef49d2fae572b881b123a85ffa21595f36"
 private def dAlpha : Bytes := hex "f71c27109c692c1b56bbdceb5b9d2865b3708dbc"
 private def d448 : Bytes := hex "12a053384a9c0c88e405a06c27dcf49ada62eb2b"
 private def dAlnum : Bytes := hex "b0e20b6e3116640286ed3a87a5713079b21f5189"
@@ -227,7 +227,7 @@ private def d8x : Bytes := hex "9b752e45573d4b39f4dbd3323cab82bf63326bfb"
 #guard hash mEmpty == dEmpty
 #guard hash mA == dA
 #guard hash mAbc == dAbc
-#guard hash mMsg == dMsg
+#guard hash mMessageDigest == dMessageDigest
 #guard hash mAlpha == dAlpha
 #guard hash m448 == d448
 #guard hash mAlnum == dAlnum
@@ -243,7 +243,7 @@ private def pat (n : Nat) : Bytes := (List.range n).map (fun i => (i % 256).toUI
 #guard hash mEmpty == Bytes.ripemd160 mEmpty
 #guard hash mA == Bytes.ripemd160 mA
 #guard hash mAbc == Bytes.ripemd160 mAbc
-#guard hash mMsg == Bytes.ripemd160 mMsg
+#guard hash mMessageDigest == Bytes.ripemd160 mMessageDigest
 #guard hash mAlpha == Bytes.ripemd160 mAlpha
 #guard hash m448 == Bytes.ripemd160 m448
 #guard hash mAlnum == Bytes.ripemd160 mAlnum

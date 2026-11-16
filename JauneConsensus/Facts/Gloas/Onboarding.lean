@@ -39,13 +39,13 @@ local instance : LawfulBEq BLSPubkey where
   rfl := pubkey_beq_iff.mpr rfl
 
 /-- The Gloas beacon state. -/
-abbrev GSt (P : Preset) := JauneConsensus.Gloas.BeaconState P
+abbrev GloasState (P : Preset) := JauneConsensus.Gloas.BeaconState P
 
 theorem far_toNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := by decide
 
 /-- `get_seed` at `FAR_FUTURE_EPOCH` always rejects: the sum overflows unless
 `EPOCHS_PER_HISTORICAL_VECTOR = 0`, and then `get_randao_mix` divides by zero. -/
-theorem getSeed_far (s : GSt P) (d : DomainType) (x : Bytes32) :
+theorem getSeed_far (s : GloasState P) (d : DomainType) (x : Bytes32) :
     JauneConsensus.Gloas.getSeed s FAR_FUTURE_EPOCH d ≠ .ok x := by
   intro h
   unfold JauneConsensus.Gloas.getSeed at h
@@ -69,7 +69,7 @@ theorem getSeed_far (s : GSt P) (d : DomainType) (x : Bytes32) :
   · cases hm
   · omega
 
-theorem computePtc_far (s : GSt P) (slot : Slot) (hspe : P.SLOTS_PER_EPOCH = 1)
+theorem computePtc_far (s : GloasState P) (slot : Slot) (hspe : P.SLOTS_PER_EPOCH = 1)
     (hs : slot.toNat = 2 ^ 64 - 1) (w : JauneConsensus.Gloas.PayloadTimelinessCommittee P) :
     JauneConsensus.Gloas.computePtc s slot ≠ .ok w := by
   intro h
@@ -86,7 +86,7 @@ theorem computePtc_far (s : GSt P) (slot : Slot) (hspe : P.SLOTS_PER_EPOCH = 1)
   obtain ⟨sd, hsd, _⟩ := bind_eq_ok_iff.mp h
   exact getSeed_far _ _ _ hsd
 
-theorem initializePtcWindow_epoch {s : GSt P} {w} (h : JauneConsensus.Gloas.initializePtcWindow s = .ok w)
+theorem initializePtcWindow_epoch {s : GloasState P} {w} (h : JauneConsensus.Gloas.initializePtcWindow s = .ok w)
     {e : Epoch} (he : JauneConsensus.Gloas.getCurrentEpoch s = .ok e) : e ≠ FAR_FUTURE_EPOCH := by
   intro hf
   subst hf
@@ -137,7 +137,7 @@ theorem initializePtcWindow_epoch {s : GSt P} {w} (h : JauneConsensus.Gloas.init
   exact computePtc_far s sl h1 (by omega) c hc
 
 theorem forIn_yield_all {α β : Type} (l : List α)
-    (f : α → Option β × Nat → M (ForInStep (Option β × Nat)))
+    (f : α → Option β × Nat → Fallible (ForInStep (Option β × Nat)))
     (hf : ∀ b ∈ l, ∀ i, f b (none, i) = pure (.yield (none, i + 1))) (i : Nat) :
     forIn l (none, i) f = pure (none, i + l.length) := by
   induction l generalizing i with
@@ -152,7 +152,7 @@ theorem forIn_yield_all {α β : Type} (l : List α)
 
 /-- With every builder at `withdrawable_epoch = FAR_FUTURE_EPOCH` and the current epoch below it,
 `get_index_for_new_builder` reuses no slot: the new builder is appended. -/
-theorem getIndexForNewBuilder_append {s : GSt P} {idx : U64}
+theorem getIndexForNewBuilder_append {s : GloasState P} {idx : U64}
     (h : JauneConsensus.Gloas.getIndexForNewBuilder s = .ok idx)
     (hfar : ∀ b ∈ s.builders.toArray, b.withdrawable_epoch = FAR_FUTURE_EPOCH)
     (he : ∀ e, JauneConsensus.Gloas.getCurrentEpoch s = .ok e → e ≠ FAR_FUTURE_EPOCH) :
@@ -176,7 +176,7 @@ theorem getIndexForNewBuilder_append {s : GSt P} {idx : U64}
     simp [hlt]
 
 /-- The five outcomes of one onboarding iteration (fork.md:80-117), read off the implementation. -/
-theorem onboardBuilderDeposit_cases {ctx : Ctx} {V : Array BLSPubkey} {st st' : GSt P}
+theorem onboardBuilderDeposit_cases {ctx : Context} {V : Array BLSPubkey} {st st' : GloasState P}
     {acc acc' : Array PendingDeposit} {d : PendingDeposit}
     (h : JauneConsensus.Gloas.onboardBuilderDeposit ctx V (st, acc) d = .ok (st', acc')) :
     (V.contains d.pubkey = true ∧ st' = st ∧ acc' = acc.push d) ∨
@@ -193,7 +193,7 @@ theorem onboardBuilderDeposit_cases {ctx : Ctx} {V : Array BLSPubkey} {st st' : 
       JauneConsensus.Gloas.isBuilderWithdrawalCredential d.withdrawal_credentials = true ∧
       JauneConsensus.Gloas.isPendingValidator ctx acc d.pubkey = .ok false ∧
       isValidDepositSignature ctx d.pubkey d.withdrawal_credentials d.amount d.signature = .ok true ∧
-      ∃ addr, Jaune.Bytes.toAdr? (d.withdrawal_credentials.toBytes.drop 12) = some addr ∧
+      ∃ addr, Jaune.Bytes.toAddress? (d.withdrawal_credentials.toBytes.drop 12) = some addr ∧
         JauneConsensus.Gloas.addBuilderToRegistry st d.pubkey
           JauneConsensus.Gloas.PAYLOAD_BUILDER_VERSION addr d.amount d.slot = .ok st' ∧ acc' = acc) ∨
     (V.contains d.pubkey = false ∧ ∃ i b nb bs,
@@ -236,10 +236,10 @@ theorem onboardBuilderDeposit_cases {ctx : Ctx} {V : Array BLSPubkey} {st st' : 
       obtain ⟨nb, hnb, h⟩ := bind_eq_ok_iff.mp h
       obtain ⟨bs, hbs, h⟩ := bind_eq_ok_iff.mp h
       cases h
-      exact Or.inr (Or.inr (Or.inr ⟨rfl, i, b, nb, bs, rfl, pl_get_ok.mp hb, hnb, hbs, rfl, rfl⟩))
+      exact Or.inr (Or.inr (Or.inr ⟨rfl, i, b, nb, bs, rfl, progressiveList_get_ok.mp hb, hnb, hbs, rfl, rfl⟩))
   · simp only [hv, ↓reduceIte] at h; cases h; exact Or.inl ⟨rfl, rfl, rfl⟩
 
-theorem arr_idxOf?_some {a : Array BLSPubkey} {x : BLSPubkey} {i : Nat} (h : a.idxOf? x = some i) :
+theorem array_idxOf?_some {a : Array BLSPubkey} {x : BLSPubkey} {i : Nat} (h : a.idxOf? x = some i) :
     ∃ hi : i < a.size, a[i] = x := by
   rw [Array.idxOf?_eq_map_finIdxOf?_val] at h
   obtain ⟨j, hj, rfl⟩ := Option.map_eq_some_iff.mp h
@@ -254,7 +254,7 @@ theorem sorted_eq {m : Nat} {l1 l2 : List (Fin m)} (h1 : l1.Pairwise (· < ·))
 Queue positions are `Fin Q.length`, so every `Q[t]` is in range. -/
 
 /-- `Bpk_t`: the pubkeys of the deposits registered (`R`) before queue position `t`. -/
-def regBefore (Q : List PendingDeposit) (R : List (Fin Q.length)) (t : Nat) : List BLSPubkey :=
+def registrationBefore (Q : List PendingDeposit) (R : List (Fin Q.length)) (t : Nat) : List BLSPubkey :=
   (R.filter (·.val < t)).map (fun r => Q[r].pubkey)
 
 /-- `Qk_t`: the deposits kept (`K`) before queue position `t`, in queue order (the spec's `Q'`
@@ -270,19 +270,19 @@ def topUpTotal (Q : List PendingDeposit) (T : List (Fin Q.length)) (r : Fin Q.le
     (fun t => Q[t].amount.toNat)).sum
 
 /-- Steps 1-3 (FK:80-98): kept as a pending validator deposit. -/
-def KeepAt (ctx : Ctx) (V : List BLSPubkey) (Q : List PendingDeposit) (K R : List (Fin Q.length))
+def KeepAt (ctx : Context) (V : List BLSPubkey) (Q : List PendingDeposit) (K R : List (Fin Q.length))
     (t : Fin Q.length) : Prop :=
   Q[t].pubkey ∈ V ∨
-    (Q[t].pubkey ∉ regBefore Q R t ∧
+    (Q[t].pubkey ∉ registrationBefore Q R t ∧
       (JauneConsensus.Gloas.isBuilderWithdrawalCredential Q[t].withdrawal_credentials = false ∨
         JauneConsensus.Gloas.isPendingValidator ctx (keptBefore Q K t).toArray Q[t].pubkey = .ok true))
 
 /-- Step 5 (FK:99-114): registered as a new builder: `0xB0` credentials, a pubkey neither a
 validator's nor a builder's, no pending validator deposit for it in `Q'`, and a valid
 `DOMAIN_DEPOSIT` signature. -/
-def RegisterAt (ctx : Ctx) (V : List BLSPubkey) (Q : List PendingDeposit)
+def RegisterAt (ctx : Context) (V : List BLSPubkey) (Q : List PendingDeposit)
     (K R : List (Fin Q.length)) (t : Fin Q.length) : Prop :=
-  Q[t].pubkey ∉ V ∧ Q[t].pubkey ∉ regBefore Q R t ∧
+  Q[t].pubkey ∉ V ∧ Q[t].pubkey ∉ registrationBefore Q R t ∧
     JauneConsensus.Gloas.isBuilderWithdrawalCredential Q[t].withdrawal_credentials = true ∧
     JauneConsensus.Gloas.isPendingValidator ctx (keptBefore Q K t).toArray Q[t].pubkey = .ok false ∧
     isValidDepositSignature ctx Q[t].pubkey Q[t].withdrawal_credentials Q[t].amount
@@ -290,9 +290,9 @@ def RegisterAt (ctx : Ctx) (V : List BLSPubkey) (Q : List PendingDeposit)
 
 /-- Step 4 (FK:99-105): dropped (stake forfeited, not re-queued): as step 5 but with an invalid
 signature. -/
-def DropAt (ctx : Ctx) (V : List BLSPubkey) (Q : List PendingDeposit) (K R : List (Fin Q.length))
+def DropAt (ctx : Context) (V : List BLSPubkey) (Q : List PendingDeposit) (K R : List (Fin Q.length))
     (t : Fin Q.length) : Prop :=
-  Q[t].pubkey ∉ V ∧ Q[t].pubkey ∉ regBefore Q R t ∧
+  Q[t].pubkey ∉ V ∧ Q[t].pubkey ∉ registrationBefore Q R t ∧
     JauneConsensus.Gloas.isBuilderWithdrawalCredential Q[t].withdrawal_credentials = true ∧
     JauneConsensus.Gloas.isPendingValidator ctx (keptBefore Q K t).toArray Q[t].pubkey = .ok false ∧
     isValidDepositSignature ctx Q[t].pubkey Q[t].withdrawal_credentials Q[t].amount
@@ -302,7 +302,7 @@ def DropAt (ctx : Ctx) (V : List BLSPubkey) (Q : List PendingDeposit) (K R : Lis
 signature are not checked. -/
 def TopUpAt (V : List BLSPubkey) (Q : List PendingDeposit) (R : List (Fin Q.length))
     (t : Fin Q.length) : Prop :=
-  Q[t].pubkey ∉ V ∧ Q[t].pubkey ∈ regBefore Q R t
+  Q[t].pubkey ∉ V ∧ Q[t].pubkey ∈ registrationBefore Q R t
 
 /-- The builder record onboarded for the deposit at `r ∈ R` (`add_builder_to_registry`,
 CL:2300-2320), with the step-6 top-ups of `T` credited. -/
@@ -311,7 +311,7 @@ structure OnboardedRecord (P : Preset) (Q : List PendingDeposit) (T : List (Fin 
   pubkey : b.pubkey = Q[r].pubkey
   version : b.version = JauneConsensus.Gloas.PAYLOAD_BUILDER_VERSION
   execution_address :
-    Jaune.Bytes.toAdr? (Q[r].withdrawal_credentials.toBytes.drop 12) = some b.execution_address
+    Jaune.Bytes.toAddress? (Q[r].withdrawal_credentials.toBytes.drop 12) = some b.execution_address
   deposit_epoch : computeEpochAtSlot P Q[r].slot = .ok b.deposit_epoch
   withdrawable_epoch : b.withdrawable_epoch = FAR_FUTURE_EPOCH
   balance : b.balance.toNat = Q[r].amount.toNat + topUpTotal Q T r
@@ -319,7 +319,7 @@ structure OnboardedRecord (P : Preset) (Q : List PendingDeposit) (T : List (Fin 
 /-- **B1 fork step, declaratively.** The partition of the pre-state's pending deposits `Q` into
 kept `K`, registered `R`, topped-up `T` and dropped `X` (`gloas-fork.md:70-120`), with `V` the
 validator pubkeys, `builders` the resulting registry and `Qkept` the resulting queue. -/
-structure OnboardingSpec (P : Preset) (ctx : Ctx) (V : List BLSPubkey) (Q : List PendingDeposit)
+structure OnboardingSpec (P : Preset) (ctx : Context) (V : List BLSPubkey) (Q : List PendingDeposit)
     (K R T X : List (Fin Q.length)) (builders : List JauneConsensus.Gloas.Builder)
     (Qkept : List PendingDeposit) : Prop where
   partition : (K ++ R ++ T ++ X).Perm (List.finRange Q.length)
@@ -335,42 +335,42 @@ structure OnboardingSpec (P : Preset) (ctx : Ctx) (V : List BLSPubkey) (Q : List
 
 section Unique
 
-variable {ctx : Ctx} {V : List BLSPubkey} {Q : List PendingDeposit} {K R : List (Fin Q.length)}
+variable {ctx : Context} {V : List BLSPubkey} {Q : List PendingDeposit} {K R : List (Fin Q.length)}
   {t : Fin Q.length}
 
-theorem keep_register_excl (h1 : KeepAt ctx V Q K R t) (h2 : RegisterAt ctx V Q K R t) : False := by
+theorem keep_register_exclusive (h1 : KeepAt ctx V Q K R t) (h2 : RegisterAt ctx V Q K R t) : False := by
   obtain ⟨hv, hb, hw, hp, _⟩ := h2
   rcases h1 with h | ⟨_, h | h⟩
   · exact hv h
   · rw [hw] at h; cases h
   · rw [hp] at h; cases h
 
-theorem keep_drop_excl (h1 : KeepAt ctx V Q K R t) (h2 : DropAt ctx V Q K R t) : False := by
+theorem keep_drop_exclusive (h1 : KeepAt ctx V Q K R t) (h2 : DropAt ctx V Q K R t) : False := by
   obtain ⟨hv, hb, hw, hp, _⟩ := h2
   rcases h1 with h | ⟨_, h | h⟩
   · exact hv h
   · rw [hw] at h; cases h
   · rw [hp] at h; cases h
 
-theorem keep_topUp_excl (h1 : KeepAt ctx V Q K R t) (h2 : TopUpAt V Q R t) : False := by
+theorem keep_topUp_exclusive (h1 : KeepAt ctx V Q K R t) (h2 : TopUpAt V Q R t) : False := by
   obtain ⟨hv, hb⟩ := h2
   rcases h1 with h | ⟨h, _⟩
   · exact hv h
   · exact h hb
 
-theorem register_drop_excl (h1 : RegisterAt ctx V Q K R t) (h2 : DropAt ctx V Q K R t) : False := by
+theorem register_drop_exclusive (h1 : RegisterAt ctx V Q K R t) (h2 : DropAt ctx V Q K R t) : False := by
   have := h1.2.2.2.2.symm.trans h2.2.2.2.2
   cases this
 
-theorem register_topUp_excl (h1 : RegisterAt ctx V Q K R t) (h2 : TopUpAt V Q R t) : False :=
+theorem register_topUp_exclusive (h1 : RegisterAt ctx V Q K R t) (h2 : TopUpAt V Q R t) : False :=
   h1.2.1 h2.2
 
-theorem drop_topUp_excl (h1 : DropAt ctx V Q K R t) (h2 : TopUpAt V Q R t) : False :=
+theorem drop_topUp_exclusive (h1 : DropAt ctx V Q K R t) (h2 : TopUpAt V Q R t) : False :=
   h1.2.1 h2.2
 
 end Unique
 
-theorem OnboardingSpec.mem_some {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
+theorem OnboardingSpec.mem_some {P : Preset} {ctx : Context} {V : List BLSPubkey}
     {Q : List PendingDeposit} {K R T X : List (Fin Q.length)}
     {bs : List JauneConsensus.Gloas.Builder} {q : List PendingDeposit}
     (S : OnboardingSpec P ctx V Q K R T X bs q) (t : Fin Q.length) :
@@ -380,7 +380,7 @@ theorem OnboardingSpec.mem_some {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
   tauto
 
 /-- Membership in each class is its step's condition. -/
-theorem OnboardingSpec.mem_iff {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
+theorem OnboardingSpec.mem_iff {P : Preset} {ctx : Context} {V : List BLSPubkey}
     {Q : List PendingDeposit} {K R T X : List (Fin Q.length)}
     {bs : List JauneConsensus.Gloas.Builder} {q : List PendingDeposit}
     (S : OnboardingSpec P ctx V Q K R T X bs q) (t : Fin Q.length) :
@@ -391,23 +391,23 @@ theorem OnboardingSpec.mem_iff {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
     ⟨S.dropped t, fun hc => ?_⟩⟩
   · rcases hm with h | h | h | h
     · exact h
-    · exact (keep_register_excl hc (S.register t h)).elim
-    · exact (keep_topUp_excl hc (S.topUp t h)).elim
-    · exact (keep_drop_excl hc (S.dropped t h)).elim
+    · exact (keep_register_exclusive hc (S.register t h)).elim
+    · exact (keep_topUp_exclusive hc (S.topUp t h)).elim
+    · exact (keep_drop_exclusive hc (S.dropped t h)).elim
   · rcases hm with h | h | h | h
-    · exact (keep_register_excl (S.keep t h) hc).elim
+    · exact (keep_register_exclusive (S.keep t h) hc).elim
     · exact h
-    · exact (register_topUp_excl hc (S.topUp t h)).elim
-    · exact (register_drop_excl hc (S.dropped t h)).elim
+    · exact (register_topUp_exclusive hc (S.topUp t h)).elim
+    · exact (register_drop_exclusive hc (S.dropped t h)).elim
   · rcases hm with h | h | h | h
-    · exact (keep_topUp_excl (S.keep t h) hc).elim
-    · exact (register_topUp_excl (S.register t h) hc).elim
+    · exact (keep_topUp_exclusive (S.keep t h) hc).elim
+    · exact (register_topUp_exclusive (S.register t h) hc).elim
     · exact h
-    · exact (drop_topUp_excl (S.dropped t h) hc).elim
+    · exact (drop_topUp_exclusive (S.dropped t h) hc).elim
   · rcases hm with h | h | h | h
-    · exact (keep_drop_excl (S.keep t h) hc).elim
-    · exact (register_drop_excl (S.register t h) hc).elim
-    · exact (drop_topUp_excl hc (S.topUp t h)).elim
+    · exact (keep_drop_exclusive (S.keep t h) hc).elim
+    · exact (register_drop_exclusive (S.register t h) hc).elim
+    · exact (drop_topUp_exclusive hc (S.topUp t h)).elim
     · exact h
 
 theorem filter_lt_eq {m : Nat} {L L' : List (Fin m)} (h : L.Pairwise (· < ·))
@@ -422,7 +422,7 @@ theorem filter_lt_eq {m : Nat} {L L' : List (Fin m)} (h : L.Pairwise (· < ·))
 
 /-- **Uniqueness.** Two partitions satisfying the specification for the same queue are equal
 (induction on the queue position: each position's class is fixed by the classes before it). -/
-theorem OnboardingSpec.unique {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
+theorem OnboardingSpec.unique {P : Preset} {ctx : Context} {V : List BLSPubkey}
     {Q : List PendingDeposit} {K R T X K' R' T' X' : List (Fin Q.length)}
     {bs bs' : List JauneConsensus.Gloas.Builder} {q q' : List PendingDeposit}
     (S : OnboardingSpec P ctx V Q K R T X bs q) (S' : OnboardingSpec P ctx V Q K' R' T' X' bs' q') :
@@ -437,7 +437,7 @@ theorem OnboardingSpec.unique {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
       have hR := filter_lt_eq S.increasing.2.1 S'.increasing.2.1
         (fun x hx => (ih x.val hx x rfl).2.1)
       have hK := filter_lt_eq S.increasing.1 S'.increasing.1 (fun x hx => (ih x.val hx x rfl).1)
-      have hreg : regBefore Q R t = regBefore Q R' t := by unfold regBefore; rw [hR]
+      have hreg : registrationBefore Q R t = registrationBefore Q R' t := by unfold registrationBefore; rw [hR]
       have hkept : keptBefore Q K t = keptBefore Q K' t := by unfold keptBefore; rw [hK]
       obtain ⟨a1, a2, a3, a4⟩ := S.mem_iff t
       obtain ⟨b1, b2, b3, b4⟩ := S'.mem_iff t
@@ -457,7 +457,7 @@ theorem OnboardingSpec.unique {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
 /-! ## The builder total of the specification (B7's fork term) -/
 
 /-- The registered deposits have distinct pubkeys (each is fresh when registered). -/
-theorem OnboardingSpec.pubkeys_nodup {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
+theorem OnboardingSpec.pubkeys_nodup {P : Preset} {ctx : Context} {V : List BLSPubkey}
     {Q : List PendingDeposit} {K R T X : List (Fin Q.length)}
     {bs : List JauneConsensus.Gloas.Builder}
     {q : List PendingDeposit} (S : OnboardingSpec P ctx V Q K R T X bs q) :
@@ -467,7 +467,7 @@ theorem OnboardingSpec.pubkeys_nodup {P : Preset} {ctx : Ctx} {V : List BLSPubke
   apply S.increasing.2.1.imp_of_mem
   intro a c ha hc hac e
   apply (S.register c hc).2.1
-  unfold regBefore
+  unfold registrationBefore
   rw [e.symm]
   exact List.mem_map_of_mem (List.mem_filter.mpr ⟨ha, by simpa using hac⟩)
 
@@ -520,7 +520,7 @@ theorem topUpTotal_cons (Q : List PendingDeposit) (t : Fin Q.length) (T : List (
 registered deposits sum to the top-up amounts. -/
 theorem sum_topUpTotal {Q : List PendingDeposit} {R : List (Fin Q.length)} (hR : R.Nodup)
     (hpk : (R.map (fun r => Q[r].pubkey)).Nodup) :
-    ∀ (T : List (Fin Q.length)), (∀ t ∈ T, Q[t].pubkey ∈ regBefore Q R t) →
+    ∀ (T : List (Fin Q.length)), (∀ t ∈ T, Q[t].pubkey ∈ registrationBefore Q R t) →
       (R.map (topUpTotal Q T)).sum = (T.map (fun t => Q[t].amount.toNat)).sum
   | [], _ => by
     have : ∀ r, topUpTotal Q [] r = 0 := fun r => rfl
@@ -553,7 +553,7 @@ theorem records_balances {P : Preset} {Q : List PendingDeposit} {T : List (Fin Q
 
 /-- **B7's fork term, from the specification.** The registry's total balance is the sum of the
 registering (`R`) and top-up (`T`) amounts. -/
-theorem OnboardingSpec.total {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
+theorem OnboardingSpec.total {P : Preset} {ctx : Context} {V : List BLSPubkey}
     {Q : List PendingDeposit} {K R T X : List (Fin Q.length)}
     {bs : List JauneConsensus.Gloas.Builder}
     {q : List PendingDeposit} (S : OnboardingSpec P ctx V Q K R T X bs q) :
@@ -564,7 +564,7 @@ theorem OnboardingSpec.total {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
 
 /-- **Order dependence (design R8).** A deposit after a registered one with the same pubkey is a
 step-6 top-up, whatever its credentials and signature. -/
-theorem OnboardingSpec.later_same_pubkey_topUp {P : Preset} {ctx : Ctx} {V : List BLSPubkey}
+theorem OnboardingSpec.later_same_pubkey_topUp {P : Preset} {ctx : Context} {V : List BLSPubkey}
     {Q : List PendingDeposit} {K R T X : List (Fin Q.length)}
     {bs : List JauneConsensus.Gloas.Builder}
     {q : List PendingDeposit} (S : OnboardingSpec P ctx V Q K R T X bs q) {r t : Fin Q.length}
@@ -601,37 +601,37 @@ theorem filter_all_lt {m : Nat} {L : List (Fin m)} {n : Nat} (h : ∀ x ∈ L, x
   rw [List.filter_eq_self]
   intro x hx; simpa using h x hx
 
-theorem regBefore_append {Q : List PendingDeposit} {R : List (Fin Q.length)} {e : Fin Q.length}
-    {t : Nat} (ht : t ≤ e.val) : regBefore Q (R ++ [e]) t = regBefore Q R t := by
-  unfold regBefore; rw [filter_append_single ht]
+theorem registrationBefore_append {Q : List PendingDeposit} {R : List (Fin Q.length)} {e : Fin Q.length}
+    {t : Nat} (ht : t ≤ e.val) : registrationBefore Q (R ++ [e]) t = registrationBefore Q R t := by
+  unfold registrationBefore; rw [filter_append_single ht]
 
 theorem keptBefore_append {Q : List PendingDeposit} {K : List (Fin Q.length)} {e : Fin Q.length}
     {t : Nat} (ht : t ≤ e.val) : keptBefore Q (K ++ [e]) t = keptBefore Q K t := by
   unfold keptBefore; rw [filter_append_single ht]
 
-variable {ctx : Ctx} {V : List BLSPubkey} {Q : List PendingDeposit}
+variable {ctx : Context} {V : List BLSPubkey} {Q : List PendingDeposit}
 
 theorem KeepAt_congr {K R K' R' : List (Fin Q.length)} {t : Fin Q.length} (hK : keptBefore Q K t = keptBefore Q K' t)
-    (hR : regBefore Q R t = regBefore Q R' t) : KeepAt ctx V Q K R t = KeepAt ctx V Q K' R' t := by
+    (hR : registrationBefore Q R t = registrationBefore Q R' t) : KeepAt ctx V Q K R t = KeepAt ctx V Q K' R' t := by
   unfold KeepAt; rw [hK, hR]
 
 theorem RegisterAt_congr {K R K' R' : List (Fin Q.length)} {t : Fin Q.length} (hK : keptBefore Q K t = keptBefore Q K' t)
-    (hR : regBefore Q R t = regBefore Q R' t) :
+    (hR : registrationBefore Q R t = registrationBefore Q R' t) :
     RegisterAt ctx V Q K R t = RegisterAt ctx V Q K' R' t := by
   unfold RegisterAt; rw [hK, hR]
 
 theorem DropAt_congr {K R K' R' : List (Fin Q.length)} {t : Fin Q.length} (hK : keptBefore Q K t = keptBefore Q K' t)
-    (hR : regBefore Q R t = regBefore Q R' t) : DropAt ctx V Q K R t = DropAt ctx V Q K' R' t := by
+    (hR : registrationBefore Q R t = registrationBefore Q R' t) : DropAt ctx V Q K R t = DropAt ctx V Q K' R' t := by
   unfold DropAt; rw [hK, hR]
 
-theorem TopUpAt_congr {R R' : List (Fin Q.length)} {t : Fin Q.length} (hR : regBefore Q R t = regBefore Q R' t) :
+theorem TopUpAt_congr {R R' : List (Fin Q.length)} {t : Fin Q.length} (hR : registrationBefore Q R t = registrationBefore Q R' t) :
     TopUpAt V Q R t = TopUpAt V Q R' t := by
   unfold TopUpAt; rw [hR]
 
 /-- The loop invariant after the first `n` deposits: the specification on the prefix, with the
 registry `st.builders` and the accumulator `acc`. -/
-structure Inv (P : Preset) (ctx : Ctx) (V : List BLSPubkey) (Q : List PendingDeposit) (st0 : GSt P)
-    (n : Nat) (K R T X : List (Fin Q.length)) (st : GSt P) (acc : Array PendingDeposit) : Prop where
+structure Invariant (P : Preset) (ctx : Context) (V : List BLSPubkey) (Q : List PendingDeposit) (st0 : GloasState P)
+    (n : Nat) (K R T X : List (Fin Q.length)) (st : GloasState P) (acc : Array PendingDeposit) : Prop where
   count : ∀ x : Fin Q.length,
     K.count x + R.count x + T.count x + X.count x = if x.val < n then 1 else 0
   increasing : K.Pairwise (· < ·) ∧ R.Pairwise (· < ·) ∧ T.Pairwise (· < ·) ∧ X.Pairwise (· < ·)
@@ -642,14 +642,14 @@ structure Inv (P : Preset) (ctx : Ctx) (V : List BLSPubkey) (Q : List PendingDep
   kept : acc.toList = K.map (fun t => Q[t])
   frame : st = { st0 with builders := st.builders }
   size : st.builders.toArray.size = R.length
-  recs : ∀ k (h1 : k < R.length) (h2 : k < st.builders.toArray.size),
+  records : ∀ k (h1 : k < R.length) (h2 : k < st.builders.toArray.size),
     OnboardedRecord P Q T R[k] st.builders.toArray[k]
   nodup : (R.map (fun r => Q[r].pubkey)).Nodup
 
-variable {P : Preset} {st0 : GSt P}
+variable {P : Preset} {st0 : GloasState P}
 
-theorem Inv.lt {n : Nat} {K R T X : List (Fin Q.length)} {st : GSt P} {acc : Array PendingDeposit}
-    (I : Inv P ctx V Q st0 n K R T X st acc) {x : Fin Q.length} :
+theorem Invariant.lt {n : Nat} {K R T X : List (Fin Q.length)} {st : GloasState P} {acc : Array PendingDeposit}
+    (I : Invariant P ctx V Q st0 n K R T X st acc) {x : Fin Q.length} :
     (x ∈ K → x.val < n) ∧ (x ∈ R → x.val < n) ∧ (x ∈ T → x.val < n) ∧ (x ∈ X → x.val < n) := by
   have h := I.count x
   refine ⟨fun hx => ?_, fun hx => ?_, fun hx => ?_, fun hx => ?_⟩ <;>
@@ -659,17 +659,17 @@ theorem Inv.lt {n : Nat} {K R T X : List (Fin Q.length)} {st : GSt P} {acc : Arr
     · omega
 
 /-- The registry's pubkeys are the registered deposits' pubkeys. -/
-theorem Inv.pubkeys {n : Nat} {K R T X : List (Fin Q.length)} {st : GSt P} {acc : Array PendingDeposit}
-    (I : Inv P ctx V Q st0 n K R T X st acc) :
-    (st.builders.toArray.map (·.pubkey)).toList = regBefore Q R n := by
-  unfold regBefore
+theorem Invariant.pubkeys {n : Nat} {K R T X : List (Fin Q.length)} {st : GloasState P} {acc : Array PendingDeposit}
+    (I : Invariant P ctx V Q st0 n K R T X st acc) :
+    (st.builders.toArray.map (·.pubkey)).toList = registrationBefore Q R n := by
+  unfold registrationBefore
   rw [filter_all_lt (fun x hx => I.lt.2.1 hx)]
   apply List.ext_getElem
   · simp [I.size]
   · intro k h1 h2
     simp only [Array.toList_map, List.getElem_map, Array.getElem_toList]
     simp only [List.length_map] at h2
-    exact (I.recs k h2 (by rw [I.size]; exact h2)).pubkey
+    exact (I.records k h2 (by rw [I.size]; exact h2)).pubkey
 
 theorem count_push {m : Nat} {s : Fin m → Nat} {e : Fin m}
     (h : ∀ x : Fin m, s x = if x.val < e.val then 1 else 0) (x : Fin m) :
@@ -683,12 +683,12 @@ theorem count_push {m : Nat} {s : Fin m → Nat} {e : Fin m}
     split_ifs at this ⊢ <;> omega
 
 /-- Appending `n` to `K` (steps 1-3). -/
-theorem Inv.appendK {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st : GSt P} {acc : Array PendingDeposit}
-    (I : Inv P ctx V Q st0 e.val K R T X st acc) (hk : KeepAt ctx V Q K R e) :
-    Inv P ctx V Q st0 (e.val + 1) (K ++ [e]) R T X st (acc.push Q[e]) := by
+theorem Invariant.appendKept {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st : GloasState P} {acc : Array PendingDeposit}
+    (I : Invariant P ctx V Q st0 e.val K R T X st acc) (hk : KeepAt ctx V Q K R e) :
+    Invariant P ctx V Q st0 (e.val + 1) (K ++ [e]) R T X st (acc.push Q[e]) := by
   refine ⟨fun x => ?_, ⟨pairwise_append_single I.increasing.1 (fun x hx => I.lt.1 hx),
       I.increasing.2⟩, fun t ht => ?_, fun t ht => ?_, fun t ht => ?_, I.topUp,
-      ?_, I.frame, I.size, I.recs, I.nodup⟩
+      ?_, I.frame, I.size, I.records, I.nodup⟩
   · rw [count_append_single]
     have := count_push I.count x
     omega
@@ -703,12 +703,12 @@ theorem Inv.appendK {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st : GSt
   · rw [Array.toList_push, I.kept, List.map_append]; rfl
 
 /-- Appending `n` to `X` (step 4). -/
-theorem Inv.appendX {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st : GSt P} {acc : Array PendingDeposit}
-    (I : Inv P ctx V Q st0 e.val K R T X st acc) (hd : DropAt ctx V Q K R e) :
-    Inv P ctx V Q st0 (e.val + 1) K R T (X ++ [e]) st acc := by
+theorem Invariant.appendDropped {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st : GloasState P} {acc : Array PendingDeposit}
+    (I : Invariant P ctx V Q st0 e.val K R T X st acc) (hd : DropAt ctx V Q K R e) :
+    Invariant P ctx V Q st0 (e.val + 1) K R T (X ++ [e]) st acc := by
   refine ⟨fun x => ?_, ⟨I.increasing.1, I.increasing.2.1, I.increasing.2.2.1,
       pairwise_append_single I.increasing.2.2.2 (fun x hx => I.lt.2.2.2 hx)⟩,
-      I.keep, I.register, fun t ht => ?_, I.topUp, I.kept, I.frame, I.size, I.recs, I.nodup⟩
+      I.keep, I.register, fun t ht => ?_, I.topUp, I.kept, I.frame, I.size, I.records, I.nodup⟩
   · rw [count_append_single]
     have := count_push I.count x
     omega
@@ -733,12 +733,12 @@ theorem topUpTotal_of_lt {Q : List PendingDeposit} {T : List (Fin Q.length)} {e 
     simp [Fin.lt_def, show ¬ e.val < x.val by omega]
 
 /-- Appending `n` to `R` (step 5): the registry grows by the onboarded record. -/
-theorem Inv.appendR {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' : GSt P} {acc : Array PendingDeposit}
-    (I : Inv P ctx V Q st0 e.val K R T X st acc) (hr : RegisterAt ctx V Q K R e)
+theorem Invariant.appendRegistered {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' : GloasState P} {acc : Array PendingDeposit}
+    (I : Invariant P ctx V Q st0 e.val K R T X st acc) (hr : RegisterAt ctx V Q K R e)
     {b : JauneConsensus.Gloas.Builder} (hb : OnboardedRecord P Q T e b)
     (hst' : st' = { st with builders := st'.builders })
     (hbs : st'.builders.toArray = st.builders.toArray.push b) :
-    Inv P ctx V Q st0 (e.val + 1) K (R ++ [e]) T X st' acc := by
+    Invariant P ctx V Q st0 (e.val + 1) K (R ++ [e]) T X st' acc := by
   have hRlt : ∀ x ∈ R, x.val < e.val := fun x hx => I.lt.2.1 hx
   refine ⟨fun x => ?_, ⟨I.increasing.1, pairwise_append_single I.increasing.2.1 hRlt,
       I.increasing.2.2⟩, fun t ht => ?_, fun t ht => ?_, fun t ht => ?_, fun t ht => ?_,
@@ -746,15 +746,15 @@ theorem Inv.appendR {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' :
   · rw [count_append_single]
     have := count_push I.count x
     omega
-  · rw [KeepAt_congr rfl (regBefore_append (Nat.le_of_lt (I.lt.1 ht)))]; exact I.keep t ht
+  · rw [KeepAt_congr rfl (registrationBefore_append (Nat.le_of_lt (I.lt.1 ht)))]; exact I.keep t ht
   · rcases List.mem_append.mp ht with ht | ht
-    · rw [RegisterAt_congr rfl (regBefore_append (Nat.le_of_lt (I.lt.2.1 ht)))]
+    · rw [RegisterAt_congr rfl (registrationBefore_append (Nat.le_of_lt (I.lt.2.1 ht)))]
       exact I.register t ht
     · rw [List.mem_singleton] at ht; subst ht
-      rw [RegisterAt_congr rfl (regBefore_append (Nat.le_refl _))]; exact hr
-  · rw [DropAt_congr rfl (regBefore_append (Nat.le_of_lt (I.lt.2.2.2 ht)))]
+      rw [RegisterAt_congr rfl (registrationBefore_append (Nat.le_refl _))]; exact hr
+  · rw [DropAt_congr rfl (registrationBefore_append (Nat.le_of_lt (I.lt.2.2.2 ht)))]
     exact I.dropped t ht
-  · rw [TopUpAt_congr (regBefore_append (Nat.le_of_lt (I.lt.2.2.1 ht)))]
+  · rw [TopUpAt_congr (registrationBefore_append (Nat.le_of_lt (I.lt.2.2.1 ht)))]
     exact I.topUp t ht
   · rw [hst']; rw [I.frame]
   · rw [hbs, Array.size_push, I.size, List.length_append, List.length_singleton]
@@ -763,7 +763,7 @@ theorem Inv.appendR {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' :
     rw [List.length_append, List.length_singleton] at h1
     by_cases hk : k < R.length
     · rw [Array.getElem_push_lt (by rw [I.size]; exact hk), List.getElem_append_left hk]
-      exact I.recs k hk (by rw [I.size]; exact hk)
+      exact I.records k hk (by rw [I.size]; exact hk)
     · have hk' : k = R.length := by omega
       subst hk'
       rw [List.getElem_append_right (Nat.le_refl _)]
@@ -776,11 +776,11 @@ theorem Inv.appendR {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' :
     simp only [List.map_cons, List.map_nil, List.mem_singleton] at hc
     subst hc
     intro hac
-    exact hr.2.1 (by unfold regBefore; rw [filter_all_lt hRlt]; exact hac ▸ ha)
+    exact hr.2.1 (by unfold registrationBefore; rw [filter_all_lt hRlt]; exact hac ▸ ha)
 
 /-- Appending `n` to `T` (step 6): the matching builder's balance grows by the amount. -/
-theorem Inv.appendT {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' : GSt P} {acc : Array PendingDeposit}
-    (I : Inv P ctx V Q st0 e.val K R T X st acc) (ht : TopUpAt V Q R e)
+theorem Invariant.appendToppedUp {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' : GloasState P} {acc : Array PendingDeposit}
+    (I : Invariant P ctx V Q st0 e.val K R T X st acc) (ht : TopUpAt V Q R e)
     {i : Nat} {b : JauneConsensus.Gloas.Builder} {nb : U64}
     (hb : st.builders.toArray[i]? = some b) (hpk : b.pubkey = Q[e].pubkey)
     (hnb : nb.toNat = b.balance.toNat + Q[e].amount.toNat)
@@ -788,7 +788,7 @@ theorem Inv.appendT {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' :
     (hsz : st'.builders.toArray.size = st.builders.toArray.size)
     (hi : st'.builders.toArray[i]? = some { b with balance := nb })
     (hoth : ∀ j, j ≠ i → st'.builders.toArray[j]? = st.builders.toArray[j]?) :
-    Inv P ctx V Q st0 (e.val + 1) K R (T ++ [e]) X st' acc := by
+    Invariant P ctx V Q st0 (e.val + 1) K R (T ++ [e]) X st' acc := by
   refine ⟨fun x => ?_, ⟨I.increasing.1, I.increasing.2.1,
       pairwise_append_single I.increasing.2.2.1 (fun x hx => I.lt.2.2.1 hx), I.increasing.2.2.2⟩,
       I.keep, I.register, I.dropped, fun t ht' => ?_, I.kept, ?_, ?_, ?_, I.nodup⟩
@@ -802,11 +802,11 @@ theorem Inv.appendT {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' :
   · rw [hsz, I.size]
   · intro k h1 h2
     have h2' : k < st.builders.toArray.size := by rw [← hsz]; exact h2
-    have hrk := I.recs k h1 h2'
+    have hrk := I.records k h1 h2'
     have hlt : R[k] < e := I.lt.2.1 (List.getElem_mem _)
     obtain ⟨hil, hbi⟩ : ∃ h : i < st.builders.toArray.size, st.builders.toArray[i] = b :=
       ⟨(Array.getElem?_eq_some_iff.mp hb).1, (Array.getElem?_eq_some_iff.mp hb).2⟩
-    have hri := I.recs i (by rw [← I.size]; exact hil) hil
+    have hri := I.records i (by rw [← I.size]; exact hil) hil
     by_cases hki : k = i
     · subst hki
       have he : st'.builders.toArray[k] = { b with balance := nb } :=
@@ -836,18 +836,18 @@ theorem Inv.appendT {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' :
       exact ⟨hrk.pubkey, hrk.version, hrk.execution_address, hrk.deposit_epoch,
         hrk.withdrawable_epoch, by rw [topUpTotal_append, ite_eq_right hcond, hrk.balance]; rfl⟩
 
-theorem getCurrentEpoch_frame {st st0 : GSt P} (h : st = { st0 with builders := st.builders }) :
+theorem getCurrentEpoch_frame {st st0 : GloasState P} (h : st = { st0 with builders := st.builders }) :
     JauneConsensus.Gloas.getCurrentEpoch st = JauneConsensus.Gloas.getCurrentEpoch st0 := by
   unfold JauneConsensus.Gloas.getCurrentEpoch
   rw [h]
 
 /-- One iteration preserves the invariant. -/
-theorem Inv.step {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' : GSt P} {acc acc' : Array PendingDeposit}
+theorem Invariant.step {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' : GloasState P} {acc acc' : Array PendingDeposit}
     {Varr : Array BLSPubkey} (hV : Varr.toList = V)
     (hE : ∀ e, JauneConsensus.Gloas.getCurrentEpoch st0 = .ok e → e ≠ FAR_FUTURE_EPOCH)
-    (I : Inv P ctx V Q st0 e.val K R T X st acc)
+    (I : Invariant P ctx V Q st0 e.val K R T X st acc)
     (h : JauneConsensus.Gloas.onboardBuilderDeposit ctx Varr (st, acc) Q[e] = .ok (st', acc')) :
-    ∃ K' R' T' X', Inv P ctx V Q st0 (e.val + 1) K' R' T' X' st' acc' := by
+    ∃ K' R' T' X', Invariant P ctx V Q st0 (e.val + 1) K' R' T' X' st' acc' := by
   have hpk := I.pubkeys
   have hacc : (keptBefore Q K e).toArray = acc := by
     unfold keptBefore
@@ -855,7 +855,7 @@ theorem Inv.step {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' : GS
   have hmemV : ∀ x, Varr.contains x = true ↔ x ∈ V := by
     intro x; rw [Array.contains_iff_mem, ← hV, Array.mem_toList_iff]
   have hnone : (st.builders.toArray.map (·.pubkey)).idxOf? Q[e].pubkey = none →
-      Q[e].pubkey ∉ regBefore Q R e := by
+      Q[e].pubkey ∉ registrationBefore Q R e := by
     intro hn hm
     rw [Array.idxOf?_eq_none_iff] at hn
     rw [← hpk, Array.mem_toList_iff] at hm
@@ -863,11 +863,11 @@ theorem Inv.step {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' : GS
   rcases onboardBuilderDeposit_cases h with ⟨hv, rfl, rfl⟩ | ⟨hv, hi, hc, rfl, rfl⟩ |
     ⟨hv, hi, hw, hp, hs, rfl, rfl⟩ | ⟨hv, hi, hw, hp, hs, addr, ha, hadd, rfl⟩ |
     ⟨hv, i, b, nb, bs, hi, hb, hnb, hset, rfl, rfl⟩
-  · exact ⟨_, _, _, _, I.appendK (Or.inl ((hmemV _).mp hv))⟩
-  · refine ⟨_, _, _, _, I.appendK (Or.inr ⟨hnone hi, ?_⟩)⟩
+  · exact ⟨_, _, _, _, I.appendKept (Or.inl ((hmemV _).mp hv))⟩
+  · refine ⟨_, _, _, _, I.appendKept (Or.inr ⟨hnone hi, ?_⟩)⟩
     rw [hacc]; exact hc
   · have hvn : Q[e].pubkey ∉ V := fun hm => by rw [← hmemV] at hm; rw [hm] at hv; cases hv
-    refine ⟨_, _, _, _, I.appendX ⟨hvn, hnone hi, hw, ?_, hs⟩⟩
+    refine ⟨_, _, _, _, I.appendDropped ⟨hvn, hnone hi, hw, ?_, hs⟩⟩
     rw [hacc]; exact hp
   · have hvn : Q[e].pubkey ∉ V := fun hm => by rw [← hmemV] at hm; rw [hm] at hv; cases hv
     unfold JauneConsensus.Gloas.addBuilderToRegistry at hadd
@@ -878,34 +878,34 @@ theorem Inv.step {e : Fin Q.length} {K R T X : List (Fin Q.length)} {st st' : GS
     have hfar : ∀ b ∈ st.builders.toArray, b.withdrawable_epoch = FAR_FUTURE_EPOCH := by
       intro b hb
       obtain ⟨k, hk, rfl⟩ := Array.getElem_of_mem hb
-      exact (I.recs k (by rw [← I.size]; exact hk) hk).withdrawable_epoch
+      exact (I.records k (by rw [← I.size]; exact hk) hk).withdrawable_epoch
     have hix := getIndexForNewBuilder_append hidx hfar (by rw [getCurrentEpoch_frame I.frame]; exact hE)
-    unfold ProgressiveListS.setOrAppend at hbs
-    rw [ite_eq_left (by simpa [ProgressiveListS.length] using hix)] at hbs
+    unfold ProgressiveListOnSpine.setOrAppend at hbs
+    rw [ite_eq_left (by simpa [ProgressiveListOnSpine.length] using hix)] at hbs
     cases hbs
-    refine ⟨_, _, _, _, I.appendR (b := freshBuilder Q[e].pubkey addr Q[e].amount de)
+    refine ⟨_, _, _, _, I.appendRegistered (b := freshBuilder Q[e].pubkey addr Q[e].amount de)
       ⟨hvn, hnone hi, hw, by rw [hacc]; exact hp, hs⟩
       ⟨rfl, rfl, ha, hde, rfl, by rw [topUpTotal_of_lt (fun x hx => I.lt.2.2.1 hx)]; rfl⟩ rfl rfl⟩
   · have hvn : Q[e].pubkey ∉ V := fun hm => by rw [← hmemV] at hm; rw [hm] at hv; cases hv
-    obtain ⟨hil, hbi⟩ := arr_idxOf?_some hi
+    obtain ⟨hil, hbi⟩ := array_idxOf?_some hi
     have hil' : i < st.builders.toArray.size := by simpa using hil
     have hbb : st.builders.toArray[i] = b :=
       Option.some.inj ((Array.getElem?_eq_getElem hil').symm.trans hb)
     have hbpk : b.pubkey = Q[e].pubkey := by
       rw [← hbi, Array.getElem_map, hbb]
-    have hmem : Q[e].pubkey ∈ regBefore Q R e := by
+    have hmem : Q[e].pubkey ∈ registrationBefore Q R e := by
       rw [← hpk, Array.mem_toList_iff, ← hbi]
       exact Array.getElem_mem hil
-    obtain ⟨h1, h2, h3⟩ := pl_set_ok hset
-    exact ⟨_, _, _, _, I.appendT ⟨hvn, hmem⟩ hb hbpk (U64.toNat_add? hnb) rfl h1 h2 h3⟩
+    obtain ⟨h1, h2, h3⟩ := progressiveList_set_ok hset
+    exact ⟨_, _, _, _, I.appendToppedUp ⟨hvn, hmem⟩ hb hbpk (U64.toNat_add? hnb) rfl h1 h2 h3⟩
 
 /-- The loop over the first `n` deposits satisfies the invariant. -/
-theorem fold_inv {Varr : Array BLSPubkey} (hV : Varr.toList = V)
+theorem fold_invariant {Varr : Array BLSPubkey} (hV : Varr.toList = V)
     (hE : ∀ e, JauneConsensus.Gloas.getCurrentEpoch st0 = .ok e → e ≠ FAR_FUTURE_EPOCH)
     (hb0 : st0.builders.toArray = #[]) :
     ∀ n, n ≤ Q.length → ∀ st acc,
       (Q.take n).foldlM (JauneConsensus.Gloas.onboardBuilderDeposit ctx Varr) (st0, #[]) =
-        .ok (st, acc) → ∃ K R T X, Inv P ctx V Q st0 n K R T X st acc
+        .ok (st, acc) → ∃ K R T X, Invariant P ctx V Q st0 n K R T X st acc
   | 0, _, st, acc, h => by
     cases h
     refine ⟨[], [], [], [], ⟨fun x => (by simp), ⟨.nil, .nil, .nil, .nil⟩, fun _ h => (by cases h),
@@ -915,32 +915,32 @@ theorem fold_inv {Varr : Array BLSPubkey} (hV : Varr.toList = V)
     rw [List.take_add_one, List.getElem?_eq_getElem (by omega), Option.toList_some,
       List.foldlM_append] at h
     obtain ⟨⟨st1, acc1⟩, h1, h⟩ := bind_eq_ok_iff.mp h
-    obtain ⟨K, R, T, X, I⟩ := fold_inv hV hE hb0 n (by omega) st1 acc1 h1
+    obtain ⟨K, R, T, X, I⟩ := fold_invariant hV hE hb0 n (by omega) st1 acc1 h1
     rw [List.foldlM_cons] at h
     obtain ⟨r, hr, h⟩ := bind_eq_ok_iff.mp h
     cases h
     exact I.step (e := ⟨n, by omega⟩) hV hE hr
 
 /-- At the end of the queue the invariant is the specification. -/
-theorem Inv.spec {K R T X : List (Fin Q.length)} {st : GSt P} {acc : Array PendingDeposit}
-    (I : Inv P ctx V Q st0 Q.length K R T X st acc) :
+theorem Invariant.spec {K R T X : List (Fin Q.length)} {st : GloasState P} {acc : Array PendingDeposit}
+    (I : Invariant P ctx V Q st0 Q.length K R T X st acc) :
     OnboardingSpec P ctx V Q K R T X st.builders.toArray.toList acc.toList := by
   refine ⟨List.perm_iff_count.mpr (fun x => ?_), I.increasing, I.keep, I.register, I.dropped,
     I.topUp, I.kept, List.forall₂_iff_get.mpr ⟨by simp [I.size], fun k h1 h2 => ?_⟩⟩
   · rw [List.count_append, List.count_append, List.count_append, I.count x,
       List.count_eq_one_of_mem (List.nodup_finRange _) (List.mem_finRange x), ite_eq_left x.isLt]
   · simp only [List.get_eq_getElem, Array.getElem_toList]
-    exact I.recs k h1 (by simpa using h2)
+    exact I.records k h1 (by simpa using h2)
 
 end Loop
 
-theorem upgradedState_fields {cfg : Config} {pre : JauneConsensus.BeaconState P .fulu} {p0 : GSt P}
+theorem upgradedState_fields {cfg : Config} {pre : JauneConsensus.BeaconState P .fulu} {p0 : GloasState P}
     (h : JauneConsensus.Gloas.upgradedState cfg pre = .ok p0) :
-    p0.validators = ProgressiveListS.ofArray pre.validators.toArray ∧
-    p0.balances = ProgressiveListS.ofArray pre.balances.toArray ∧
-    p0.pending_deposits = ProgressiveListS.ofArray
-      (Gated.get (by decide : CFork.fulu.atLeast .electra = true) pre.pending_deposits).toArray ∧
-    p0.builders = ProgressiveListS.empty := by
+    p0.validators = ProgressiveListOnSpine.ofArray pre.validators.toArray ∧
+    p0.balances = ProgressiveListOnSpine.ofArray pre.balances.toArray ∧
+    p0.pending_deposits = ProgressiveListOnSpine.ofArray
+      (ForkField.get (by decide : ConsensusFork.fulu.atLeast .electra = true) pre.pending_deposits).toArray ∧
+    p0.builders = ProgressiveListOnSpine.empty := by
   unfold JauneConsensus.Gloas.upgradedState at h
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
@@ -949,14 +949,14 @@ theorem upgradedState_fields {cfg : Config} {pre : JauneConsensus.BeaconState P 
 
 /-- The Fulu pre-state's pending deposits, in queue order. -/
 def fuluPendingDeposits (pre : JauneConsensus.BeaconState P .fulu) : List PendingDeposit :=
-  (Gated.get (by decide : CFork.fulu.atLeast .electra = true) pre.pending_deposits).toArray.toList
+  (ForkField.get (by decide : ConsensusFork.fulu.atLeast .electra = true) pre.pending_deposits).toArray.toList
 
 /-- **B1 fork theorem (`upgradeToGloas_onboards`).** `upgrade_to_gloas` onboards builders exactly
 as the declarative specification says: there is a partition `K/R/T/X` of the Fulu pending
 deposits meeting `OnboardingSpec` against the resulting registry and queue; it is the only one;
 validators and their balances are unchanged; and the total builder balance after the upgrade is
 the sum of the registering and top-up amounts (B7's fork term). -/
-theorem upgradeToGloas_onboards {ctx : Ctx} {pre : JauneConsensus.BeaconState P .fulu}
+theorem upgradeToGloas_onboards {ctx : Context} {pre : JauneConsensus.BeaconState P .fulu}
     {post : JauneConsensus.Gloas.BeaconState P}
     (h : JauneConsensus.Gloas.upgradeToGloas ctx pre = .ok post) :
     ∃ K R T X,
@@ -979,16 +979,16 @@ theorem upgradeToGloas_onboards {ctx : Ctx} {pre : JauneConsensus.BeaconState P 
   cases h
   rw [← Array.foldlM_toList] at hr
   obtain ⟨hpv, hpb, hpd, hpB⟩ := upgradedState_fields hp0
-  have hQ : ({ p0 with ptc_window := ptc } : GSt P).pending_deposits.toArray.toList =
+  have hQ : ({ p0 with ptc_window := ptc } : GloasState P).pending_deposits.toArray.toList =
       fuluPendingDeposits pre := by
     show p0.pending_deposits.toArray.toList = _
     rw [hpd]; rfl
-  have hV : (({ p0 with ptc_window := ptc } : GSt P).validators.toArray.map (·.pubkey)).toList =
+  have hV : (({ p0 with ptc_window := ptc } : GloasState P).validators.toArray.map (·.pubkey)).toList =
       pre.validators.toArray.toList.map (·.pubkey) := by
     show (p0.validators.toArray.map (·.pubkey)).toList = _
     rw [hpv, Array.toList_map]; rfl
   rw [hQ] at hr
-  obtain ⟨K, R, T, X, I⟩ := fold_inv (Q := fuluPendingDeposits pre) hV hE
+  obtain ⟨K, R, T, X, I⟩ := fold_invariant (Q := fuluPendingDeposits pre) hV hE
     (by show p0.builders.toArray = #[]; rw [hpB]; rfl) _ (Nat.le_refl _) st acc
     (by rw [List.take_length]; exact hr)
   have S := I.spec
@@ -1008,7 +1008,7 @@ theorem upgradeToGloas_onboards {ctx : Ctx} {pre : JauneConsensus.BeaconState P 
 /-- **B7's fork term (Jaune half of `builder_total_crossing`).** For the onboarding partition of a
 successful upgrade, the total builder balance after `upgrade_to_gloas` is the sum of the
 registering and top-up amounts. -/
-theorem upgradeToGloas_builder_total {ctx : Ctx} {pre : JauneConsensus.BeaconState P .fulu}
+theorem upgradeToGloas_builder_total {ctx : Context} {pre : JauneConsensus.BeaconState P .fulu}
     {post : JauneConsensus.Gloas.BeaconState P} {K R T X : List (Fin (fuluPendingDeposits pre).length)}
     (S : OnboardingSpec P ctx (pre.validators.toArray.toList.map (·.pubkey)) (fuluPendingDeposits pre)
       K R T X post.builders.toArray.toList post.pending_deposits.toArray.toList) :

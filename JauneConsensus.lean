@@ -18,7 +18,7 @@ import JauneConsensus.Signing
 import JauneConsensus.Transition
 import JauneConsensus.Upgrade
 import JauneConsensus.Accessors
-import JauneConsensus.Ctx
+import JauneConsensus.Context
 import JauneConsensus.Deposits
 import JauneConsensus.Block
 import JauneConsensus.Facts.WithdrawalRequest
@@ -32,7 +32,7 @@ import JauneConsensus.LightClientFullNode
 import JauneConsensus.Crypto.HashToCurve
 import JauneConsensus.Crypto.HashToCurveVectors
 import JauneConsensus.Crypto.Codec
-import JauneConsensus.Crypto.BLSSig
+import JauneConsensus.Crypto.BLSSignature
 import JauneConsensus.Crypto.CodecVectors
 import JauneConsensus.Crypto.MSM
 import JauneConsensus.Crypto.MSMVectors
@@ -70,12 +70,12 @@ import JauneConsensus.Harness.RecordedPairs
 import JauneConsensus.Harness.RecordedPairsGloas
 import JauneConsensus.Crypto.G2Subgroup
 import JauneConsensus.Crypto.G2SubgroupVectors
-import JauneConsensus.Facts.AnchorInv
-import JauneConsensus.Facts.AnchorInvComposite
+import JauneConsensus.Facts.AnchorInvariant
+import JauneConsensus.Facts.AnchorInvariantComposite
 import JauneConsensus.Facts.WithdrawalsFloor
 import JauneConsensus.GloasAccessors
 import JauneConsensus.GloasEnvelope
-import JauneConsensus.GloasOps
+import JauneConsensus.GloasListAccessors
 import JauneConsensus.GloasMutators
 import JauneConsensus.GloasEpochAccessors
 import JauneConsensus.GloasEpoch

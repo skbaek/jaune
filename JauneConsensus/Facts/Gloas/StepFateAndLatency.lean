@@ -1,5 +1,5 @@
 import JauneConsensus.Facts.JointGloas
-import JauneConsensus.Facts.Gloas.InvariantsGen
+import JauneConsensus.Facts.Gloas.InvariantsPreservation
 
 /-!
 # The per-step consensus layer of B2, B4 and B6 (goal `eip8282-gloas-cross-layer-v1`, RBS)
@@ -47,18 +47,18 @@ def _root_.JauneConsensus.ParentSettle.isFull : ParentSettle P → Bool
 /-- A successful Gloas→Gloas joint step, opened: the post-slots state `postSlots` (the state
 Gloas `process_block` receives), the execution-side settlement `settle`, the post-block state,
 and the step's end. -/
-structure GStepView (cfg : ChainConfig) (ccfg : Config) (bls : Bool)
+structure GloasStepView (cfg : ChainConfig) (ccfg : Config) (bls : Bool)
     (preB : Gloas.BeaconState P) (preExec : BlockChain) (preParent : ParentPayload P)
     (b : Gloas.SignedBeaconBlock P) (env? : Option (Gloas.SignedExecutionPayloadEnvelope P))
     (postB : Gloas.BeaconState P) (postExec : BlockChain) (postParent : ParentPayload P) where
   postSlots : Gloas.BeaconState P
   settle : ParentSettle P
-  slots : Gloas.processSlots (gloasCtx ccfg bls) preB b.message.slot = .ok postSlots
+  slots : Gloas.processSlots (gloasContext ccfg bls) preB b.message.slot = .ok postSlots
   settled : settleParent preParent preExec (parentFull postSlots b.message)
     b.message.body.parent_execution_requests = .ok (postExec, settle)
-  block : gloasBlockTransition (gloasCtx ccfg bls) postSlots b = .ok postB
+  block : gloasBlockTransition (gloasContext ccfg bls) postSlots b = .ok postB
   stepEnd : (env? = none ∧ postParent = .withheld) ∨
-    ∃ e req postE, env? = some e ∧ verifyEnvelopeG cfg ccfg bls postB postExec e = .ok (req, postE) ∧
+    ∃ e req postE, env? = some e ∧ verifyEnvelopeGloas cfg ccfg bls postB postExec e = .ok (req, postE) ∧
       postParent = .delivered e req postE
 
 section View
@@ -70,19 +70,19 @@ variable {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
 
 /-- Every successful Gloas→Gloas joint step has a view. -/
 theorem gloasStep_view
-    (h : jointStepG cfg ccfg bls (.gloas preB preExec preParent) (.gloas b) env? =
+    (h : jointStepGloas cfg ccfg bls (.gloas preB preExec preParent) (.gloas b) env? =
       .ok (.gloas postB postExec postParent)) :
-    Nonempty (GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) := by
-  obtain ⟨postSlots, post, exec', o, h0, hs, hp, hd⟩ := jointStepG_gloas_ok_iff.mp h
-  rcases gloasDeliverOpt_ok_iff.mp hd with ⟨hn, he⟩ | ⟨e, req, postE, he, hv, hs'⟩
+    Nonempty (GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) := by
+  obtain ⟨postSlots, post, exec', o, h0, hs, hp, hd⟩ := jointStepGloas_gloas_ok_iff.mp h
+  rcases gloasDeliverOptional_ok_iff.mp hd with ⟨hn, he⟩ | ⟨e, req, postE, he, hv, hs'⟩
   · cases he
     exact ⟨⟨postSlots, o, h0, hs, hp, Or.inl ⟨hn, rfl⟩⟩⟩
   · cases hs'
     exact ⟨⟨postSlots, o, h0, hs, hp, Or.inr ⟨e, req, postE, he, hv, rfl⟩⟩⟩
 
 /-- The view is unique: the post-slots state and the settlement are functions of the step. -/
-theorem GStepView.unique
-    (V W : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
+theorem GloasStepView.unique
+    (V W : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
     V.postSlots = W.postSlots ∧ V.settle = W.settle := by
   have h1 : V.postSlots = W.postSlots := Except.ok.inj (V.slots.symm.trans W.slots)
   refine ⟨h1, ?_⟩
@@ -91,14 +91,14 @@ theorem GStepView.unique
   exact (Prod.mk.inj (Except.ok.inj h2)).2.symm
 
 /-- The block transition after the slots runs Gloas `process_block` on the post-slots state. -/
-theorem GStepView.processBlock
-    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
-    Gloas.processBlock (gloasCtx ccfg bls) V.postSlots b.message = .ok postB :=
-  Inv.applySignedBlockWith_ok V.block
+theorem GloasStepView.processBlock
+    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
+    Gloas.processBlock (gloasContext ccfg bls) V.postSlots b.message = .ok postB :=
+  Invariant.applySignedBlockWith_ok V.block
 
 /-- The settlement, by cases (`settleParent_ok_iff` at the step). -/
-theorem GStepView.settle_cases
-    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
+theorem GloasStepView.settle_cases
+    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
     (parentFull V.postSlots b.message = true ∧ ∃ env req post, preParent = .delivered env req post ∧
         b.message.body.parent_execution_requests = env.message.execution_requests ∧
         postExec = post ∧ V.settle = .full env req post) ∨
@@ -113,8 +113,8 @@ theorem GStepView.settle_cases
 /-- **B6 per step, settle side.** The step settles FULL exactly when its pre-state holds a
 delivered payload and the block builds on it; the settlement then names that payload, the
 child's requests are the envelope's by value, and the built-upon chain becomes its `post`. -/
-theorem GStepView.full_iff
-    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+theorem GloasStepView.full_iff
+    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
     {env : Gloas.SignedExecutionPayloadEnvelope P} {req : Gloas.NewPayloadRequest P}
     {post : BlockChain} :
     V.settle = .full env req post ↔
@@ -138,8 +138,8 @@ theorem GStepView.full_iff
 
 /-- **Non-FULL settles nothing.** An EMPTY or `.landed` settlement has the empty requests by
 value: the block carries no builder deposit and no builder exit request. -/
-theorem GStepView.requests_of_not_full
-    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+theorem GloasStepView.requests_of_not_full
+    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
     (hnf : V.settle.isFull = false) :
     b.message.body.parent_execution_requests = Gloas.ExecutionRequests.empty ∧
       blockBuilderDeposits b = [] ∧ blockBuilderExits b = [] := by
@@ -155,10 +155,10 @@ theorem GStepView.requests_of_not_full
 /-- **B6 per step, end side.** After the step the joint state holds only the block's own payload:
 `.withheld`, or `.delivered` with the block's own envelope, verified against the post-block state
 and the chain after the settlement. -/
-theorem GStepView.postParent_cases
-    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
+theorem GloasStepView.postParent_cases
+    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
     (env? = none ∧ postParent = .withheld) ∨
-      ∃ e req postE, env? = some e ∧ verifyEnvelopeG cfg ccfg bls postB postExec e = .ok (req, postE) ∧
+      ∃ e req postE, env? = some e ∧ verifyEnvelopeGloas cfg ccfg bls postB postExec e = .ok (req, postE) ∧
         postParent = .delivered e req postE :=
   V.stepEnd
 
@@ -166,8 +166,8 @@ theorem GStepView.postParent_cases
 
 /-- At a FULL step, the parent settlement inside `process_block` (at `postSlots`) factors through
 the two traces read at `postSlots`. -/
-theorem GStepView.traces
-    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
+theorem GloasStepView.traces
+    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent) :
     ∃ trD trE, builderDepositTrace ccfg bls V.postSlots b = .ok trD ∧
       builderExitTrace ccfg bls V.postSlots b = .ok trE ∧ trE[0]? = trD.getLast? := by
   obtain ⟨s1, h1⟩ := processBlock_parent V.processBlock
@@ -186,8 +186,8 @@ variable {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
   {postB : Gloas.BeaconState P} {postExec : BlockChain} {postParent : ParentPayload P}
 
 /-- A block with a builder request settles FULL over a delivered payload. -/
-theorem GStepView.full_of_requests
-    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+theorem GloasStepView.full_of_requests
+    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
     (hne : blockBuilderDeposits b ≠ [] ∨ blockBuilderExits b ≠ []) :
     ∃ env req post, V.settle = .full env req post := by
   cases hs : V.settle with
@@ -208,8 +208,8 @@ theorem GStepView.full_of_requests
 position `k` of the trace read at the post-slots state: it has exactly one classification
 outcome at `tr[k]`, and `tr[k+1]` is that outcome's effect. The step settles FULL over the
 delivered payload `env`, and its built-upon chain is the payload's `post`. -/
-theorem GStepView.builderDeposit_applied
-    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+theorem GloasStepView.builderDeposit_applied
+    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
     {k : Nat} {r : Gloas.BuilderDepositRequest} (hr : (blockBuilderDeposits b)[k]? = some r) :
     ∃ (env : Gloas.SignedExecutionPayloadEnvelope P) (req : Gloas.NewPayloadRequest P)
       (post : BlockChain) (tr : List (Gloas.BeaconState P)) (m m' : Gloas.BeaconState P)
@@ -236,8 +236,8 @@ theorem GStepView.builderDeposit_applied
 /-- **B4 consensus half, per step.** The builder exit request at position `k` is applied at exit
 trace position `k` of the trace read at the post-slots state, with exactly one classification
 outcome; the step settles FULL over the delivered payload `env`. -/
-theorem GStepView.builderExit_applied
-    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+theorem GloasStepView.builderExit_applied
+    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
     {k : Nat} {r : Gloas.BuilderExitRequest} (hr : (blockBuilderExits b)[k]? = some r) :
     ∃ (env : Gloas.SignedExecutionPayloadEnvelope P) (req : Gloas.NewPayloadRequest P)
       (post : BlockChain) (tr : List (Gloas.BeaconState P)) (m m' : Gloas.BeaconState P)
@@ -265,13 +265,13 @@ theorem GStepView.builderExit_applied
 of the block is applied at deposit trace position `k` of the trace read at the post-slots state,
 with one outcome, by a step whose settlement is FULL over the delivered payload `env`. -/
 theorem gloasStep_builderDeposit_applied
-    (h : jointStepG cfg ccfg bls (.gloas preB preExec preParent) (.gloas b) env? =
+    (h : jointStepGloas cfg ccfg bls (.gloas preB preExec preParent) (.gloas b) env? =
       .ok (.gloas postB postExec postParent))
     {k : Nat} {r : Gloas.BuilderDepositRequest} (hr : (blockBuilderDeposits b)[k]? = some r) :
     ∃ (postSlots : Gloas.BeaconState P) (env : Gloas.SignedExecutionPayloadEnvelope P)
       (req : Gloas.NewPayloadRequest P) (post : BlockChain) (tr : List (Gloas.BeaconState P))
       (m m' : Gloas.BeaconState P) (o : BuilderDepositOutcome),
-      Gloas.processSlots (gloasCtx ccfg bls) preB b.message.slot = .ok postSlots ∧
+      Gloas.processSlots (gloasContext ccfg bls) preB b.message.slot = .ok postSlots ∧
       settleParent preParent preExec (parentFull postSlots b.message)
         b.message.body.parent_execution_requests = .ok (postExec, .full env req post) ∧
       preParent = .delivered env req post ∧
@@ -289,13 +289,13 @@ theorem gloasStep_builderDeposit_applied
 
 /-- **B4 headline, per step.** As `gloasStep_builderDeposit_applied`, for builder exits. -/
 theorem gloasStep_builderExit_applied
-    (h : jointStepG cfg ccfg bls (.gloas preB preExec preParent) (.gloas b) env? =
+    (h : jointStepGloas cfg ccfg bls (.gloas preB preExec preParent) (.gloas b) env? =
       .ok (.gloas postB postExec postParent))
     {k : Nat} {r : Gloas.BuilderExitRequest} (hr : (blockBuilderExits b)[k]? = some r) :
     ∃ (postSlots : Gloas.BeaconState P) (env : Gloas.SignedExecutionPayloadEnvelope P)
       (req : Gloas.NewPayloadRequest P) (post : BlockChain) (tr : List (Gloas.BeaconState P))
       (m m' : Gloas.BeaconState P) (o : BuilderExitOutcome),
-      Gloas.processSlots (gloasCtx ccfg bls) preB b.message.slot = .ok postSlots ∧
+      Gloas.processSlots (gloasContext ccfg bls) preB b.message.slot = .ok postSlots ∧
       settleParent preParent preExec (parentFull postSlots b.message)
         b.message.body.parent_execution_requests = .ok (postExec, .full env req post) ∧
       preParent = .delivered env req post ∧

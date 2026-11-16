@@ -39,29 +39,29 @@ instance : ToString ConfigError where
     | .width k n => s!"config: {k} must be {n} bytes"
     | .notMapping => "config: config.yaml is not a mapping"
 
-private def hexN (v : YVal) (n : Nat) (k : String) : Except ConfigError (List UInt8) := do
+private def hexBytesOfLength (v : YamlValue) (n : Nat) (k : String) : Except ConfigError (List UInt8) := do
   let bs ← v.asHex.mapError .yaml
   if bs.length == n then pure bs else throw (.width k n)
 
-private def natOf (v : YVal) : Except ConfigError Nat := v.asNat.mapError .yaml
+private def natOf (v : YamlValue) : Except ConfigError Nat := v.asNat.mapError .yaml
 
 private def natOfBytes (bs : List UInt8) : Nat :=
   bs.foldl (fun (n : Nat) (b : UInt8) => 256 * n + b.toNat) 0
 
-private def scheduleOf (v : YVal) : Except ConfigError (List BlobScheduleEntry) :=
+private def scheduleOf (v : YamlValue) : Except ConfigError (List BlobScheduleEntry) :=
   Except.mapError ConfigError.yaml do
-    (← v.asSeq).mapM fun e => do
+    (← v.asSequence).mapM fun e => do
       e.expectKeys ["EPOCH", "MAX_BLOBS_PER_BLOCK"]
       pure ⟨← (← e.field "EPOCH").asNat, ← (← e.field "MAX_BLOBS_PER_BLOCK").asNat⟩
 
-private def gasScheduleOf (v : YVal) : Except ConfigError (List GasLimitScheduleEntry) :=
+private def gasScheduleOf (v : YamlValue) : Except ConfigError (List GasLimitScheduleEntry) :=
   Except.mapError ConfigError.yaml do
-    (← v.asSeq).mapM fun e => do
+    (← v.asSequence).mapM fun e => do
       e.expectKeys ["EPOCH", "GAS_LIMIT"]
       pure ⟨← (← e.field "EPOCH").asNat, ← (← e.field "GAS_LIMIT").asNat⟩
 
 /-- Set one configuration key from its YAML value. -/
-def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :
+def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YamlValue) :
     Except ConfigError Config :=
   match k with
   | "PRESET_BASE" => match v with
@@ -69,25 +69,25 @@ def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :
       else .error (.presetBase s c.PRESET_BASE)
     | _ => .error (.yaml (.shape "PRESET_BASE is not a scalar"))
   | "TERMINAL_TOTAL_DIFFICULTY" => (fun x => { c with TERMINAL_TOTAL_DIFFICULTY := x }) <$> natOf v
-  | "TERMINAL_BLOCK_HASH" => (fun x => { c with TERMINAL_BLOCK_HASH := x }) <$> (fun bs => (natOfBytes bs).toB256) <$> hexN v 32 "TERMINAL_BLOCK_HASH"
+  | "TERMINAL_BLOCK_HASH" => (fun x => { c with TERMINAL_BLOCK_HASH := x }) <$> (fun bs => (natOfBytes bs).toU256) <$> hexBytesOfLength v 32 "TERMINAL_BLOCK_HASH"
   | "TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH" => (fun x => { c with TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH := x }) <$> natOf v
   | "MIN_GENESIS_ACTIVE_VALIDATOR_COUNT" => (fun x => { c with MIN_GENESIS_ACTIVE_VALIDATOR_COUNT := x }) <$> natOf v
   | "MIN_GENESIS_TIME" => (fun x => { c with MIN_GENESIS_TIME := x }) <$> natOf v
-  | "GENESIS_FORK_VERSION" => (fun x => { c with GENESIS_FORK_VERSION := x }) <$> hexN v 4 "GENESIS_FORK_VERSION"
+  | "GENESIS_FORK_VERSION" => (fun x => { c with GENESIS_FORK_VERSION := x }) <$> hexBytesOfLength v 4 "GENESIS_FORK_VERSION"
   | "GENESIS_DELAY" => (fun x => { c with GENESIS_DELAY := x }) <$> natOf v
-  | "ALTAIR_FORK_VERSION" => (fun x => { c with ALTAIR_FORK_VERSION := x }) <$> hexN v 4 "ALTAIR_FORK_VERSION"
+  | "ALTAIR_FORK_VERSION" => (fun x => { c with ALTAIR_FORK_VERSION := x }) <$> hexBytesOfLength v 4 "ALTAIR_FORK_VERSION"
   | "ALTAIR_FORK_EPOCH" => (fun x => { c with ALTAIR_FORK_EPOCH := x }) <$> natOf v
-  | "BELLATRIX_FORK_VERSION" => (fun x => { c with BELLATRIX_FORK_VERSION := x }) <$> hexN v 4 "BELLATRIX_FORK_VERSION"
+  | "BELLATRIX_FORK_VERSION" => (fun x => { c with BELLATRIX_FORK_VERSION := x }) <$> hexBytesOfLength v 4 "BELLATRIX_FORK_VERSION"
   | "BELLATRIX_FORK_EPOCH" => (fun x => { c with BELLATRIX_FORK_EPOCH := x }) <$> natOf v
-  | "CAPELLA_FORK_VERSION" => (fun x => { c with CAPELLA_FORK_VERSION := x }) <$> hexN v 4 "CAPELLA_FORK_VERSION"
+  | "CAPELLA_FORK_VERSION" => (fun x => { c with CAPELLA_FORK_VERSION := x }) <$> hexBytesOfLength v 4 "CAPELLA_FORK_VERSION"
   | "CAPELLA_FORK_EPOCH" => (fun x => { c with CAPELLA_FORK_EPOCH := x }) <$> natOf v
-  | "DENEB_FORK_VERSION" => (fun x => { c with DENEB_FORK_VERSION := x }) <$> hexN v 4 "DENEB_FORK_VERSION"
+  | "DENEB_FORK_VERSION" => (fun x => { c with DENEB_FORK_VERSION := x }) <$> hexBytesOfLength v 4 "DENEB_FORK_VERSION"
   | "DENEB_FORK_EPOCH" => (fun x => { c with DENEB_FORK_EPOCH := x }) <$> natOf v
-  | "ELECTRA_FORK_VERSION" => (fun x => { c with ELECTRA_FORK_VERSION := x }) <$> hexN v 4 "ELECTRA_FORK_VERSION"
+  | "ELECTRA_FORK_VERSION" => (fun x => { c with ELECTRA_FORK_VERSION := x }) <$> hexBytesOfLength v 4 "ELECTRA_FORK_VERSION"
   | "ELECTRA_FORK_EPOCH" => (fun x => { c with ELECTRA_FORK_EPOCH := x }) <$> natOf v
-  | "FULU_FORK_VERSION" => (fun x => { c with FULU_FORK_VERSION := x }) <$> hexN v 4 "FULU_FORK_VERSION"
+  | "FULU_FORK_VERSION" => (fun x => { c with FULU_FORK_VERSION := x }) <$> hexBytesOfLength v 4 "FULU_FORK_VERSION"
   | "FULU_FORK_EPOCH" => (fun x => { c with FULU_FORK_EPOCH := x }) <$> natOf v
-  | "GLOAS_FORK_VERSION" => (fun x => { c with GLOAS_FORK_VERSION := x }) <$> hexN v 4 "GLOAS_FORK_VERSION"
+  | "GLOAS_FORK_VERSION" => (fun x => { c with GLOAS_FORK_VERSION := x }) <$> hexBytesOfLength v 4 "GLOAS_FORK_VERSION"
   | "GLOAS_FORK_EPOCH" => (fun x => { c with GLOAS_FORK_EPOCH := x }) <$> natOf v
   | "SLOT_DURATION_MS" => (fun x => { c with SLOT_DURATION_MS := x }) <$> natOf v
   | "SECONDS_PER_ETH1_BLOCK" => (fun x => { c with SECONDS_PER_ETH1_BLOCK := x }) <$> natOf v
@@ -123,14 +123,14 @@ def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :
   | "REORG_MAX_EPOCHS_SINCE_FINALIZATION" => (fun x => { c with REORG_MAX_EPOCHS_SINCE_FINALIZATION := x }) <$> natOf v
   | "DEPOSIT_CHAIN_ID" => (fun x => { c with DEPOSIT_CHAIN_ID := x }) <$> natOf v
   | "DEPOSIT_NETWORK_ID" => (fun x => { c with DEPOSIT_NETWORK_ID := x }) <$> natOf v
-  | "DEPOSIT_CONTRACT_ADDRESS" => (fun x => { c with DEPOSIT_CONTRACT_ADDRESS := x }) <$> (fun bs => (natOfBytes bs).toAdr) <$> hexN v 20 "DEPOSIT_CONTRACT_ADDRESS"
+  | "DEPOSIT_CONTRACT_ADDRESS" => (fun x => { c with DEPOSIT_CONTRACT_ADDRESS := x }) <$> (fun bs => (natOfBytes bs).toAddress) <$> hexBytesOfLength v 20 "DEPOSIT_CONTRACT_ADDRESS"
   | "MAX_PAYLOAD_SIZE" => (fun x => { c with MAX_PAYLOAD_SIZE := x }) <$> natOf v
   | "MAX_REQUEST_BLOCKS" => (fun x => { c with MAX_REQUEST_BLOCKS := x }) <$> natOf v
   | "EPOCHS_PER_SUBNET_SUBSCRIPTION" => (fun x => { c with EPOCHS_PER_SUBNET_SUBSCRIPTION := x }) <$> natOf v
   | "ATTESTATION_PROPAGATION_SLOT_RANGE" => (fun x => { c with ATTESTATION_PROPAGATION_SLOT_RANGE := x }) <$> natOf v
   | "MAXIMUM_GOSSIP_CLOCK_DISPARITY" => (fun x => { c with MAXIMUM_GOSSIP_CLOCK_DISPARITY := x }) <$> natOf v
-  | "MESSAGE_DOMAIN_INVALID_SNAPPY" => (fun x => { c with MESSAGE_DOMAIN_INVALID_SNAPPY := x }) <$> hexN v 4 "MESSAGE_DOMAIN_INVALID_SNAPPY"
-  | "MESSAGE_DOMAIN_VALID_SNAPPY" => (fun x => { c with MESSAGE_DOMAIN_VALID_SNAPPY := x }) <$> hexN v 4 "MESSAGE_DOMAIN_VALID_SNAPPY"
+  | "MESSAGE_DOMAIN_INVALID_SNAPPY" => (fun x => { c with MESSAGE_DOMAIN_INVALID_SNAPPY := x }) <$> hexBytesOfLength v 4 "MESSAGE_DOMAIN_INVALID_SNAPPY"
+  | "MESSAGE_DOMAIN_VALID_SNAPPY" => (fun x => { c with MESSAGE_DOMAIN_VALID_SNAPPY := x }) <$> hexBytesOfLength v 4 "MESSAGE_DOMAIN_VALID_SNAPPY"
   | "SUBNETS_PER_NODE" => (fun x => { c with SUBNETS_PER_NODE := x }) <$> natOf v
   | "ATTESTATION_SUBNET_COUNT" => (fun x => { c with ATTESTATION_SUBNET_COUNT := x }) <$> natOf v
   | "ATTESTATION_SUBNET_EXTRA_BITS" => (fun x => { c with ATTESTATION_SUBNET_EXTRA_BITS := x }) <$> natOf v
@@ -154,7 +154,7 @@ def _root_.JauneConsensus.Config.setKey (c : Config) (k : String) (v : YVal) :
   | _ => .error (.unknownKey k)
 
 /-- Apply a case `config.yaml` (a mapping) on top of `base`. -/
-def _root_.JauneConsensus.Config.applyOverrides (base : Config) (doc : YVal) :
+def _root_.JauneConsensus.Config.applyOverrides (base : Config) (doc : YamlValue) :
     Except ConfigError Config :=
   match doc with
   | .map kvs => kvs.foldlM (fun c (k, v) => c.setKey k v) base
