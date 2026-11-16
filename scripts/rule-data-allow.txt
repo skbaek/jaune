@@ -26,19 +26,19 @@
 # `meteringGuardLegacySchedule` in `Jaune/Execution.lean`.
 #
 # --- the three definitions ---
-Jaune/Machine.lean def gasColdAccountAccess : Nat := 2600
-Jaune/Machine.lean def gasCallValue : Nat := 9000
-Jaune/Machine.lean def gasCreate : Nat := 32000
+Jaune/Machine.lean def Gas.coldAccountAccessCost : Nat := 2600
+Jaune/Machine.lean def Gas.callValue : Nat := 9000
+Jaune/Machine.lean def Gas.create : Nat := 32000
 # --- Prague bridges: the record's value IS the global at Prague, by rfl ---
-Jaune/Machine.lean pragueRules.gas.coldAccountAccess = gasColdAccountAccess := rfl
-Jaune/Machine.lean pragueRules.gas.callValue = gasCallValue := rfl
-Jaune/Machine.lean pragueRules.gas.createAccess = gasCreate := rfl
-Jaune/Machine.lean @[simp] theorem txCreateCost_eq_gasCreate : txCreateCost = gasCreate := rfl
-Jaune/Machine.lean #guard pragueGas.callValue = gasCallValue
-Jaune/Machine.lean #guard pragueGas.createAccess = gasCreate
+Jaune/Machine.lean pragueRules.gas.coldAccountAccess = Gas.coldAccountAccessCost := rfl
+Jaune/Machine.lean pragueRules.gas.callValue = Gas.callValue := rfl
+Jaune/Machine.lean pragueRules.gas.createAccess = Gas.create := rfl
+Jaune/Machine.lean @[simp] theorem Gas.txCreate_eq_create : Gas.txCreate = Gas.create := rfl
+Jaune/Machine.lean #guard pragueGas.callValue = Gas.callValue
+Jaune/Machine.lean #guard pragueGas.createAccess = Gas.create
 # --- the retained schedule-free `accessCost`, which is Prague's function ---
-Jaune/Machine.lean if x ∈ a then gasWarmAccess else gasColdAccountAccess
-Jaune/Sufficiency.lean unfold accessCost gasWarmAccess gasColdAccountAccess
+Jaune/Machine.lean if x ∈ a then Gas.warmStorageReadCost else Gas.coldAccountAccessCost
+Jaune/Sufficiency.lean unfold accessCost Gas.warmStorageReadCost Gas.coldAccountAccessCost
 # --- prose ---
 Jaune/Machine.lean interpreter) rewrites to `gasCallValue` and meets the arithmetic it already
 Jaune/Sufficiency.lean `gasCallValue = 9000` against a `gCallStipend = 2300` stipend.

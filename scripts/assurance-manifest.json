@@ -288,7 +288,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Xinst.step_spawn_benvStat",
+      "declaration": "Jaune.MessageOp.step_spawn_benvStat",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
