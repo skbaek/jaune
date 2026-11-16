@@ -566,7 +566,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
     # minimal prefix of its target that escapes every such name.
     local_commands = sorted((*char_span(offsets, r[0], r[1], text),)
                             for r in syntax_rows(index, 'commands', 6) if r[0] < r[1])
-    if local_commands:
+    if local_commands and universe is not None and commands:
         local_starts = [c[0] for c in local_commands]
         def command_of(position):
             i = bisect.bisect_right(local_starts, position) - 1
@@ -596,6 +596,13 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             captured = {name for a, name in binders.get(i, ()) if a < start} if i is not None else set()
             if split_name(new)[0] not in captured:
                 continue
+            # Only a lexically resolved spelling can be captured by a local: the
+            # old spelling must resolve to its constant by the capture model
+            # (struct-instance field labels, named arguments and projections do not).
+            j = bisect.bisect_right([c[0] for c in commands], start) - 1
+            if j < 0 or resolve(universe.lookup('before', index_module), edit['old'], commands[j][2],
+                                commands[j][3]) != {const}:
+                continue
             target = generated_rename(renamer, const) or renamer(const)
             parts = split_name(target)
             choice = None
@@ -603,14 +610,11 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                 candidate = '.'.join(parts[-k:])
                 if parts[-k] in captured:
                     continue
-                if universe is not None:
-                    j = bisect.bisect_right([c[0] for c in commands], start) - 1 if commands else -1
-                    if j >= 0:
-                        ns, opens = commands[j][2], commands[j][3]
-                        new_ns = renamer.scope(ns) if ns != '[anonymous]' else ns
-                        if resolve(universe.lookup('after', index_module, renamer), candidate, new_ns,
-                                   renamed_opens(opens, renamer)) != {target}:
-                            continue
+                ns, opens = commands[j][2], commands[j][3]
+                new_ns = renamer.scope(ns) if ns != '[anonymous]' else ns
+                if resolve(universe.lookup('after', index_module, renamer), candidate, new_ns,
+                           renamed_opens(opens, renamer)) != {target}:
+                    continue
                 choice = escape_keywords(candidate)
                 break
             if choice is None:
