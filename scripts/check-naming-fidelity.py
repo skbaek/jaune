@@ -363,8 +363,9 @@ def read_exports(paths):
 
 
 class Comparison:
-    def __init__(self, before, after, mapping, reviewed=None, reviewed_used=None):
+    def __init__(self, before, after, mapping, reviewed=None, reviewed_used=None, collect=False):
         self.before, self.after = before, after
+        self.collect, self.problems = collect, []
         self.reviewed = reviewed
         self.reviewed_used = reviewed_used if reviewed_used is not None else set()
         if isinstance(mapping, dict):  # An exact old -> new table.
@@ -739,12 +740,22 @@ class Comparison:
                 raise Mismatch(f'module {module}: direct imports changed: expected '
                                f'{[e[0] for e in expected]}, found {[e[0] for e in actual]}')
 
+    def fail(self, message):
+        """Raise at the first mismatch, or with `collect` record every one and
+        raise them together at the end (the verdict fails either way)."""
+        if not self.collect:
+            raise Mismatch(message)
+        self.problems.append(message)
+
     def run(self):
         expected = {self.name(n) for n in self.before['roots']}
         if len(expected) != len(self.before['roots']) or expected != self.after['roots']:
-            raise Mismatch(f'authored constant set changed: missing={sorted(expected - self.after["roots"])}, extra={sorted(self.after["roots"] - expected)}')
+            self.fail(f'authored constant set changed: missing={sorted(expected - self.after["roots"])}, extra={sorted(self.after["roots"] - expected)}')
         for name in sorted(self.before['roots']):
-            self.pair(name, self.name(name))
+            try:
+                self.pair(name, self.name(name))
+            except (Mismatch, KeyError) as error:
+                self.fail(f'constant {name}: {error}')
         # Moving a declaration is part of the map: every authored constant
         # stays in its (renamed) module unless a relocation row moves it.
         left_owner, right_owner = self.before.get('owners'), self.after.get('owners')
@@ -754,12 +765,12 @@ class Comparison:
                 if name in left_owner and self.name(name) in right_owner:
                     expected = self.module_of(base, left_owner[name])
                     if right_owner[self.name(name)] != expected:
-                        raise Mismatch(f'{name}: module {left_owner[name]} became '
+                        self.fail(f'{name}: module {left_owner[name]} became '
                                        f'{right_owner[self.name(name)]}, expected {expected}')
         for row, (source, target) in sorted(self.mapping.relocations.items()):
             if not any(MAP.split_private(n)[2] == row if MAP.split_private(n) else n == row
                        for n in self.before['roots']):
-                raise Mismatch(f'relocation row {row} names no authored constant in scope')
+                self.fail(f'relocation row {row} names no authored constant in scope')
         # Generated constants are not compared by name. Match their finite
         # kernel/attribute graphs bijectively, including unreferenced nodes.
         buckets = defaultdict(list)
@@ -789,10 +800,10 @@ class Comparison:
                 except Mismatch:
                     self.pairs, self.reverse, self.checked = saved
             else:
-                raise Mismatch(f'no verified generated-constant match for {name}' +
+                self.fail(f'no verified generated-constant match for {name}' +
                                (f'; same-name comparison: {same_error}' if same_error else ''))
         if self.right.keys() != self.reverse.keys():
-            raise Mismatch('additional generated constants after renaming')
+            self.fail('additional generated constants after renaming')
         # Generated constants (equation lemmas, compiler-named instances) stay
         # in the modules that hold them, up to module and relocation rows.
         left_holders, right_holders = self.before.get('holders'), self.after.get('holders')
@@ -803,7 +814,7 @@ class Comparison:
                 was = {self.component(m, 'before') for m in left_holders[a]}
                 now = {self.component(m, 'after') for m in right_holders[b]}
                 if was != now:
-                    raise Mismatch(f'generated constant {a} (now {b}): modules {sorted(left_holders[a])} '
+                    self.fail(f'generated constant {a} (now {b}): modules {sorted(left_holders[a])} '
                                    f'became {sorted(right_holders[b])}')
         # Checks, guards and attribute commands stay in their (renamed) module,
         # or move only between the two modules of a relocation row.
@@ -820,9 +831,14 @@ class Comparison:
             left, right = tagged(self.before, 'before'), tagged(self.after, 'after')
             if left != right:
                 where = sorted({json.loads(k)[0] or '<module unrecorded>' for k in (left - right) + (right - left)})
-                raise Mismatch(f'{key}: expression/command multiset changed (missing {sum((left-right).values())}, '
+                self.fail(f'{key}: expression/command multiset changed (missing {sum((left-right).values())}, '
                                f'extra {sum((right-left).values())}; modules {where})')
-        self.compare_imports()
+        try:
+            self.compare_imports()
+        except Mismatch as error:
+            self.fail(str(error))
+        if self.problems:
+            raise Mismatch(f'{len(self.problems)} mismatch(es):\n' + '\n'.join(self.problems))
         return dict(status='OK', scope='exported-modules',
                     authored_constants=len(self.before['roots']), generated_constants=len(self.generated_left),
                     guards=len(self.before['guards']), attribute_commands=len(self.before['attributes']),
@@ -830,13 +846,13 @@ class Comparison:
                     derived_literals_respelled=self.respelled_literals)
 
 
-def check(before, after, mapping, reviewed=None, reviewed_used=None):
+def check(before, after, mapping, reviewed=None, reviewed_used=None, collect=False):
     MAP.validate_map(mapping)
     if before['version'] != after['version']:
         raise ValueError('Lean versions differ')
     renames = MAP.Renamer(mapping['entries'])
     # Imports are reported, not silently treated as a proof about their contents.
-    result = Comparison(before, after, renames, reviewed, reviewed_used).run()
+    result = Comparison(before, after, renames, reviewed, reviewed_used, collect).run()
     result.update(before=before['receipts'], after=after['receipts'],
                   before_imports=before['modules'], after_imports=after['modules'],
                   before_coalesced_equations=before.get('coalesced_equations', []),

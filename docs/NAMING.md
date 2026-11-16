@@ -618,6 +618,18 @@ each with its controls in `scripts/tests/test_naming_fidelity.py`:
   renames compares as the new name; each respelling is listed in the verdict
   (`derived_literals_respelled`, reason `name literal`). A literal naming no
   renamed constant is compared as written.
+- A compiler-named, non-private constant (a syntax kind `Ns.tacticFoo`)
+  whose parent namespace the map renames through its members (a derived
+  namespace, at least two agreeing member rows) moves with the namespace
+  syntax: it compares as the renamed namespace with the same leaf, and a Name
+  literal naming it follows too (listed in the verdict). A generated constant
+  whose parent is not renamed does not move. Authored names cannot take this
+  path: the planner refuses an authored declaration inside a renamed namespace
+  without its own row.
+
+`naming-candidate.py compare --collect-all` reports every mismatch, in every
+environment, in one run instead of stopping at the first; the verdict still
+fails on any mismatch.
 
 The low-level comparator's verdict remains `exported-modules`. It can compare
 archived schema-3 to schema-6 exports as well as schema 7 (the candidate

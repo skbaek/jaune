@@ -403,6 +403,40 @@ class NamingFidelityTests(unittest.TestCase):
         with self.assertRaises(CHECK.Mismatch):
             check(('N', 'old'), ('N', 'newer'))
 
+    def test_collect_all_reports_every_mismatch_and_still_fails(self):
+        self.before = snapshot({'N.old': constant(), 'N.a': constant(1), 'N.b': constant(2)}, ['N.old', 'N.a', 'N.b'])
+        self.after = snapshot({'N.new': constant(), 'N.a': constant(5), 'N.b': constant(6)}, ['N.new', 'N.a', 'N.b'])
+        with self.assertRaises(CHECK.Mismatch) as first:
+            CHECK.Comparison(self.before, self.after, self.renames).run()
+        self.assertNotIn('mismatch(es)', str(first.exception))
+        with self.assertRaises(CHECK.Mismatch) as every:
+            CHECK.Comparison(self.before, self.after, self.renames, collect=True).run()
+        self.assertIn('2 mismatch(es)', str(every.exception))
+        self.assertIn('constant N.a', str(every.exception))
+        self.assertIn('constant N.b', str(every.exception))
+
+    def test_generated_constants_follow_a_derived_namespace(self):
+        # Two member rows rename namespace N.Inv -> N.Invariant (derived); the
+        # compiler-named syntax kind N.Inv.tacticFoo has no row and moves with it.
+        rows = self.entries(('N.Inv.a', 'N.Invariant.a', 'declaration', {}), ('N.Inv.b', 'N.Invariant.b', 'declaration', {}))
+        lit = lambda *ps: ['definition', 'safe', ['app', ['app', ['app', ['const', ['name', 'Lean.Name.mkStr3'], []],
+                                                                        ['str', ps[0]]], ['str', ps[1]]], ['str', ps[2]]]]
+        def run(before_ns, after_ns, kind_parent):
+            self.before = snapshot({'N.Inv.a': constant(), 'N.Inv.b': constant(2), f'{kind_parent}.tacticFoo': constant(7),
+                                    'gen': dict(kernel=lit('N', before_ns, 'tacticFoo'), attributes={})},
+                                   ['N.Inv.a', 'N.Inv.b'])
+            after_kind = f'N.Invariant.tacticFoo' if kind_parent == 'N.Inv' else f'{kind_parent}.tacticFoo'
+            self.after = snapshot({'N.Invariant.a': constant(), 'N.Invariant.b': constant(2), after_kind: constant(7),
+                                   'gen': dict(kernel=lit('N', after_ns, 'tacticFoo'), attributes={})},
+                                  ['N.Invariant.a', 'N.Invariant.b'])
+            self.renames = rows
+            return self.run_check()
+        verdict = run('Inv', 'Invariant', 'N.Inv')
+        self.assertIn(['gen', 'N.Inv.tacticFoo', 'N.Invariant.tacticFoo', 'name literal'], verdict['derived_literals_respelled'])
+        # Control: a generated constant whose parent namespace is not renamed does not move.
+        with self.assertRaises(CHECK.Mismatch):
+            run('Other', 'Otherwise', 'N.Other')
+
     def test_module_named_auxiliaries_follow_module_rows(self):
         self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), ('A.Mod', 'A.Module', 'module', {}))
         aux = 'N._aux_A_Mod___elabRules_N_tac_1.go'
