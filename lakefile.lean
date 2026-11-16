@@ -12,6 +12,15 @@ require mathlib from git
 @[default_target]
 lean_lib «Jaune» where
 
+/--
+Executable checks relocated out of the specification modules (`Jaune/Check/`; goal
+`jaune-shape-and-names-v1`, unit W0). Kept outside the `Jaune` library root so that
+Blanc and other proof clients do not elaborate them; a default target, so an ordinary
+`lake build` compiles every check module.
+-/
+@[default_target]
+lean_lib «JauneChecks» where
+
 /-- Consumer examples compile in the ambient package, outside the library import closure. -/
 @[default_target]
 lean_lib «Examples» where

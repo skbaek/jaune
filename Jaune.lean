@@ -15,6 +15,7 @@ import Jaune.Blake2Spec
 import Jaune.EC
 import Jaune.BLSConst
 import Jaune.BLS
+import Jaune.Fuel
 import Jaune.Machine
 import Jaune.DevmProjections
 import Jaune.Precompiles

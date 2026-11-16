@@ -235,7 +235,6 @@ def U256.shiftRight : U256 → Nat → U256
               else ⟨0, 0⟩
 instance : HShiftRight U256 Nat U256 := ⟨U256.shiftRight⟩
 
-
 def U256.shiftLeft : U256 → Nat → U256
   | ⟨xs, ys⟩, os =>
     if os = 0
@@ -456,7 +455,6 @@ def List.sliceD {ξ : Type u} (xs : List ξ) (m n : Nat) (x : ξ) : List ξ :=
 def List.slice! {ξ : Type u} [Inhabited ξ] (xs : List ξ) (m n : Nat) : List ξ :=
   takeD n (drop m xs) default
 
-
 -- Lemma API for the partial list operations above.
 
 theorem List.drop?_add {ξ : Type u} (m n : Nat) (xs : List ξ) :
@@ -620,7 +618,6 @@ lemma List.of_get?_succ_eq_some {X} {l : List X} {k : ℕ} {x} :
       rcases ih h with ⟨y', h'⟩
       exact ⟨y', h'⟩
 
-
 def U256.mul (x y : U256) : U256 := (x.toNat * y.toNat).toU256
 instance : HMul U256 U256 U256 := ⟨U256.mul⟩
 
@@ -732,13 +729,6 @@ def Nibbles.toBytes (xs : Bytes) : Option Bytes := Nibbles.toBytes.go [] xs
 def Hex.toBytes (s : String) : Option Bytes :=
   s.toList.mapM Hexit.toNibble >>= Nibbles.toBytes
 
-def Option.toIO {ξ} (o : Option ξ)
-  (msg : String := "error : option-to-IO lift failed, input is 'none'") :
-  IO ξ := do
-  match o with
-  | none => throw (IO.Error.userError msg)
-  | some x => pure x
-
 def List.compare {ξ : Type u} [Ord ξ] : List ξ → List ξ → Ordering
   | [], [] => .eq
   | [], _ :: _ => .lt
@@ -777,10 +767,6 @@ instance {ξ : Type u} [Ord ξ] [Std.LawfulEqCmp (Ord.compare : ξ → ξ → Or
     exact List.jauneCompare_eq_compareLex xs ys]
   infer_instance
 
--- The byte-list comparator Jaune's tries use resolves both.
-example : Std.TransCmp (compare : Bytes → Bytes → Ordering) := inferInstance
-example : Std.LawfulEqCmp (compare : Bytes → Bytes → Ordering) := inferInstance
-
 def UInt8.compareLows (x y : UInt8) : Ordering :=
   Ord.compare x.lows y.lows
 
@@ -788,13 +774,6 @@ def Nibbles.toHex : Bytes → String
   | [] => ""
   | [b] => String.ofList [b.toHexit]
   | b :: bs => String.ofList ([b.toHexit] ++ (toHex bs).toList)
-def IO.throw {ξ} (s : String) : IO ξ := MonadExcept.throw <| IO.Error.userError s
-
-def IO.remove0x (s : String) : IO String :=
-  match s.toList with
-  | '0' :: 'x' :: cs => return String.ofList cs
-  | _ => IO.throw "prefix not 0x"
-
 def remove0x (s : String) : String :=
   match s.toList with
   | '0' :: 'x' :: cs => String.ofList cs
@@ -829,8 +808,6 @@ def UInt64.ofBytes (a b c d e f g h : UInt8) : UInt64 :=
   (f64 <<< 16) |||
   (g64 <<< 8)  |||
   h64
-
-
 
 -- `packV` is `pack` with its width in the type, so the two byte reads below
 -- are total: padding a short input on the left with zeros is what `pack`
@@ -920,7 +897,6 @@ lemma List.drop_length_append' {ξ} {n} {xs ys : List ξ} (h : n = xs.length) :
     List.drop n (xs ++ ys) = ys := by
   rw [h]; apply List.drop_length_append
 
-
 def Nat.lo (n m : ℕ) : ℕ := n % (2 ^ m)
 def Nat.hi (n m : ℕ) : ℕ := n >>> m <<< m
 
@@ -940,7 +916,6 @@ lemma Nat.add_sub_mod_eq_sub {k m n : Nat}
   apply lt_of_le_of_lt (Nat.sub_le _ _) hm
 
 lemma two_le_32 : (2 : Nat) ≤ 32 := by omega
-
 
 lemma Nat.mod_two_pow_succ {k m} :
     (k % (2 ^ (m + 1))) = (k / 2) % (2 ^ m) * 2 + k % 2 := by
@@ -1061,12 +1036,9 @@ lemma Nat.concat_modadd_concat {m n x x' y y' : Nat}
       · rw [Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le (Nat.mod_lt _ (Nat.pow_pos (by omega))) pow_le)]
     · apply Nat.mod_lt _ <| Nat.pow_pos (by omega)
 
-
-
 lemma Nat.mul_two_pow_add_eq_shl_or {n x y : ℕ} (lt : y < 2 ^ n) :
     x * 2 ^ n + y = x <<< n ||| y := by
   rw [← shiftLeft_eq]; apply add_eq_or two_pow_dvd_shl lt
-
 
 lemma Nat.shl_or_add_shl_or_lo_add {m n x x' y y' : Nat}
     (x'_lt : x' < 2 ^ n) (y'_lt : y' < 2 ^ n) :
@@ -1150,12 +1122,10 @@ lemma high_or_low_eq_self (n o : Nat) (h : n < 2 ^ (o + o)) :
     rw [Nat.mul_comm]; apply Nat.mul_div_le
   rw [Nat.mod_eq_of_lt h_lt']
 
-
   have lt'' := @Nat.mod_lt n (2 ^ o) (Nat.pow_pos (by omega))
 
   have h_rw :=
     @Nat.shiftLeft_add_eq_or_of_lt o (n % (2 ^ o)) lt'' (n / (2 ^ o))
-
 
   rw [← Nat.shiftLeft_eq, ← h_rw]
   rw [Nat.shiftLeft_eq]
@@ -1518,9 +1488,6 @@ lemma U256.toU256_toBytes (x : U256) : x.toBytes.toU256 = x := by
   rw [Bytes.toU256_go_append_toBytes]
   rfl
 
-def IO.guard (φ : Prop) [Decidable φ] (msg : String) : IO Unit :=
-  if φ then return () else IO.throw msg
-
 def Array.writeD {ξ : Type u} (xs : Array ξ) (n : ℕ) : List ξ → Array ξ
   | [] => xs
   | y :: ys =>
@@ -1748,12 +1715,6 @@ def String.chunks : Nat → String → List String
   | 0, _ => []
   | m + 1, s => (List.chunks m s.toList).map String.ofList
 
-def readJsonFile (filename : System.FilePath) : IO Lean.Json := do
-  let contents ← IO.FS.readFile filename
-  match Lean.Json.parse contents with
-  | .ok json => pure json
-  | .error err => throw (IO.userError err)
-
 def U256.ltCheck  (x y : U256) : U256 := if x < y then 1 else 0
 def U256.gtCheck  (x y : U256) : U256 := if x > y then 1 else 0
 def U256.sltCheck (x y : U256) : U256 := if U256.SignedLt x y then 1 else 0
@@ -1827,6 +1788,5 @@ def Nat.toHex (n : Nat) : String :=
 def List.maxD {ξ} [Max ξ] : List ξ → ξ → ξ
   | [], y => y
   | x :: xs, y => maxD xs (max x y)
-
 
 end Jaune

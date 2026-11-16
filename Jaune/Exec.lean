@@ -86,27 +86,6 @@ lemma Exec.last_inv {pc sevm devm exn l}
 def NextOp.Run (sevm : Sevm) (devm : Devm) (n : NextOp) (devm' : Devm) : Prop :=
   ∃ xl : Xlot, xl.Filled ∧ ∃ pc, NextOp.StepRun pc sevm devm n xl (.ok devm')
 
-/- The residue of the fuel-bounded (`Fueled`) reasoning layer.  With
-   sufficiency proved in Jaune, fuel never reaches a Blanc statement: these
-   three lemmas exist only so that the adequacy bridge between `Exec` and the
-   total `exec` can be proved by induction over `execFueled`. -/
-
-namespace Fueled
-
-variable {ε : Type} {α : Type}
-
-lemma ext {x y : Fueled ε α} (h : x.run = y.run) : x = y := h
-
-lemma exhausted_ne_ofExcept {x : Except ε α} :
-    (Fueled.exhausted : Fueled ε α) ≠ Fueled.ofExcept x :=
-  fun h => nomatch congrArg ExceptT.run h
-
-@[simp] lemma ofExcept_inj {x y : Except ε α} :
-    (Fueled.ofExcept x : Fueled ε α) = Fueled.ofExcept y ↔ x = y :=
-  ⟨fun h => Option.some.inj (congrArg ExceptT.run h), fun h => by rw [h]⟩
-
-end Fueled
-
 /-! ### Depth side conditions for the strong induction of `Common.lean`.
 
 Every `.spawn` produced by the step functions is depth-guarded, so a child
