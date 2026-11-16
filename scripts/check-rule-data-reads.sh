@@ -58,6 +58,21 @@ allowed="$(grep -v '^[[:space:]]*#' "$ALLOW" | grep -v '^[[:space:]]*$' \
   | sed 's/^[[:space:]]*//; s/[[:space:]]\{1,\}/ /g; s/[[:space:]]*$//' \
   | LC_ALL=C sort)"
 
+# The three globals live in the `Gas` namespace, and their short names
+# (`callValue`, `create`, `coldAccountAccessCost`) are not unique tokens: a read
+# spelled under `open Gas` or inside `namespace Gas` would escape the qualified
+# grep above. Absence rule, no allowlist: nothing under Jaune/ or in Main.lean
+# opens or exports `Gas`/`Jaune.Gas` or declares `namespace Gas`/`Jaune.Gas`,
+# so every spelling of the three is qualified and inventoried.
+gas_scope="$(grep -nE '^[[:space:]]*(open|export)[[:space:]](.*[[:space:](])?(Jaune\.)?Gas([^A-Za-z0-9_.]|$)|^[[:space:]]*namespace[[:space:]]+(Jaune\.)?Gas([^A-Za-z0-9_.]|$)' \
+  $(find Jaune -name '*.lean' | LC_ALL=C sort) Main.lean || true)"
+if [ -n "$gas_scope" ]; then
+  printf '%s\n' 'rule-data: FAIL — the Gas namespace is opened, exported or reopened, so a short-name read could escape the inventory:' >&2
+  printf '%s\n' "$gas_scope" >&2
+  printf '%s\n' 'FAIL — rule-data: Gas namespace scope outside qualified spellings' >&2
+  exit 1
+fi
+
 found="$(inventory)"
 
 unlisted="$(LC_ALL=C comm -23 <(printf '%s\n' "$found" | uniq) \
