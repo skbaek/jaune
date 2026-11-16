@@ -11891,6 +11891,15 @@
       "notes": "parts: blockSeq>blockSequence"
     },
     {
+      "old": "JauneConsensus.Harness.Yaml.blockSeq.firstNonSpace",
+      "new": "JauneConsensus.Harness.Yaml.blockSequence.firstNonSpace",
+      "kind": "declaration",
+      "layer": "consensus",
+      "rule": "5, 4",
+      "source": "Plain English (rule 4)",
+      "notes": "parts: blockSeq>blockSequence"
+    },
+    {
       "old": "JauneConsensus.Harness.Yaml.ch",
       "new": "JauneConsensus.Harness.Yaml.charByte",
       "kind": "declaration",

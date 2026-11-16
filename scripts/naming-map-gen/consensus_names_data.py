@@ -300,4 +300,7 @@ PART_OVERRIDE.update({
 # each a row when its parent is renamed; the last component is Lean's and is kept).
 SPELLED_GENERATED = [
     "JauneConsensus.GJointState.gloas.injEq",  # Facts/JointGloas.lean, `simp only [...]`
+    # A `let rec` auxiliary is a declaration under its enclosing definition's name, which the
+    # textual inventory does not list; it follows `blockSeq` -> `blockSequence`.
+    "JauneConsensus.Harness.Yaml.blockSeq.firstNonSpace",  # Harness/Yaml.lean
 ]
