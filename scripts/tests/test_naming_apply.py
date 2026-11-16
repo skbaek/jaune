@@ -83,6 +83,15 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual([p['reason'] for p in problems],
                          ['descendant of renamed declaration needs its own map row'])
 
+    def test_root_prefixed_definition_is_renamed_and_keeps_its_prefix(self):
+        text = 'def _root_.Pilot.Op.extra : Nat := 1\nexample := _root_.Pilot.Op.extra\n'
+        index = index_for(text, [('_root_.Pilot.Op.extra', 'Pilot.Op.extra', 0, True),
+                                 ('_root_.Pilot.Op.extra', 'Pilot.Op.extra', 1, False)])
+        rows = [entry('Pilot.Op', 'Pilot.Opcode'), entry('Pilot.Op.extra', 'Pilot.Opcode.extra')]
+        edits, problems = M.plan_file(text, index, rows)
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['_root_.Pilot.Opcode.extra'] * 2)
+
     def test_unresolved_use_is_reported(self):
         text = 'def a (x : Tx) := x.gas\n'
         _, problems = M.plan_file(text, index_for(text, []), [entry()])
