@@ -417,10 +417,11 @@ class Comparison:
                         len(args) == int(head[1][1][-1]) and
                         all(isinstance(a, list) and len(a) == 2 and a[0] == 'str' for a in args)):
                     full = '.'.join(a[1] for a in args)
-                    if mapping.renames(full) and full in known:
-                        parts = mapping(full).split('.')
+                    new_full = self.name(full) if full in known else full
+                    if new_full != full:
+                        parts = new_full.split('.')
                         if len(parts) <= 8:
-                            self.respelled_literals.append([name, full, mapping(full), 'name literal'])
+                            self.respelled_literals.append([name, full, new_full, 'name literal'])
                             out = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], head[2]]
                             for part in parts:
                                 out = ['app', out, ['str', part]]
@@ -561,6 +562,15 @@ class Comparison:
                 mangled_old, mangled_new = old.replace('.', '_'), new.replace('.', '_')
                 mapped = re.sub(r'(^|\.)_aux_' + re.escape(mangled_old) + r'___',
                                 lambda m: m.group(1) + '_aux_' + mangled_new + '___', mapped)
+        if (mapped == name and name in self.left and name not in self.before['roots'] and '.' in name
+                and not name.startswith('_private.')):
+            # A compiler-named constant (a syntax kind `Ns.tacticFoo`) declared
+            # inside a namespace the map renames through its members (derived
+            # namespace) moves with the namespace syntax, without a row.
+            parent, leaf = name.rsplit('.', 1)
+            scoped = self.mapping.scope(parent)
+            if scoped != parent and parent in self.mapping.derived():
+                return f'{scoped}.{leaf}'
         if mapped == name and name not in self.left:
             # A constant Lean realizes on demand and no export holds (a matcher
             # `P.match_8` behind a private equation lemma) is named after its
