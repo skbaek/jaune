@@ -454,6 +454,9 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             private = MAP.split_private(const) if const.startswith('_private.') else None
             if private:
                 name_parts = split_name(private[2])
+            if parts[:1] == ['_root_']:
+                # `def _root_.N.x` spells the full name: compare it whole.
+                parts = parts[1:] if parts[1:] == name_parts else parts
             if parts != name_parts[-len(parts):]:
                 continue  # Compiler-named (an anonymous instance): nothing spelled.
             context = '.'.join(name_parts[:-len(parts)])
@@ -483,8 +486,14 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         try:
             if comps is None:
                 raise ValueError(f'compound reference range {spelling!r} for renamed {const}')
-            renamed = replacement(spelling, const, new, renamer,
-                                  type_directed=start > 0 and text[start - 1] == '.' and not spelling.startswith('.'))
+            if spelling.startswith('_root_.'):
+                # An absolute spelling stays absolute: the whole new name, prefix kept.
+                renamed = '_root_.' + replacement(spelling[len('_root_.'):], const, new, None)
+                if split_name(spelling[len('_root_.'):]) != split_name(const):
+                    raise ValueError(f'_root_ spelling {spelling!r} is not the full name {const}')
+            else:
+                renamed = replacement(spelling, const, new, renamer,
+                                      type_directed=start > 0 and text[start - 1] == '.' and not spelling.startswith('.'))
             if (start, end) in local_spans and len(comps) == 1:
                 # Field abbreviation `{ gas }` is `{ gas := gas }`: the field is
                 # renamed, the local variable it reads is not.
