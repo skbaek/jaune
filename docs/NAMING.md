@@ -538,6 +538,14 @@ Hyphenated script filenames remain inventoried. Selected sources using Lean's
 `module` visibility system are currently refused because that visibility has
 not yet been added to the constant exporter.
 
+A Lake project that consumes Jaune as a package (Blanc) has no exporter
+target of its own. Pass `--tool-root JAUNE_TOOL_CHECKOUT --tool-build-prefix
+BUILD_ARGV_JSON`: the exporter (which imports only Lean) is built there with
+that checkout's owned-build prefix and runs in the candidate's `lake env`. The
+two `lean-toolchain` files must be byte-identical. The snapshot records
+`tool_root`, and its `tool_sources` digests are read from that checkout and
+rechecked after export.
+
 All three command arguments are nonempty JSON argv arrays, never shell text.
 The build prefix is the host's authorized owned-build invocation, ending just
 before its targets (for Creme, through the `--` separator). Capture first builds
