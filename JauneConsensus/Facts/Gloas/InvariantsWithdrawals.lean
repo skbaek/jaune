@@ -100,7 +100,7 @@ local macro_rules
     `(tactic| (refine StepRel.forIn_list_rel _ (fun x => x.2.1) ?_ _ _ $h; intro _ _; gvcg))
 local macro_rules
   | `(tactic| gstep_close) =>
-    `(tactic| exact keepAll_push (Array.getElem?_eq_some_iff.mp (pl_get_ok.mp (by assumption))).1)
+    `(tactic| exact keepAll_push (Array.getElem?_eq_some_iff.mp ((pl_get_ok).mp (by assumption))).1)
 
 theorem getPendingPartialWithdrawals_inRange (st : GSt P) (idx : U64) (prior : Array Withdrawal) :
     Ok (JauneConsensus.Gloas.getPendingPartialWithdrawals st idx prior)

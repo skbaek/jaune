@@ -70,7 +70,7 @@ local macro_rules
 local macro_rules
   | `(tactic| gstep_of $h) =>
     `(tactic| (have hh := StepRel.of_ok (decreaseBalance_vlen _ _ _) $h
-               refine vLen.trans ?_ hh; exact vlen_of_set rfl (by assumption)))
+               refine (vLen).trans ?_ hh; exact vlen_of_set rfl (by assumption)))
 
 theorem slashValidator_vlen (cfg : Config) (s : GSt P) (i : ValidatorIndex)
     (wb : Option ValidatorIndex) :
@@ -111,7 +111,7 @@ section Attestation
 local macro_rules
   | `(tactic| gstep_of $h) =>
     `(tactic| (have hh := StepRel.of_ok (increaseBalance_vlen _ _ _) $h
-               exact vLen.trans (by split <;> exact (show VLen _ _ from rfl)) hh))
+               exact (vLen).trans (by split <;> exact (show VLen _ _ from rfl)) hh))
 
 set_option maxHeartbeats 2000000 in
 theorem processAttestation_vlen (ctx : Ctx) (s : GSt P)

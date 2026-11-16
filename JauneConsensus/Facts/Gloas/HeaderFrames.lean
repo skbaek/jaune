@@ -719,12 +719,12 @@ local macro "epoch_tail" : tactic => `(tactic| (
     split at h
     · exact processProposerLookahead_hdr _ _ _ h
     · cases h; rfl
-  exact hdrEq.trans (processEffectiveBalanceUpdates_hdr _ _ _ h8) <|
-    hdrEq.trans (processSlashingsReset_hdr _ _ _ h9) <|
-    hdrEq.trans (processRandaoMixesReset_hdr _ _ _ h10) <|
-    hdrEq.trans (processHistoricalSummariesUpdate_hdr _ _ _ h11) <|
-    hdrEq.trans (processParticipationFlagUpdates_hdr _ _ _ h12) <|
-    hdrEq.trans (processSyncCommitteeUpdates_hdr _ _ _ h13) f14))
+  exact (hdrEq).trans (processEffectiveBalanceUpdates_hdr _ _ _ h8) <|
+    (hdrEq).trans (processSlashingsReset_hdr _ _ _ h9) <|
+    (hdrEq).trans (processRandaoMixesReset_hdr _ _ _ h10) <|
+    (hdrEq).trans (processHistoricalSummariesUpdate_hdr _ _ _ h11) <|
+    (hdrEq).trans (processParticipationFlagUpdates_hdr _ _ _ h12) <|
+    (hdrEq).trans (processSyncCommitteeUpdates_hdr _ _ _ h13) f14))
 
 /-- `process_epoch` keeps `latest_execution_payload_header`. -/
 theorem processEpoch_hdr (ctx : Ctx) (s : BeaconState P f) :

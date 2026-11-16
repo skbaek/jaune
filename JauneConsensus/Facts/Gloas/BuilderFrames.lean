@@ -1225,7 +1225,7 @@ section BidFrame
 proved on the spot by the generator. Local to this section. -/
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (exact StepRel.of_ok (Q := buildersEq.R _) (by gvcg) $h))
+    `(tactic| (exact StepRel.of_ok (Q := StepRel.R buildersEq _) (by gvcg) $h))
 
 theorem processExecutionPayloadBid_buildersEq (ctx : Ctx) (s : JauneConsensus.Gloas.BeaconState P)
     (sb : JauneConsensus.Gloas.SignedExecutionPayloadBid) :

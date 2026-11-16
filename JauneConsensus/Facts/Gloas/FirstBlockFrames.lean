@@ -299,7 +299,7 @@ section BidFrame
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (exact StepRel.of_ok (Q := pewEq.R _) (by gvcg) $h))
+    `(tactic| (exact StepRel.of_ok (Q := StepRel.R pewEq _) (by gvcg) $h))
 
 set_option maxHeartbeats 1000000 in
 theorem processExecutionPayloadBid_pew (ctx : Ctx) (s : GSt P)

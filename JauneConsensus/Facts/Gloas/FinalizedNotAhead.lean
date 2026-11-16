@@ -147,7 +147,7 @@ section Prefix
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (refine finSlot.trans ?_ (StepRel.forIn_array_rel finSlot id ?_ _ _ $h)
+    `(tactic| (refine (finSlot).trans ?_ (StepRel.forIn_array_rel finSlot id ?_ _ _ $h)
                · exact (show FinSlot _ _ from ⟨rfl, rfl⟩)
                · intro _ _; gvcg))
 
@@ -286,7 +286,7 @@ section Attestation
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRel.of_ok (increaseBalance_fs _ _ _) $h; exact (finSlot.trans (by split <;> exact ⟨rfl, rfl⟩) hh)))
+    `(tactic| (have hh := StepRel.of_ok (increaseBalance_fs _ _ _) $h; exact ((finSlot).trans (by split <;> exact ⟨rfl, rfl⟩) hh)))
 
 set_option maxHeartbeats 2000000 in
 theorem processAttestation_fs (ctx : Ctx) (s : GSt P)
