@@ -18,18 +18,18 @@ the gossip driver (`Harness/GossipCases.lean`) through the handler table
 namespace JauneConsensus.Harness
 open Yaml
 
-private def nats (v : YVal) : Except String (List Nat) :=
-  ((v.asSeq).bind (·.mapM YVal.asNat)).mapError toString
+private def nats (v : YamlValue) : Except String (List Nat) :=
+  ((v.asSequence).bind (·.mapM YamlValue.asNat)).mapError toString
 
-private def nat (v : YVal) (k : String) : Except String Nat :=
-  ((v.field k).bind YVal.asNat).mapError toString
+private def nat (v : YamlValue) (k : String) : Except String Nat :=
+  ((v.field k).bind YamlValue.asNat).mapError toString
 
 /-- Run a `networking/<handler>` case under `cfg` at preset `P`. -/
 def networkingCase (cfg : Config) (c : Case) : IO (Except String Unit) := do
   if c.key.handler.startsWith "gossip_" then return ← gossipCase gossipHandlers cfg c
   let some P := Preset.ofName? c.preset | return .error s!"no preset {c.preset}"
   if c.files != ["meta.yaml"] then return .error s!"unexpected files {c.files}"
-  let doc := (parse (← IO.FS.readBinFile (c.dir / "meta.yaml"))).mapError toString
+  let doc := (parse (← IO.FS.readBinFile (c.directory / "meta.yaml"))).mapError toString
   pure do
     let v ← doc
     let want ← nats (← (v.field "result").mapError toString)
@@ -38,7 +38,7 @@ def networkingCase (cfg : Config) (c : Case) : IO (Except String Unit) := do
         v.expectKeys ["node_id", "custody_group_count", "result"] |>.mapError toString
         let nodeId ← nat v "node_id"
         let count ← nat v "custody_group_count"
-        let some nid := (UIntN.ofNat? nodeId : M U256).toOption | throw "node_id out of range"
+        let some nid := (UIntN.ofNat? nodeId : Fallible U256).toOption | throw "node_id out of range"
         let some cnt := (U64.ofNat? count).toOption | throw "count out of range"
         match getCustodyGroups cfg nid cnt with
         | .ok r => pure (r.toList.map (·.toNat))

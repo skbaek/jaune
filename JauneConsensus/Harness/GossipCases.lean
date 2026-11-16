@@ -68,23 +68,23 @@ structure GossipMessage where
   deriving Repr
 
 /-- `meta.yaml` of a gossip case. -/
-structure GossipMeta where
+structure GossipMetadata where
   topic : String
   blocks : List GossipBlockEntry
   /-- `finalized_checkpoint` as given (`epoch` and `root` or `block`); the Store-dependent
   handlers read it. -/
-  finalizedCheckpoint : Option YVal := none
+  finalizedCheckpoint : Option YamlValue := none
   /-- `seen_partial_data_column_headers`: `(block_root, header file)` pairs. -/
   seenPartialHeaders : List (String × String) := []
   messages : List GossipMessage
   blsSetting : Option Nat := none
 
 /-- What a handler receives. -/
-structure GossipEnv where
+structure GossipEnvironment where
   case : Case
-  cfg : Config
+  config : Config
   preset : Preset
-  caseMeta : GossipMeta
+  caseMetadata : GossipMetadata
   /-- `bls_setting` 2 turns BLS off; the gossip vectors carry only `1` or nothing. -/
   blsActive : Bool
 
@@ -95,16 +95,16 @@ structure GossipHandler where
   /-- The message-file prefix (`voluntary_exit_` for `voluntary_exit_0x<root>.ssz_snappy`). -/
   filePrefix : String
   /-- One outcome per message, in order. -/
-  run : GossipEnv → IO (Except String (List Gossip.Outcome))
+  run : GossipEnvironment → IO (Except String (List Gossip.Outcome))
 
 /-! ## Reading `meta.yaml` -/
 
-private def asStr (v : YVal) (what : String) : Except String String :=
+private def asString (v : YamlValue) (what : String) : Except String String :=
   match v with
   | .scalar s _ => .ok s
   | _ => .error s!"{what}: expected a scalar"
 
-private def onlyKeys (v : YVal) (allowed : List String) (what : String) : Except String Unit :=
+private def onlyKeys (v : YamlValue) (allowed : List String) (what : String) : Except String Unit :=
   match v with
   | .map kvs =>
     match kvs.find? (fun (k, _) => !allowed.contains k) with
@@ -112,92 +112,92 @@ private def onlyKeys (v : YVal) (allowed : List String) (what : String) : Except
     | none => .ok ()
   | _ => .error s!"{what}: expected a mapping"
 
-private def optNat (v : YVal) (k : String) : Except String (Option Nat) :=
+private def optionalNat (v : YamlValue) (k : String) : Except String (Option Nat) :=
   match v.get? k with
   | none => .ok none
   | some x => (some <$> x.asNat).mapError (s!"{k}: " ++ toString ·)
 
-private def optStr (v : YVal) (k : String) : Except String (Option String) :=
+private def optionalString (v : YamlValue) (k : String) : Except String (Option String) :=
   match v.get? k with
   | none => .ok none
-  | some x => some <$> asStr x k
+  | some x => some <$> asString x k
 
-private def optBool (v : YVal) (k : String) : Except String Bool :=
+private def optionalBool (v : YamlValue) (k : String) : Except String Bool :=
   match v.get? k with
   | none => .ok false
   | some x => x.asBool.mapError (s!"{k}: " ++ toString ·)
 
-private def reqStr (v : YVal) (k : String) : Except String String := do
-  asStr (← (v.field k).mapError toString) k
+private def requiredString (v : YamlValue) (k : String) : Except String String := do
+  asString (← (v.field k).mapError toString) k
 
-def parseGossipBlock (v : YVal) : Except String GossipBlockEntry := do
+def parseGossipBlock (v : YamlValue) : Except String GossipBlockEntry := do
   onlyKeys v ["block", "failed", "pending", "payload_status", "payload"] "blocks entry"
-  let payloadStatus ← optStr v "payload_status"
+  let payloadStatus ← optionalString v "payload_status"
   if let some s := payloadStatus then
     if !["VALID", "INVALIDATED", "NOT_VALIDATED"].contains s then
       throw s!"payload_status: unknown value {s}"
-  pure { block := ← reqStr v "block", failed := ← optBool v "failed",
-         pending := ← optBool v "pending", payloadStatus, payload := ← optStr v "payload" }
+  pure { block := ← requiredString v "block", failed := ← optionalBool v "failed",
+         pending := ← optionalBool v "pending", payloadStatus, payload := ← optionalString v "payload" }
 
-def parseGossipMessage (v : YVal) : Except String GossipMessage := do
+def parseGossipMessage (v : YamlValue) : Except String GossipMessage := do
   onlyKeys v ["current_time_ms", "subnet_id", "column_index", "group_id", "message", "expected",
     "reason"] "messages entry"
-  let expected ← match ← reqStr v "expected" with
+  let expected ← match ← requiredString v "expected" with
     | "valid" => pure GossipExpected.valid
     | "ignore" => pure .ignore
     | "reject" => pure .reject
     | s => throw s!"expected: unknown value {s}"
-  pure { message := ← reqStr v "message", expected, reason := ← optStr v "reason",
-         currentTimeMs := ← optNat v "current_time_ms", subnetId := ← optNat v "subnet_id",
-         columnIndex := ← optNat v "column_index", groupId := ← optStr v "group_id" }
+  pure { message := ← requiredString v "message", expected, reason := ← optionalString v "reason",
+         currentTimeMs := ← optionalNat v "current_time_ms", subnetId := ← optionalNat v "subnet_id",
+         columnIndex := ← optionalNat v "column_index", groupId := ← optionalString v "group_id" }
 
-def parseGossipMeta (v : YVal) : Except String GossipMeta := do
+def parseGossipMetadata (v : YamlValue) : Except String GossipMetadata := do
   onlyKeys v ["topic", "blocks", "messages", "bls_setting", "finalized_checkpoint",
     "seen_partial_data_column_headers"] "meta.yaml"
   let blocks ← match v.get? "blocks" with
     | none => pure []
-    | some b => (← b.asSeq.mapError toString).mapM parseGossipBlock
-  let messages ← (← ((v.field "messages").bind YVal.asSeq).mapError toString).mapM parseGossipMessage
+    | some b => (← b.asSequence.mapError toString).mapM parseGossipBlock
+  let messages ← (← ((v.field "messages").bind YamlValue.asSequence).mapError toString).mapM parseGossipMessage
   if messages.isEmpty then throw "meta.yaml: no messages"
   let seenPartialHeaders ← match v.get? "seen_partial_data_column_headers" with
     | none => pure []
-    | some s => (← s.asSeq.mapError toString).mapM fun e => do
+    | some s => (← s.asSequence.mapError toString).mapM fun e => do
       onlyKeys e ["block_root", "header"] "seen_partial_data_column_headers entry"
-      pure (← reqStr e "block_root", ← reqStr e "header")
-  pure { topic := ← reqStr v "topic", blocks, messages, seenPartialHeaders,
+      pure (← requiredString e "block_root", ← requiredString e "header")
+  pure { topic := ← requiredString v "topic", blocks := blocks, messages := messages, seenPartialHeaders := seenPartialHeaders,
          finalizedCheckpoint := v.get? "finalized_checkpoint",
-         blsSetting := ← optNat v "bls_setting" }
+         blsSetting := ← optionalNat v "bls_setting" }
 
 /-! ## Files -/
 
 /-- Read and Snappy-decode `<name>.ssz_snappy` of the case. -/
-def GossipEnv.load (env : GossipEnv) (name : String) : IO (Except String Bytes) := do
+def GossipEnvironment.load (env : GossipEnvironment) (name : String) : IO (Except String Bytes) := do
   let file := name ++ ".ssz_snappy"
   if !env.case.has file then return .error s!"{file}: not in the case"
-  match Snappy.decompress (← IO.FS.readBinFile (env.case.dir / file)) with
+  match Snappy.decompress (← IO.FS.readBinFile (env.case.directory / file)) with
   | .ok b => pure (.ok b.toList)
   | .error e => pure (.error s!"{file}: snappy: {e}")
 
 /-- Decode an SSZ value. -/
 def gossipDecode {α : Type} [Ssz α] (bytes : Bytes) (what : String) : Except String α :=
-  match (deserialize bytes : M α) with
+  match (deserialize bytes : Fallible α) with
   | .ok v => .ok v
   | .error r => .error s!"{what}: decode rejected: {repr r}"
 
 /-- Load and decode a case file. -/
-def GossipEnv.decode {α : Type} [Ssz α] (env : GossipEnv) (name : String) : IO (Except String α) := do
+def GossipEnvironment.decode {α : Type} [Ssz α] (env : GossipEnvironment) (name : String) : IO (Except String α) := do
   pure ((← env.load name).bind (gossipDecode · name))
 
 /-! ## Running and comparing -/
 
 /-- Run the messages in order through `step` from `init`: each message file is decoded as `α`
 and validated; the cache threads through. A model exception fails the case. -/
-def gossipRunMessages {σ α : Type} [Ssz α] (env : GossipEnv) (init : σ)
-    (step : σ → GossipMessage → α → Except String (Gossip.GM σ)) :
+def gossipRunMessages {σ α : Type} [Ssz α] (env : GossipEnvironment) (init : σ)
+    (step : σ → GossipMessage → α → Except String (Gossip.Validation σ)) :
     IO (Except String (List Gossip.Outcome)) := do
   let mut seen := init
   let mut out := #[]
-  for m in env.caseMeta.messages do
+  for m in env.caseMetadata.messages do
     let msg : α ← match ← env.decode m.message with
       | .ok x => pure x
       | .error e => return .error e
@@ -240,8 +240,8 @@ def gossipCase (handlers : String → Option GossipHandler) (cfg : Config) (c : 
     | return .error s!"UNIMPLEMENTED: no gossip handler {c.key.handler} at {c.key.fork}"
   if !c.has "meta.yaml" || !c.has "state.ssz_snappy" then
     return .error s!"unexpected files {c.files}"
-  let cm ← match (parse (← IO.FS.readBinFile (c.dir / "meta.yaml"))).mapError toString
-      |>.bind parseGossipMeta with
+  let cm ← match (parse (← IO.FS.readBinFile (c.directory / "meta.yaml"))).mapError toString
+      |>.bind parseGossipMetadata with
     | .ok m => pure m
     | .error e => return .error s!"meta.yaml: {e}"
   if cm.topic != h.topic then
@@ -252,7 +252,7 @@ def gossipCase (handlers : String → Option GossipHandler) (cfg : Config) (c : 
     if !m.message.startsWith h.filePrefix then
       return .error s!"message {m.message} lacks the prefix {h.filePrefix}"
     if !c.has (m.message ++ ".ssz_snappy") then return .error s!"message file {m.message} missing"
-  let env : GossipEnv := { case := c, cfg, preset, caseMeta := cm, blsActive := cm.blsSetting != some 2 }
+  let env : GossipEnvironment := { case := c, config := cfg, preset := preset, caseMetadata := cm, blsActive := cm.blsSetting != some 2 }
   match ← h.run env with
   | .error e => pure (.error e)
   | .ok outs =>

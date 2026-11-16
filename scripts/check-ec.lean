@@ -162,7 +162,7 @@ def refSqrt (x : secp256k1.Coord) : Option secp256k1.Coord :=
 
 /-- Verbatim copy of `secp256k1.recover` as of commit 118b208, rewired to the
 reference point operations above. -/
-def refRecover (h : B256) (v : Bool) (r : B256) (s : B256) : Option Adr := do
+def refRecover (h : U256) (v : Bool) (r : U256) (s : U256) : Option Address := do
   let x : secp256k1.Coord := .ofNat r.toNat
   let ySquared : secp256k1.Coord := x ^ 3 + 7
   let yFst ← refSqrt ySquared
@@ -180,8 +180,8 @@ def refRecover (h : B256) (v : Bool) (r : B256) (s : B256) : Option Adr := do
   let O : secp256k1.Point := refSub sR zG
   if O = ⟨0, 0⟩ then none
   let Q : secp256k1.Point := refMulBy O rInv
-  let hash := Bytes.keccak <| Q.x.val.toB256.toBytes ++ Q.y.val.toB256.toBytes
-  Bytes.toAdr? <| List.drop 12 <| hash.toBytes
+  let hash := Bytes.keccak <| Q.x.val.toU256.toBytes ++ Q.y.val.toU256.toBytes
+  Bytes.toAddress? <| List.drop 12 <| hash.toBytes
 
 /-! ## Harness -/
 
@@ -214,12 +214,12 @@ def checkJacobian {F} [DecidableEq F] [ToString F]
   note st name (decide (got = exp))
     s!"got {ppJacobian got}, expected {ppJacobian exp}"
 
-def ppAdr : Option Adr → String
+def ppAdr : Option Address → String
   | none => "none"
-  | some a => "0x" ++ (a.toB256.toHex.drop 24)
+  | some a => "0x" ++ (a.toU256.toHex.drop 24)
 
-def checkAdr (st : Tally) (name : String) (got exp : Option Adr) : IO Unit :=
-  note st name (decide (got.map Adr.toNat = exp.map Adr.toNat))
+def checkAdr (st : Tally) (name : String) (got exp : Option Address) : IO Unit :=
+  note st name (decide (got.map Address.toNat = exp.map Address.toNat))
     s!"got {ppAdr got}, expected {ppAdr exp}"
 
 def checkBool (st : Tally) (name : String) (ok : Bool) : IO Unit :=
@@ -242,11 +242,11 @@ def bigScalars (order : Nat) : List Nat :=
   [order - 1, order, order + 1, k1 % order, k2 % order, (k1 * 7 + 13) % order]
 
 def mkSecp (x y : Nat) : secp256k1.Point := ⟨.ofNat x, .ofNat y⟩
-def mkBls1 (x y : Nat) : BLSP := ⟨.ofNat x, .ofNat y⟩
-def mkBls2 (x0 x1 y0 y1 : Nat) : BLSP2 := ⟨BLSF2.mk x0 x1, BLSF2.mk y0 y1⟩
-def mkBn (x y : Nat) : BNP := ⟨.ofNat x, .ofNat y⟩
+def mkBls1 (x y : Nat) : Bls12G1 := ⟨.ofNat x, .ofNat y⟩
+def mkBls2 (x0 x1 y0 y1 : Nat) : Bls12G2 := ⟨Bls12Fp2.mk x0 x1, Bls12Fp2.mk y0 y1⟩
+def mkBn (x y : Nat) : Bn254G1 := ⟨.ofNat x, .ofNat y⟩
 
-def bn254Generator : BNP := mkBn 1 2
+def bn254Generator : Bn254G1 := mkBn 1 2
 
 -- Toy curve with a ≠ 0: y² = x³ + x + 999 over F_1009.  Discriminant
 -- -16(4a³+27b²) = 123 ≠ 0; 959 affine points, group order 960; three points of
@@ -590,9 +590,9 @@ def recoverCases : List RecoverCase :=
 
 def recoverGroup (st : Tally) : IO Unit := do
   for c in recoverCases do
-    let got := secp256k1.recover c.h.toB256 c.v c.r.toB256 c.s.toB256
-    let ref := refRecover c.h.toB256 c.v c.r.toB256 c.s.toB256
-    let exp : Option Adr := c.expected.map Nat.toAdr
+    let got := secp256k1.recover c.h.toU256 c.v c.r.toU256 c.s.toU256
+    let ref := refRecover c.h.toU256 c.v c.r.toU256 c.s.toU256
+    let exp : Option Address := c.expected.map Nat.toAddress
     checkAdr st s!"pin recover {c.name}" got exp
     checkAdr st s!"diff recover {c.name}" got ref
   let differentialCases : List (String × Nat × Bool × Nat × Nat) :=
@@ -606,8 +606,8 @@ def recoverGroup (st : Tally) : IO Unit := do
       ("invalid r=B256 max", k2, true, (2 ^ 256) - 1, k1) ]
   for (name, h, v, r, s) in differentialCases do
     checkAdr st s!"diff recover {name}"
-      (secp256k1.recover h.toB256 v r.toB256 s.toB256)
-      (refRecover h.toB256 v r.toB256 s.toB256)
+      (secp256k1.recover h.toU256 v r.toU256 s.toU256)
+      (refRecover h.toU256 v r.toU256 s.toU256)
 
 end ECOracle
 
@@ -644,18 +644,18 @@ def main : IO UInt32 := do
   sweepCurve st "secp256k1" secpPoints smallScalars
   sweepCurve st "secp256k1" [("G", secp256k1.generator)]
     (bigScalars secp256k1.curveOrder)
-  let bnPoints : List (String × BNP) :=
+  let bnPoints : List (String × Bn254G1) :=
     [ ("G", bn254Generator), ("O", ⟨0, 0⟩), ("-G", -bn254Generator),
       ("2G", bn254Generator.double) ]
   sweepCurve st "bn254-g1" bnPoints smallScalars
   sweepCurve st "bn254-g1" [("G", bn254Generator)]
     (bigScalars altBn128CurveOrder)
-  let bls1Points : List (String × BLSP) :=
+  let bls1Points : List (String × Bls12G1) :=
     [ ("G", blsG1Generator), ("O", ⟨0, 0⟩), ("-G", -blsG1Generator),
       ("2G", blsG1Generator.double) ]
   sweepCurve st "bls-g1" bls1Points smallScalars
   sweepCurve st "bls-g1" [("G", blsG1Generator)] (bigScalars blsCurveOrder)
-  let bls2Points : List (String × BLSP2) :=
+  let bls2Points : List (String × Bls12G2) :=
     [ ("G", blsG2Generator), ("O", ⟨0, 0⟩), ("-G", -blsG2Generator),
       ("2G", blsG2Generator.double) ]
   sweepCurve st "bls-g2" bls2Points smallScalars

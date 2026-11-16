@@ -23,9 +23,9 @@ open Jaune (Bytes)
 
 /-- The store-free head view of a case: see the module note. `stateRoot` and `blockStateRoot`
 are the fork's `hash_tree_root(state)` and `signed_block.message.state_root`. -/
-def storeFreeHead {S B : Type} [Ssz S] [Ssz B] (env : GossipEnv) (genesisTime : S → U64)
+def storeFreeHead {S B : Type} [Ssz S] [Ssz B] (env : GossipEnvironment) (genesisTime : S → U64)
     (blockStateRoot : B → Root) : IO (Except String (Gossip.HeadView S)) := do
-  let m := env.caseMeta
+  let m := env.caseMetadata
   let some anchor := (match m.blocks with | [b] => some b | _ => none)
     | return .error s!"store-free handler: {m.blocks.length} blocks, expected the anchor alone"
   if anchor.failed || anchor.pending || anchor.payloadStatus.isSome || anchor.payload.isSome ||
@@ -45,27 +45,27 @@ def storeFreeHead {S B : Type} [Ssz S] [Ssz B] (env : GossipEnv) (genesisTime : 
 
 /-- The six store-free validators, as handler steps over one fork's state `S`. -/
 structure StoreFreeSteps (S : Type) (AS : Type) (P : Preset) where
-  voluntaryExit : Ctx → Gossip.Seen Unit → Gossip.HeadView S → SignedVoluntaryExit → U64 →
-    Gossip.GM (Gossip.Seen Unit)
-  proposerSlashing : Ctx → Gossip.Seen Unit → Gossip.HeadView S → ProposerSlashing →
-    Gossip.GM (Gossip.Seen Unit)
-  attesterSlashing : Ctx → Gossip.Seen Unit → Gossip.HeadView S → AS →
-    Gossip.GM (Gossip.Seen Unit)
-  blsChange : Ctx → Gossip.Seen Unit → Gossip.HeadView S → SignedBLSToExecutionChange → U64 →
-    Gossip.GM (Gossip.Seen Unit)
-  contribution : Ctx → Gossip.Seen Unit → Gossip.HeadView S → SignedContributionAndProof P →
-    U64 → Gossip.GM (Gossip.Seen Unit)
-  syncMessage : Ctx → Gossip.Seen Unit → Gossip.HeadView S → SyncCommitteeMessage → U64 → U64 →
-    Gossip.GM (Gossip.Seen Unit)
+  voluntaryExit : Context → Gossip.Seen Unit → Gossip.HeadView S → SignedVoluntaryExit → U64 →
+    Gossip.Validation (Gossip.Seen Unit)
+  proposerSlashing : Context → Gossip.Seen Unit → Gossip.HeadView S → ProposerSlashing →
+    Gossip.Validation (Gossip.Seen Unit)
+  attesterSlashing : Context → Gossip.Seen Unit → Gossip.HeadView S → AS →
+    Gossip.Validation (Gossip.Seen Unit)
+  blsChange : Context → Gossip.Seen Unit → Gossip.HeadView S → SignedBLSToExecutionChange → U64 →
+    Gossip.Validation (Gossip.Seen Unit)
+  contribution : Context → Gossip.Seen Unit → Gossip.HeadView S → SignedContributionAndProof P →
+    U64 → Gossip.Validation (Gossip.Seen Unit)
+  syncMessage : Context → Gossip.Seen Unit → Gossip.HeadView S → SyncCommitteeMessage → U64 → U64 →
+    Gossip.Validation (Gossip.Seen Unit)
 
 /-- Run a store-free handler `h` (`gossip_<topic>` without the prefix) on one fork. -/
-def runStoreFree {S B AS : Type} [Ssz S] [Ssz B] [Ssz AS] {P : Preset} (env : GossipEnv)
+def runStoreFree {S B AS : Type} [Ssz S] [Ssz B] [Ssz AS] {P : Preset} (env : GossipEnvironment)
     (genesisTime : S → U64) (blockStateRoot : B → Root) (steps : StoreFreeSteps S AS P)
     (h : String) : IO (Except String (List Gossip.Outcome)) := do
   let head ← match ← storeFreeHead env genesisTime blockStateRoot with
     | .ok v => pure v
     | .error e => return .error e
-  let ctx : Ctx := { cfg := env.cfg, blsActive := env.blsActive }
+  let ctx : Context := { config := env.config, blsActive := env.blsActive }
   let seen : Gossip.Seen Unit := Gossip.Seen.empty ()
   let time (m : GossipMessage) := gossipNeed "current_time_ms" m.currentTimeMs
   match h with
@@ -90,7 +90,7 @@ def runStoreFree {S B AS : Type} [Ssz S] [Ssz B] [Ssz AS] {P : Preset} (env : Go
   | _ => pure (.error s!"no store-free handler {h}")
 
 /-- The fork-indexed steps (Electra, Fulu). -/
-def forkSteps (P : Preset) (f : CFork) : StoreFreeSteps (BeaconState P f) (AttesterSlashing P f) P where
+def forkSteps (P : Preset) (f : ConsensusFork) : StoreFreeSteps (BeaconState P f) (AttesterSlashing P f) P where
   voluntaryExit := Gossip.validateVoluntaryExitGossip
   proposerSlashing := Gossip.validateProposerSlashingGossip
   attesterSlashing := Gossip.validateAttesterSlashingGossip

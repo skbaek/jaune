@@ -1,4 +1,4 @@
-import JauneConsensus.Facts.AnchorInvCorpus
+import JauneConsensus.Facts.AnchorInvariantCorpus
 
 /-!
 # Slot, Epoch, and Upgrade Frame & Window Lemmas (G1b Deliverable 2)
@@ -44,38 +44,38 @@ namespace JauneConsensus.Facts
 
 open JauneConsensus
 
-variable {P : Preset} {f : CFork}
+variable {P : Preset} {f : ConsensusFork}
 
 /-! ## Basic `U64` and `B256` helpers -/
 
 theorem u64_eq_of_toNat_eq {a b : U64} (h : a.toNat = b.toNat) : a = b :=
   U64.ext_toNat h
 
-theorem b256_beq_eq_true_iff (a b : Jaune.B256) : B256.beq a b = true ↔ a = b := by
-  unfold B256.beq
+theorem bytes32_beq_eq_true_iff (a b : Jaune.U256) : Bytes32.beq a b = true ↔ a = b := by
+  unfold Bytes32.beq
   rw [beq_iff_eq]
   constructor
   · intro h
-    have h' := congrArg Jaune.Bytes.toB256 h
-    rwa [Jaune.B256.toB256_toBytes, Jaune.B256.toB256_toBytes] at h'
+    have h' := congrArg Jaune.Bytes.toU256 h
+    rwa [Jaune.U256.toU256_toBytes, Jaune.U256.toU256_toBytes] at h'
   · intro h; subst h; rfl
 
-theorem b256_beq_eq_false_iff (a b : Jaune.B256) : B256.beq a b = false ↔ a ≠ b := by
-  rw [← Bool.not_eq_true, b256_beq_eq_true_iff]
+theorem bytes32_beq_eq_false_iff (a b : Jaune.U256) : Bytes32.beq a b = false ↔ a ≠ b := by
+  rw [← Bool.not_eq_true, bytes32_beq_eq_true_iff]
 
-private theorem toB256_replicate_zero_any :
-    ∀ n : Nat, Jaune.Bytes.toB256 (List.replicate n 0) = (0 : Jaune.B256)
+private theorem toU256_replicate_zero_any :
+    ∀ n : Nat, Jaune.Bytes.toU256 (List.replicate n 0) = (0 : Jaune.U256)
   | 0 => by decide
-  | n + 1 => by rw [List.replicate_succ, Jaune.Bytes.toB256_zero_cons, toB256_replicate_zero_any n]
+  | n + 1 => by rw [List.replicate_succ, Jaune.Bytes.toU256_zero_cons, toU256_replicate_zero_any n]
 
-theorem toB256_replicate_zero : Jaune.Bytes.toB256 (List.replicate 32 0) = (0 : Jaune.B256) :=
-  toB256_replicate_zero_any 32
+theorem toU256_replicate_zero : Jaune.Bytes.toU256 (List.replicate 32 0) = (0 : Jaune.U256) :=
+  toU256_replicate_zero_any 32
 
 /-! ## Section 1 (`R-S9`): `filledHeader`, `filledHeaderRoot`, `processSlots`, `jointStep` -/
 
 /-- Header produced when `process_slot` fills a zero `state_root` with `hash_tree_root(s)`. -/
 def filledHeader (s : BeaconState P f) : BeaconBlockHeader :=
-  if B256.beq s.latest_block_header.state_root (0 : Jaune.B256) then
+  if Bytes32.beq s.latest_block_header.state_root (0 : Jaune.U256) then
     { s.latest_block_header with state_root := Ssz.hashTreeRoot s }
   else
     s.latest_block_header
@@ -85,26 +85,26 @@ def filledHeaderRoot (s : BeaconState P f) : Root :=
   Ssz.hashTreeRoot (filledHeader s)
 
 theorem filledHeader_of_zero {s : BeaconState P f}
-    (h : s.latest_block_header.state_root = (0 : Jaune.B256)) :
+    (h : s.latest_block_header.state_root = (0 : Jaune.U256)) :
     filledHeader s = { s.latest_block_header with state_root := Ssz.hashTreeRoot s } := by
   unfold filledHeader
-  have hb : B256.beq s.latest_block_header.state_root (0 : Jaune.B256) = true :=
-    (b256_beq_eq_true_iff _ _).mpr h
+  have hb : Bytes32.beq s.latest_block_header.state_root (0 : Jaune.U256) = true :=
+    (bytes32_beq_eq_true_iff _ _).mpr h
   rw [hb]; rfl
 
 theorem filledHeader_of_nonzero {s : BeaconState P f}
-    (h : s.latest_block_header.state_root ≠ (0 : Jaune.B256)) :
+    (h : s.latest_block_header.state_root ≠ (0 : Jaune.U256)) :
     filledHeader s = s.latest_block_header := by
   unfold filledHeader
-  have hb : B256.beq s.latest_block_header.state_root (0 : Jaune.B256) = false :=
-    (b256_beq_eq_false_iff _ _).mpr h
+  have hb : Bytes32.beq s.latest_block_header.state_root (0 : Jaune.U256) = false :=
+    (bytes32_beq_eq_false_iff _ _).mpr h
   rw [hb]; rfl
 
 theorem filledHeader_state_root_ne_zero {s : BeaconState P f}
-    (h : s.latest_block_header.state_root = (0 : Jaune.B256) →
-         Ssz.hashTreeRoot s ≠ (0 : Jaune.B256)) :
-    (filledHeader s).state_root ≠ (0 : Jaune.B256) := by
-  by_cases hz : s.latest_block_header.state_root = (0 : Jaune.B256)
+    (h : s.latest_block_header.state_root = (0 : Jaune.U256) →
+         Ssz.hashTreeRoot s ≠ (0 : Jaune.U256)) :
+    (filledHeader s).state_root ≠ (0 : Jaune.U256) := by
+  by_cases hz : s.latest_block_header.state_root = (0 : Jaune.U256)
   · rw [filledHeader_of_zero hz]
     exact h hz
   · rw [filledHeader_of_nonzero hz]
@@ -136,10 +136,10 @@ theorem processSlot_slot_and_header {s s' : BeaconState P f}
 /-- Uniform loop extraction from `processSlots`: `s.slot < slot` and an abstract loop `body` over
 `List.range' 0 (slot.toNat - s.slot.toNat)` whose each iteration runs `processSlot`, optionally
 `processEpoch ctx`, and sets `slot := next` with `next.toNat = st.slot.toNat + 1`. -/
-private theorem processSlots_loop_ok {ctx : Ctx} {s s' : BeaconState P f} {slot : Slot}
+private theorem processSlots_loop_ok {ctx : Context} {s s' : BeaconState P f} {slot : Slot}
     (h : processSlots ctx s slot = .ok s') :
     s.slot < slot ∧
-    ∃ (body : Nat → BeaconState P f → M (ForInStep (BeaconState P f))),
+    ∃ (body : Nat → BeaconState P f → Fallible (ForInStep (BeaconState P f))),
       forIn (List.range' 0 (slot.toNat - s.slot.toNat)) s body = .ok s' ∧
       ∀ k st r, body k st = .ok r →
         ∃ st1 next st2,
@@ -173,8 +173,8 @@ private theorem processSlots_loop_ok {ctx : Ctx} {s s' : BeaconState P f} {slot 
   · have hr_eq : ForInStep.yield { st1 with slot := next } = r := Except.ok.inj hr
     exact ⟨st1, next, st1, hslot, hn, Or.inl rfl, hr_eq.symm⟩
 
-private theorem body_step_header (hf : f.atLeast .electra = true) (ctx : Ctx)
-    {body : Nat → BeaconState P f → M (ForInStep (BeaconState P f))}
+private theorem body_step_header (hf : f.atLeast .electra = true) (ctx : Context)
+    {body : Nat → BeaconState P f → Fallible (ForInStep (BeaconState P f))}
     (hb : ∀ k st r, body k st = .ok r →
       ∃ st1 next st2,
         processSlot st = .ok st1 ∧
@@ -190,11 +190,11 @@ private theorem body_step_header (hf : f.atLeast .electra = true) (ctx : Ctx)
   obtain ⟨_, hhdr1⟩ := processSlot_slot_and_header hslot
   rcases hep_or with rfl | hep
   · exact ⟨_, rfl, hn, hhdr1⟩
-  · have hep_fr := processEpoch_cpres_and_frame hf ctx hep
+  · have hep_fr := processEpoch_corpusPreservation_and_frame hf ctx hep
     exact ⟨_, rfl, hn, hep_fr.2.2.1.trans hhdr1⟩
 
-private theorem range'_forIn_slot_only (hf : f.atLeast .electra = true) (ctx : Ctx)
-    {body : Nat → BeaconState P f → M (ForInStep (BeaconState P f))}
+private theorem range'_forIn_slot_only (hf : f.atLeast .electra = true) (ctx : Context)
+    {body : Nat → BeaconState P f → Fallible (ForInStep (BeaconState P f))}
     (hb : ∀ k st r, body k st = .ok r →
       ∃ st1 next st2,
         processSlot st = .ok st1 ∧
@@ -214,8 +214,8 @@ private theorem range'_forIn_slot_only (hf : f.atLeast .electra = true) (ctx : C
     have hsl := range'_forIn_slot_only hf ctx hb n (start + 1) st1 out h
     omega
 
-private theorem range'_forIn_slot_and_nonzero_header (hf : f.atLeast .electra = true) (ctx : Ctx)
-    {body : Nat → BeaconState P f → M (ForInStep (BeaconState P f))}
+private theorem range'_forIn_slot_and_nonzero_header (hf : f.atLeast .electra = true) (ctx : Context)
+    {body : Nat → BeaconState P f → Fallible (ForInStep (BeaconState P f))}
     (hb : ∀ k st r, body k st = .ok r →
       ∃ st1 next st2,
         processSlot st = .ok st1 ∧
@@ -223,7 +223,7 @@ private theorem range'_forIn_slot_and_nonzero_header (hf : f.atLeast .electra = 
         (st2 = st1 ∨ processEpoch ctx st1 = .ok st2) ∧
         r = .yield { st2 with slot := next }) :
     ∀ (n start : Nat) (cur out : BeaconState P f),
-      cur.latest_block_header.state_root ≠ (0 : Jaune.B256) →
+      cur.latest_block_header.state_root ≠ (0 : Jaune.U256) →
       forIn (List.range' start n) cur body = .ok out →
       out.slot.toNat = cur.slot.toNat + n ∧
       out.latest_block_header = cur.latest_block_header
@@ -236,7 +236,7 @@ private theorem range'_forIn_slot_and_nonzero_header (hf : f.atLeast .electra = 
     obtain ⟨r, hr, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨st1, rfl, hslot1, hhdr1⟩ := body_step_header hf ctx hb hr
     rw [filledHeader_of_nonzero hnz] at hhdr1
-    have hnz1 : st1.latest_block_header.state_root ≠ (0 : Jaune.B256) := by
+    have hnz1 : st1.latest_block_header.state_root ≠ (0 : Jaune.U256) := by
       rw [hhdr1]; exact hnz
     obtain ⟨hsl_rest, hhdr_rest⟩ :=
       range'_forIn_slot_and_nonzero_header hf ctx hb n (start + 1) st1 out hnz1 h
@@ -244,7 +244,7 @@ private theorem range'_forIn_slot_and_nonzero_header (hf : f.atLeast .electra = 
 
 /-- Unconditional slot postcondition of `processSlots` at Electra/Fulu: `s.slot < slot` and
 `s'.slot = slot`. -/
-theorem processSlots_slot (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem processSlots_slot (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {slot : Slot}
     (h : processSlots ctx s slot = .ok s') :
     s.slot < slot ∧ s'.slot = slot := by
@@ -255,9 +255,9 @@ theorem processSlots_slot (hf : f.atLeast .electra = true) (ctx : Ctx)
 
 /-- When `s.latest_block_header.state_root ≠ 0`, `processSlots` preserves `latest_block_header`
 unconditionally across any number of slots. -/
-theorem processSlots_header_of_nonzero (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem processSlots_header_of_nonzero (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {slot : Slot}
-    (hnz : s.latest_block_header.state_root ≠ (0 : Jaune.B256))
+    (hnz : s.latest_block_header.state_root ≠ (0 : Jaune.U256))
     (h : processSlots ctx s slot = .ok s') :
     s.slot < slot ∧ s'.slot = slot ∧ s'.latest_block_header = s.latest_block_header := by
   obtain ⟨hlt, body, hloop, hb⟩ := processSlots_loop_ok h
@@ -271,11 +271,11 @@ Under the single-slot-or-nonzero-root guard
 `(slot.toNat = s.slot.toNat + 1 ∨ (s.latest_block_header.state_root = 0 → Ssz.hashTreeRoot s ≠ 0))`,
 `processSlots` advances `s.slot` to `slot` and leaves `s'.latest_block_header = filledHeader s`
 (hence `Ssz.hashTreeRoot s'.latest_block_header = filledHeaderRoot s`). -/
-theorem processSlots_latest_block_header (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem processSlots_latest_block_header (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {slot : Slot}
     (hguard : slot.toNat = s.slot.toNat + 1 ∨
-      (s.latest_block_header.state_root = (0 : Jaune.B256) →
-        Ssz.hashTreeRoot s ≠ (0 : Jaune.B256)))
+      (s.latest_block_header.state_root = (0 : Jaune.U256) →
+        Ssz.hashTreeRoot s ≠ (0 : Jaune.U256)))
     (h : processSlots ctx s slot = .ok s') :
     s.slot < slot ∧
     s'.slot = slot ∧
@@ -294,7 +294,7 @@ theorem processSlots_latest_block_header (hf : f.atLeast .electra = true) (ctx :
     rw [hst1_eq] at hslot1 hhdr1
     have hsl_eq : s'.slot = slot := u64_eq_of_toNat_eq (by omega)
     exact ⟨hlt, hsl_eq, hhdr1, congrArg Ssz.hashTreeRoot hhdr1⟩
-  · have hnz1 : st1.latest_block_header.state_root ≠ (0 : Jaune.B256) := by
+  · have hnz1 : st1.latest_block_header.state_root ≠ (0 : Jaune.U256) := by
       rw [hhdr1]
       exact filledHeader_state_root_ne_zero hnz_imp
     obtain ⟨hsl_rest, hhdr_rest⟩ :=
@@ -315,7 +315,7 @@ theorem processBlockHeader_spec {s s' : BeaconState P f} {blk : BeaconBlock P f}
       { slot := blk.slot,
         proposer_index := blk.proposer_index,
         parent_root := blk.parent_root,
-        state_root := (0 : Jaune.B256),
+        state_root := (0 : Jaune.U256),
         body_root := Ssz.hashTreeRoot blk.body } := by
   unfold processBlockHeader at h
   obtain ⟨_, hreq1, h⟩ := bind_eq_ok_iff.mp h
@@ -334,12 +334,12 @@ theorem processBlockHeader_spec {s s' : BeaconState P f} {blk : BeaconBlock P f}
   have hs'_eq := (Except.ok.inj h).symm
   refine ⟨hsl, hnewer, hpos, hpr, ?_, ?_⟩
   · rw [hs'_eq]; exact hsl.symm
-  · rw [hs'_eq, toB256_replicate_zero]
+  · rw [hs'_eq, toU256_replicate_zero]
 
 /-- Across `processBlock`, `blk.parent_root` equals `Ssz.hashTreeRoot s.latest_block_header`,
 `0 < blk.slot.toNat`, `s'.slot = blk.slot`, and `s'.latest_block_header` is `blk`'s header with
 unfilled `state_root = 0`. -/
-theorem processBlock_latest_block_header (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem processBlock_latest_block_header (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {blk : BeaconBlock P f}
     (h : processBlock ctx s blk = .ok s') :
     blk.slot = s.slot ∧
@@ -351,7 +351,7 @@ theorem processBlock_latest_block_header (hf : f.atLeast .electra = true) (ctx :
       { slot := blk.slot,
         proposer_index := blk.proposer_index,
         parent_root := blk.parent_root,
-        state_root := (0 : Jaune.B256),
+        state_root := (0 : Jaune.U256),
         body_root := Ssz.hashTreeRoot blk.body } := by
   unfold processBlock processBlockWith at h
   obtain ⟨s1, h1, h⟩ := bind_eq_ok_iff.mp h
@@ -361,30 +361,30 @@ theorem processBlock_latest_block_header (hf : f.atLeast .electra = true) (ctx :
   obtain ⟨s5, h5, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨s6, h6, h7⟩ := bind_eq_ok_iff.mp h
   obtain ⟨hsl, hnewer, hpos, hpr, hsl1, hhdr1⟩ := processBlockHeader_spec h1
-  have c2 := processWithdrawals_csub h2
-  have c3 := processExecutionPayload_corpusPres ctx h3
-  have c4 := processRandao_csub ctx h4
-  have c5 := processEth1Data_csub h5
+  have c2 := processWithdrawals_commonSubstep h2
+  have c3 := processExecutionPayload_corpusPreservation ctx h3
+  have c4 := processRandao_commonSubstep ctx h4
+  have c5 := processEth1Data_commonSubstep h5
   rw [processOperations_split_all ctx s5 blk.body hf] at h6
   obtain ⟨o1, ho1, h6⟩ := bind_eq_ok_iff.mp h6
   obtain ⟨o2, ho2, h6⟩ := bind_eq_ok_iff.mp h6
   obtain ⟨o3, ho3, ho4⟩ := bind_eq_ok_iff.mp h6
-  have co1 := preDeposits_cpres_and_frame hf ctx ho1
+  have co1 := preDeposits_corpusPreservation_and_frame hf ctx ho1
   obtain ⟨_, _, hfr_o2⟩ := foldDepositRequests_spec hf _ ho2
-  have co3 := foldWithdrawalRequests_csub ctx.cfg ho3
+  have co3 := foldWithdrawalRequests_commonSubstep ctx.config ho3
   obtain ⟨_, _, _, hsl_o4, _, hlbh_o4, _, _, _, _, _, _, _⟩ :=
-    foldConsolidationRequests_frames_and_queues hf ctx.cfg _ ho4
-  have c7 := processSyncAggregate_csub ctx h7
+    foldConsolidationRequests_frames_and_queues hf ctx.config _ ho4
+  have c7 := processSyncAggregate_commonSubstep ctx h7
   have hsl_o2 : o2.slot = o1.slot := by rw [hfr_o2]
   have hlbh_o2 : o2.latest_block_header = o1.latest_block_header := by rw [hfr_o2]
   have hsl_all : s'.slot = s1.slot := by
     rw [c7.slot_eq, hsl_o4, co3.slot_eq, hsl_o2, co1.2.1, c5.slot_eq, c4.slot_eq, c3.2.1, c2.slot_eq]
   have hlbh_all : s'.latest_block_header = s1.latest_block_header := by
-    rw [c7.lbh_eq, hlbh_o4, co3.lbh_eq, hlbh_o2, co1.2.2.1, c5.lbh_eq, c4.lbh_eq, c3.2.2.1, c2.lbh_eq]
+    rw [c7.latestBlockHeader_eq, hlbh_o4, co3.latestBlockHeader_eq, hlbh_o2, co1.2.2.1, c5.latestBlockHeader_eq, c4.latestBlockHeader_eq, c3.2.2.1, c2.latestBlockHeader_eq]
   exact ⟨hsl, hnewer, hpos, hpr, hsl_all.trans hsl1, hlbh_all.trans hhdr1⟩
 
 /-- Decomposition of `stateTransition` with `validateResult = true` (the default used by `jointStep`). -/
-theorem stateTransition_true_split {ctx : Ctx} {s s' : BeaconState P f}
+theorem stateTransition_true_split {ctx : Context} {s s' : BeaconState P f}
     {sb : SignedBeaconBlock P f}
     (h : stateTransition ctx s sb true = .ok s') :
     ∃ mid,
@@ -399,16 +399,16 @@ theorem stateTransition_true_split {ctx : Ctx} {s s' : BeaconState P f}
   obtain ⟨s2, hpb, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨_, hsr, h⟩ := bind_eq_ok_iff.mp h
   have hroot : sb.message.state_root = Ssz.hashTreeRoot s2 :=
-    (b256_beq_eq_true_iff _ _).mp (require_eq_ok_iff.mp hsr)
+    (bytes32_beq_eq_true_iff _ _).mp (require_eq_ok_iff.mp hsr)
   have hs2 : s2 = s' := Except.ok.inj h
   exact ⟨mid, hps, hs2 ▸ hpb, hs2 ▸ hroot⟩
 
 /-- Decomposition of the at-slot block verification & application branch in crossing `jointStep`. -/
-theorem atSlot_block_split {ctx : Ctx} {bls : Bool} {s s' : BeaconState P f}
+theorem atSlot_block_split {ctx : Context} {bls : Bool} {s s' : BeaconState P f}
     {sb : SignedBeaconBlock P f}
     (h : (do require (← verifyBlockSignature bls s sb) "state_transition: verify_block_signature"
              let s ← processBlock ctx s sb.message
-             require (B256.beq sb.message.state_root (Ssz.hashTreeRoot s))
+             require (Bytes32.beq sb.message.state_root (Ssz.hashTreeRoot s))
                "state_transition: block.state_root"
              pure s) = .ok s') :
     processBlock ctx s sb.message = .ok s' ∧
@@ -418,19 +418,19 @@ theorem atSlot_block_split {ctx : Ctx} {bls : Bool} {s s' : BeaconState P f}
   obtain ⟨s2, hpb, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨_, hsr, h⟩ := bind_eq_ok_iff.mp h
   have hroot : sb.message.state_root = Ssz.hashTreeRoot s2 :=
-    (b256_beq_eq_true_iff _ _).mp (require_eq_ok_iff.mp hsr)
+    (bytes32_beq_eq_true_iff _ _).mp (require_eq_ok_iff.mp hsr)
   have hs2 : s2 = s' := Except.ok.inj h
   exact ⟨hs2 ▸ hpb, hs2 ▸ hroot⟩
 
 /-- Helper: after `processBlock` + state-root verification, `filledHeader s'` is `blk`'s 5-field
 header and `filledHeaderRoot s' = Ssz.hashTreeRoot blk`. -/
-theorem postBlock_filledHeaderRoot (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem postBlock_filledHeaderRoot (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {blk : BeaconBlock P f}
     (hpb : processBlock ctx s blk = .ok s')
     (hsr : blk.state_root = Ssz.hashTreeRoot s') :
     s'.slot = blk.slot ∧
     s'.latest_block_header.slot = blk.slot ∧
-    s'.latest_block_header.state_root = (0 : Jaune.B256) ∧
+    s'.latest_block_header.state_root = (0 : Jaune.U256) ∧
     filledHeader s' =
       { slot := blk.slot,
         proposer_index := blk.proposer_index,
@@ -439,7 +439,7 @@ theorem postBlock_filledHeaderRoot (hf : f.atLeast .electra = true) (ctx : Ctx)
         body_root := Ssz.hashTreeRoot blk.body } ∧
     filledHeaderRoot s' = Ssz.hashTreeRoot blk := by
   obtain ⟨_, _, _, _, hsl, hhdr⟩ := processBlock_latest_block_header hf ctx hpb
-  have hz : s'.latest_block_header.state_root = (0 : Jaune.B256) := by rw [hhdr]
+  have hz : s'.latest_block_header.state_root = (0 : Jaune.U256) := by rw [hhdr]
   have hfh0 : filledHeader s' = { s'.latest_block_header with state_root := Ssz.hashTreeRoot s' } :=
     filledHeader_of_zero hz
   have hfh : filledHeader s' =
@@ -467,7 +467,7 @@ theorem jointStep_post_header_and_filledRoot {cfg : ChainConfig} {ccfg : Config}
     s'.beacon.slot = b.2.message.slot ∧
     Ssz.hashTreeRoot s'.beacon = b.2.message.state_root ∧
     s'.beacon.latest_block_header.slot = b.2.message.slot ∧
-    s'.beacon.latest_block_header.state_root = (0 : Jaune.B256) ∧
+    s'.beacon.latest_block_header.state_root = (0 : Jaune.U256) ∧
     filledHeaderRoot s'.beacon = Ssz.hashTreeRoot b.2.message := by
   obtain ⟨fs, beacon, exec⟩ := s
   obtain ⟨fb, sb⟩ := b
@@ -499,8 +499,8 @@ theorem jointStep_electra_parent_root {cfg : ChainConfig} {ccfg : Config} {bls :
     {beacon : BeaconState P .electra} {exec : BlockChain} {sb : SignedBeaconBlock P .electra}
     {s' : JointState P}
     (hguard : sb.message.slot.toNat = beacon.slot.toNat + 1 ∨
-      (beacon.latest_block_header.state_root = (0 : B256) →
-        Ssz.hashTreeRoot beacon ≠ (0 : B256)))
+      (beacon.latest_block_header.state_root = (0 : Jaune.U256) →
+        Ssz.hashTreeRoot beacon ≠ (0 : Jaune.U256)))
     (h : jointStep cfg ccfg bls ⟨.electra, beacon, exec⟩ ⟨.electra, sb⟩ = .ok s') :
     beacon.slot < sb.message.slot ∧
     sb.message.parent_root = filledHeaderRoot beacon := by
@@ -516,8 +516,8 @@ theorem jointStep_fulu_parent_root {cfg : ChainConfig} {ccfg : Config} {bls : Bo
     {beacon : BeaconState P .fulu} {exec : BlockChain} {sb : SignedBeaconBlock P .fulu}
     {s' : JointState P}
     (hguard : sb.message.slot.toNat = beacon.slot.toNat + 1 ∨
-      (beacon.latest_block_header.state_root = (0 : B256) →
-        Ssz.hashTreeRoot beacon ≠ (0 : B256)))
+      (beacon.latest_block_header.state_root = (0 : Jaune.U256) →
+        Ssz.hashTreeRoot beacon ≠ (0 : Jaune.U256)))
     (h : jointStep cfg ccfg bls ⟨.fulu, beacon, exec⟩ ⟨.fulu, sb⟩ = .ok s') :
     beacon.slot < sb.message.slot ∧
     sb.message.parent_root = filledHeaderRoot beacon := by
@@ -549,23 +549,23 @@ theorem jointStep_cross_parent_root {cfg : ChainConfig} {ccfg : Config} {bls : B
       forkSlot ≤ sb.message.slot ∧
       ((beacon.slot < forkSlot ∧
           (sb.message.slot.toNat = beacon.slot.toNat + 1 ∨
-            (beacon.latest_block_header.state_root = (0 : B256) →
-              Ssz.hashTreeRoot beacon ≠ (0 : B256)) →
+            (beacon.latest_block_header.state_root = (0 : Jaune.U256) →
+              Ssz.hashTreeRoot beacon ≠ (0 : Jaune.U256)) →
             sb.message.parent_root = filledHeaderRoot beacon)) ∨
        (beacon.slot = forkSlot ∧ sb.message.slot = forkSlot ∧
           sb.message.parent_root = Ssz.hashTreeRoot beacon.latest_block_header) ∨
        (beacon.slot = forkSlot ∧ forkSlot < sb.message.slot ∧
           ∃ upgraded, upgradeToFulu ccfg beacon = .ok upgraded ∧
             (sb.message.slot.toNat = upgraded.slot.toNat + 1 ∨
-              (upgraded.latest_block_header.state_root = (0 : B256) →
-                Ssz.hashTreeRoot upgraded ≠ (0 : B256)) →
+              (upgraded.latest_block_header.state_root = (0 : Jaune.U256) →
+                Ssz.hashTreeRoot upgraded ≠ (0 : Jaune.U256)) →
               sb.message.parent_root = filledHeaderRoot upgraded))) := by
   obtain ⟨hle1, hle2, _, forkSlot, b1, b2, b', _, hfslot, hb1, hup, _, _, hb', _⟩ :=
     jointStep_cross_ok_iff.mp h
   have hfslot_nat : forkSlot.toNat = fuluForkSlot (P := P) ccfg := U64.toNat_ofNat? hfslot
   have hle1' : beacon.slot ≤ forkSlot := by show beacon.slot.toNat ≤ forkSlot.toNat; omega
   have hle2' : forkSlot ≤ sb.message.slot := by show forkSlot.toNat ≤ sb.message.slot.toNat; omega
-  have hup_fr := upgradeToFulu_cpres_and_frame ccfg hup
+  have hup_fr := upgradeToFulu_corpusPreservation_and_frame ccfg hup
   refine ⟨forkSlot, hfslot_nat, hle1', hle2', ?_⟩
   by_cases hlt : beacon.slot < forkSlot
   · left
@@ -588,7 +588,7 @@ theorem jointStep_cross_parent_root {cfg : ChainConfig} {ccfg : Config} {bls : B
       rw [hpr, hup_fr.2.2.2.2.1, hroot_b1]
     · obtain ⟨_, hsl_b1, hhdr_b1, hroot_b1⟩ :=
         processSlots_latest_block_header rfl _ (Or.inr hnz_imp) hb1
-      have hnz_b2 : b2.latest_block_header.state_root ≠ (0 : B256) := by
+      have hnz_b2 : b2.latest_block_header.state_root ≠ (0 : Jaune.U256) := by
         rw [hup_fr.2.2.2.2.1, hhdr_b1]
         exact filledHeader_state_root_ne_zero hnz_imp
       by_cases hat : (sb.message.slot == b2.slot) = true
@@ -637,7 +637,7 @@ theorem jointStep_consecutive_parent_root {cfg : ChainConfig} {ccfg : Config} {b
     (h₁ : jointStep cfg ccfg bls s₀ b₁ = .ok s₁)
     (h₂ : jointStep cfg ccfg bls s₁ b₂ = .ok s₂)
     (hguard : b₂.2.message.slot.toNat = b₁.2.message.slot.toNat + 1 ∨
-              b₁.2.message.state_root ≠ (0 : B256)) :
+              b₁.2.message.state_root ≠ (0 : Jaune.U256)) :
     b₁.2.message.slot < b₂.2.message.slot ∧
     b₂.2.message.parent_root = Ssz.hashTreeRoot b₁.2.message := by
   obtain ⟨hsl₁, hsr₁, _, _, hfr₁⟩ := jointStep_post_header_and_filledRoot h₁
@@ -648,8 +648,8 @@ theorem jointStep_consecutive_parent_root {cfg : ChainConfig} {ccfg : Config} {b
   change filledHeaderRoot beacon₁ = Ssz.hashTreeRoot b₁.2.message at hfr₁
   have hguard' :
       sb₂.message.slot.toNat = beacon₁.slot.toNat + 1 ∨
-      (beacon₁.latest_block_header.state_root = (0 : B256) →
-        Ssz.hashTreeRoot beacon₁ ≠ (0 : B256)) := by
+      (beacon₁.latest_block_header.state_root = (0 : Jaune.U256) →
+        Ssz.hashTreeRoot beacon₁ ≠ (0 : Jaune.U256)) := by
     rcases hguard with h1 | hnz
     · exact Or.inl (by rw [hsl₁]; exact h1)
     · exact Or.inr (fun _ => by rw [hsr₁]; exact hnz)
@@ -713,7 +713,7 @@ def payloadHeader (payload : ExecutionPayload P) : ExecutionPayloadHeader P :=
 
 /-- `processExecutionPayload` enforces `payload.parent_hash = s.latest_execution_payload_header.block_hash`
 and updates `s'.latest_execution_payload_header` to `payloadHeader payload`. -/
-theorem processExecutionPayload_parent_and_header (ctx : Ctx) {body : BeaconBlockBody P f}
+theorem processExecutionPayload_parent_and_header (ctx : Context) {body : BeaconBlockBody P f}
     {s s' : BeaconState P f} (h : processExecutionPayload ctx s body = .ok s') :
     body.execution_payload.parent_hash = s.latest_execution_payload_header.block_hash ∧
     s'.latest_execution_payload_header = payloadHeader body.execution_payload ∧
@@ -731,7 +731,7 @@ theorem processExecutionPayload_parent_and_header (ctx : Ctx) {body : BeaconBloc
 /-- Across `processBlock` at Electra/Fulu, `blk.body.execution_payload.parent_hash` equals the
 pre-state's `latest_execution_payload_header.block_hash`, and the post-state's
 `latest_execution_payload_header` equals `payloadHeader blk.body.execution_payload`. -/
-theorem processBlock_execution_payload_hashes (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem processBlock_execution_payload_hashes (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {blk : BeaconBlock P f}
     (h : processBlock ctx s blk = .ok s') :
     blk.body.execution_payload.parent_hash = s.latest_execution_payload_header.block_hash ∧
@@ -744,34 +744,34 @@ theorem processBlock_execution_payload_hashes (hf : f.atLeast .electra = true) (
   obtain ⟨s4, h4, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨s5, h5, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨s6, h6, h7⟩ := bind_eq_ok_iff.mp h
-  have c1 := processBlockHeader_corpusPres h1
-  have c2 := processWithdrawals_csub h2
+  have c1 := processBlockHeader_corpusPreservation h1
+  have c2 := processWithdrawals_commonSubstep h2
   obtain ⟨hph, hhdr3, _⟩ := processExecutionPayload_parent_and_header ctx h3
-  have c4 := processRandao_csub ctx h4
-  have c5 := processEth1Data_csub h5
+  have c4 := processRandao_commonSubstep ctx h4
+  have c5 := processEth1Data_commonSubstep h5
   rw [processOperations_split_all ctx s5 blk.body hf] at h6
   obtain ⟨o1, ho1, h6⟩ := bind_eq_ok_iff.mp h6
   obtain ⟨o2, ho2, h6⟩ := bind_eq_ok_iff.mp h6
   obtain ⟨o3, ho3, ho4⟩ := bind_eq_ok_iff.mp h6
-  have co1 := preDeposits_cpres_and_frame hf ctx ho1
+  have co1 := preDeposits_corpusPreservation_and_frame hf ctx ho1
   obtain ⟨_, _, hfr_o2⟩ := foldDepositRequests_spec hf _ ho2
-  have co3 := foldWithdrawalRequests_csub ctx.cfg ho3
+  have co3 := foldWithdrawalRequests_commonSubstep ctx.config ho3
   obtain ⟨_, _, _, _, hlep_o4, _, _, _, _, _, _, _, _⟩ :=
-    foldConsolidationRequests_frames_and_queues hf ctx.cfg _ ho4
-  have c7 := processSyncAggregate_csub ctx h7
+    foldConsolidationRequests_frames_and_queues hf ctx.config _ ho4
+  have c7 := processSyncAggregate_commonSubstep ctx h7
   have hlep_o2 : o2.latest_execution_payload_header = o1.latest_execution_payload_header := by
     rw [hfr_o2]
   have hph_pre : blk.body.execution_payload.parent_hash =
       s.latest_execution_payload_header.block_hash := by
-    rw [hph, c2.lep_eq, c1.2.2.1]
+    rw [hph, c2.latestExecutionPayloadHeader_eq, c1.2.2.1]
   have hhdr_post : s'.latest_execution_payload_header = payloadHeader blk.body.execution_payload := by
-    rw [c7.lep_eq, hlep_o4, co3.lep_eq, hlep_o2, co1.2.2.2.1, c5.lep_eq, c4.lep_eq, hhdr3]
+    rw [c7.latestExecutionPayloadHeader_eq, hlep_o4, co3.latestExecutionPayloadHeader_eq, hlep_o2, co1.2.2.2.1, c5.latestExecutionPayloadHeader_eq, c4.latestExecutionPayloadHeader_eq, hhdr3]
   exact ⟨hph_pre, hhdr_post, by rw [hhdr_post]; rfl⟩
 
 /-- Across `stateTransition` at Electra/Fulu, `processSlots` preserves
 `latest_execution_payload_header` and `processBlock` checks `parent_hash` and writes
 `payloadHeader sb.message.body.execution_payload`. -/
-theorem stateTransition_execution_payload_hashes (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem stateTransition_execution_payload_hashes (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {sb : SignedBeaconBlock P f} {vr : Bool}
     (h : stateTransition ctx s sb vr = .ok s') :
     sb.message.body.execution_payload.parent_hash = s.latest_execution_payload_header.block_hash ∧
@@ -780,7 +780,7 @@ theorem stateTransition_execution_payload_hashes (hf : f.atLeast .electra = true
       sb.message.body.execution_payload.block_hash := by
   unfold stateTransition stateTransitionWith at h
   obtain ⟨mid, hps, h⟩ := bind_eq_ok_iff.mp h
-  have hlep_ps := (processSlots_corpusPres hf ctx hps).2
+  have hlep_ps := (processSlots_corpusPreservation hf ctx hps).2
   have hpb : processBlock ctx mid sb.message = .ok s' := by
     cases vr
     · simp only [Bool.false_eq_true, ite_false] at h
@@ -820,10 +820,10 @@ theorem jointStep_execution_payload_hashes {cfg : ChainConfig} {ccfg : Config} {
     obtain ⟨_, _, _, _, b1, b2, b', _, _, hb1, hup, _, _, hb', rfl⟩ := jointStep_cross_ok_iff.mp h
     have hlep1 : b1.latest_execution_payload_header = beacon.latest_execution_payload_header := by
       split at hb1
-      · exact (processSlots_corpusPres rfl _ hb1).2
+      · exact (processSlots_corpusPreservation rfl _ hb1).2
       · cases hb1; rfl
     have hlep2 : b2.latest_execution_payload_header = beacon.latest_execution_payload_header :=
-      (upgradeToFulu_cpres_and_frame ccfg hup).2.2.2.2.2.1.trans hlep1
+      (upgradeToFulu_corpusPreservation_and_frame ccfg hup).2.2.2.2.2.1.trans hlep1
     split at hb'
     · obtain ⟨hpb, _⟩ := atSlot_block_split hb'
       obtain ⟨hph, hhdr, hbh⟩ := processBlock_execution_payload_hashes rfl _ hpb
@@ -837,7 +837,7 @@ theorem jointStep_execution_payload_hashes {cfg : ChainConfig} {ccfg : Config} {
 /-! ## Section 3 (`C-S9` & `D-S9` shared epoch split): `epochPreQueues` and `epochPostQueues` -/
 
 /-- The six epoch passes before `processPendingDeposits` in `processEpoch`. -/
-def epochPreQueues (cfg : Config) (state : BeaconState P f) : M (BeaconState P f) := do
+def epochPreQueues (cfg : Config) (state : BeaconState P f) : Fallible (BeaconState P f) := do
   let state ← processJustificationAndFinalization cfg state
   let state ← processInactivityUpdates cfg state
   let state ← processRewardsAndPenalties cfg state
@@ -847,8 +847,8 @@ def epochPreQueues (cfg : Config) (state : BeaconState P f) : M (BeaconState P f
 
 /-- The epoch passes after `processPendingConsolidations` in `processEpoch` (including Fulu's
 `processProposerLookahead`). -/
-def epochPostQueues (ctx : Ctx) (state : BeaconState P f) : M (BeaconState P f) := do
-  let cfg := ctx.cfg
+def epochPostQueues (ctx : Context) (state : BeaconState P f) : Fallible (BeaconState P f) := do
+  let cfg := ctx.config
   let state ← processEffectiveBalanceUpdates cfg state
   let state ← processSlashingsReset cfg state
   let state ← processRandaoMixesReset cfg state
@@ -858,28 +858,28 @@ def epochPostQueues (ctx : Ctx) (state : BeaconState P f) : M (BeaconState P f) 
   if f.atLeast .fulu then processProposerLookahead cfg state else pure state
 
 /-- The epoch passes before `processPendingConsolidations` at Electra/Fulu. -/
-def epochBeforeConsolidations (ctx : Ctx) (state : BeaconState P f) : M (BeaconState P f) := do
-  let state ← epochPreQueues ctx.cfg state
+def epochBeforeConsolidations (ctx : Context) (state : BeaconState P f) : Fallible (BeaconState P f) := do
+  let state ← epochPreQueues ctx.config state
   processPendingDeposits ctx state
 
 /-- The epoch passes after `processPendingDeposits` at Electra/Fulu. -/
-def epochAfterDeposits (ctx : Ctx) (state : BeaconState P f) : M (BeaconState P f) := do
-  let state ← processPendingConsolidations ctx.cfg state
+def epochAfterDeposits (ctx : Context) (state : BeaconState P f) : Fallible (BeaconState P f) := do
+  let state ← processPendingConsolidations ctx.config state
   epochPostQueues ctx state
 
 /-- Decomposition of `processEpoch` at Electra/Fulu around `processPendingDeposits` and
 `processPendingConsolidations`. -/
-theorem processEpoch_split_queues (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem processEpoch_split_queues (hf : f.atLeast .electra = true) (ctx : Context)
     (state : BeaconState P f) :
     processEpoch ctx state = (do
-      let s1 ← epochPreQueues ctx.cfg state
+      let s1 ← epochPreQueues ctx.config state
       let s2 ← processPendingDeposits ctx s1
-      let s3 ← processPendingConsolidations ctx.cfg s2
+      let s3 ← processPendingConsolidations ctx.config s2
       epochPostQueues ctx s3) := by
   unfold processEpoch epochPreQueues epochPostQueues
   simp only [hf, ite_true, bind_assoc]
 
-theorem epochPreQueues_csub (hf : f.atLeast .electra = true) (cfg : Config)
+theorem epochPreQueues_commonSubstep (hf : f.atLeast .electra = true) (cfg : Config)
     {s s' : BeaconState P f} (h : epochPreQueues cfg s = .ok s') : CommonSubstep s s' := by
   unfold epochPreQueues at h
   obtain ⟨s1, h1, h⟩ := bind_eq_ok_iff.mp h
@@ -887,14 +887,14 @@ theorem epochPreQueues_csub (hf : f.atLeast .electra = true) (cfg : Config)
   obtain ⟨s3, h3, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨s4, h4, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨s5, h5, h6⟩ := bind_eq_ok_iff.mp h
-  exact (processJustificationAndFinalization_csub cfg h1).trans <|
-    (processInactivityUpdates_csub cfg h2).trans <|
-    (processRewardsAndPenalties_csub cfg h3).trans <|
-    (processRegistryUpdates_csub cfg hf h4).trans <|
-    (processSlashings_csub cfg h5).trans <|
-    processEth1DataReset_csub cfg h6
+  exact (processJustificationAndFinalization_commonSubstep cfg h1).trans <|
+    (processInactivityUpdates_commonSubstep cfg h2).trans <|
+    (processRewardsAndPenalties_commonSubstep cfg h3).trans <|
+    (processRegistryUpdates_commonSubstep cfg hf h4).trans <|
+    (processSlashings_commonSubstep cfg h5).trans <|
+    processEth1DataReset_commonSubstep cfg h6
 
-theorem epochPostQueues_csub (ctx : Ctx)
+theorem epochPostQueues_commonSubstep (ctx : Context)
     {s s' : BeaconState P f} (h : epochPostQueues ctx s = .ok s') : CommonSubstep s s' := by
   unfold epochPostQueues at h
   obtain ⟨s8, h8, h⟩ := bind_eq_ok_iff.mp h
@@ -905,39 +905,39 @@ theorem epochPostQueues_csub (ctx : Ctx)
   obtain ⟨s13, h13, h⟩ := bind_eq_ok_iff.mp h
   have c_end : CommonSubstep s13 s' := by
     split at h
-    · exact processProposerLookahead_csub ctx.cfg h
+    · exact processProposerLookahead_commonSubstep ctx.config h
     · cases h; exact CommonSubstep.refl _
-  exact (processEffectiveBalanceUpdates_csub ctx.cfg h8).trans <|
-    (processSlashingsReset_csub ctx.cfg h9).trans <|
-    (processRandaoMixesReset_csub ctx.cfg h10).trans <|
-    (processHistoricalSummariesUpdate_csub ctx.cfg h11).trans <|
-    (processParticipationFlagUpdates_csub ctx.cfg h12).trans <|
-    (processSyncCommitteeUpdates_csub ctx h13).trans c_end
+  exact (processEffectiveBalanceUpdates_commonSubstep ctx.config h8).trans <|
+    (processSlashingsReset_commonSubstep ctx.config h9).trans <|
+    (processRandaoMixesReset_commonSubstep ctx.config h10).trans <|
+    (processHistoricalSummariesUpdate_commonSubstep ctx.config h11).trans <|
+    (processParticipationFlagUpdates_commonSubstep ctx.config h12).trans <|
+    (processSyncCommitteeUpdates_commonSubstep ctx h13).trans c_end
 
 theorem epochBeforeConsolidations_pendingConsolidations (hf : f.atLeast .electra = true)
-    (ctx : Ctx) {s s' : BeaconState P f}
+    (ctx : Context) {s s' : BeaconState P f}
     (h : epochBeforeConsolidations ctx s = .ok s') :
     s'.pending_consolidations = s.pending_consolidations ∧ s'.slot = s.slot := by
   unfold epochBeforeConsolidations at h
   obtain ⟨s1, h1, h2⟩ := bind_eq_ok_iff.mp h
-  have c1 := epochPreQueues_csub hf ctx.cfg h1
-  have c2 := processPendingDeposits_cpres_and_frame ctx h2
-  exact ⟨c2.2.2.2.2.trans c1.pc_eq, c2.2.1.trans c1.slot_eq⟩
+  have c1 := epochPreQueues_commonSubstep hf ctx.config h1
+  have c2 := processPendingDeposits_corpusPreservation_and_frame ctx h2
+  exact ⟨c2.2.2.2.2.trans c1.pendingConsolidations_eq, c2.2.1.trans c1.slot_eq⟩
 
 theorem epochAfterDeposits_pendingDeposits (hf : f.atLeast .electra = true)
-    (ctx : Ctx) {s s' : BeaconState P f}
+    (ctx : Context) {s s' : BeaconState P f}
     (h : epochAfterDeposits ctx s = .ok s') :
     s'.pending_deposits = s.pending_deposits ∧ s'.slot = s.slot := by
   unfold epochAfterDeposits at h
   obtain ⟨s1, h1, h2⟩ := bind_eq_ok_iff.mp h
-  have c1 := processPendingConsolidations_cpres_and_frame hf ctx.cfg h1
-  have c2 := epochPostQueues_csub ctx h2
-  exact ⟨c2.pd_eq.trans c1.2.2.2.2, c2.slot_eq.trans c1.2.1⟩
+  have c1 := processPendingConsolidations_corpusPreservation_and_frame hf ctx.config h1
+  have c2 := epochPostQueues_commonSubstep ctx h2
+  exact ⟨c2.pendingDeposits_eq.trans c1.2.2.2.2, c2.slot_eq.trans c1.2.1⟩
 
 /-! ## Section 4 (`C-S9`): Block consolidation split, `ConsolidationRun` list law, and chains -/
 
 /-- `processSyncAggregate` modifies only `balances` and leaves `validators` unchanged. -/
-theorem processSyncAggregate_validators_eq (ctx : Ctx) {sa : SyncAggregate P}
+theorem processSyncAggregate_validators_eq (ctx : Context) {sa : SyncAggregate P}
     {s s' : BeaconState P f} (h : processSyncAggregate ctx s sa = .ok s') :
     s'.validators = s.validators := by
   revert s' h
@@ -949,7 +949,7 @@ theorem processSyncAggregate_validators_eq (ctx : Ctx) {sa : SyncAggregate P}
     repeat (with_reducible apply ok_bind; intro _ _)
     refine ok_pure ?_
     rename_i out hloop
-    refine array_forIn_rel (fun (a b : BeaconState P f) => b.validators = a.validators)
+    refine array_forIn_relation (fun (a b : BeaconState P f) => b.validators = a.validators)
       (fun _ => rfl) (fun _ _ _ h1 h2 => h2.trans h1) _ (fun x st r hr => ?_) _ _ _ hloop
     split at hr
     · obtain ⟨st1, hinc1, hr⟩ := bind_eq_ok_iff.mp hr
@@ -965,17 +965,17 @@ theorem processSyncAggregate_validators_eq (ctx : Ctx) {sa : SyncAggregate P}
 preserve `pending_consolidations`, `foldConsolidationRequests` appends the accepted consolidations
 with `source_index ≠ target_index`, and `processSyncAggregate` preserves `pending_consolidations`
 and `validators`. -/
-theorem processBlock_pendingConsolidations (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem processBlock_pendingConsolidations (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {blk : BeaconBlock P f}
     (h : processBlock ctx s blk = .ok s') :
     ∃ (s_pre s_post : BeaconState P f) (outcomes : List ConsolidationOutcome),
       s_pre.slot = blk.slot ∧
       s_pre.pending_consolidations = s.pending_consolidations ∧
       pendingConsolidationsList s_pre = pendingConsolidationsList s ∧
-      foldConsolidationRequests ctx.cfg s_pre
-        (Gated.get hf blk.body.execution_requests).consolidations.toArray.toList = .ok s_post ∧
+      foldConsolidationRequests ctx.config s_pre
+        (ForkField.get hf blk.body.execution_requests).consolidations.toArray.toList = .ok s_post ∧
       outcomes.length =
-        (Gated.get hf blk.body.execution_requests).consolidations.toArray.toList.length ∧
+        (ForkField.get hf blk.body.execution_requests).consolidations.toArray.toList.length ∧
       (∀ pc ∈ outcomes.filterMap acceptedConsolidation, pc.source_index ≠ pc.target_index) ∧
       pendingConsolidationsList s' =
         pendingConsolidationsList s ++ outcomes.filterMap acceptedConsolidation ∧
@@ -990,38 +990,38 @@ theorem processBlock_pendingConsolidations (hf : f.atLeast .electra = true) (ctx
   obtain ⟨s5, h5, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨s6, h6, h7⟩ := bind_eq_ok_iff.mp h
   obtain ⟨_, _, _, _, hsl1, _⟩ := processBlockHeader_spec h1
-  have c1 := processBlockHeader_corpusPres h1
-  have c2 := processWithdrawals_csub h2
-  have c3 := processExecutionPayload_corpusPres ctx h3
-  have c4 := processRandao_csub ctx h4
-  have c5 := processEth1Data_csub h5
+  have c1 := processBlockHeader_corpusPreservation h1
+  have c2 := processWithdrawals_commonSubstep h2
+  have c3 := processExecutionPayload_corpusPreservation ctx h3
+  have c4 := processRandao_commonSubstep ctx h4
+  have c5 := processEth1Data_commonSubstep h5
   rw [processOperations_split_consolidations ctx s5 blk.body hf] at h6
   obtain ⟨s_pre, hpre, hfold⟩ := bind_eq_ok_iff.mp h6
   rw [preConsolidations_eq ctx s5 blk.body hf, preRequests_eq_preDeposits_fold ctx s5 blk.body hf] at hpre
   simp only [bind_assoc] at hpre
   obtain ⟨o1, ho1, hpre⟩ := bind_eq_ok_iff.mp hpre
   obtain ⟨o2, ho2, ho3⟩ := bind_eq_ok_iff.mp hpre
-  have co1 := preDeposits_cpres_and_frame hf ctx ho1
+  have co1 := preDeposits_corpusPreservation_and_frame hf ctx ho1
   obtain ⟨_, _, hfr_o2⟩ := foldDepositRequests_spec hf _ ho2
-  have co3 := foldWithdrawalRequests_csub ctx.cfg ho3
+  have co3 := foldWithdrawalRequests_commonSubstep ctx.config ho3
   have hsl_o2 : o2.slot = o1.slot := by rw [hfr_o2]
   have hpc_o2 : o2.pending_consolidations = o1.pending_consolidations := by rw [hfr_o2]
   have hsl_pre : s_pre.slot = blk.slot := by
     rw [co3.slot_eq, hsl_o2, co1.2.1, c5.slot_eq, c4.slot_eq, c3.2.1, c2.slot_eq, hsl1]
   have hpc_pre : s_pre.pending_consolidations = s.pending_consolidations := by
-    rw [co3.pc_eq, hpc_o2, co1.2.2.2.2.1, c5.pc_eq, c4.pc_eq, c3.2.2.2.1, c2.pc_eq, c1.2.2.2.1]
+    rw [co3.pendingConsolidations_eq, hpc_o2, co1.2.2.2.2.1, c5.pendingConsolidations_eq, c4.pendingConsolidations_eq, c3.2.2.2.1, c2.pendingConsolidations_eq, c1.2.2.2.1]
   have hpcl_pre : pendingConsolidationsList s_pre = pendingConsolidationsList s :=
     pendingConsolidationsList_congr hpc_pre
   obtain ⟨outcomes, _, hlen, _, _, _, _, _, _, hdist, hpc_post, _, _⟩ :=
-    foldConsolidationRequests_frames_and_queues hf ctx.cfg _ hfold
-  have c7 := processSyncAggregate_csub ctx h7
+    foldConsolidationRequests_frames_and_queues hf ctx.config _ hfold
+  have c7 := processSyncAggregate_commonSubstep ctx h7
   have hval7 := processSyncAggregate_validators_eq ctx h7
   have hpcl_s' : pendingConsolidationsList s' =
       pendingConsolidationsList s ++ outcomes.filterMap acceptedConsolidation := by
-    rw [pendingConsolidationsList_congr c7.pc_eq, pendingConsolidationsList_eq_get hf,
+    rw [pendingConsolidationsList_congr c7.pendingConsolidations_eq, pendingConsolidationsList_eq_get hf,
         hpc_post, ← pendingConsolidationsList_eq_get hf, hpcl_pre]
   exact ⟨s_pre, s6, outcomes, hsl_pre, hpc_pre, hpcl_pre, hfold, hlen, hdist, hpcl_s',
-    h7, c7.pc_eq, hval7⟩
+    h7, c7.pendingConsolidations_eq, hval7⟩
 
 /-- Explicit indexed trace extracted from `ConsolidationRun`: intermediate states `us` of length
 `L.length + 1` with `us[0] = s`, `us[L.length] = s'`, constant `validators`, and per-step skipped
@@ -1121,9 +1121,9 @@ theorem processPendingConsolidations_full_law (hf : f.atLeast .electra = true) {
   obtain ⟨nextEpoch, hne, hp⟩ := bind_eq_ok_iff.mp hp
   have hne_nat : nextEpoch.toNat = e0.toNat + 1 := U64.toNat_add? hne
   obtain ⟨pending, hpend, hp⟩ := bind_eq_ok_iff.mp hp
-  have hpq : pending = Gated.get hf state.pending_consolidations := by
+  have hpq : pending = ForkField.get hf state.pending_consolidations := by
     unfold BeaconState.pendingConsolidations at hpend
-    rw [gated_read_get hf] at hpend
+    rw [forkField_read_get hf] at hpend
     exact (Except.ok.inj hpend).symm
   subst hpq
   obtain ⟨out, hloop, hp⟩ := bind_eq_ok_iff.mp hp
@@ -1133,21 +1133,21 @@ theorem processPendingConsolidations_full_law (hf : f.atLeast .electra = true) {
   unfold BeaconState.setPendingConsolidations at hp
   obtain ⟨g, hg, hp⟩ := bind_eq_ok_iff.mp hp
   cases hp
-  have hgq : g = Gated.mk hf q := by
-    rw [gated_write_eq hf] at hg; exact (Except.ok.inj hg).symm
+  have hgq : g = ForkField.mk hf q := by
+    rw [forkField_write_eq hf] at hg; exact (Except.ok.inj hg).symm
   have hq_arr : q.toArray =
-      (Gated.get hf state.pending_consolidations).toArray.extract out.2
-        (Gated.get hf state.pending_consolidations).length := by
+      (ForkField.get hf state.pending_consolidations).toArray.extract out.2
+        (ForkField.get hf state.pending_consolidations).length := by
     unfold SszList.ofArray at hq
     split at hq
     · cases hq; rfl
     · cases hq
   have hpcl_state : pendingConsolidationsList state =
-      (Gated.get hf state.pending_consolidations).toArray.toList :=
+      (ForkField.get hf state.pending_consolidations).toArray.toList :=
     pendingConsolidationsList_eq_get hf state
   have hd_le' : d ≤ (pendingConsolidationsList state).length := by
     rw [hpcl_state]; exact hd_le
-  have htake_len : ((Gated.get hf state.pending_consolidations).toArray.toList.take d).length = d :=
+  have htake_len : ((ForkField.get hf state.pending_consolidations).toArray.toList.take d).length = d :=
     List.length_take_of_le hd_le
   have hmid_val : out.1.validators = state.validators := by
     rw [htake_len] at husd
@@ -1156,15 +1156,15 @@ theorem processPendingConsolidations_full_law (hf : f.atLeast .electra = true) {
       pendingConsolidationsList { out.1 with pending_consolidations := g } =
         (pendingConsolidationsList state).drop d := by
     rw [pendingConsolidationsList_eq_get hf, hpcl_state]
-    show (Gated.get hf g).toArray.toList = _
-    rw [hgq, Gated.get_mk, hq_arr, hn, Nat.zero_add, Array.toList_extract]
-    have hsz : (Gated.get hf state.pending_consolidations).length =
-        (Gated.get hf state.pending_consolidations).toArray.toList.length := by
+    show (ForkField.get hf g).toArray.toList = _
+    rw [hgq, ForkField.get_mk, hq_arr, hn, Nat.zero_add, Array.toList_extract]
+    have hsz : (ForkField.get hf state.pending_consolidations).length =
+        (ForkField.get hf state.pending_consolidations).toArray.toList.length := by
       simp [SszList.length]
     rw [hsz]
     have hdrop_len :
-        ((Gated.get hf state.pending_consolidations).toArray.toList.drop d).length ≤
-          (Gated.get hf state.pending_consolidations).toArray.toList.length - d := by
+        ((ForkField.get hf state.pending_consolidations).toArray.toList.drop d).length ≤
+          (ForkField.get hf state.pending_consolidations).toArray.toList.length - d := by
       simp
     exact List.take_of_length_le hdrop_len
   refine ⟨e0, nextEpoch, d, out.1, us, he0, hne_nat, hd_le',
@@ -1172,7 +1172,7 @@ theorem processPendingConsolidations_full_law (hf : f.atLeast .electra = true) {
     hus0, by rw [← htake_len]; exact husd,
     hus_vals, hmid_val, rfl, hpcl_post, ?_, ?_⟩
   · intro j hj
-    have hj_take : j < ((Gated.get hf state.pending_consolidations).toArray.toList.take d).length := by
+    have hj_take : j < ((ForkField.get hf state.pending_consolidations).toArray.toList.take d).length := by
       rw [htake_len]; exact hj
     obtain ⟨pc, u, u', src, hpc_take, huj, huj1, hsrc, hcase⟩ := hus_steps j hj_take
     have hpc_full : (pendingConsolidationsList state)[j]? = some pc := by
@@ -1180,12 +1180,12 @@ theorem processPendingConsolidations_full_law (hf : f.atLeast .electra = true) {
       exact hpc_take
     exact ⟨pc, u, u', src, hpc_full, huj, huj1, hsrc, hcase⟩
   · intro hd_lt
-    have hd_lt_raw : d < (Gated.get hf state.pending_consolidations).toArray.toList.length := by
+    have hd_lt_raw : d < (ForkField.get hf state.pending_consolidations).toArray.toList.length := by
       rwa [← hpcl_state]
     have hdone := hstop hd_lt_raw
     obtain ⟨src, hsrc, hsp⟩ := pendingConsolidationStep_spec hdone
     rw [hmid_val] at hsrc
-    let pc := (Gated.get hf state.pending_consolidations).toArray.toList[d]'hd_lt_raw
+    let pc := (ForkField.get hf state.pending_consolidations).toArray.toList[d]'hd_lt_raw
     have hpc_some : (pendingConsolidationsList state)[d]? = some pc := by
       rw [hpcl_state, List.getElem?_eq_getElem hd_lt_raw]
     rcases hsp with ⟨_, heq⟩ | ⟨hsl, hgt, _⟩ | ⟨_, _, _, _, _, _, _, _, heq⟩
@@ -1216,8 +1216,8 @@ theorem EpochConsolidationChain.append {cfg : Config}
   | nil _ => exact h₂
   | cons hw hp _ ih => exact .cons hw hp (ih h₂)
 
-private theorem range'_forIn_consolidations_chain (hf : f.atLeast .electra = true) (ctx : Ctx)
-    {body : Nat → BeaconState P f → M (ForInStep (BeaconState P f))}
+private theorem range'_forIn_consolidations_chain (hf : f.atLeast .electra = true) (ctx : Context)
+    {body : Nat → BeaconState P f → Fallible (ForInStep (BeaconState P f))}
     (hb : ∀ k st r, body k st = .ok r →
       ∃ st1 next st2,
         processSlot st = .ok st1 ∧
@@ -1227,7 +1227,7 @@ private theorem range'_forIn_consolidations_chain (hf : f.atLeast .electra = tru
     ∀ (n start : Nat) (cur out : BeaconState P f),
       forIn (List.range' start n) cur body = .ok out →
       ∃ calls : List (BeaconState P f × BeaconState P f),
-        EpochConsolidationChain ctx.cfg (pendingConsolidationsList cur) calls
+        EpochConsolidationChain ctx.config (pendingConsolidationsList cur) calls
           (pendingConsolidationsList out)
   | 0, _, cur, out, h => by
     have heq : cur = out := Except.ok.inj h
@@ -1237,7 +1237,7 @@ private theorem range'_forIn_consolidations_chain (hf : f.atLeast .electra = tru
     rw [List.range'_succ, List.forIn_cons] at h
     obtain ⟨r, hr, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨st1, next, st2, hslot, _, hep_or, rfl⟩ := hb start cur r hr
-    have hc_slot := processSlot_cpres_and_frame hslot
+    have hc_slot := processSlot_corpusPreservation_and_frame hslot
     rcases hep_or with hst2 | hep
     · rw [hst2] at h
       obtain ⟨calls_rest, hrest⟩ :=
@@ -1252,28 +1252,28 @@ private theorem range'_forIn_consolidations_chain (hf : f.atLeast .electra = tru
       obtain ⟨ep1, hep1, hep⟩ := bind_eq_ok_iff.mp hep
       obtain ⟨ep2, hep2, hep⟩ := bind_eq_ok_iff.mp hep
       obtain ⟨ep3, hep3, hep4⟩ := bind_eq_ok_iff.mp hep
-      have c_pre := epochPreQueues_csub hf ctx.cfg hep1
-      have c_dep := processPendingDeposits_cpres_and_frame ctx hep2
-      have c_post := epochPostQueues_csub ctx hep4
+      have c_pre := epochPreQueues_commonSubstep hf ctx.config hep1
+      have c_dep := processPendingDeposits_corpusPreservation_and_frame ctx hep2
+      have c_post := epochPostQueues_commonSubstep ctx hep4
       obtain ⟨calls_rest, hrest⟩ :=
         range'_forIn_consolidations_chain hf ctx hb n (start + 1)
           { st2 with slot := next } out h
       have hw_eq : pendingConsolidationsList ep2 = pendingConsolidationsList cur :=
         pendingConsolidationsList_congr
-          (c_dep.2.2.2.2.trans (c_pre.pc_eq.trans hc_slot.2.2.2.2.2.1))
+          (c_dep.2.2.2.2.trans (c_pre.pendingConsolidations_eq.trans hc_slot.2.2.2.2.2.1))
       have hw'_eq :
           pendingConsolidationsList { st2 with slot := next } = pendingConsolidationsList ep3 :=
-        pendingConsolidationsList_congr c_post.pc_eq
+        pendingConsolidationsList_congr c_post.pendingConsolidations_eq
       rw [hw'_eq] at hrest
       exact ⟨(ep2, ep3) :: calls_rest, .cons hw_eq hep3 hrest⟩
 
 /-- **`C-S9` `processSlots` consolidation chain:** `processSlots` changes `pendingConsolidationsList`
 exclusively via an ordered sequence of `processPendingConsolidations` invocations. -/
-theorem processSlots_consolidations_chain (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem processSlots_consolidations_chain (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {slot : Slot}
     (h : processSlots ctx s slot = .ok s') :
     ∃ calls : List (BeaconState P f × BeaconState P f),
-      EpochConsolidationChain ctx.cfg (pendingConsolidationsList s) calls
+      EpochConsolidationChain ctx.config (pendingConsolidationsList s) calls
         (pendingConsolidationsList s') := by
   obtain ⟨_, body, hloop, hb⟩ := processSlots_loop_ok h
   exact range'_forIn_consolidations_chain hf ctx hb (slot.toNat - s.slot.toNat) 0 s s' hloop
@@ -1300,10 +1300,10 @@ theorem jointStep_cross_consolidations_chain {cfg : ChainConfig} {ccfg : Config}
       pendingConsolidationsList b2 = pendingConsolidationsList b1 ∧
       EpochConsolidationChain ccfg (pendingConsolidationsList b2) callsF
         (pendingConsolidationsList b_preBlock) ∧
-      processBlock { cfg := ccfg, blsActive := bls } b_preBlock sb.message = .ok b' := by
+      processBlock { config := ccfg, blsActive := bls } b_preBlock sb.message = .ok b' := by
   obtain ⟨_, _, _, _, b1, b2, b', e', _, hb1, hup, _, _, hb', hs'_eq⟩ :=
     jointStep_cross_ok_iff.mp h
-  have hup_pcl := (upgradeToFulu_cpres_and_frame ccfg hup).2.2.2.2.2.2.1
+  have hup_pcl := (upgradeToFulu_corpusPreservation_and_frame ccfg hup).2.2.2.2.2.2.1
   have hE : ∃ callsE : List (BeaconState P .electra × BeaconState P .electra),
       EpochConsolidationChain ccfg (pendingConsolidationsList beacon) callsE
         (pendingConsolidationsList b1) := by
@@ -1323,11 +1323,11 @@ theorem jointStep_cross_consolidations_chain {cfg : ChainConfig} {ccfg : Config}
 /-- Fork-uniform view of `state.pending_deposits` as `List PendingDeposit` (empty before Electra). -/
 def pendingDepositsList (s : BeaconState P f) : List PendingDeposit :=
   if hf : f.atLeast .electra = true then
-    (Gated.get hf s.pending_deposits).toArray.toList
+    (ForkField.get hf s.pending_deposits).toArray.toList
   else []
 
 theorem pendingDepositsList_eq_get (hf : f.atLeast .electra = true) (s : BeaconState P f) :
-    pendingDepositsList s = (Gated.get hf s.pending_deposits).toArray.toList := by
+    pendingDepositsList s = (ForkField.get hf s.pending_deposits).toArray.toList := by
   unfold pendingDepositsList
   split
   · rfl
@@ -1345,14 +1345,14 @@ theorem upgradeToFulu_pendingDepositsList (cfg : Config)
     {pre : BeaconState P .electra} {post : BeaconState P .fulu}
     (h : upgradeToFulu cfg pre = .ok post) :
     pendingDepositsList post = pendingDepositsList pre := by
-  have hpd := (upgradeToFulu_cpres_and_frame cfg h).2.2.2.2.2.2.2.2
+  have hpd := (upgradeToFulu_corpusPreservation_and_frame cfg h).2.2.2.2.2.2.2.2
   rw [pendingDepositsList_eq_get (f := .fulu) rfl, pendingDepositsList_eq_get (f := .electra) rfl]
   exact congrArg (fun x => x.toArray.toList) hpd
 
 /-- One `applyPendingDeposit` preserves all existing validators at their indices, preserves all
 existing `findValidatorIndex` lookups, and any newly appended validator has
 `exit_epoch = FAR_FUTURE_EPOCH` and `withdrawable_epoch = FAR_FUTURE_EPOCH`. -/
-theorem applyPendingDeposit_validators_step {ctx : Ctx} {s s' : BeaconState P f}
+theorem applyPendingDeposit_validators_step {ctx : Context} {s s' : BeaconState P f}
     {dep : PendingDeposit}
     (h : applyPendingDeposit ctx s dep = .ok s') :
     s.validators.toArray.size ≤ s'.validators.toArray.size ∧
@@ -1440,7 +1440,7 @@ An exiting validator (`v.exit_epoch < FAR_FUTURE_EPOCH`) resolved by `findValida
 intermediate state `cur` of `processPendingDeposits` is the exact same validator at the exact same
 index as in the pre-pass state `init` (newly created validators always have
 `exit_epoch = FAR_FUTURE_EPOCH`, and `applyPendingDeposit` never modifies existing `validators`). -/
-theorem foldlM_applyPendingDeposit_exiting_iff (ctx : Ctx) :
+theorem foldlM_applyPendingDeposit_exiting_iff (ctx : Context) :
     ∀ (applied : List PendingDeposit) {init cur : BeaconState P f},
       List.foldlM (applyPendingDeposit ctx) init applied = .ok cur →
       ∀ (pk : BLSPubkey) (i : Nat) (v : Validator),
@@ -1482,7 +1482,7 @@ where:
 - `drs.map (depositRequestPending · blk.slot)` are the EIP-6110 deposit requests at `blk.slot > 0`,
 - `extraPost` comes from `switchToCompoundingValidator` (`queueExcessActiveBalance` during
   `foldConsolidationRequests`, all at `GENESIS_SLOT`). -/
-theorem processBlock_pendingDeposits_split (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem processBlock_pendingDeposits_split (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {blk : BeaconBlock P f}
     (h : processBlock ctx s blk = .ok s') :
     0 < blk.slot.toNat ∧
@@ -1491,7 +1491,7 @@ theorem processBlock_pendingDeposits_split (hf : f.atLeast .electra = true) (ctx
       pendingDepositsList s' =
         pendingDepositsList s ++
           extraPre ++
-          ((Gated.get hf blk.body.execution_requests).deposits.toArray.toList.map
+          ((ForkField.get hf blk.body.execution_requests).deposits.toArray.toList.map
             (depositRequestPending · blk.slot)) ++
           extraPost ∧
       (f.atLeast .fulu = true → extraPre = []) ∧
@@ -1507,48 +1507,48 @@ theorem processBlock_pendingDeposits_split (hf : f.atLeast .electra = true) (ctx
   obtain ⟨_, _, hpos, _, hsl1, _⟩ := processBlockHeader_spec h1
   have hne_gen : blk.slot ≠ GENESIS_SLOT := by
     intro heq; rw [heq] at hpos; exact Nat.lt_irrefl 0 hpos
-  have c1 := processBlockHeader_corpusPres h1
-  have c2 := processWithdrawals_csub h2
-  have c3 := processExecutionPayload_corpusPres ctx h3
-  have c4 := processRandao_csub ctx h4
-  have c5 := processEth1Data_csub h5
+  have c1 := processBlockHeader_corpusPreservation h1
+  have c2 := processWithdrawals_commonSubstep h2
+  have c3 := processExecutionPayload_corpusPreservation ctx h3
+  have c4 := processRandao_commonSubstep ctx h4
+  have c5 := processEth1Data_commonSubstep h5
   rw [processOperations_split_all ctx s5 blk.body hf] at h6
   obtain ⟨o1, ho1, h6⟩ := bind_eq_ok_iff.mp h6
   obtain ⟨o2, ho2, h6⟩ := bind_eq_ok_iff.mp h6
   obtain ⟨o3, ho3, ho4⟩ := bind_eq_ok_iff.mp h6
   obtain ⟨_, hsl_o1, _, _, _, hfu_o1, extraPre_raw, hpd_o1, hgen_pre_raw⟩ :=
-    preDeposits_cpres_and_frame hf ctx ho1
+    preDeposits_corpusPreservation_and_frame hf ctx ho1
   have hsl_s5 : s5.slot = blk.slot := by
     rw [c5.slot_eq, c4.slot_eq, c3.2.1, c2.slot_eq, hsl1]
   have hsl_o1_blk : o1.slot = blk.slot := hsl_o1.trans hsl_s5
   obtain ⟨hpd_o2_arr, _, _⟩ := foldDepositRequests_spec hf _ ho2
   rw [hsl_o1_blk] at hpd_o2_arr
-  have hpd_o2 : (Gated.get hf o2.pending_deposits).toArray.toList =
-      (Gated.get hf o1.pending_deposits).toArray.toList ++
-        ((Gated.get hf blk.body.execution_requests).deposits.toArray.toList.map
+  have hpd_o2 : (ForkField.get hf o2.pending_deposits).toArray.toList =
+      (ForkField.get hf o1.pending_deposits).toArray.toList ++
+        ((ForkField.get hf blk.body.execution_requests).deposits.toArray.toList.map
           (depositRequestPending · blk.slot)) := by
     have h' := congrArg Array.toList hpd_o2_arr
     simpa only [Array.toList_append] using h'
-  have co3 := foldWithdrawalRequests_csub ctx.cfg ho3
+  have co3 := foldWithdrawalRequests_commonSubstep ctx.config ho3
   obtain ⟨_, extraPost, _, _, _, _, _, _, _, _, _, hpd_o4, hgen_post⟩ :=
-    foldConsolidationRequests_frames_and_queues hf ctx.cfg _ ho4
-  have c7 := processSyncAggregate_csub ctx h7
+    foldConsolidationRequests_frames_and_queues hf ctx.config _ ho4
+  have c7 := processSyncAggregate_commonSubstep ctx h7
   have hpd_s5 : s5.pending_deposits = s.pending_deposits := by
-    rw [c5.pd_eq, c4.pd_eq, c3.2.2.2.2, c2.pd_eq, c1.2.2.2.2]
+    rw [c5.pendingDeposits_eq, c4.pendingDeposits_eq, c3.2.2.2.2, c2.pendingDeposits_eq, c1.2.2.2.2]
   by_cases hfu : f.atLeast .fulu = true
   · refine ⟨hpos, hne_gen, [], extraPost, ?_, fun _ => rfl,
       (fun _ hm => nomatch hm), hgen_post⟩
     rw [pendingDepositsList_eq_get hf, pendingDepositsList_eq_get hf]
     have ho1_eq : o1.pending_deposits = s.pending_deposits := (hfu_o1 hfu).trans hpd_s5
-    rw [c7.pd_eq, hpd_o4, co3.pd_eq, hpd_o2, ho1_eq, List.append_nil]
+    rw [c7.pendingDeposits_eq, hpd_o4, co3.pendingDeposits_eq, hpd_o2, ho1_eq, List.append_nil]
   · refine ⟨hpos, hne_gen, extraPre_raw, extraPost, ?_,
       fun hh => absurd hh hfu, hgen_pre_raw, hgen_post⟩
     rw [pendingDepositsList_eq_get hf, pendingDepositsList_eq_get hf]
-    rw [c7.pd_eq, hpd_o4, co3.pd_eq, hpd_o2, hpd_o1, hpd_s5]
+    rw [c7.pendingDeposits_eq, hpd_o4, co3.pendingDeposits_eq, hpd_o2, hpd_o1, hpd_s5]
 
 /-- Ordered chain of `processPendingDeposits ctx` invocations transforming queue `q₀` to `q'`,
 with `pendingDepositsList` unchanged between consecutive invocations. -/
-inductive EpochDepositChain (ctx : Ctx) :
+inductive EpochDepositChain (ctx : Context) :
     List PendingDeposit → List (BeaconState P f × BeaconState P f) →
     List PendingDeposit → Prop where
   | nil (q : List PendingDeposit) : EpochDepositChain ctx q [] q
@@ -1559,7 +1559,7 @@ inductive EpochDepositChain (ctx : Ctx) :
       EpochDepositChain ctx (pendingDepositsList w') rest q_out →
       EpochDepositChain ctx q ((w, w') :: rest) q_out
 
-theorem EpochDepositChain.append {ctx : Ctx}
+theorem EpochDepositChain.append {ctx : Context}
     {q₀ q₁ q₂ : List PendingDeposit}
     {c₁ c₂ : List (BeaconState P f × BeaconState P f)}
     (h₁ : EpochDepositChain ctx q₀ c₁ q₁)
@@ -1569,8 +1569,8 @@ theorem EpochDepositChain.append {ctx : Ctx}
   | nil _ => exact h₂
   | cons hw hp _ ih => exact .cons hw hp (ih h₂)
 
-private theorem range'_forIn_deposits_chain (hf : f.atLeast .electra = true) (ctx : Ctx)
-    {body : Nat → BeaconState P f → M (ForInStep (BeaconState P f))}
+private theorem range'_forIn_deposits_chain (hf : f.atLeast .electra = true) (ctx : Context)
+    {body : Nat → BeaconState P f → Fallible (ForInStep (BeaconState P f))}
     (hb : ∀ k st r, body k st = .ok r →
       ∃ st1 next st2,
         processSlot st = .ok st1 ∧
@@ -1589,7 +1589,7 @@ private theorem range'_forIn_deposits_chain (hf : f.atLeast .electra = true) (ct
     rw [List.range'_succ, List.forIn_cons] at h
     obtain ⟨r, hr, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨st1, next, st2, hslot, _, hep_or, rfl⟩ := hb start cur r hr
-    have hc_slot := processSlot_cpres_and_frame hslot
+    have hc_slot := processSlot_corpusPreservation_and_frame hslot
     rcases hep_or with hst2 | hep
     · rw [hst2] at h
       obtain ⟨calls_rest, hrest⟩ :=
@@ -1604,23 +1604,23 @@ private theorem range'_forIn_deposits_chain (hf : f.atLeast .electra = true) (ct
       obtain ⟨ep1, hep1, hep⟩ := bind_eq_ok_iff.mp hep
       obtain ⟨ep2, hep2, hep⟩ := bind_eq_ok_iff.mp hep
       obtain ⟨ep3, hep3, hep4⟩ := bind_eq_ok_iff.mp hep
-      have c_pre := epochPreQueues_csub hf ctx.cfg hep1
-      have c_con := processPendingConsolidations_cpres_and_frame hf ctx.cfg hep3
-      have c_post := epochPostQueues_csub ctx hep4
+      have c_pre := epochPreQueues_commonSubstep hf ctx.config hep1
+      have c_con := processPendingConsolidations_corpusPreservation_and_frame hf ctx.config hep3
+      have c_post := epochPostQueues_commonSubstep ctx hep4
       obtain ⟨calls_rest, hrest⟩ :=
         range'_forIn_deposits_chain hf ctx hb n (start + 1)
           { st2 with slot := next } out h
       have hw_eq : pendingDepositsList ep1 = pendingDepositsList cur :=
-        pendingDepositsList_congr (c_pre.pd_eq.trans hc_slot.2.2.2.2.2.2)
+        pendingDepositsList_congr (c_pre.pendingDeposits_eq.trans hc_slot.2.2.2.2.2.2)
       have hw'_eq :
           pendingDepositsList { st2 with slot := next } = pendingDepositsList ep2 :=
-        pendingDepositsList_congr (c_post.pd_eq.trans c_con.2.2.2.2)
+        pendingDepositsList_congr (c_post.pendingDeposits_eq.trans c_con.2.2.2.2)
       rw [hw'_eq] at hrest
       exact ⟨(ep1, ep2) :: calls_rest, .cons hw_eq hep2 hrest⟩
 
 /-- **`D-S9` `processSlots` pending-deposits chain:** `processSlots` changes `pendingDepositsList`
 exclusively via an ordered sequence of `processPendingDeposits` invocations. -/
-theorem processSlots_pendingDeposits_chain (hf : f.atLeast .electra = true) (ctx : Ctx)
+theorem processSlots_pendingDeposits_chain (hf : f.atLeast .electra = true) (ctx : Context)
     {s s' : BeaconState P f} {slot : Slot}
     (h : processSlots ctx s slot = .ok s') :
     ∃ calls : List (BeaconState P f × BeaconState P f),
@@ -1643,18 +1643,18 @@ theorem jointStep_cross_pendingDeposits_chain {cfg : ChainConfig} {ccfg : Config
       (callsE : List (BeaconState P .electra × BeaconState P .electra))
       (callsF : List (BeaconState P .fulu × BeaconState P .fulu)),
       s' = ⟨.fulu, b', e'⟩ ∧
-      EpochDepositChain { cfg := ccfg, blsActive := bls } (pendingDepositsList beacon) callsE
+      EpochDepositChain { config := ccfg, blsActive := bls } (pendingDepositsList beacon) callsE
         (pendingDepositsList b1) ∧
       upgradeToFulu ccfg b1 = .ok b2 ∧
       pendingDepositsList b2 = pendingDepositsList b1 ∧
-      EpochDepositChain { cfg := ccfg, blsActive := bls } (pendingDepositsList b2) callsF
+      EpochDepositChain { config := ccfg, blsActive := bls } (pendingDepositsList b2) callsF
         (pendingDepositsList b_preBlock) ∧
-      processBlock { cfg := ccfg, blsActive := bls } b_preBlock sb.message = .ok b' := by
+      processBlock { config := ccfg, blsActive := bls } b_preBlock sb.message = .ok b' := by
   obtain ⟨_, _, _, _, b1, b2, b', e', _, hb1, hup, _, _, hb', hs'_eq⟩ :=
     jointStep_cross_ok_iff.mp h
   have hup_pdl := upgradeToFulu_pendingDepositsList ccfg hup
   have hE : ∃ callsE : List (BeaconState P .electra × BeaconState P .electra),
-      EpochDepositChain { cfg := ccfg, blsActive := bls }
+      EpochDepositChain { config := ccfg, blsActive := bls }
         (pendingDepositsList beacon) callsE (pendingDepositsList b1) := by
     split at hb1
     · exact processSlots_pendingDeposits_chain rfl _ hb1

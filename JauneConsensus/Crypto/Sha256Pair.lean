@@ -64,7 +64,7 @@ the same order and by the same shifts and truncations (`UInt16.toBytes`, `UInt32
   push32 (push32 acc (x >>> 32).toUInt32) x.toUInt32
 
 /-- The 64-byte message block `a ++ b` as an array. -/
-def pairBlock (a b : B256) : Array UInt8 :=
+def pairBlock (a b : Jaune.U256) : Array UInt8 :=
   push64 (push64 (push64 (push64 (push64 (push64 (push64 (push64
     (Array.emptyWithCapacity 64) a.1.1) a.1.2) a.2.1) a.2.2) b.1.1) b.1.2) b.2.1) b.2.2
 
@@ -80,26 +80,26 @@ theorem push64_toList (acc : Array UInt8) (x : UInt64) :
     (push64 acc x).toList = acc.toList ++ UInt64.toBytes x := by
   simp [push64, push32_toList, UInt64.toBytes]
 
-theorem pairBlock_toList (a b : B256) : (pairBlock a b).toList = a.toBytes ++ b.toBytes := by
-  simp [pairBlock, push64_toList, B256.toBytes, B128.toBytes]
+theorem pairBlock_toList (a b : Jaune.U256) : (pairBlock a b).toList = a.toBytes ++ b.toBytes := by
+  simp [pairBlock, push64_toList, U256.toBytes, U128.toBytes]
 
 /-- `hash(a + b)` for two `Bytes32`: the message block, written straight into an array, through
 the kernel's compression, then the constant padding block over its precomputed schedule. -/
-def hashPair (a b : B256) : B256 :=
+def hashPair (a b : Jaune.U256) : Jaune.U256 :=
   let H1 := consumeChunk initChunk (pairBlock a b)
   let H := compressScheduled H1 padSchedule
-  B32s.toB256 H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]
+  UInt32s.toU256 H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]
 
 /-- The same digest with both blocks through the kernel's `consumeChunk` (no precomputed
 schedule). Kept as the intermediate step of the proof and as a benchmark point. -/
-def hashPairKernel (a b : B256) : B256 :=
+def hashPairKernel (a b : Jaune.U256) : Jaune.U256 :=
   let H := consumeChunk (consumeChunk initChunk ⟨a.toBytes ++ b.toBytes⟩) padBlock
-  B32s.toB256 H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]
+  UInt32s.toU256 H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]
 
-theorem length_toBytes_pair (a b : B256) : (a.toBytes ++ b.toBytes).length = 64 := by
-  simp [B256.toBytes, B128.toBytes, UInt64.toBytes, UInt32.toBytes, UInt16.toBytes]
+theorem length_toBytes_pair (a b : Jaune.U256) : (a.toBytes ++ b.toBytes).length = 64 := by
+  simp [U256.toBytes, U128.toBytes, UInt64.toBytes, UInt32.toBytes, UInt16.toBytes]
 
-theorem hashPairKernel_eq (a b : B256) :
+theorem hashPairKernel_eq (a b : Jaune.U256) :
     hashPairKernel a b = Bytes.sha256 (a.toBytes ++ b.toBytes) := by
   have hm := length_toBytes_pair a b
   rw [Bytes.sha256_eq_fips, FIPS.hash, FIPS.hashWords, FIPS.pad, hm,
@@ -109,25 +109,25 @@ theorem hashPairKernel_eq (a b : B256) :
   rw [consumeChunk_eq, consumeChunk_eq, initChunk_eq]
   rfl
 
-theorem hashPair_eq_hashPairKernel (a b : B256) : hashPair a b = hashPairKernel a b := by
+theorem hashPair_eq_hashPairKernel (a b : Jaune.U256) : hashPair a b = hashPairKernel a b := by
   unfold hashPair hashPairKernel
   rw [consumeChunk_eq _ padBlock, consumeChunk_eq _ (pairBlock a b), pairBlock_toList,
     consumeChunk_eq _ ⟨a.toBytes ++ b.toBytes⟩]
   rfl
 
 /-- **`hashPair` is SHA-256 of the 64-byte concatenation**, for every pair of roots. -/
-theorem hashPair_eq (a b : B256) : hashPair a b = Bytes.sha256 (a.toBytes ++ b.toBytes) :=
+theorem hashPair_eq (a b : Jaune.U256) : hashPair a b = Bytes.sha256 (a.toBytes ++ b.toBytes) :=
   (hashPair_eq_hashPairKernel a b).trans (hashPairKernel_eq a b)
 
 /-! ## Differential falsifier (in addition to the theorem) -/
 
-private def b256Eq (x y : B256) : Bool := x.toBytes == y.toBytes
+private def u256Eq (x y : Jaune.U256) : Bool := x.toBytes == y.toBytes
 
-private def sample (k : Nat) : B256 := (k * 0x9e3779b97f4a7c15f39cc0605cedc834 + k ^ 7).toB256
+private def sample (k : Nat) : Jaune.U256 := (k * 0x9e3779b97f4a7c15f39cc0605cedc834 + k ^ 7).toU256
 
 #guard (List.range 64).all fun k =>
-  b256Eq (hashPair (sample k) (sample (k + 1000))) (Bytes.sha256 ((sample k).toBytes ++ (sample (k + 1000)).toBytes))
+  u256Eq (hashPair (sample k) (sample (k + 1000))) (Bytes.sha256 ((sample k).toBytes ++ (sample (k + 1000)).toBytes))
 -- the zero pair: SHA-256 of 64 zero bytes (`zero_hashes[1]` in SSZ merkleization)
-#guard b256Eq (hashPair 0 0) 0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b
+#guard u256Eq (hashPair 0 0) 0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b
 
 end JauneConsensus.Crypto

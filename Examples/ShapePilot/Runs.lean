@@ -55,7 +55,7 @@ def observe (msg : Msg) : Option Observation := do
   let .success _ _ meter world substate _ := parentReport.result | none
   pure {
     childIsCreate := child.message.isCreate
-    childCodeAddress := child.message.codeAddress.map Adr.toNat
+    childCodeAddress := child.message.codeAddress.map Address.toNat
     childReverted := match childReport.result with | .revert .. => true | _ => false
     childDepositHalted := match raw, childReport.result with
       | .ok _, .halt (.outOfGas _) _ _ => child.message.isCreate
@@ -64,10 +64,10 @@ def observe (msg : Msg) : Option Observation := do
     rawChildOutput := rawState.output
     rawChildSlot := (rawState.getStorVal childAddress 0).toNat
     rawChildLogs := rawState.logs.length
-    callerStack := parentReport.terminalMachine.stack.map B256.toNat
+    callerStack := parentReport.terminalMachine.stack.map U256.toNat
     callerOutputWindow := (parentReport.terminalMachine.memory.read 0 1).1
     callerReturnData := parentReport.terminalMachine.returnData
-    childSlot := ((world.state.get childAddress).stor.get 0).toNat
+    childSlot := ((world.state.get childAddress).storage.get 0).toNat
     logs := substate.logs.length
     creatorNonce := (world.state.get parentAddress).nonce.toNat
     destinationWarm := substate.accessedAddresses.contains newAddress

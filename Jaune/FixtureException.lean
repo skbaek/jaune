@@ -64,7 +64,7 @@ inductive FixtureException where
   -- the malformed-list identity the corpus uses for a published list that is
   -- not in the canonical form.
   | blockInvalidBlockAccessList
-  | blockInvalidBalHash
+  | blockInvalidBlockAccessListHash
   | blockAccessListGasLimitExceeded
   | blockIncorrectBlockFormat
   -- TransactionException.*
@@ -81,18 +81,18 @@ inductive FixtureException where
   | txNonceMismatchTooLow
   | txPriorityGreaterThanMaxFeePerGas
   | txSenderNotEoa
-  | txType3TxBlobCountExceeded
-  | txType3TxContractCreation
-  | txType3TxInvalidBlobVersionedHash
-  | txType3TxZeroBlobs
+  | txType3TransactionBlobCountExceeded
+  | txType3TransactionContractCreation
+  | txType3TransactionInvalidBlobVersionedHash
+  | txType3TransactionZeroBlobs
   | txType4EmptyAuthorizationList
-  | txType4TxContractCreation
+  | txType4TransactionContractCreation
   -- Goal U11a: a typed transaction before its type's fork (types 1 and 2
   -- since U11d, when Berlin's pre-London cases ran).
-  | txType3TxPreFork
-  | txType4TxPreFork
-  | txType1TxPreFork
-  | txType2TxPreFork
+  | txType3TransactionPreFork
+  | txType4TransactionPreFork
+  | txType1TransactionPreFork
+  | txType2TransactionPreFork
 deriving DecidableEq, BEq, Repr, Inhabited
 
 namespace FixtureException
@@ -126,7 +126,7 @@ def all : List FixtureException :=
     blockUnknownParent,
     blockUnknownParentZero,
     blockInvalidBlockAccessList,
-    blockInvalidBalHash,
+    blockInvalidBlockAccessListHash,
     blockAccessListGasLimitExceeded,
     blockIncorrectBlockFormat,
     txGasLimitPriceProductOverflow,
@@ -142,13 +142,13 @@ def all : List FixtureException :=
     txNonceMismatchTooLow,
     txPriorityGreaterThanMaxFeePerGas,
     txSenderNotEoa,
-    txType3TxBlobCountExceeded,
-    txType3TxContractCreation,
-    txType3TxInvalidBlobVersionedHash,
-    txType3TxZeroBlobs ]
-    ++ [txType4EmptyAuthorizationList, txType4TxContractCreation]
-    ++ [txType3TxPreFork, txType4TxPreFork]
-    ++ [txType1TxPreFork, txType2TxPreFork]
+    txType3TransactionBlobCountExceeded,
+    txType3TransactionContractCreation,
+    txType3TransactionInvalidBlobVersionedHash,
+    txType3TransactionZeroBlobs ]
+    ++ [txType4EmptyAuthorizationList, txType4TransactionContractCreation]
+    ++ [txType3TransactionPreFork, txType4TransactionPreFork]
+    ++ [txType1TransactionPreFork, txType2TransactionPreFork]
 
 /-- The canonical spelling of an identity: byte-for-byte the token the fixtures
 use. -/
@@ -182,7 +182,7 @@ def toString : FixtureException → String
   | blockUnknownParent => "BlockException.UNKNOWN_PARENT"
   | blockUnknownParentZero => "BlockException.UNKNOWN_PARENT_ZERO"
   | blockInvalidBlockAccessList => "BlockException.INVALID_BLOCK_ACCESS_LIST"
-  | blockInvalidBalHash => "BlockException.INVALID_BAL_HASH"
+  | blockInvalidBlockAccessListHash => "BlockException.INVALID_BAL_HASH"
   | blockAccessListGasLimitExceeded => "BlockException.BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED"
   | blockIncorrectBlockFormat => "BlockException.INCORRECT_BLOCK_FORMAT"
   | txGasLimitPriceProductOverflow =>
@@ -201,17 +201,17 @@ def toString : FixtureException → String
   | txPriorityGreaterThanMaxFeePerGas =>
     "TransactionException.PRIORITY_GREATER_THAN_MAX_FEE_PER_GAS"
   | txSenderNotEoa => "TransactionException.SENDER_NOT_EOA"
-  | txType3TxBlobCountExceeded => "TransactionException.TYPE_3_TX_BLOB_COUNT_EXCEEDED"
-  | txType3TxContractCreation => "TransactionException.TYPE_3_TX_CONTRACT_CREATION"
-  | txType3TxInvalidBlobVersionedHash =>
+  | txType3TransactionBlobCountExceeded => "TransactionException.TYPE_3_TX_BLOB_COUNT_EXCEEDED"
+  | txType3TransactionContractCreation => "TransactionException.TYPE_3_TX_CONTRACT_CREATION"
+  | txType3TransactionInvalidBlobVersionedHash =>
     "TransactionException.TYPE_3_TX_INVALID_BLOB_VERSIONED_HASH"
-  | txType3TxZeroBlobs => "TransactionException.TYPE_3_TX_ZERO_BLOBS"
+  | txType3TransactionZeroBlobs => "TransactionException.TYPE_3_TX_ZERO_BLOBS"
   | txType4EmptyAuthorizationList => "TransactionException.TYPE_4_EMPTY_AUTHORIZATION_LIST"
-  | txType4TxContractCreation => "TransactionException.TYPE_4_TX_CONTRACT_CREATION"
-  | txType3TxPreFork => "TransactionException.TYPE_3_TX_PRE_FORK"
-  | txType4TxPreFork => "TransactionException.TYPE_4_TX_PRE_FORK"
-  | txType1TxPreFork => "TransactionException.TYPE_1_TX_PRE_FORK"
-  | txType2TxPreFork => "TransactionException.TYPE_2_TX_PRE_FORK"
+  | txType4TransactionContractCreation => "TransactionException.TYPE_4_TX_CONTRACT_CREATION"
+  | txType3TransactionPreFork => "TransactionException.TYPE_3_TX_PRE_FORK"
+  | txType4TransactionPreFork => "TransactionException.TYPE_4_TX_PRE_FORK"
+  | txType1TransactionPreFork => "TransactionException.TYPE_1_TX_PRE_FORK"
+  | txType2TransactionPreFork => "TransactionException.TYPE_2_TX_PRE_FORK"
 
 instance : ToString FixtureException := ⟨toString⟩
 
@@ -230,11 +230,11 @@ def ofString? (s : String) : Option FixtureException :=
   -- The v20 fixture publisher also permits the corresponding aggregate
   -- blob-gas allowance spelling for the established per-transaction limit.
   | "TransactionException.TYPE_3_TX_MAX_BLOB_GAS_ALLOWANCE_EXCEEDED" =>
-    some txType3TxBlobCountExceeded
+    some txType3TransactionBlobCountExceeded
   | "TransactionException.INSUFFICIENT_MAX_FEE_PER_BLOB_GAS" =>
     some txInsufficientMaxFeePerGas
   | "TransactionException.TYPE_3_TX_WITH_FULL_BLOBS" =>
-    some txType3TxBlobCountExceeded
+    some txType3TransactionBlobCountExceeded
   | "BlockException.INCORRECT_BLOB_GAS_USED" =>
     some blockInvalidGasUsed
   | "BlockException.BLOB_GAS_USED_ABOVE_LIMIT" =>
@@ -248,7 +248,7 @@ def ofString? (s : String) : Option FixtureException :=
   -- `TYPE_3_TX_PRE_FORK`; it names the same reason as the transaction-level
   -- identity.
   | "BlockException.INVALID_VERSIONED_HASHES" =>
-    some txType3TxInvalidBlobVersionedHash
+    some txType3TransactionInvalidBlobVersionedHash
   -- The withdrawal-root fixtures permit the historical block-hash spelling as
   -- an alternative oracle name for the same header-commitment mismatch.
   | "BlockException.INVALID_BLOCK_HASH" =>
@@ -402,12 +402,12 @@ def ofTxValidationError : TxValidationError → Option FixtureException
   | .nonceMismatchTooLow _ => some txNonceMismatchTooLow
   | .priorityGreaterThanMaxFee _ => some txPriorityGreaterThanMaxFeePerGas
   | .senderNotEoa _ => some txSenderNotEoa
-  | .type3BlobCountExceeded _ => some txType3TxBlobCountExceeded
-  | .type3BlobCountLimitExceeded _ => some txType3TxBlobCountExceeded
-  | .type3ContractCreation _ => some txType3TxContractCreation
-  | .type3InvalidBlobVersionedHash _ => some txType3TxInvalidBlobVersionedHash
-  | .type3ZeroBlobs _ => some txType3TxZeroBlobs
-  | .type4ContractCreation _ => some txType4TxContractCreation
+  | .type3BlobCountExceeded _ => some txType3TransactionBlobCountExceeded
+  | .type3BlobCountLimitExceeded _ => some txType3TransactionBlobCountExceeded
+  | .type3ContractCreation _ => some txType3TransactionContractCreation
+  | .type3InvalidBlobVersionedHash _ => some txType3TransactionInvalidBlobVersionedHash
+  | .type3ZeroBlobs _ => some txType3TransactionZeroBlobs
+  | .type4ContractCreation _ => some txType4TransactionContractCreation
   | .emptyAuthorizationList _ => some txType4EmptyAuthorizationList
   -- Each admitted type has its own pre-fork identity in the fixture
   -- vocabulary (`TransactionException.TYPE_{1,2,3,4}_TX_PRE_FORK`,
@@ -415,10 +415,10 @@ def ofTxValidationError : TxValidationError → Option FixtureException
   -- 1 and 2 since U11d, when Berlin's EEST cases expect `TYPE_2_TX_PRE_FORK`
   -- (for_berlin/london/eip1559_fee_market_change/tx_type). No other type has
   -- one, so any other fails closed.
-  | .typePreFork 1 _ => some txType1TxPreFork
-  | .typePreFork 2 _ => some txType2TxPreFork
-  | .typePreFork 3 _ => some txType3TxPreFork
-  | .typePreFork 4 _ => some txType4TxPreFork
+  | .typePreFork 1 _ => some txType1TransactionPreFork
+  | .typePreFork 2 _ => some txType2TransactionPreFork
+  | .typePreFork 3 _ => some txType3TransactionPreFork
+  | .typePreFork 4 _ => some txType4TransactionPreFork
   | .typePreFork _ _ => none
 
 /-- The official identity of a block-validation rejection.
@@ -467,7 +467,7 @@ def ofBlockValidationError : BlockValidationError → Option FixtureException
   -- `INCORRECT_BLOCK_FORMAT`, a canonical one the header's hash commits to
   -- but Jaune did not compute is `INVALID_BLOCK_ACCESS_LIST`, and a header
   -- hash inconsistent with the published list is `INVALID_BAL_HASH`.
-  | .blockAccessListHash _ _ => some blockInvalidBalHash
+  | .blockAccessListHash _ _ => some blockInvalidBlockAccessListHash
   | .blockAccessListContent _ => some blockInvalidBlockAccessList
   | .blockAccessListFormat _ => some blockIncorrectBlockFormat
   | .blockAccessListGasLimit _ => some blockAccessListGasLimitExceeded
@@ -756,10 +756,10 @@ def fixtureInventory : List String :=
 #guard ofDecodeError (.rlpStructure .none) == some blockRlpStructuresEncoding
 #guard ofDecodeError (.roundTrip .none) == some blockRlpStructuresEncoding
 #guard ofDecodeError (.headerWidth .none) == some blockIncorrectBlockFormat
-#guard ofTxValidationError (.typePreFork 3 .none) == some txType3TxPreFork
-#guard ofTxValidationError (.typePreFork 4 .none) == some txType4TxPreFork
-#guard ofTxValidationError (.typePreFork 1 .none) == some txType1TxPreFork
-#guard ofTxValidationError (.typePreFork 2 .none) == some txType2TxPreFork
+#guard ofTxValidationError (.typePreFork 3 .none) == some txType3TransactionPreFork
+#guard ofTxValidationError (.typePreFork 4 .none) == some txType4TransactionPreFork
+#guard ofTxValidationError (.typePreFork 1 .none) == some txType1TransactionPreFork
+#guard ofTxValidationError (.typePreFork 2 .none) == some txType2TransactionPreFork
 #guard (ofTxValidationError (.typePreFork 0 .none)).isNone
 #guard (ofTxValidationError (.typePreFork 5 .none)).isNone
 #guard ofDecodeError (.leadingZeros .none) == some blockRlpStructuresEncoding
@@ -781,18 +781,18 @@ def fixtureInventory : List String :=
 -- corpus's alternations parse to the sets they name, and a hash mismatch is
 -- never scored as a content or format mismatch or vice versa -- which is what
 -- fixed decision 9's refusal to alias buys.
-#guard ofBlockValidationError (.blockAccessListHash emptyOmmerHash .none) == some blockInvalidBalHash
+#guard ofBlockValidationError (.blockAccessListHash emptyOmmerHash .none) == some blockInvalidBlockAccessListHash
 #guard ofBlockValidationError (.blockAccessListContent .none)
   == some blockInvalidBlockAccessList
 #guard ofBlockValidationError (.blockAccessListFormat .none) == some blockIncorrectBlockFormat
 #guard ofBlockValidationError (.blockAccessListGasLimit .none)
   == some blockAccessListGasLimitExceeded
-#guard [blockInvalidBalHash, blockInvalidBlockAccessList, blockIncorrectBlockFormat,
+#guard [blockInvalidBlockAccessListHash, blockInvalidBlockAccessList, blockIncorrectBlockFormat,
   blockAccessListGasLimitExceeded].eraseDups.length = 4
 #guard parsesTo "BlockException.INVALID_BLOCK_ACCESS_LIST|BlockException.INVALID_GAS_USED"
   [blockInvalidBlockAccessList, blockInvalidGasUsed]
 #guard parsesTo "BlockException.INVALID_BAL_HASH|BlockException.INVALID_BLOCK_HASH"
-  [blockInvalidBalHash, blockInvalidWithdrawalsRoot]
+  [blockInvalidBlockAccessListHash, blockInvalidWithdrawalsRoot]
 #guard (parseExpectation "BlockException.INVALID_BLOCK_ACCESS_LIST").toOption.all
   (fun expected => ¬ matchesSet expected (.block (.blockAccessListHash emptyOmmerHash .none)))
 #guard (parseExpectation "BlockException.INVALID_BLOCK_ACCESS_LIST").toOption.all

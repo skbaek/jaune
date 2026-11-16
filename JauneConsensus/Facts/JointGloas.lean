@@ -43,9 +43,9 @@ variable {P : Preset}
 
 /-- A `guardE` followed by a continuation succeeds iff the condition holds and the
 continuation succeeds. -/
-theorem guardE_bind_ok_iff {ε β : Type} {c : Bool} {e : ε} {k : Unit → Except ε β} {b : β} :
-    (guardE c e >>= k) = .ok b ↔ c = true ∧ k () = .ok b := by
-  cases c <;> simp [guardE, bind, Except.bind]
+theorem guardExcept_bind_ok_iff {ε β : Type} {c : Bool} {e : ε} {k : Unit → Except ε β} {b : β} :
+    (guardExcept c e >>= k) = .ok b ↔ c = true ∧ k () = .ok b := by
+  cases c <;> simp [guardExcept, bind, Except.bind]
 
 /-- The transition verdict is `.ok post` iff the configured transition succeeded with `post`. -/
 theorem transitionVerdict_ok_iff {r : Except RulesLookupError (Except TransitionError BlockChain)}
@@ -53,9 +53,9 @@ theorem transitionVerdict_ok_iff {r : Except RulesLookupError (Except Transition
   rcases r with e | e | p <;> simp [transitionVerdict]
 
 /-- A `guardE` succeeds iff its condition holds. -/
-theorem guardE_eq_ok_iff {ε : Type} {c : Bool} {e : ε} {u : Unit} :
-    guardE c e = .ok u ↔ c = true := by
-  cases c <;> simp [guardE]
+theorem guardExcept_eq_ok_iff {ε : Type} {c : Bool} {e : ε} {u : Unit} :
+    guardExcept c e = .ok u ↔ c = true := by
+  cases c <;> simp [guardExcept]
 
 private theorem pure_eq_ok_iff {ε α : Type} {a b : α} :
     (pure a : Except ε α) = .ok b ↔ a = b := by
@@ -79,26 +79,26 @@ theorem consensusFork?_eq_gloas_iff {f : Jaune.Fork} :
 
 /-- The Gloas engine accepts a payload exactly when every check passes, in the definition's
 order. -/
-theorem engineVerdictG_ok_iff {cfg : ChainConfig} {exec : BlockChain}
+theorem engineVerdictGloas_ok_iff {cfg : ChainConfig} {exec : BlockChain}
     {req : Gloas.NewPayloadRequest P} {post : BlockChain} :
-    engineVerdictG cfg exec req = .ok post ↔
+    engineVerdictGloas cfg exec req = .ok post ↔
       req.execution_payload.txBytes.any List.isEmpty = false ∧
-      (payloadToBlockG req).header.hash = req.execution_payload.block_hash ∧
+      (payloadToBlockGloas req).header.hash = req.execution_payload.block_hash ∧
       blobVersionedHashesOf req.execution_payload.txBytes =
         .ok req.versioned_hashes.toArray.toList ∧
       cfg.checkChainId exec = .ok () ∧
-      ∃ f, cfg.forkAt (payloadToBlockG req).header.number
-            (payloadToBlockG req).header.timestamp = .ok f ∧
+      ∃ f, cfg.forkAt (payloadToBlockGloas req).header.number
+            (payloadToBlockGloas req).header.timestamp = .ok f ∧
         f.consensusFork? = some .gloas ∧
-        checkBlockRlpSize f.ruleSet.block (payloadToBlockG req).toBLT.toBytes.length = .ok () ∧
-        stateTransitionScheduledE cfg f exec (payloadToBlockG req) = .ok (.ok post) ∧
-        ∃ st bout, applyBody (initBenv f exec (payloadToBlockG req).header)
-            (payloadToBlockG req).txs (payloadToBlockG req).ommers (payloadToBlockG req).wds =
+        checkBlockRlpSize f.ruleSet.block (payloadToBlockGloas req).toRlpItem.toBytes.length = .ok () ∧
+        stateTransitionScheduledE cfg f exec (payloadToBlockGloas req) = .ok (.ok post) ∧
+        ∃ st bout, applyBody (initBenv f exec (payloadToBlockGloas req).header)
+            (payloadToBlockGloas req).transactions (payloadToBlockGloas req).ommers (payloadToBlockGloas req).withdrawals =
             .ok (st, bout) ∧
           bout.requests = Gloas.getExecutionRequestsList req.execution_requests ∧
-          req.execution_payload.balBytes = bout.blockAccessList.encode := by
-  unfold engineVerdictG
-  simp only [Except.bind_eq_ok_iff, guardE_eq_ok_iff, Except.mapError_eq_ok_iff,
+          req.execution_payload.blockAccessListBytes = bout.blockAccessList.encode := by
+  unfold engineVerdictGloas
+  simp only [Except.bind_eq_ok_iff, guardExcept_eq_ok_iff, Except.mapError_eq_ok_iff,
     transitionVerdict_ok_iff, decide_eq_true_eq, pure_eq_ok_iff, Prod.exists, unit_exists_iff,
     Bool.not_eq_true']
   constructor
@@ -109,16 +109,16 @@ theorem engineVerdictG_ok_iff {cfg : ChainConfig} {exec : BlockChain}
 
 /-- An accepted Gloas payload runs on Amsterdam, and its body run produces the request's
 requests, as the list `get_execution_requests_list`, and the payload's block access list. -/
-theorem engineVerdictG_requests {cfg : ChainConfig} {exec : BlockChain}
+theorem engineVerdictGloas_requests {cfg : ChainConfig} {exec : BlockChain}
     {req : Gloas.NewPayloadRequest P} {post : BlockChain}
-    (h : engineVerdictG cfg exec req = .ok post) :
-    ∃ st bout, applyBody (initBenv .amsterdam exec (payloadToBlockG req).header)
-        (payloadToBlockG req).txs (payloadToBlockG req).ommers (payloadToBlockG req).wds =
+    (h : engineVerdictGloas cfg exec req = .ok post) :
+    ∃ st bout, applyBody (initBenv .amsterdam exec (payloadToBlockGloas req).header)
+        (payloadToBlockGloas req).transactions (payloadToBlockGloas req).ommers (payloadToBlockGloas req).withdrawals =
         .ok (st, bout) ∧
       bout.requests = Gloas.getExecutionRequestsList req.execution_requests ∧
-      req.execution_payload.balBytes = bout.blockAccessList.encode := by
+      req.execution_payload.blockAccessListBytes = bout.blockAccessList.encode := by
   obtain ⟨_, _, _, _, f, _, hpair, _, _, st, bout, hbody, hr, hbal⟩ :=
-    engineVerdictG_ok_iff.mp h
+    engineVerdictGloas_ok_iff.mp h
   rw [consensusFork?_eq_gloas_iff] at hpair
   subst hpair
   exact ⟨st, bout, hbody, hr, hbal⟩
@@ -126,9 +126,9 @@ theorem engineVerdictG_requests {cfg : ChainConfig} {exec : BlockChain}
 /-- The `Bool` engine U6's check calls accepts exactly when the verdict is a chain. -/
 theorem envelopeEngine_eq_true_iff {cfg : ChainConfig} {exec : BlockChain}
     {req : Gloas.NewPayloadRequest P} :
-    envelopeEngine cfg exec req = true ↔ ∃ post, engineVerdictG cfg exec req = .ok post := by
+    envelopeEngine cfg exec req = true ↔ ∃ post, engineVerdictGloas cfg exec req = .ok post := by
   unfold envelopeEngine
-  cases engineVerdictG cfg exec req <;> simp [Except.isOk, Except.toBool]
+  cases engineVerdictGloas cfg exec req <;> simp [Except.isOk, Except.toBool]
 
 /-! ## The envelope seam -/
 
@@ -145,44 +145,44 @@ theorem envelopeNewPayloadRequest_execution_requests {state : Gloas.BeaconState 
 /-- The seam succeeds exactly when U6's named conjuncts hold with the engine
 `envelopeEngine cfg exec`, the withdrawals match as lists, the request is the envelope's, and
 the engine's verdict on it is the returned chain. -/
-theorem verifyEnvelopeG_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem verifyEnvelopeGloas_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {state : Gloas.BeaconState P} {exec : BlockChain} {e : Gloas.SignedExecutionPayloadEnvelope P}
     {req : Gloas.NewPayloadRequest P} {post : BlockChain} :
-    verifyEnvelopeG cfg ccfg bls state exec e = .ok (req, post) ↔
-      Gloas.EnvelopeChecksB bls ccfg (envelopeEngine cfg exec) state e ∧
+    verifyEnvelopeGloas cfg ccfg bls state exec e = .ok (req, post) ↔
+      Gloas.EnvelopeChecksWithBls bls ccfg (envelopeEngine cfg exec) state e ∧
       Gloas.WithdrawalsMatchExpected state e ∧
       Gloas.envelopeNewPayloadRequest state e = .ok req ∧
-      engineVerdictG cfg exec req = .ok post := by
+      engineVerdictGloas cfg exec req = .ok post := by
   constructor
   · intro h
-    unfold verifyEnvelopeG at h
+    unfold verifyEnvelopeGloas at h
     obtain ⟨u, hv, h⟩ := Except.bind_eq_ok h
     obtain ⟨u2, hw, h⟩ := Except.bind_eq_ok h
     obtain ⟨r, hr, h⟩ := Except.bind_eq_ok h
     cases u
     have hw' : Gloas.WithdrawalsMatchExpected state e := of_decide_eq_true (require_ok_iff.mp hw)
-    cases he : engineVerdictG cfg exec r with
+    cases he : engineVerdictGloas cfg exec r with
     | error x =>
       rw [he] at h
       cases h
     | ok p =>
       rw [he] at h
       cases h
-      exact ⟨Gloas.verifyExecutionPayloadEnvelopeB_ok_iff.mp hv, hw', hr, he⟩
+      exact ⟨Gloas.verifyExecutionPayloadEnvelopeWithBls_ok_iff.mp hv, hw', hr, he⟩
   · rintro ⟨hc, hw, hr, he⟩
-    unfold verifyEnvelopeG
-    rw [Gloas.verifyExecutionPayloadEnvelopeB_ok_iff.mpr hc]
+    unfold verifyEnvelopeGloas
+    rw [Gloas.verifyExecutionPayloadEnvelopeWithBls_ok_iff.mpr hc]
     simp only [require, decide_eq_true hw, hr, he, ite_true, bind, Except.bind, pure, Except.pure]
 
 /-- The two engine calls agree: the request the check hands its `Bool` engine is the request the
 second call runs, the `Bool` call accepted it, and the second call's chain is `post`. -/
-theorem verifyEnvelopeG_engine_calls_agree {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem verifyEnvelopeGloas_engine_calls_agree {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {state : Gloas.BeaconState P} {exec : BlockChain} {e : Gloas.SignedExecutionPayloadEnvelope P}
     {req : Gloas.NewPayloadRequest P} {post : BlockChain}
-    (h : verifyEnvelopeG cfg ccfg bls state exec e = .ok (req, post))
+    (h : verifyEnvelopeGloas cfg ccfg bls state exec e = .ok (req, post))
     {r : Gloas.NewPayloadRequest P} (hr : Gloas.envelopeNewPayloadRequest state e = .ok r) :
-    r = req ∧ envelopeEngine cfg exec r = true ∧ engineVerdictG cfg exec r = .ok post := by
-  obtain ⟨hc, _, hreq, he⟩ := verifyEnvelopeG_ok_iff.mp h
+    r = req ∧ envelopeEngine cfg exec r = true ∧ engineVerdictGloas cfg exec r = .ok post := by
+  obtain ⟨hc, _, hreq, he⟩ := verifyEnvelopeGloas_ok_iff.mp h
   have hrr : r = req := by
     rw [hr] at hreq
     cases hreq
@@ -195,95 +195,95 @@ theorem verifyEnvelopeG_engine_calls_agree {cfg : ChainConfig} {ccfg : Config} {
 
 /-- On an accepted envelope the request is the envelope's, and the body run on Amsterdam
 produced the envelope's requests as the list `get_execution_requests_list`. -/
-theorem verifyEnvelopeG_requests {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem verifyEnvelopeGloas_requests {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {state : Gloas.BeaconState P} {exec : BlockChain} {e : Gloas.SignedExecutionPayloadEnvelope P}
     {req : Gloas.NewPayloadRequest P} {post : BlockChain}
-    (h : verifyEnvelopeG cfg ccfg bls state exec e = .ok (req, post)) :
+    (h : verifyEnvelopeGloas cfg ccfg bls state exec e = .ok (req, post)) :
     req.execution_requests = e.message.execution_requests ∧
-      ∃ st bout, applyBody (initBenv .amsterdam exec (payloadToBlockG req).header)
-          (payloadToBlockG req).txs (payloadToBlockG req).ommers (payloadToBlockG req).wds =
+      ∃ st bout, applyBody (initBenv .amsterdam exec (payloadToBlockGloas req).header)
+          (payloadToBlockGloas req).transactions (payloadToBlockGloas req).ommers (payloadToBlockGloas req).withdrawals =
           .ok (st, bout) ∧
         bout.requests = Gloas.getExecutionRequestsList e.message.execution_requests := by
-  obtain ⟨_, _, hreq, he⟩ := verifyEnvelopeG_ok_iff.mp h
+  obtain ⟨_, _, hreq, he⟩ := verifyEnvelopeGloas_ok_iff.mp h
   have hx := envelopeNewPayloadRequest_execution_requests hreq
-  obtain ⟨st, bout, hbody, hr, _⟩ := engineVerdictG_requests he
+  obtain ⟨st, bout, hbody, hr, _⟩ := engineVerdictGloas_requests he
   exact ⟨hx, st, bout, hbody, hx ▸ hr⟩
 
 /-- An envelope whose withdrawals root differs from `payload_expected_withdrawals`' is rejected
 (U6's root-form rejection). -/
-theorem verifyEnvelopeG_rejects_of_withdrawalsRoot_ne {cfg : ChainConfig} {ccfg : Config}
+theorem verifyEnvelopeGloas_rejects_of_withdrawalsRoot_ne {cfg : ChainConfig} {ccfg : Config}
     {bls : Bool} {state : Gloas.BeaconState P} {exec : BlockChain}
     {e : Gloas.SignedExecutionPayloadEnvelope P}
     (hne : Ssz.hashTreeRoot e.message.payload.withdrawals ≠
       Ssz.hashTreeRoot state.payload_expected_withdrawals)
     (r : Gloas.NewPayloadRequest P × BlockChain) :
-    verifyEnvelopeG cfg ccfg bls state exec e ≠ .ok r := fun h =>
-  Gloas.verifyExecutionPayloadEnvelopeB_rejects_of_withdrawalsRoot_ne hne
-    (Gloas.verifyExecutionPayloadEnvelopeB_ok_iff.mpr (verifyEnvelopeG_ok_iff.mp h).1)
+    verifyEnvelopeGloas cfg ccfg bls state exec e ≠ .ok r := fun h =>
+  Gloas.verifyExecutionPayloadEnvelopeWithBls_rejects_of_withdrawalsRoot_ne hne
+    (Gloas.verifyExecutionPayloadEnvelopeWithBls_ok_iff.mpr (verifyEnvelopeGloas_ok_iff.mp h).1)
 
 /-- An envelope whose withdrawals differ, as lists, from `payload_expected_withdrawals` is
 rejected (the list form, with no hash). -/
-theorem verifyEnvelopeG_rejects_of_withdrawals_ne {cfg : ChainConfig} {ccfg : Config}
+theorem verifyEnvelopeGloas_rejects_of_withdrawals_ne {cfg : ChainConfig} {ccfg : Config}
     {bls : Bool} {state : Gloas.BeaconState P} {exec : BlockChain}
     {e : Gloas.SignedExecutionPayloadEnvelope P}
     (hne : ¬ Gloas.WithdrawalsMatchExpected state e)
     (r : Gloas.NewPayloadRequest P × BlockChain) :
-    verifyEnvelopeG cfg ccfg bls state exec e ≠ .ok r := fun h =>
-  hne (verifyEnvelopeG_ok_iff.mp h).2.1
+    verifyEnvelopeGloas cfg ccfg bls state exec e ≠ .ok r := fun h =>
+  hne (verifyEnvelopeGloas_ok_iff.mp h).2.1
 
 /-- An envelope whose requests root differs from the committed bid's is rejected (U6's
 rejection). -/
-theorem verifyEnvelopeG_rejects_of_requestsRoot_ne {cfg : ChainConfig} {ccfg : Config}
+theorem verifyEnvelopeGloas_rejects_of_requestsRoot_ne {cfg : ChainConfig} {ccfg : Config}
     {bls : Bool} {state : Gloas.BeaconState P} {exec : BlockChain}
     {e : Gloas.SignedExecutionPayloadEnvelope P}
     (hne : Ssz.hashTreeRoot e.message.execution_requests ≠
       state.latest_execution_payload_bid.execution_requests_root)
     (r : Gloas.NewPayloadRequest P × BlockChain) :
-    verifyEnvelopeG cfg ccfg bls state exec e ≠ .ok r := fun h =>
-  Gloas.verifyExecutionPayloadEnvelopeB_rejects_of_requestsRoot_ne hne
-    (Gloas.verifyExecutionPayloadEnvelopeB_ok_iff.mpr (verifyEnvelopeG_ok_iff.mp h).1)
+    verifyEnvelopeGloas cfg ccfg bls state exec e ≠ .ok r := fun h =>
+  Gloas.verifyExecutionPayloadEnvelopeWithBls_rejects_of_requestsRoot_ne hne
+    (Gloas.verifyExecutionPayloadEnvelopeWithBls_ok_iff.mpr (verifyEnvelopeGloas_ok_iff.mp h).1)
 
 /-! ## The BLS switch -/
 
 /-- When the envelope signature verifies with real BLS, U6's check is the same function of the
 rest under either setting of the switch. -/
-theorem verifyExecutionPayloadEnvelopeB_bls_indep {bls : Bool} {cfg : Config}
+theorem verifyExecutionPayloadEnvelopeWithBls_bls_independent {bls : Bool} {cfg : Config}
     {engine : Gloas.NewPayloadRequest P → Bool} {state : Gloas.BeaconState P}
     {e : Gloas.SignedExecutionPayloadEnvelope P}
-    (hsig : Gloas.verifyExecutionPayloadEnvelopeSignatureB true state e = .ok true) :
-    Gloas.verifyExecutionPayloadEnvelopeB bls cfg engine state e =
-      Gloas.verifyExecutionPayloadEnvelopeB true cfg engine state e := by
+    (hsig : Gloas.verifyExecutionPayloadEnvelopeSignatureWithBls true state e = .ok true) :
+    Gloas.verifyExecutionPayloadEnvelopeWithBls bls cfg engine state e =
+      Gloas.verifyExecutionPayloadEnvelopeWithBls true cfg engine state e := by
   cases bls
   · have hlook : ∃ pk d, Gloas.builderSigningPubkey state e.message.builder_index = .ok pk ∧
         Gloas.getDomain state Gloas.DOMAIN_BEACON_BUILDER = .ok d := by
-      unfold Gloas.verifyExecutionPayloadEnvelopeSignatureB at hsig
+      unfold Gloas.verifyExecutionPayloadEnvelopeSignatureWithBls at hsig
       obtain ⟨pk, hpk, h⟩ := Except.bind_eq_ok hsig
       obtain ⟨d, hd, _⟩ := Except.bind_eq_ok h
       exact ⟨pk, d, hpk, hd⟩
     obtain ⟨pk, d, hpk, hd⟩ := hlook
-    have hf := Gloas.verifyExecutionPayloadEnvelopeSignatureB_false hpk hd
-    unfold Gloas.verifyExecutionPayloadEnvelopeB
+    have hf := Gloas.verifyExecutionPayloadEnvelopeSignatureWithBls_false hpk hd
+    unfold Gloas.verifyExecutionPayloadEnvelopeWithBls
     rw [hf, hsig]
   · rfl
 
 /-- `verifyEnvelopeG` does not depend on the switch when the signature verifies. -/
-theorem verifyEnvelopeG_bls_indep {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem verifyEnvelopeGloas_bls_independent {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {state : Gloas.BeaconState P} {exec : BlockChain} {e : Gloas.SignedExecutionPayloadEnvelope P}
-    (hsig : Gloas.verifyExecutionPayloadEnvelopeSignatureB true state e = .ok true) :
-    verifyEnvelopeG cfg ccfg bls state exec e = verifyEnvelopeG cfg ccfg true state exec e := by
-  unfold verifyEnvelopeG
-  rw [verifyExecutionPayloadEnvelopeB_bls_indep hsig]
+    (hsig : Gloas.verifyExecutionPayloadEnvelopeSignatureWithBls true state e = .ok true) :
+    verifyEnvelopeGloas cfg ccfg bls state exec e = verifyEnvelopeGloas cfg ccfg true state exec e := by
+  unfold verifyEnvelopeGloas
+  rw [verifyExecutionPayloadEnvelopeWithBls_bls_independent hsig]
 
 /-! ## The envelope arm -/
 
 /-- The envelope arm succeeds exactly on a Gloas state whose latest block's payload is
 `.withheld`, when the seam accepts; it records the envelope, the request and the engine's chain,
 and moves nothing else. -/
-theorem deliver_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s s' : GJointState P}
+theorem deliver_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s s' : GloasJointState P}
     {e : Gloas.SignedExecutionPayloadEnvelope P} :
     deliver cfg ccfg bls s e = .ok s' ↔
       ∃ beacon exec req post, s = .gloas beacon exec .withheld ∧
-        verifyEnvelopeG cfg ccfg bls beacon exec e = .ok (req, post) ∧
+        verifyEnvelopeGloas cfg ccfg bls beacon exec e = .ok (req, post) ∧
         s' = .gloas beacon exec (.delivered e req post) := by
   cases s with
   | pre j =>
@@ -302,17 +302,17 @@ theorem deliver_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s s' : 
         unfold deliver
         simp only [hv, bind, Except.bind, pure, Except.pure]
     | landed =>
-      simp only [deliver, reduceCtorEq, GJointState.gloas.injEq, false_and, and_false,
+      simp only [deliver, reduceCtorEq, GloasJointState.gloas.injEq, false_and, and_false,
         exists_false]
     | delivered env req post =>
-      simp only [deliver, reduceCtorEq, GJointState.gloas.injEq, false_and, and_false,
+      simp only [deliver, reduceCtorEq, GloasJointState.gloas.injEq, false_and, and_false,
         exists_false]
 
 /-- A second envelope for the same block is refused. -/
 theorem deliver_refuses_delivered {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : Gloas.BeaconState P} {exec : BlockChain}
     {env e : Gloas.SignedExecutionPayloadEnvelope P} {req : Gloas.NewPayloadRequest P}
-    {post : BlockChain} (s' : GJointState P) :
+    {post : BlockChain} (s' : GloasJointState P) :
     deliver cfg ccfg bls (.gloas beacon exec (.delivered env req post)) e ≠ .ok s' := by
   intro h
   obtain ⟨_, _, _, _, hs, _, _⟩ := deliver_ok_iff.mp h
@@ -322,7 +322,7 @@ theorem deliver_refuses_delivered {cfg : ChainConfig} {ccfg : Config} {bls : Boo
 already the head) is refused. -/
 theorem deliver_refuses_landed {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : Gloas.BeaconState P} {exec : BlockChain}
-    {e : Gloas.SignedExecutionPayloadEnvelope P} (s' : GJointState P) :
+    {e : Gloas.SignedExecutionPayloadEnvelope P} (s' : GloasJointState P) :
     deliver cfg ccfg bls (.gloas beacon exec .landed) e ≠ .ok s' := by
   intro h
   obtain ⟨_, _, _, _, hs, _, _⟩ := deliver_ok_iff.mp h
@@ -332,45 +332,45 @@ theorem deliver_refuses_landed {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
 theorem deliver_rejects_of_withdrawals_ne {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : Gloas.BeaconState P} {exec : BlockChain} {parent : ParentPayload P}
     {e : Gloas.SignedExecutionPayloadEnvelope P}
-    (hne : ¬ Gloas.WithdrawalsMatchExpected beacon e) (s' : GJointState P) :
+    (hne : ¬ Gloas.WithdrawalsMatchExpected beacon e) (s' : GloasJointState P) :
     deliver cfg ccfg bls (.gloas beacon exec parent) e ≠ .ok s' := by
   intro h
   obtain ⟨_, _, _, _, hs, hv, _⟩ := deliver_ok_iff.mp h
   cases hs
-  exact verifyEnvelopeG_rejects_of_withdrawals_ne hne _ hv
+  exact verifyEnvelopeGloas_rejects_of_withdrawals_ne hne _ hv
 
 /-- The envelope arm rejects a withdrawals root that differs from the expected one (U6). -/
 theorem deliver_rejects_of_withdrawalsRoot_ne {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : Gloas.BeaconState P} {exec : BlockChain} {parent : ParentPayload P}
     {e : Gloas.SignedExecutionPayloadEnvelope P}
     (hne : Ssz.hashTreeRoot e.message.payload.withdrawals ≠
-      Ssz.hashTreeRoot beacon.payload_expected_withdrawals) (s' : GJointState P) :
+      Ssz.hashTreeRoot beacon.payload_expected_withdrawals) (s' : GloasJointState P) :
     deliver cfg ccfg bls (.gloas beacon exec parent) e ≠ .ok s' := by
   intro h
   obtain ⟨_, _, _, _, hs, hv, _⟩ := deliver_ok_iff.mp h
   cases hs
-  exact verifyEnvelopeG_rejects_of_withdrawalsRoot_ne hne _ hv
+  exact verifyEnvelopeGloas_rejects_of_withdrawalsRoot_ne hne _ hv
 
 /-- The envelope arm rejects requests whose root is not the committed bid's (U6). -/
 theorem deliver_rejects_of_requestsRoot_ne {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : Gloas.BeaconState P} {exec : BlockChain} {parent : ParentPayload P}
     {e : Gloas.SignedExecutionPayloadEnvelope P}
     (hne : Ssz.hashTreeRoot e.message.execution_requests ≠
-      beacon.latest_execution_payload_bid.execution_requests_root) (s' : GJointState P) :
+      beacon.latest_execution_payload_bid.execution_requests_root) (s' : GloasJointState P) :
     deliver cfg ccfg bls (.gloas beacon exec parent) e ≠ .ok s' := by
   intro h
   obtain ⟨_, _, _, _, hs, hv, _⟩ := deliver_ok_iff.mp h
   cases hs
-  exact verifyEnvelopeG_rejects_of_requestsRoot_ne hne _ hv
+  exact verifyEnvelopeGloas_rejects_of_requestsRoot_ne hne _ hv
 
 /-- The envelope arm does not depend on the switch when the signature verifies. -/
-theorem deliver_bls_indep {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem deliver_bls_independent {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : Gloas.BeaconState P} {exec : BlockChain} {parent : ParentPayload P}
     {e : Gloas.SignedExecutionPayloadEnvelope P}
-    (hsig : Gloas.verifyExecutionPayloadEnvelopeSignatureB true beacon e = .ok true) :
+    (hsig : Gloas.verifyExecutionPayloadEnvelopeSignatureWithBls true beacon e = .ok true) :
     deliver cfg ccfg bls (.gloas beacon exec parent) e =
       deliver cfg ccfg true (.gloas beacon exec parent) e := by
-  cases parent <;> simp only [deliver, verifyEnvelopeG_bls_indep hsig]
+  cases parent <;> simp only [deliver, verifyEnvelopeGloas_bls_independent hsig]
 
 /-! ## Parent settlement -/
 
@@ -431,7 +431,7 @@ theorem settleParent_refuses_other_requests {exec : BlockChain}
 /-- The beacon-side settlement inside Gloas `processBlock` branches on `parentFull`: EMPTY
 checks the requests are `ExecutionRequests.empty()` and leaves the state; FULL checks the
 requests root against the parent bid and applies the requests. -/
-theorem processParentExecutionPayload_ok_iff {ctx : Ctx} {state st' : Gloas.BeaconState P}
+theorem processParentExecutionPayload_ok_iff {ctx : Context} {state st' : Gloas.BeaconState P}
     {block : Gloas.BeaconBlock P} :
     Gloas.processParentExecutionPayload ctx state block = .ok st' ↔
       (parentFull state block = false ∧
@@ -456,7 +456,7 @@ theorem processParentExecutionPayload_ok_iff {ctx : Ctx} {state st' : Gloas.Beac
 /-- The block arm succeeds exactly when `processSlots` reaches the block's slot, the
 execution-side settlement at that state succeeds, and the rest of the block transition does. -/
 theorem gloasBlockArm_ok_iff
-    {processSlots : GloasSlotsFn P} {blockTransition : GloasBlockFn P}
+    {processSlots : GloasSlotsFunction P} {blockTransition : GloasBlockFunction P}
     {beacon post : Gloas.BeaconState P} {exec exec' : BlockChain} {parent : ParentPayload P}
     {b : Gloas.SignedBeaconBlock P} {o : ParentSettle P} :
     gloasBlockArm processSlots blockTransition beacon exec parent b = .ok (post, exec', o) ↔
@@ -475,7 +475,7 @@ theorem gloasBlockArm_ok_iff
 
 /-- A FULL child of a withheld payload is refused, whatever the block transition does. -/
 theorem gloasBlockArm_refuses_full_of_withheld
-    {processSlots : GloasSlotsFn P} {blockTransition : GloasBlockFn P}
+    {processSlots : GloasSlotsFunction P} {blockTransition : GloasBlockFunction P}
     {beacon st0 : Gloas.BeaconState P} {exec : BlockChain} {b : Gloas.SignedBeaconBlock P}
     (h0 : processSlots beacon b.message.slot = .ok st0) (hfull : parentFull st0 b.message = true)
     (r : Gloas.BeaconState P × BlockChain × ParentSettle P) :
@@ -491,20 +491,20 @@ theorem gloasBlockArm_refuses_full_of_withheld
 /-- The end of a Gloas step: with no envelope the block's payload is `.withheld`; with one, the
 envelope is checked against the post-block state and the chain after the settlement, and
 recorded as delivered. -/
-theorem gloasDeliverOpt_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem gloasDeliverOptional_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {post : Gloas.BeaconState P} {exec : BlockChain}
-    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GJointState P} :
-    gloasDeliverOpt cfg ccfg bls post exec env? = .ok s' ↔
+    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GloasJointState P} :
+    gloasDeliverOptional cfg ccfg bls post exec env? = .ok s' ↔
       (env? = none ∧ s' = .gloas post exec .withheld) ∨
-      (∃ e req postE, env? = some e ∧ verifyEnvelopeG cfg ccfg bls post exec e = .ok (req, postE) ∧
+      (∃ e req postE, env? = some e ∧ verifyEnvelopeGloas cfg ccfg bls post exec e = .ok (req, postE) ∧
         s' = .gloas post exec (.delivered e req postE)) := by
   cases env? with
   | none =>
-    simp only [gloasDeliverOpt, pure_eq_ok_iff, true_and, reduceCtorEq, false_and,
+    simp only [gloasDeliverOptional, pure_eq_ok_iff, true_and, reduceCtorEq, false_and,
       exists_false, or_false]
     exact eq_comm
   | some e =>
-    simp only [gloasDeliverOpt, deliver_ok_iff, reduceCtorEq, false_and, false_or,
+    simp only [gloasDeliverOptional, deliver_ok_iff, reduceCtorEq, false_and, false_or,
       Option.some.injEq]
     constructor
     · rintro ⟨_, _, req, postE, hs, hv, rfl⟩
@@ -515,51 +515,51 @@ theorem gloasDeliverOpt_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
 
 /-- The step hands `deliver` the `.withheld` state: an envelope is only ever checked for the
 block just added, never against a `.landed` or `.delivered` parent. -/
-theorem gloasDeliverOpt_some {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem gloasDeliverOptional_some {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {post : Gloas.BeaconState P} {exec : BlockChain} {e : Gloas.SignedExecutionPayloadEnvelope P} :
-    gloasDeliverOpt cfg ccfg bls post exec (some e) =
+    gloasDeliverOptional cfg ccfg bls post exec (some e) =
       deliver cfg ccfg bls (.gloas post exec .withheld) e := rfl
 
 /-- The Gloas→Gloas step succeeds exactly when the block arm does and its end does. -/
 theorem gloasStepWith_ok_iff
-    {processSlots : GloasSlotsFn P} {blockTransition : GloasBlockFn P}
+    {processSlots : GloasSlotsFunction P} {blockTransition : GloasBlockFunction P}
     {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {beacon : Gloas.BeaconState P}
     {exec : BlockChain} {parent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
-    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GJointState P} :
+    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GloasJointState P} :
     gloasStepWith processSlots blockTransition cfg ccfg bls beacon exec parent b env? = .ok s' ↔
       ∃ post exec' o,
         gloasBlockArm processSlots blockTransition beacon exec parent b = .ok (post, exec', o) ∧
-        gloasDeliverOpt cfg ccfg bls post exec' env? = .ok s' := by
+        gloasDeliverOptional cfg ccfg bls post exec' env? = .ok s' := by
   unfold gloasStepWith
   simp only [Except.bind_eq_ok_iff, Prod.exists]
 
 /-- Without an envelope, the step is the block arm, and the block's payload is withheld. -/
 theorem gloasStepWith_none_ok_iff
-    {processSlots : GloasSlotsFn P} {blockTransition : GloasBlockFn P}
+    {processSlots : GloasSlotsFunction P} {blockTransition : GloasBlockFunction P}
     {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {beacon : Gloas.BeaconState P}
     {exec : BlockChain} {parent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
-    {s' : GJointState P} :
+    {s' : GloasJointState P} :
     gloasStepWith processSlots blockTransition cfg ccfg bls beacon exec parent b none = .ok s' ↔
       ∃ post exec' o,
         gloasBlockArm processSlots blockTransition beacon exec parent b = .ok (post, exec', o) ∧
         s' = .gloas post exec' .withheld := by
-  simp only [gloasStepWith_ok_iff, gloasDeliverOpt_ok_iff, true_and, reduceCtorEq, false_and,
+  simp only [gloasStepWith_ok_iff, gloasDeliverOptional_ok_iff, true_and, reduceCtorEq, false_and,
     exists_false, or_false]
 
 /-- With the block's envelope, the step is the block arm, then the envelope checked against the
 post-block state and the chain after the settlement, recorded as delivered. -/
 theorem gloasStepWith_some_ok_iff
-    {processSlots : GloasSlotsFn P} {blockTransition : GloasBlockFn P}
+    {processSlots : GloasSlotsFunction P} {blockTransition : GloasBlockFunction P}
     {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {beacon : Gloas.BeaconState P}
     {exec : BlockChain} {parent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
-    {e : Gloas.SignedExecutionPayloadEnvelope P} {s' : GJointState P} :
+    {e : Gloas.SignedExecutionPayloadEnvelope P} {s' : GloasJointState P} :
     gloasStepWith processSlots blockTransition cfg ccfg bls beacon exec parent b (some e) =
         .ok s' ↔
       ∃ post exec' o req postE,
         gloasBlockArm processSlots blockTransition beacon exec parent b = .ok (post, exec', o) ∧
-        verifyEnvelopeG cfg ccfg bls post exec' e = .ok (req, postE) ∧
+        verifyEnvelopeGloas cfg ccfg bls post exec' e = .ok (req, postE) ∧
         s' = .gloas post exec' (.delivered e req postE) := by
-  simp only [gloasStepWith_ok_iff, gloasDeliverOpt_ok_iff, reduceCtorEq, false_and, false_or,
+  simp only [gloasStepWith_ok_iff, gloasDeliverOptional_ok_iff, reduceCtorEq, false_and, false_or,
     Option.some.injEq]
   constructor
   · rintro ⟨post, exec', o, h, _, req, postE, rfl, hv, rfl⟩
@@ -571,11 +571,11 @@ theorem gloasStepWith_some_ok_iff
 
 /-- `process_slots` followed by `gloasBlockTransition` is U5's Gloas `state_transition`
 (`Gloas.stateTransition_eq`). -/
-theorem processSlots_then_gloasBlockTransition (ctx : Ctx) (state : Gloas.BeaconState P)
+theorem processSlots_then_gloasBlockTransition (ctx : Context) (state : Gloas.BeaconState P)
     (b : Gloas.SignedBeaconBlock P) :
     (do
       let st ← Gloas.processSlots ctx state b.message.slot
-      gloasBlockTransition ctx st b : M (Gloas.BeaconState P)) =
+      gloasBlockTransition ctx st b : Fallible (Gloas.BeaconState P)) =
       Gloas.stateTransition ctx state b :=
   (Gloas.stateTransition_eq ctx state b true).symm
 
@@ -588,14 +588,14 @@ execution-side settlement keyed on the FULL test at `postSlots` succeeds, the re
 theorem gloasStep_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : Gloas.BeaconState P} {exec : BlockChain} {parent : ParentPayload P}
     {b : Gloas.SignedBeaconBlock P} {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    {s' : GJointState P} :
+    {s' : GloasJointState P} :
     gloasStep cfg ccfg bls beacon exec parent b env? = .ok s' ↔
       ∃ postSlots post exec' o,
-        Gloas.processSlots (gloasCtx ccfg bls) beacon b.message.slot = .ok postSlots ∧
+        Gloas.processSlots (gloasContext ccfg bls) beacon b.message.slot = .ok postSlots ∧
         settleParent parent exec (parentFull postSlots b.message)
           b.message.body.parent_execution_requests = .ok (exec', o) ∧
-        gloasBlockTransition (gloasCtx ccfg bls) postSlots b = .ok post ∧
-        gloasDeliverOpt cfg ccfg bls post exec' env? = .ok s' := by
+        gloasBlockTransition (gloasContext ccfg bls) postSlots b = .ok post ∧
+        gloasDeliverOptional cfg ccfg bls post exec' env? = .ok s' := by
   unfold gloasStep
   rw [gloasStepWith_ok_iff]
   constructor
@@ -607,7 +607,7 @@ theorem gloasStep_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
 
 /-- The block transition after the slots runs Gloas `process_block` on the post-slots state (so
 `processParentExecutionPayload` and the BF1 traces are read there). -/
-theorem gloasBlockTransition_processBlock {ctx : Ctx} {st post : Gloas.BeaconState P}
+theorem gloasBlockTransition_processBlock {ctx : Context} {st post : Gloas.BeaconState P}
     {b : Gloas.SignedBeaconBlock P} (h : gloasBlockTransition ctx st b = .ok post) :
     ∃ s, Gloas.processBlock ctx st b.message = .ok s := by
   unfold gloasBlockTransition Gloas.applySignedBlockWith at h
@@ -621,13 +621,13 @@ theorem gloasBlockTransition_processBlock {ctx : Ctx} {st post : Gloas.BeaconSta
 
 /-- A pre-Gloas pair is the Electra/Fulu `jointStep`, with no envelope and the block before the
 Gloas fork slot. -/
-theorem jointStepG_pre_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s : JointState P}
+theorem jointStepGloas_pre_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s : JointState P}
     {b : AnySignedBlock P} {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    {s' : GJointState P} :
-    jointStepG cfg ccfg bls (.pre s) (.pre b) env? = .ok s' ↔
+    {s' : GloasJointState P} :
+    jointStepGloas cfg ccfg bls (.pre s) (.pre b) env? = .ok s' ↔
       env? = none ∧ b.2.message.slot.toNat < gloasForkSlot (P := P) ccfg ∧
       ∃ j, jointStep cfg ccfg bls s b = .ok j ∧ s' = .pre j := by
-  simp only [jointStepG, Except.bind_eq_ok_iff, require_ok_iff, unit_exists_iff,
+  simp only [jointStepGloas, Except.bind_eq_ok_iff, require_ok_iff, unit_exists_iff,
     decide_eq_true_eq, Option.isNone_iff_eq_none, pure_eq_ok_iff]
   constructor
   · rintro ⟨h1, h2, j, hj, rfl⟩
@@ -636,25 +636,25 @@ theorem jointStepG_pre_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {
     exact ⟨h1, h2, j, hj, rfl⟩
 
 /-- A Gloas state and block take the Gloas arm. -/
-theorem jointStepG_gloas_eq {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_gloas_eq {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : Gloas.BeaconState P} {exec : BlockChain} {parent : ParentPayload P}
     {b : Gloas.SignedBeaconBlock P} {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} :
-    jointStepG cfg ccfg bls (.gloas beacon exec parent) (.gloas b) env? =
+    jointStepGloas cfg ccfg bls (.gloas beacon exec parent) (.gloas b) env? =
       gloasStep cfg ccfg bls beacon exec parent b env? := rfl
 
 /-- The Gloas arm of the joint step: `gloasStep_ok_iff`, with the post-slots state named. -/
-theorem jointStepG_gloas_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_gloas_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : Gloas.BeaconState P} {exec : BlockChain} {parent : ParentPayload P}
     {b : Gloas.SignedBeaconBlock P} {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    {s' : GJointState P} :
-    jointStepG cfg ccfg bls (.gloas beacon exec parent) (.gloas b) env? = .ok s' ↔
+    {s' : GloasJointState P} :
+    jointStepGloas cfg ccfg bls (.gloas beacon exec parent) (.gloas b) env? = .ok s' ↔
       ∃ postSlots post exec' o,
-        Gloas.processSlots (gloasCtx ccfg bls) beacon b.message.slot = .ok postSlots ∧
+        Gloas.processSlots (gloasContext ccfg bls) beacon b.message.slot = .ok postSlots ∧
         settleParent parent exec (parentFull postSlots b.message)
           b.message.body.parent_execution_requests = .ok (exec', o) ∧
-        gloasBlockTransition (gloasCtx ccfg bls) postSlots b = .ok post ∧
-        gloasDeliverOpt cfg ccfg bls post exec' env? = .ok s' := by
-  rw [jointStepG_gloas_eq, gloasStep_ok_iff]
+        gloasBlockTransition (gloasContext ccfg bls) postSlots b = .ok post ∧
+        gloasDeliverOptional cfg ccfg bls post exec' env? = .ok s' := by
+  rw [jointStepGloas_gloas_eq, gloasStep_ok_iff]
 
 /-- Settling a `.landed` parent as `.landed` is exactly FULL with empty requests by value. -/
 theorem settleParent_landed_iff {exec exec' : BlockChain} {full : Bool}
@@ -675,19 +675,19 @@ it; `Gloas.crossFromFulu` gives `upgraded`; the crossing's slots function gives 
 state `postSlots` (no slots at the fork slot); the parent settlement is FULL over the `.landed`
 synthetic bid with empty requests by value, so the built-upon chain does not move; the rest of
 `state_transition` gives `post`; then the step's end. -/
-theorem jointStepG_cross_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_cross_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : BeaconState P .fulu} {exec : BlockChain} {b : Gloas.SignedBeaconBlock P}
-    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GJointState P} :
-    jointStepG cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? = .ok s' ↔
+    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GloasJointState P} :
+    jointStepGloas cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? = .ok s' ↔
       beacon.slot.toNat < gloasForkSlot (P := P) ccfg ∧
       gloasForkSlot (P := P) ccfg ≤ b.message.slot.toNat ∧
       ∃ upgraded postSlots post,
-        Gloas.crossFromFulu (gloasCtx ccfg bls) beacon = .ok upgraded ∧
-        crossingSlots (gloasCtx ccfg bls) upgraded b.message.slot = .ok postSlots ∧
+        Gloas.crossFromFulu (gloasContext ccfg bls) beacon = .ok upgraded ∧
+        crossingSlots (gloasContext ccfg bls) upgraded b.message.slot = .ok postSlots ∧
         parentFull postSlots b.message = true ∧
         b.message.body.parent_execution_requests = Gloas.ExecutionRequests.empty ∧
-        gloasBlockTransition (gloasCtx ccfg bls) postSlots b = .ok post ∧
-        gloasDeliverOpt cfg ccfg bls post exec env? = .ok s' := by
+        gloasBlockTransition (gloasContext ccfg bls) postSlots b = .ok post ∧
+        gloasDeliverOptional cfg ccfg bls post exec env? = .ok s' := by
   change crossingStep cfg ccfg bls beacon exec b env? = .ok s' ↔ _
   unfold crossingStep
   simp only [Except.bind_eq_ok_iff, require_ok_iff, unit_exists_iff, decide_eq_true_eq]
@@ -707,17 +707,17 @@ theorem jointStepG_cross_ok_iff {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
 /-! ## Refusals (Gloas pairs with Amsterdam only; every other pairing fails closed) -/
 
 /-- A pre-Gloas block on a Gloas state is refused. -/
-theorem jointStepG_refuses_gloas_pre {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_refuses_gloas_pre {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : Gloas.BeaconState P} {exec : BlockChain} {parent : ParentPayload P}
     {b : AnySignedBlock P} {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} :
-    jointStepG cfg ccfg bls (.gloas beacon exec parent) (.pre b) env? =
+    jointStepGloas cfg ccfg bls (.gloas beacon exec parent) (.pre b) env? =
       .error (.assert "joint step: a pre-Gloas block on a Gloas state") := rfl
 
 /-- A Gloas block on a pre-Gloas state of a fork other than Fulu is refused. -/
-theorem jointStepG_refuses_cross_of_ne_fulu {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_refuses_cross_of_ne_fulu {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {s : JointState P} (hf : s.fork ≠ .fulu) {b : Gloas.SignedBeaconBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} :
-    jointStepG cfg ccfg bls (.pre s) (.gloas b) env? =
+    jointStepGloas cfg ccfg bls (.pre s) (.gloas b) env? =
       .error (.assert "joint step: a Gloas block crossing from a state other than Fulu") := by
   obtain ⟨f, beacon, exec⟩ := s
   cases f
@@ -727,47 +727,47 @@ theorem jointStepG_refuses_cross_of_ne_fulu {cfg : ChainConfig} {ccfg : Config} 
   · rfl
 
 /-- An envelope with a pre-Gloas block is refused. -/
-theorem jointStepG_refuses_pre_envelope {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_refuses_pre_envelope {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {s : JointState P} {b : AnySignedBlock P} {e : Gloas.SignedExecutionPayloadEnvelope P} :
-    jointStepG cfg ccfg bls (.pre s) (.pre b) (some e) =
+    jointStepGloas cfg ccfg bls (.pre s) (.pre b) (some e) =
       .error (.assert "joint step: an envelope with a pre-Gloas block") := rfl
 
 /-- A pre-Gloas block at or after the Gloas fork slot is refused. -/
-theorem jointStepG_refuses_pre_at_gloas_fork {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_refuses_pre_at_gloas_fork {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {s : JointState P} {b : AnySignedBlock P}
     (hslot : gloasForkSlot (P := P) ccfg ≤ b.2.message.slot.toNat) :
-    jointStepG cfg ccfg bls (.pre s) (.pre b) none =
+    jointStepGloas cfg ccfg bls (.pre s) (.pre b) none =
       .error (.assert "joint step: a pre-Gloas block at or after the Gloas fork slot") := by
   have : decide (b.2.message.slot.toNat < gloasForkSlot (P := P) ccfg) = false :=
     decide_eq_false (Nat.not_lt.mpr hslot)
-  simp only [jointStepG, Option.isNone_none, require, this, ite_true, bind, Except.bind,
+  simp only [jointStepGloas, Option.isNone_none, require, this, ite_true, bind, Except.bind,
     Bool.false_eq_true, ite_false]
   rfl
 
 /-- Any other pre-Gloas pair is refused, as by `jointStep` (`jointStep_refuses`). -/
-theorem jointStepG_refuses_pre {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_refuses_pre {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {s : JointState P} {b : AnySignedBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
     (hpair : (s.fork, b.1) ≠ (.electra, .electra) ∧ (s.fork, b.1) ≠ (.fulu, .fulu) ∧
-      (s.fork, b.1) ≠ (.electra, .fulu)) (s' : GJointState P) :
-    jointStepG cfg ccfg bls (.pre s) (.pre b) env? ≠ .ok s' := by
+      (s.fork, b.1) ≠ (.electra, .fulu)) (s' : GloasJointState P) :
+    jointStepGloas cfg ccfg bls (.pre s) (.pre b) env? ≠ .ok s' := by
   intro h
-  obtain ⟨_, _, j, hj, _⟩ := jointStepG_pre_ok_iff.mp h
+  obtain ⟨_, _, j, hj, _⟩ := jointStepGloas_pre_ok_iff.mp h
   obtain ⟨e, he⟩ := jointStep_refuses (cfg := cfg) (ccfg := ccfg) (bls := bls) hpair
   rw [he] at hj
   cases hj
 
 /-- The crossing refuses an EMPTY first settlement (design.md §2.4: the first Gloas block's
 bid must extend the synthetic bid's block hash). -/
-theorem jointStepG_cross_refuses_empty {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_cross_refuses_empty {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : BeaconState P .fulu} {exec : BlockChain} {b : Gloas.SignedBeaconBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {upgraded postSlots : Gloas.BeaconState P}
-    (hup : Gloas.crossFromFulu (gloasCtx ccfg bls) beacon = .ok upgraded)
-    (h0 : crossingSlots (gloasCtx ccfg bls) upgraded b.message.slot = .ok postSlots)
-    (hempty : parentFull postSlots b.message = false) (s' : GJointState P) :
-    jointStepG cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? ≠ .ok s' := by
+    (hup : Gloas.crossFromFulu (gloasContext ccfg bls) beacon = .ok upgraded)
+    (h0 : crossingSlots (gloasContext ccfg bls) upgraded b.message.slot = .ok postSlots)
+    (hempty : parentFull postSlots b.message = false) (s' : GloasJointState P) :
+    jointStepGloas cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? ≠ .ok s' := by
   intro h
-  obtain ⟨_, _, u, st0, _, hu, h0', hf, _⟩ := jointStepG_cross_ok_iff.mp h
+  obtain ⟨_, _, u, st0, _, hu, h0', hf, _⟩ := jointStepGloas_cross_ok_iff.mp h
   rw [hup] at hu
   cases hu
   rw [h0] at h0'
@@ -777,26 +777,26 @@ theorem jointStepG_cross_refuses_empty {cfg : ChainConfig} {ccfg : Config} {bls 
 
 /-- The crossing refuses a first Gloas block whose `parent_execution_requests` are not empty by
 value (SF-7). -/
-theorem jointStepG_cross_refuses_requests {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_cross_refuses_requests {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : BeaconState P .fulu} {exec : BlockChain} {b : Gloas.SignedBeaconBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
     (hne : b.message.body.parent_execution_requests ≠ Gloas.ExecutionRequests.empty)
-    (s' : GJointState P) :
-    jointStepG cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? ≠ .ok s' := by
+    (s' : GloasJointState P) :
+    jointStepGloas cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? ≠ .ok s' := by
   intro h
-  obtain ⟨_, _, _, _, _, _, _, _, hr, _⟩ := jointStepG_cross_ok_iff.mp h
+  obtain ⟨_, _, _, _, _, _, _, _, hr, _⟩ := jointStepGloas_cross_ok_iff.mp h
   exact hne hr
 
 /-- A FULL child of a withheld payload is refused by the joint step (the model of
 `is_payload_verified`, FC:1058-1061). -/
-theorem jointStepG_refuses_full_of_withheld {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_refuses_full_of_withheld {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon postSlots : Gloas.BeaconState P} {exec : BlockChain} {b : Gloas.SignedBeaconBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    (h0 : Gloas.processSlots (gloasCtx ccfg bls) beacon b.message.slot = .ok postSlots)
-    (hfull : parentFull postSlots b.message = true) (s' : GJointState P) :
-    jointStepG cfg ccfg bls (.gloas beacon exec .withheld) (.gloas b) env? ≠ .ok s' := by
+    (h0 : Gloas.processSlots (gloasContext ccfg bls) beacon b.message.slot = .ok postSlots)
+    (hfull : parentFull postSlots b.message = true) (s' : GloasJointState P) :
+    jointStepGloas cfg ccfg bls (.gloas beacon exec .withheld) (.gloas b) env? ≠ .ok s' := by
   intro h
-  obtain ⟨st0, _, _, _, h0', hs, _⟩ := jointStepG_gloas_ok_iff.mp h
+  obtain ⟨st0, _, _, _, h0', hs, _⟩ := jointStepGloas_gloas_ok_iff.mp h
   rw [h0] at h0'
   cases h0'
   rw [hfull, settleParent_refuses_full_of_withheld] at hs
@@ -804,18 +804,18 @@ theorem jointStepG_refuses_full_of_withheld {cfg : ChainConfig} {ccfg : Config} 
 
 /-- A FULL child of a delivered payload whose `parent_execution_requests` are not the envelope's
 `execution_requests` (as values) is refused by the joint step. -/
-theorem jointStepG_refuses_other_requests {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_refuses_other_requests {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon postSlots : Gloas.BeaconState P} {exec : BlockChain} {b : Gloas.SignedBeaconBlock P}
     {env : Gloas.SignedExecutionPayloadEnvelope P} {req : Gloas.NewPayloadRequest P}
     {postE : BlockChain} {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    (h0 : Gloas.processSlots (gloasCtx ccfg bls) beacon b.message.slot = .ok postSlots)
+    (h0 : Gloas.processSlots (gloasContext ccfg bls) beacon b.message.slot = .ok postSlots)
     (hfull : parentFull postSlots b.message = true)
     (hne : b.message.body.parent_execution_requests ≠ env.message.execution_requests)
-    (s' : GJointState P) :
-    jointStepG cfg ccfg bls (.gloas beacon exec (.delivered env req postE)) (.gloas b) env? ≠
+    (s' : GloasJointState P) :
+    jointStepGloas cfg ccfg bls (.gloas beacon exec (.delivered env req postE)) (.gloas b) env? ≠
       .ok s' := by
   intro h
-  obtain ⟨st0, _, _, _, h0', hs, _⟩ := jointStepG_gloas_ok_iff.mp h
+  obtain ⟨st0, _, _, _, h0', hs, _⟩ := jointStepGloas_gloas_ok_iff.mp h
   rw [h0] at h0'
   cases h0'
   rw [hfull, settleParent_refuses_other_requests hne] at hs
@@ -838,7 +838,7 @@ theorem addBuilderToRegistry_buildersFar {state post : Gloas.BeaconState P} {pk 
   obtain ⟨ep, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨bs, hbs, h⟩ := Except.bind_eq_ok h
   cases h
-  obtain ⟨_, hnew, hold⟩ := Facts.Gloas.pl_setOrAppend_ok hbs
+  obtain ⟨_, hnew, hold⟩ := Facts.Gloas.progressiveList_setOrAppend_ok hbs
   refine ⟨fun i x hx => ?_, rfl⟩
   by_cases hi : i = idx.toNat
   · subst hi
@@ -851,7 +851,7 @@ theorem addBuilderToRegistry_buildersFar {state post : Gloas.BeaconState P} {pk 
 /-- One onboarding iteration keeps every builder at `FAR_FUTURE_EPOCH` (a registration writes
 `FAR_FUTURE_EPOCH`, a top-up changes only the balance) and touches no pending builder
 withdrawal. -/
-theorem onboardBuilderDeposit_buildersFar {ctx : Ctx} {V : Array BLSPubkey}
+theorem onboardBuilderDeposit_buildersFar {ctx : Context} {V : Array BLSPubkey}
     {acc acc' : Gloas.BeaconState P × Array PendingDeposit} {d : PendingDeposit}
     (hf : BuildersFar acc.1) (h : Gloas.onboardBuilderDeposit ctx V acc d = .ok acc') :
     BuildersFar acc'.1 ∧ acc'.1.builder_pending_withdrawals = acc.1.builder_pending_withdrawals := by
@@ -883,18 +883,18 @@ theorem onboardBuilderDeposit_buildersFar {ctx : Ctx} {V : Array BLSPubkey}
       obtain ⟨bs, hset, h⟩ := Except.bind_eq_ok h
       cases h
       refine ⟨fun i x hx => ?_, rfl⟩
-      obtain ⟨_, hnew, hold⟩ := Facts.Gloas.pl_set_ok hset
+      obtain ⟨_, hnew, hold⟩ := Facts.Gloas.progressiveList_set_ok hset
       by_cases hi : i = bi
       · subst hi
         rw [hnew] at hx
         cases hx
-        exact hf _ bld (Facts.Gloas.pl_get_ok.mp hget)
+        exact hf _ bld (Facts.Gloas.progressiveList_get_ok.mp hget)
       · rw [hold i hi] at hx
         exact hf i x hx
 
 /-- The onboarding loop keeps every builder at `FAR_FUTURE_EPOCH` and touches no pending
 builder withdrawal. -/
-theorem foldlM_onboardBuilderDeposit_buildersFar {ctx : Ctx} {V : Array BLSPubkey} :
+theorem foldlM_onboardBuilderDeposit_buildersFar {ctx : Context} {V : Array BLSPubkey} :
     ∀ (l : List PendingDeposit) (acc acc' : Gloas.BeaconState P × Array PendingDeposit),
       BuildersFar acc.1 → l.foldlM (Gloas.onboardBuilderDeposit ctx V) acc = .ok acc' →
       BuildersFar acc'.1 ∧
@@ -911,7 +911,7 @@ theorem foldlM_onboardBuilderDeposit_buildersFar {ctx : Ctx} {V : Array BLSPubke
 
 /-- `onboard_builders_from_pending_deposits` keeps every builder at `FAR_FUTURE_EPOCH` and
 touches no pending builder withdrawal. -/
-theorem onboardBuildersFromPendingDeposits_buildersFar {ctx : Ctx}
+theorem onboardBuildersFromPendingDeposits_buildersFar {ctx : Context}
     {state post : Gloas.BeaconState P} (hf : BuildersFar state)
     (h : Gloas.onboardBuildersFromPendingDeposits ctx state = .ok post) :
     BuildersFar post ∧ post.builder_pending_withdrawals = state.builder_pending_withdrawals := by
@@ -925,8 +925,8 @@ theorem onboardBuildersFromPendingDeposits_buildersFar {ctx : Ctx}
 builder withdrawals (fork.md:194, 204). -/
 theorem upgradedState_builders {cfg : Config} {pre : BeaconState P .fulu}
     {post : Gloas.BeaconState P} (h : Gloas.upgradedState cfg pre = .ok post) :
-    post.builders = ProgressiveListS.empty ∧
-      post.builder_pending_withdrawals = ProgressiveListS.empty := by
+    post.builders = ProgressiveListOnSpine.empty ∧
+      post.builder_pending_withdrawals = ProgressiveListOnSpine.empty := by
   unfold Gloas.upgradedState at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
@@ -936,22 +936,22 @@ theorem upgradedState_builders {cfg : Config} {pre : BeaconState P .fulu}
 /-- `upgrade_to_gloas` leaves every builder at `FAR_FUTURE_EPOCH` and no pending builder
 withdrawal: the builders are exactly those `onboard_builders_from_pending_deposits` registers,
 each written at `FAR_FUTURE_EPOCH` and only topped up after. -/
-theorem upgradeToGloas_builders {ctx : Ctx} {pre : BeaconState P .fulu}
+theorem upgradeToGloas_builders {ctx : Context} {pre : BeaconState P .fulu}
     {post : Gloas.BeaconState P} (h : Gloas.upgradeToGloas ctx pre = .ok post) :
-    BuildersFar post ∧ post.builder_pending_withdrawals = ProgressiveListS.empty := by
+    BuildersFar post ∧ post.builder_pending_withdrawals = ProgressiveListOnSpine.empty := by
   unfold Gloas.upgradeToGloas at h
   obtain ⟨p0, h0, h⟩ := Except.bind_eq_ok h
   obtain ⟨w, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨hb, hw⟩ := upgradedState_builders h0
   have hf : BuildersFar { p0 with ptc_window := w } := by
     intro i x hx
-    simp only [hb, ProgressiveListS.empty] at hx
+    simp only [hb, ProgressiveListOnSpine.empty] at hx
     simp at hx
   obtain ⟨f, w'⟩ := onboardBuildersFromPendingDeposits_buildersFar hf h
   exact ⟨f, w'.trans hw⟩
 
 /-- `crossFromFulu` ends in `upgrade_to_gloas` of the Fulu state at the fork slot. -/
-theorem crossFromFulu_upgrade {ctx : Ctx} {pre : BeaconState P .fulu}
+theorem crossFromFulu_upgrade {ctx : Context} {pre : BeaconState P .fulu}
     {post : Gloas.BeaconState P} (h : Gloas.crossFromFulu ctx pre = .ok post) :
     ∃ atFork, Gloas.upgradeToGloas ctx atFork = .ok post := by
   unfold Gloas.crossFromFulu at h
@@ -971,20 +971,20 @@ theorem crossFromFulu_upgrade {ctx : Ctx} {pre : BeaconState P .fulu}
 `FAR_FUTURE_EPOCH` and whose `builder_pending_withdrawals` is empty, and the step's Gloas block
 arm runs from `upgraded`: its post-slots state `postSlots`, then the block transition to
 `post`, then the step's end. -/
-theorem jointStepG_crossing_builders {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepGloas_crossing_builders {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : BeaconState P .fulu} {exec : BlockChain} {b : Gloas.SignedBeaconBlock P}
-    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GJointState P}
-    (h : jointStepG cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? = .ok s') :
+    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GloasJointState P}
+    (h : jointStepGloas cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? = .ok s') :
     ∃ atFork upgraded postSlots post,
-      Gloas.crossFromFulu (gloasCtx ccfg bls) beacon = .ok upgraded ∧
-      Gloas.upgradeToGloas (gloasCtx ccfg bls) atFork = .ok upgraded ∧
+      Gloas.crossFromFulu (gloasContext ccfg bls) beacon = .ok upgraded ∧
+      Gloas.upgradeToGloas (gloasContext ccfg bls) atFork = .ok upgraded ∧
       BuildersFar upgraded ∧
-      upgraded.builder_pending_withdrawals = ProgressiveListS.empty ∧
-      crossingSlots (gloasCtx ccfg bls) upgraded b.message.slot = .ok postSlots ∧
-      gloasBlockTransition (gloasCtx ccfg bls) postSlots b = .ok post ∧
-      gloasDeliverOpt cfg ccfg bls post exec env? = .ok s' := by
+      upgraded.builder_pending_withdrawals = ProgressiveListOnSpine.empty ∧
+      crossingSlots (gloasContext ccfg bls) upgraded b.message.slot = .ok postSlots ∧
+      gloasBlockTransition (gloasContext ccfg bls) postSlots b = .ok post ∧
+      gloasDeliverOptional cfg ccfg bls post exec env? = .ok s' := by
   obtain ⟨_, _, upgraded, postSlots, post, hup, h0, _, _, hp, hd⟩ :=
-    jointStepG_cross_ok_iff.mp h
+    jointStepGloas_cross_ok_iff.mp h
   obtain ⟨atFork, hat⟩ := crossFromFulu_upgrade hup
   obtain ⟨hf, hw⟩ := upgradeToGloas_builders hat
   exact ⟨atFork, upgraded, postSlots, post, hup, hat, hf, hw, h0, hp, hd⟩

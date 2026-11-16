@@ -43,13 +43,13 @@ variable {P : Preset}
 /-- `convert_builder_index_to_validator_index(builder_index)`:
 `ValidatorIndex(builder_index | BUILDER_INDEX_FLAG)`. Both operands are below `2^64`, so the
 result is too. -/
-def convertBuilderIndexToValidatorIndex (builderIndex : BuilderIndex) : M ValidatorIndex :=
+def convertBuilderIndexToValidatorIndex (builderIndex : BuilderIndex) : Fallible ValidatorIndex :=
   U64.ofNat? (builderIndex.toNat ||| BUILDER_INDEX_FLAG.toNat) "convert_builder_index_to_validator_index"
 
 /-- `convert_validator_index_to_builder_index(validator_index)`:
 `BuilderIndex(validator_index & ~BUILDER_INDEX_FLAG)`, where `~` is the `uint64` complement
 `2^64 - 1 - BUILDER_INDEX_FLAG`. -/
-def convertValidatorIndexToBuilderIndex (validatorIndex : ValidatorIndex) : M BuilderIndex :=
+def convertValidatorIndexToBuilderIndex (validatorIndex : ValidatorIndex) : Fallible BuilderIndex :=
   U64.ofNat? (validatorIndex.toNat &&& (2 ^ 64 - 1 - BUILDER_INDEX_FLAG.toNat))
     "convert_validator_index_to_builder_index"
 
@@ -69,33 +69,33 @@ abbrev WithdrawalsPhase := Array Withdrawal × WithdrawalIndex × U64
 /-! ## Balances after withdrawals -/
 
 /-- `sum(w.amount for w in withdrawals if w.validator_index == index)`, typed `Gwei`. -/
-def withdrawnAmount (withdrawals : Array Withdrawal) (index : ValidatorIndex) : M Gwei :=
+def withdrawnAmount (withdrawals : Array Withdrawal) (index : ValidatorIndex) : Fallible Gwei :=
   withdrawals.foldlM (fun acc w =>
     if w.validator_index == index then acc.add? w.amount "withdrawn" else pure acc) U64.zero
 
 /-- `saturating_sub(a, b)` on `Gwei`. -/
-def saturatingSubGwei (a b : Gwei) : M Gwei :=
+def saturatingSubGwei (a b : Gwei) : Fallible Gwei :=
   if b < a then a.sub? b "saturating_sub" else pure U64.zero
 
 /-- `get_balance_after_withdrawals(state, validator_index, withdrawals)` (Capella): the
 balance less what `withdrawals` already take from it (`uint64`, raising on underflow). -/
 def getBalanceAfterWithdrawals (state : BeaconState P) (validatorIndex : ValidatorIndex)
-    (withdrawals : Array Withdrawal) : M Gwei := do
+    (withdrawals : Array Withdrawal) : Fallible Gwei := do
   let site := "get_balance_after_withdrawals"
   (← state.balances.get validatorIndex.toNat site).sub? (← withdrawnAmount withdrawals validatorIndex)
     site
 
 /-- `get_builder_balance_after_withdrawals(state, builder_index, withdrawals)` (Gloas, :1892). -/
 def getBuilderBalanceAfterWithdrawals (state : BeaconState P) (builderIndex : BuilderIndex)
-    (withdrawals : Array Withdrawal) : M Gwei := do
+    (withdrawals : Array Withdrawal) : Fallible Gwei := do
   let validatorIndex ← convertBuilderIndexToValidatorIndex builderIndex
   let withdrawn ← withdrawnAmount withdrawals validatorIndex
   let builder ← state.builders.get builderIndex.toNat "get_builder_balance_after_withdrawals"
   saturatingSubGwei builder.balance withdrawn
 
 /-- `ExecutionAddress(withdrawal_credentials[12:])`. -/
-def addressOfCredentials (wc : Bytes32) : M ExecutionAddress :=
-  match Jaune.Bytes.toAdr? (wc.toBytes.drop 12) with
+def addressOfCredentials (wc : Bytes32) : Fallible ExecutionAddress :=
+  match Jaune.Bytes.toAddress? (wc.toBytes.drop 12) with
   | some a => pure a
   | none => throw (.assert "ExecutionAddress(withdrawal_credentials[12:])")
 
@@ -103,7 +103,7 @@ def addressOfCredentials (wc : Bytes32) : M ExecutionAddress :=
 
 /-- `get_builder_withdrawals(state, withdrawal_index, prior_withdrawals)` (Gloas, :1858). -/
 def getBuilderWithdrawals (state : BeaconState P) (withdrawalIndex : WithdrawalIndex)
-    (prior : Array Withdrawal) : M WithdrawalsPhase := do
+    (prior : Array Withdrawal) : Fallible WithdrawalsPhase := do
   let site := "get_builder_withdrawals"
   let withdrawalsLimit := P.MAX_WITHDRAWALS_PER_PAYLOAD - 1
   require (prior.size ≤ withdrawalsLimit) s!"{site}: len(prior_withdrawals) <= withdrawals_limit"
@@ -123,21 +123,21 @@ def getBuilderWithdrawals (state : BeaconState P) (withdrawalIndex : WithdrawalI
   pure (withdrawals, withdrawalIndex, processed)
 
 /-- `is_eligible_for_partial_withdrawals(validator, balance)` (Electra). -/
-def isEligibleForPartialWithdrawals (validator : Validator) (balance : Gwei) : M Bool := do
-  let minAct ← c64 P.MIN_ACTIVATION_BALANCE
+def isEligibleForPartialWithdrawals (validator : Validator) (balance : Gwei) : Fallible Bool := do
+  let minAct ← u64Checked P.MIN_ACTIVATION_BALANCE
   pure (validator.exit_epoch == FAR_FUTURE_EPOCH && minAct ≤ validator.effective_balance &&
     minAct < balance)
 
 /-- `get_pending_partial_withdrawals(state, withdrawal_index, prior_withdrawals)` (Electra,
 :1356), with its `len(prior_withdrawals) <= withdrawals_limit` assert (:1362-1366). -/
 def getPendingPartialWithdrawals (state : BeaconState P) (withdrawalIndex : WithdrawalIndex)
-    (prior : Array Withdrawal) : M WithdrawalsPhase := do
+    (prior : Array Withdrawal) : Fallible WithdrawalsPhase := do
   let site := "get_pending_partial_withdrawals"
   let epoch ← getCurrentEpoch state
   let withdrawalsLimit := min (prior.size + P.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP)
     (P.MAX_WITHDRAWALS_PER_PAYLOAD - 1)
   require (prior.size ≤ withdrawalsLimit) s!"{site}: len(prior_withdrawals) <= withdrawals_limit"
-  let minAct ← c64 P.MIN_ACTIVATION_BALANCE
+  let minAct ← u64Checked P.MIN_ACTIVATION_BALANCE
   let mut processed := U64.zero
   let mut withdrawals : Array Withdrawal := #[]
   let mut withdrawalIndex := withdrawalIndex
@@ -162,7 +162,7 @@ def getPendingPartialWithdrawals (state : BeaconState P) (withdrawalIndex : With
 
 /-- `get_builders_sweep_withdrawals(state, withdrawal_index, prior_withdrawals)` (Gloas, :1909). -/
 def getBuildersSweepWithdrawals (state : BeaconState P) (withdrawalIndex : WithdrawalIndex)
-    (prior : Array Withdrawal) : M WithdrawalsPhase := do
+    (prior : Array Withdrawal) : Fallible WithdrawalsPhase := do
   let site := "get_builders_sweep_withdrawals"
   let epoch ← getCurrentEpoch state
   let buildersLimit := min state.builders.length P.MAX_BUILDERS_PER_WITHDRAWALS_SWEEP
@@ -192,7 +192,7 @@ def getBuildersSweepWithdrawals (state : BeaconState P) (withdrawalIndex : Withd
 /-- `get_validators_sweep_withdrawals(state, withdrawal_index, prior_withdrawals)` (Electra,
 :1403: the partial amount is `balance - get_max_effective_balance(validator)`). -/
 def getValidatorsSweepWithdrawals (state : BeaconState P) (withdrawalIndex : WithdrawalIndex)
-    (prior : Array Withdrawal) : M WithdrawalsPhase := do
+    (prior : Array Withdrawal) : Fallible WithdrawalsPhase := do
   let site := "get_validators_sweep_withdrawals"
   let epoch ← getCurrentEpoch state
   let validatorsLimit := min state.validators.length P.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP
@@ -217,7 +217,7 @@ def getValidatorsSweepWithdrawals (state : BeaconState P) (withdrawalIndex : Wit
       withdrawals := withdrawals.push
         { index := withdrawalIndex, validator_index := validatorIndex
           address := ← addressOfCredentials validator.withdrawal_credentials
-          amount := ← balance.sub? (← c64 (getMaxEffectiveBalance P validator)) site }
+          amount := ← balance.sub? (← u64Checked (getMaxEffectiveBalance P validator)) site }
       withdrawalIndex ← withdrawalIndex.add? U64.one site
     validatorIndex ← (← validatorIndex.add? U64.one site).mod?
       (← U64.ofNat? state.validators.length site) site
@@ -227,7 +227,7 @@ def getValidatorsSweepWithdrawals (state : BeaconState P) (withdrawalIndex : Wit
 /-- `get_expected_withdrawals(state)` (Gloas, :1950): builder withdrawals, pending partial
 withdrawals, the builders sweep and the validators sweep, each phase given the withdrawals of
 the phases before it. -/
-def getExpectedWithdrawals (state : BeaconState P) : M ExpectedWithdrawals := do
+def getExpectedWithdrawals (state : BeaconState P) : Fallible ExpectedWithdrawals := do
   let withdrawalIndex := state.next_withdrawal_index
   let withdrawals : Array Withdrawal := #[]
   -- [New in Gloas:EIP7732] Get builder withdrawals
@@ -257,7 +257,7 @@ def getExpectedWithdrawals (state : BeaconState P) : M ExpectedWithdrawals := do
 /-- `apply_withdrawals(state, withdrawals)` (Gloas, :1994): a builder withdrawal debits the
 builder's balance (saturating), any other the validator's (`decrease_balance`). -/
 def applyWithdrawals (state : BeaconState P) (withdrawals : Array Withdrawal) :
-    M (BeaconState P) := do
+    Fallible (BeaconState P) := do
   let site := "apply_withdrawals"
   let mut state := state
   for withdrawal in withdrawals do
@@ -272,7 +272,7 @@ def applyWithdrawals (state : BeaconState P) (withdrawals : Array Withdrawal) :
 
 /-- `update_next_withdrawal_index(state, withdrawals)` (Capella). -/
 def updateNextWithdrawalIndex (state : BeaconState P) (withdrawals : Array Withdrawal) :
-    M (BeaconState P) := do
+    Fallible (BeaconState P) := do
   match withdrawals.back? with
   | none => pure state
   | some latest =>
@@ -281,25 +281,25 @@ def updateNextWithdrawalIndex (state : BeaconState P) (withdrawals : Array Withd
 /-- `update_payload_expected_withdrawals(state, withdrawals)` (Gloas). -/
 def updatePayloadExpectedWithdrawals (state : BeaconState P) (withdrawals : Array Withdrawal) :
     BeaconState P :=
-  { state with payload_expected_withdrawals := ProgressiveListS.ofArray withdrawals }
+  { state with payload_expected_withdrawals := ProgressiveListOnSpine.ofArray withdrawals }
 
 /-- `update_builder_pending_withdrawals(state, processed_builder_withdrawals_count)` (Gloas):
 the slice `[processed:]`. -/
 def updateBuilderPendingWithdrawals (state : BeaconState P) (processed : U64) : BeaconState P :=
   let xs := state.builder_pending_withdrawals.toArray
   { state with builder_pending_withdrawals :=
-      ProgressiveListS.ofArray (xs.extract processed.toNat xs.size) }
+      ProgressiveListOnSpine.ofArray (xs.extract processed.toNat xs.size) }
 
 /-- `update_pending_partial_withdrawals(state, processed_partial_withdrawals_count)` (Electra):
 the slice `[processed:]`. -/
 def updatePendingPartialWithdrawals (state : BeaconState P) (processed : U64) : BeaconState P :=
   let xs := state.pending_partial_withdrawals.toArray
   { state with pending_partial_withdrawals :=
-      ProgressiveListS.ofArray (xs.extract processed.toNat xs.size) }
+      ProgressiveListOnSpine.ofArray (xs.extract processed.toNat xs.size) }
 
 /-- `update_next_withdrawal_builder_index(state, processed_builders_sweep_count)` (Gloas). -/
 def updateNextWithdrawalBuilderIndex (state : BeaconState P) (processed : U64) :
-    M (BeaconState P) := do
+    Fallible (BeaconState P) := do
   let site := "update_next_withdrawal_builder_index"
   if 0 < state.builders.length then
     -- Update the next builder index to start the next withdrawal sweep
@@ -310,7 +310,7 @@ def updateNextWithdrawalBuilderIndex (state : BeaconState P) (processed : U64) :
 
 /-- `update_next_withdrawal_validator_index(state, withdrawals)` (Capella). -/
 def updateNextWithdrawalValidatorIndex (state : BeaconState P) (withdrawals : Array Withdrawal) :
-    M (BeaconState P) := do
+    Fallible (BeaconState P) := do
   let site := "update_next_withdrawal_validator_index"
   let n ← U64.ofNat? state.validators.length site
   match withdrawals.back? with
@@ -322,13 +322,13 @@ def updateNextWithdrawalValidatorIndex (state : BeaconState P) (withdrawals : Ar
   | none => pure ()
   -- Advance sweep by the max length of the sweep if there was not a full set of withdrawals
   let nextIndex ← state.next_withdrawal_validator_index.add?
-    (← c64 P.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP) site
+    (← u64Checked P.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP) site
   pure { state with next_withdrawal_validator_index := ← nextIndex.mod? n site }
 
 /-- `process_withdrawals(state)` (Gloas, :2042): nothing when the parent block is EMPTY
 (`state.latest_block_hash != state.latest_execution_payload_bid.block_hash`); otherwise the
 expected withdrawals are applied and the six update steps run in the spec's order. -/
-def processWithdrawals (state : BeaconState P) : M (BeaconState P) := do
+def processWithdrawals (state : BeaconState P) : Fallible (BeaconState P) := do
   -- [New in Gloas:EIP7732] Return early if the parent block is empty
   if state.latest_block_hash != state.latest_execution_payload_bid.block_hash then
     return state

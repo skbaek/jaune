@@ -47,64 +47,64 @@ open Jaune
 
 /-- The consensus-layer forks this goal knows. Deneb exists only as Electra's pre-fork side;
 Gloas is declared and refused. -/
-inductive CFork where
+inductive ConsensusFork where
   | deneb
   | electra
   | fulu
   | gloas
   deriving DecidableEq, Repr, Inhabited
 
-namespace CFork
+namespace ConsensusFork
 
-def all : List CFork := [.deneb, .electra, .fulu, .gloas]
+def all : List ConsensusFork := [.deneb, .electra, .fulu, .gloas]
 
 /-- The fork directory name used by the specs and the vector tree. -/
-def name : CFork → String
+def name : ConsensusFork → String
   | .deneb => "deneb"
   | .electra => "electra"
   | .fulu => "fulu"
   | .gloas => "gloas"
 
-instance : ToString CFork := ⟨name⟩
+instance : ToString ConsensusFork := ⟨name⟩
 
 /-- Strict name parsing: no case folding, no fallback. -/
-def ofName? : String → Option CFork
+def ofName? : String → Option ConsensusFork
   | "deneb" => some .deneb
   | "electra" => some .electra
   | "fulu" => some .fulu
   | "gloas" => some .gloas
   | _ => none
 
-def ord : CFork → Nat
+def ordinal : ConsensusFork → Nat
   | .deneb => 0
   | .electra => 1
   | .fulu => 2
   | .gloas => 3
 
 /-- `f.atLeast g`: `f` is `g` or later (the gate for fork-introduced fields). -/
-def atLeast (f g : CFork) : Bool := g.ord ≤ f.ord
+def atLeast (f g : ConsensusFork) : Bool := g.ordinal ≤ f.ordinal
 
 /-- The execution-layer forks each consensus fork pairs with. -/
-def executionForks : CFork → List Fork
+def executionForks : ConsensusFork → List Fork
   | .deneb => [.cancun]
   | .electra => [.prague]
   | .fulu => [.osaka, .bpo1, .bpo2]
   | .gloas => [.amsterdam]
 
-end CFork
+end ConsensusFork
 
 /-- The inverse pairing: total, `none` before Cancun. -/
-def _root_.Jaune.Fork.consensusFork? : Fork → Option CFork
+def _root_.Jaune.Fork.consensusFork? : Fork → Option ConsensusFork
   | .cancun => some .deneb
   | .prague => some .electra
   | .osaka | .bpo1 | .bpo2 => some .fulu
   | .amsterdam => some .gloas
   | _ => none
 
-theorem CFork.ofName?_name (c : CFork) : CFork.ofName? c.name = some c := by
+theorem ConsensusFork.ofName?_name (c : ConsensusFork) : ConsensusFork.ofName? c.name = some c := by
   cases c <;> rfl
 
-theorem CFork.mem_executionForks_iff (c : CFork) (f : Fork) :
+theorem ConsensusFork.mem_executionForks_iff (c : ConsensusFork) (f : Fork) :
     f ∈ c.executionForks ↔ f.consensusFork? = some c := by
   cases c <;> cases f <;> decide
 
@@ -123,12 +123,12 @@ byte followed by the SSZ serialization of that type's list. -/
 abbrev ExecutionRequestsList : Type := List Bytes
 
 /-- The consensus request list feeds Jaune's EIP-7685 commitment with no conversion. -/
-def ExecutionRequestsList.requestsHash (l : ExecutionRequestsList) : B256 :=
+def ExecutionRequestsList.requestsHash (l : ExecutionRequestsList) : Jaune.U256 :=
   computeRequestsHash l
 
 /-- What a resolved consensus fork carries for the cross-layer ties. -/
-structure CForkData where
-  fork : CFork
+structure ConsensusForkData where
+  fork : ConsensusFork
   /-- Each paired execution fork with the consensus layer's maximum blobs per block while it is
   active (`MAX_BLOBS_PER_BLOCK`, `MAX_BLOBS_PER_BLOCK_ELECTRA`, or a `BLOB_SCHEDULE` entry of
   `configs/mainnet.yaml`). -/
@@ -141,15 +141,15 @@ structure CForkData where
 -- The blob counts are read from the generated mainnet configuration (`Config.mainnet`, from
 -- `configs/mainnet.yaml`), so the ties below follow the pinned config, not a restatement.
 
-def denebData : CForkData :=
+def denebData : ConsensusForkData :=
   -- `MAX_BLOBS_PER_BLOCK`; Deneb has no execution requests.
   { fork := .deneb, blobs := [(.cancun, Config.mainnet.MAX_BLOBS_PER_BLOCK)], requestTypes := [] }
 
-def electraData : CForkData :=
+def electraData : ConsensusForkData :=
   { fork := .electra, blobs := [(.prague, Config.mainnet.MAX_BLOBS_PER_BLOCK_ELECTRA)],
     requestTypes := [depositRequestType, withdrawalRequestType, consolidationRequestType] }
 
-def fuluData : CForkData :=
+def fuluData : ConsensusForkData :=
   -- `get_blob_parameters`: Electra's count before the first `BLOB_SCHEDULE` entry, then each
   -- entry in turn; the mainnet schedule's two entries are BPO1 and BPO2.
   { fork := .fulu,
@@ -158,7 +158,7 @@ def fuluData : CForkData :=
     requestTypes := [depositRequestType, withdrawalRequestType, consolidationRequestType] }
 
 /-- The single resolver. Gloas is declared and refused: `none`. -/
-def CFork.rules? : CFork → Option CForkData
+def ConsensusFork.rules? : ConsensusFork → Option ConsensusForkData
   | .deneb => some denebData
   | .electra => some electraData
   | .fulu => some fuluData
@@ -170,7 +170,7 @@ inductive ForkRefusal where
   `eip7805` feature-fork directory of the `v1.6.1` vectors). -/
   | unknown (name : String)
   /-- A declared fork whose rules do not resolve (Gloas). -/
-  | notImplemented (c : CFork)
+  | notImplemented (c : ConsensusFork)
   deriving Repr
 
 instance : ToString ForkRefusal where
@@ -181,45 +181,45 @@ instance : ToString ForkRefusal where
 
 /-- Resolve a fork name for a run: the name must be a `CFork` whose rules resolve. Gloas, the
 `eip7805` feature fork and every unknown name are refused; nothing is ever run as Fulu. -/
-def CFork.resolve (n : String) : Except ForkRefusal CForkData :=
-  match CFork.ofName? n with
+def ConsensusFork.resolve (n : String) : Except ForkRefusal ConsensusForkData :=
+  match ConsensusFork.ofName? n with
   | none => .error (.unknown n)
   | some c =>
     match c.rules? with
     | some d => .ok d
     | none => .error (.notImplemented c)
 
-theorem CFork.rules?_fork (c : CFork) (d : CForkData) (h : c.rules? = some d) : d.fork = c := by
-  cases c <;> simp [CFork.rules?] at h <;> subst h <;> rfl
+theorem ConsensusFork.rules?_fork (c : ConsensusFork) (d : ConsensusForkData) (h : c.rules? = some d) : d.fork = c := by
+  cases c <;> simp [ConsensusFork.rules?] at h <;> subst h <;> rfl
 
-theorem CFork.rules?_gloas : CFork.gloas.rules? = none := rfl
+theorem ConsensusFork.rules?_gloas : ConsensusFork.gloas.rules? = none := rfl
 
 /-- The blob list of a resolved fork names exactly its paired execution forks. -/
-theorem CForkData.blobs_forks (c : CFork) (d : CForkData) (h : c.rules? = some d) :
+theorem ConsensusForkData.blobs_forks (c : ConsensusFork) (d : ConsensusForkData) (h : c.rules? = some d) :
     d.blobs.map (·.1) = c.executionForks := by
-  cases c <;> simp [CFork.rules?] at h <;> subst h <;> rfl
+  cases c <;> simp [ConsensusFork.rules?] at h <;> subst h <;> rfl
 
 /-- Blob tie: each paired execution fork's `MAX_BLOB_GAS_PER_BLOCK` (Jaune's rule data) is the
 consensus maximum blob count times `GAS_PER_BLOB`. -/
-theorem CForkData.blobs_tie (c : CFork) (d : CForkData) (h : c.rules? = some d) :
+theorem ConsensusForkData.blobs_tie (c : ConsensusFork) (d : ConsensusForkData) (h : c.rules? = some d) :
     ∀ p ∈ d.blobs, p.1.ruleSet.blob.max = p.2 * gasPerBlob := by
-  cases c <;> simp [CFork.rules?] at h <;> subst h <;> decide
+  cases c <;> simp [ConsensusFork.rules?] at h <;> subst h <;> decide
 
 /-- Request-type tie: the non-deposit request types are exactly the system-contract request
 types of every paired execution rule set, in order, and the deposit type is Jaune's
 receipt-derived `depositRequestType`. -/
-theorem CForkData.requestTypes_tie (c : CFork) (d : CForkData) (h : c.rules? = some d)
+theorem ConsensusForkData.requestTypes_tie (c : ConsensusFork) (d : ConsensusForkData) (h : c.rules? = some d)
     (hne : d.requestTypes ≠ []) :
     d.requestTypes.head? = some depositRequestType ∧
     [depositRequestType] = Jaune.depositRequestType ∧
     ∀ f ∈ c.executionForks, f.ruleSet.requests.map (·.1) = d.requestTypes.tail := by
-  cases c <;> simp [CFork.rules?] at h <;> subst h
+  cases c <;> simp [ConsensusFork.rules?] at h <;> subst h
   · exact absurd rfl hne
   all_goals exact ⟨rfl, rfl, by decide⟩
 
 /-! ## The pairing, rendered (`lake exe jaune-consensus --forks`) -/
 
-def CFork.statusText : CFork → String
+def ConsensusFork.statusText : ConsensusFork → String
   | .deneb => "pre-fork side (Electra fork/transition vectors)"
   | .electra | .fulu => "implemented by this goal"
   | .gloas => "REFUSED: declared, not implemented (fails closed)"
@@ -227,7 +227,7 @@ def CFork.statusText : CFork → String
 /-- One line per (consensus fork, execution fork) pair. -/
 def pairingTable : List String :=
   let header := "consensus  execution  max-blobs  exec-max-blob-gas  request-types  status"
-  header :: CFork.all.flatMap fun c =>
+  header :: ConsensusFork.all.flatMap fun c =>
     c.executionForks.map fun f =>
       let blobs : String := match c.rules? with
         | some d => match (d.blobs.find? (·.1 == f)) with
@@ -239,9 +239,9 @@ def pairingTable : List String :=
         | none => "-"
       s!"{c.name}  {f}  {blobs}  {f.ruleSet.blob.max}  {reqs}  {c.statusText}"
 
-#guard (CFork.resolve "gloas").toBool == false
-#guard (CFork.resolve "eip7805").toBool == false
-#guard (CFork.resolve "Fulu").toBool == false
-#guard ((CFork.resolve "fulu").toOption.map (·.fork)) == some .fulu
+#guard (ConsensusFork.resolve "gloas").toBool == false
+#guard (ConsensusFork.resolve "eip7805").toBool == false
+#guard (ConsensusFork.resolve "Fulu").toBool == false
+#guard ((ConsensusFork.resolve "fulu").toOption.map (·.fork)) == some .fulu
 
 end JauneConsensus

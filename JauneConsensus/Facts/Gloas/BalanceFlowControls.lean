@@ -1,5 +1,5 @@
 import JauneConsensus.Facts.JointGloas
-import JauneConsensus.Facts.Gloas.B5Witnesses
+import JauneConsensus.Facts.Gloas.BalanceFlowWitnesses
 
 /-!
 # B5 envelope mutant control (goal `eip8282-gloas-cross-layer-v1`, statements.md §0.3, B5 (2))
@@ -25,7 +25,7 @@ Function-level (**F**) negative control for the withdrawals clause of the envelo
   `hash_tree_root` occurs only symbolically; the kernel never evaluates it.
 -/
 
-namespace JauneConsensus.Facts.Gloas.B5Controls
+namespace JauneConsensus.Facts.Gloas.BalanceFlowControls
 
 open JauneConsensus JauneConsensus.Gloas
 
@@ -35,11 +35,11 @@ variable {P : Preset}
 without the withdrawals-root assert; the other eleven checks are unchanged and in spec order. -/
 def verifyEnvelopeNoWithdrawals (bls : Bool) (cfg : Config)
     (engine : JauneConsensus.Gloas.NewPayloadRequest P → Bool) (state : JauneConsensus.Gloas.BeaconState P)
-    (signedEnvelope : SignedExecutionPayloadEnvelope P) : M Unit := do
+    (signedEnvelope : SignedExecutionPayloadEnvelope P) : Fallible Unit := do
   let site := "verify_execution_payload_envelope"
   let envelope := signedEnvelope.message
   let payload := envelope.payload
-  require (← verifyExecutionPayloadEnvelopeSignatureB bls state signedEnvelope)
+  require (← verifyExecutionPayloadEnvelopeSignatureWithBls bls state signedEnvelope)
     s!"{site}: signature"
   require (envelope.beacon_block_root == latestBlockRoot state) s!"{site}: beacon_block_root"
   require (envelope.parent_beacon_block_root == state.latest_block_header.parent_root)
@@ -60,7 +60,7 @@ def verifyEnvelopeNoWithdrawals (bls : Bool) (cfg : Config)
 /-- The envelope built from `st`: every field a check compares with the state is the state's,
 the payload's timestamp is `t`, its withdrawals are `ws`; the rest is the template `e0`. -/
 def mutantEnvelope (st : JauneConsensus.Gloas.BeaconState P) (e0 : SignedExecutionPayloadEnvelope P)
-    (ws : ProgressiveListR JauneConsensus.Withdrawal) (t : U64) : SignedExecutionPayloadEnvelope P :=
+    (ws : ProgressiveListRightSpine JauneConsensus.Withdrawal) (t : U64) : SignedExecutionPayloadEnvelope P :=
   { e0 with message :=
     { e0.message with
       beacon_block_root := latestBlockRoot st
@@ -82,7 +82,7 @@ theorem verifyEnvelopeNoWithdrawals_ok_iff {bls : Bool} {cfg : Config}
     {engine : JauneConsensus.Gloas.NewPayloadRequest P → Bool} {state : JauneConsensus.Gloas.BeaconState P}
     {e : SignedExecutionPayloadEnvelope P} :
     verifyEnvelopeNoWithdrawals bls cfg engine state e = .ok () ↔
-      verifyExecutionPayloadEnvelopeSignatureB bls state e = .ok true ∧
+      verifyExecutionPayloadEnvelopeSignatureWithBls bls state e = .ok true ∧
       e.message.beacon_block_root = latestBlockRoot state ∧
       e.message.parent_beacon_block_root = state.latest_block_header.parent_root ∧
       e.message.builder_index = state.latest_execution_payload_bid.builder_index ∧
@@ -109,7 +109,7 @@ engine `fun _ => true`, when the signing key, the domain, the slot time and the 
 are defined and the bid commits to the template's requests root, the mutant accepts the envelope
 built from `st` whatever its withdrawals `ws` are. No root is evaluated. -/
 theorem mutant_accepts (cfg : Config) (st : JauneConsensus.Gloas.BeaconState P)
-    (e0 : SignedExecutionPayloadEnvelope P) (ws : ProgressiveListR JauneConsensus.Withdrawal)
+    (e0 : SignedExecutionPayloadEnvelope P) (ws : ProgressiveListRightSpine JauneConsensus.Withdrawal)
     {pk : BLSPubkey} {d : Domain} {t : U64}
     {vh : SszList Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK}
     (hpk : builderSigningPubkey st st.latest_execution_payload_bid.builder_index = .ok pk)
@@ -121,7 +121,7 @@ theorem mutant_accepts (cfg : Config) (st : JauneConsensus.Gloas.BeaconState P)
       Ssz.hashTreeRoot e0.message.execution_requests) :
     verifyEnvelopeNoWithdrawals false cfg (fun _ => true) st (mutantEnvelope st e0 ws t) =
       .ok () := by
-  have hsig := verifyExecutionPayloadEnvelopeSignatureB_false
+  have hsig := verifyExecutionPayloadEnvelopeSignatureWithBls_false
     (signedEnvelope := mutantEnvelope st e0 ws t) hpk hdom
   have hnpr : envelopeNewPayloadRequest st (mutantEnvelope st e0 ws t) =
       .ok { execution_payload := (mutantEnvelope st e0 ws t).message.payload
@@ -144,14 +144,14 @@ section Closed
 local instance {α : Type} [Inhabited α] {n : Nat} : Inhabited (SszVector α n) :=
   ⟨⟨Array.replicate n default, Array.size_replicate⟩⟩
 local instance {α : Type} {n : Nat} : Inhabited (SszList α n) := ⟨⟨#[], Nat.zero_le _⟩⟩
-local instance {s : Spine} {α : Type} : Inhabited (ProgressiveListS s α) := ⟨⟨#[]⟩⟩
+local instance {s : Spine} {α : Type} : Inhabited (ProgressiveListOnSpine s α) := ⟨⟨#[]⟩⟩
 local instance : Inhabited ProgressiveByteList := ⟨⟨default⟩⟩
 
 /-- The minimal preset. -/
-abbrev Pm : Preset := Preset.minimal
+abbrev MinimalPreset : Preset := Preset.minimal
 
 /-- The template envelope: every field at its zero value. -/
-def zEnvelope : SignedExecutionPayloadEnvelope Pm where
+def zeroEnvelope : SignedExecutionPayloadEnvelope MinimalPreset where
   message :=
     { payload := by constructor <;> exact default
       execution_requests := by constructor <;> exact default
@@ -161,29 +161,29 @@ def zEnvelope : SignedExecutionPayloadEnvelope Pm where
   signature := default
 
 /-- The withdrawal the state expects: 5 gwei to address 1. -/
-def wExpected : JauneConsensus.Withdrawal :=
+def expectedWithdrawal : JauneConsensus.Withdrawal :=
   { index := U64.zero, validator_index := U64.zero, address := ((0 : UInt32), (0, 1)),
-    amount := U64.lit 5 }
+    amount := U64.literal 5 }
 
 /-- The withdrawal the envelope carries instead: the same 5 gwei to address 2. -/
-def wOther : JauneConsensus.Withdrawal := { wExpected with address := ((0 : UInt32), (0, 2)) }
+def otherWithdrawal : JauneConsensus.Withdrawal := { expectedWithdrawal with address := ((0 : UInt32), (0, 2)) }
 
 /-- B5Witnesses' `satState` (builder 0 registered, every other field at zero) with one expected
 withdrawal, to address 1, and a zero bid for builder 0 with no blob commitments, committing to the
 template's requests root (a symbolic term; it is never evaluated). -/
-def ctrlState : JauneConsensus.Gloas.BeaconState Pm :=
-  { Facts.Gloas.B5Witnesses.satState with
-    payload_expected_withdrawals := ProgressiveListS.ofArray #[wExpected]
+def controlState : JauneConsensus.Gloas.BeaconState MinimalPreset :=
+  { Facts.Gloas.BalanceFlowWitnesses.saturationState with
+    payload_expected_withdrawals := ProgressiveListOnSpine.ofArray #[expectedWithdrawal]
     latest_execution_payload_bid :=
       { parent_block_hash := default, parent_block_root := default, block_hash := default,
         prev_randao := default, fee_recipient := default, gas_limit := U64.zero,
         builder_index := U64.zero, slot := U64.zero, value := U64.zero,
-        execution_payment := U64.zero, blob_kzg_commitments := ProgressiveListS.ofArray #[],
-        execution_requests_root := Ssz.hashTreeRoot zEnvelope.message.execution_requests } }
+        execution_payment := U64.zero, blob_kzg_commitments := ProgressiveListOnSpine.ofArray #[],
+        execution_requests_root := Ssz.hashTreeRoot zeroEnvelope.message.execution_requests } }
 
 /-- The envelope built from `ctrlState`, paying `wOther`. -/
-def ctrlEnvelope : SignedExecutionPayloadEnvelope Pm :=
-  mutantEnvelope ctrlState zEnvelope (ProgressiveListS.ofArray #[wOther]) U64.zero
+def controlEnvelope : SignedExecutionPayloadEnvelope MinimalPreset :=
+  mutantEnvelope controlState zeroEnvelope (ProgressiveListOnSpine.ofArray #[otherWithdrawal]) U64.zero
 
 /-- **B5 control (2): the mutant admits another address.** On `ctrlState` (expected: 5 gwei to
 address 1), the mutant without the withdrawals clause, at `bls = false` with the stub engine
@@ -192,35 +192,35 @@ withdrawal names, so `¬ WithdrawalsMatchExpected`. The real seam check `verifyE
 envelope arm `deliver` reject that same envelope, under every chain configuration, BLS setting,
 chain and parent payload. -/
 theorem mutant_admits_other_address :
-    verifyEnvelopeNoWithdrawals false Config.minimal (fun _ => true) ctrlState ctrlEnvelope =
+    verifyEnvelopeNoWithdrawals false Config.minimal (fun _ => true) controlState controlEnvelope =
       .ok () ∧
-    ¬ WithdrawalsMatchExpected ctrlState ctrlEnvelope ∧
-    (∃ w ∈ ctrlEnvelope.message.payload.withdrawals.toArray.toList,
-      ∀ x ∈ ctrlState.payload_expected_withdrawals.toArray.toList, x.address ≠ w.address) ∧
+    ¬ WithdrawalsMatchExpected controlState controlEnvelope ∧
+    (∃ w ∈ controlEnvelope.message.payload.withdrawals.toArray.toList,
+      ∀ x ∈ controlState.payload_expected_withdrawals.toArray.toList, x.address ≠ w.address) ∧
     (∀ (cfg : Jaune.ChainConfig) (bls : Bool) (exec : Jaune.BlockChain)
-        (r : JauneConsensus.Gloas.NewPayloadRequest Pm × Jaune.BlockChain),
-      verifyEnvelopeG cfg Config.minimal bls ctrlState exec ctrlEnvelope ≠ .ok r) ∧
-    (∀ (cfg : Jaune.ChainConfig) (bls : Bool) (exec : Jaune.BlockChain) (parent : ParentPayload Pm)
-        (s' : GJointState Pm),
-      deliver cfg Config.minimal bls (.gloas ctrlState exec parent) ctrlEnvelope ≠ .ok s') := by
-  have hne : ¬ WithdrawalsMatchExpected ctrlState ctrlEnvelope := by
+        (r : JauneConsensus.Gloas.NewPayloadRequest MinimalPreset × Jaune.BlockChain),
+      verifyEnvelopeGloas cfg Config.minimal bls controlState exec controlEnvelope ≠ .ok r) ∧
+    (∀ (cfg : Jaune.ChainConfig) (bls : Bool) (exec : Jaune.BlockChain) (parent : ParentPayload MinimalPreset)
+        (s' : GloasJointState MinimalPreset),
+      deliver cfg Config.minimal bls (.gloas controlState exec parent) controlEnvelope ≠ .ok s') := by
+  have hne : ¬ WithdrawalsMatchExpected controlState controlEnvelope := by
     unfold WithdrawalsMatchExpected
-    simp only [ctrlEnvelope, mutantEnvelope, ctrlState, ProgressiveListS.ofArray]
+    simp only [controlEnvelope, mutantEnvelope, controlState, ProgressiveListOnSpine.ofArray]
     decide
-  have hvh : blobVersionedHashes (P := Pm)
-      ctrlState.latest_execution_payload_bid.blob_kzg_commitments = .ok ⟨#[], Nat.zero_le _⟩ := by
+  have hvh : blobVersionedHashes (P := MinimalPreset)
+      controlState.latest_execution_payload_bid.blob_kzg_commitments = .ok ⟨#[], Nat.zero_le _⟩ := by
     unfold blobVersionedHashes
-    simp [ctrlState, ProgressiveListS.ofArray, pure, Except.pure]
-  refine ⟨mutant_accepts _ _ _ _ (pk := Facts.Gloas.B5Witnesses.satBuilder.pubkey)
+    simp [controlState, ProgressiveListOnSpine.ofArray, pure, Except.pure]
+  refine ⟨mutant_accepts _ _ _ _ (pk := Facts.Gloas.BalanceFlowWitnesses.saturationBuilder.pubkey)
     rfl rfl rfl hvh rfl, hne,
-    ⟨wOther, ?_, ?_⟩, fun _ _ _ r => verifyEnvelopeG_rejects_of_withdrawals_ne hne r,
+    ⟨otherWithdrawal, ?_, ?_⟩, fun _ _ _ r => verifyEnvelopeGloas_rejects_of_withdrawals_ne hne r,
     fun _ _ _ _ s' => deliver_rejects_of_withdrawals_ne hne s'⟩
-  · simp [ctrlEnvelope, mutantEnvelope, ProgressiveListS.ofArray]
+  · simp [controlEnvelope, mutantEnvelope, ProgressiveListOnSpine.ofArray]
   · intro x hx
-    simp only [ctrlState, ProgressiveListS.ofArray, List.mem_singleton] at hx
+    simp only [controlState, ProgressiveListOnSpine.ofArray, List.mem_singleton] at hx
     subst hx
     decide
 
 end Closed
 
-end JauneConsensus.Facts.Gloas.B5Controls
+end JauneConsensus.Facts.Gloas.BalanceFlowControls
