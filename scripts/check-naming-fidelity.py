@@ -401,7 +401,9 @@ class Comparison:
         self.right = after['constants']
         self.respelled_literals = []
         for name in list(self.left):
-            self.left[name] = self.respell_name_literals(name, self.left[name])
+            respelled = self.respell_name_literals(name, self.left[name])
+            if respelled is not self.left[name]:
+                self.left[name] = respelled
         for name, (target, cls) in sorted((before.get('derived') or {}).items()):
             if name in self.left:
                 self.left[name] = self.respell_derived(name, target, cls, self.left[name])
@@ -433,8 +435,11 @@ class Comparison:
             return e, list(reversed(args))
 
         def walk(e):
+            # Copy on change only: an unchanged subtree is returned as is, so
+            # comparing many environments does not duplicate their graphs.
             if isinstance(e, dict):
-                return {k: walk(v) for k, v in e.items()}
+                out = {k: walk(v) for k, v in e.items()}
+                return e if all(out[k] is e[k] for k in e) else out
             if not isinstance(e, list):
                 return e
             if len(e) == 3 and e[0] == 'app':
@@ -445,16 +450,57 @@ class Comparison:
                         all(isinstance(a, list) and len(a) == 2 and a[0] == 'str' for a in args)):
                     full = '.'.join(a[1] for a in args)
                     new_full = self.name(full) if full in known else full
+                    why = 'name literal'
+                    if new_full == full:
+                        new_full, why = self.namespace_literal(full), 'namespace literal'
                     if new_full != full:
                         parts = new_full.split('.')
                         if len(parts) <= 8:
-                            self.respelled_literals.append([name, full, new_full, 'name literal'])
+                            self.respelled_literals.append([name, full, new_full, why])
                             out = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], head[2]]
                             for part in parts:
                                 out = ['app', out, ['str', part]]
                             return out
-            return [walk(x) for x in e]
+            out = [walk(x) for x in e]
+            return e if all(a is b for a, b in zip(out, e)) else out
         return walk(value)
+
+    def renamed_namespace(self, namespace):
+        """The new namespace, when the map renames `namespace` by a namespace
+        row or by derivation (its member rows agree); else None."""
+        scoped = self.mapping.scope(namespace)
+        if scoped == namespace or namespace in self.mapping.exact:
+            return None
+        if namespace in self.mapping.derived() or any(
+                namespace == ns or namespace.startswith(ns + '.') for ns in self.mapping.namespaces):
+            return scoped
+        return None
+
+    def namespace_literal(self, full):
+        """Rule D (master decision 2026-11-16): a Name literal that is exactly a
+        namespace the map renames respells to its new namespace; one whose plain
+        or private form is a generated, non-authored constant under such a
+        namespace respells to the new namespace with the same leaf. Anything
+        else stays literal (returned unchanged)."""
+        renamed = self.renamed_namespace(full)
+        if renamed is not None:
+            return renamed
+        if '.' not in full:
+            return full
+        parent, leaf = full.rsplit('.', 1)
+        renamed = self.renamed_namespace(parent)
+        if renamed is None:
+            return full
+        if not hasattr(self, '_private_users'):
+            self._private_users = {}
+            for key in self.left:
+                split = MAP.split_private(key) if key.startswith('_private.') else None
+                if split:
+                    self._private_users.setdefault(split[2], []).append(key)
+        forms = ([full] if full in self.left else []) + self._private_users.get(full, [])
+        if forms and all(form not in self.before['roots'] for form in forms):
+            return f'{renamed}.{leaf}'
+        return full
 
     def respell_derived(self, name, target, cls, value):
         """A deriving handler's output follows the rename (master decisions
@@ -510,9 +556,11 @@ class Comparison:
                         self.respelled_literals.append([name, e[1], new, why])
                         return ['str', new]
                     return e
-                return [walk(x) for x in e]
+                out = [walk(x) for x in e]
+                return e if all(a is b for a, b in zip(out, e)) else out
             if isinstance(e, dict):
-                return {k: walk(v) for k, v in e.items()}
+                out = {k: walk(v) for k, v in e.items()}
+                return e if all(out[k] is e[k] for k in e) else out
             return e
         return walk(value)
 

@@ -634,6 +634,14 @@ each with its controls in `scripts/tests/test_naming_fidelity.py`:
   path: the planner refuses an authored declaration inside a renamed namespace
   without its own row.
 
+- A Name literal that is exactly a namespace the map renames (by a
+  namespace row or by derivation) respells to the new namespace; one whose
+  plain or private form is a generated, non-authored constant under such a
+  namespace (a private syntax kind `_private.M.0.Ns.tacticFoo`) respells to
+  the new namespace with the same leaf. Each is listed in the verdict
+  (reason `namespace literal`). A literal under an unrenamed namespace, or one
+  naming no constant, stays literal; an authored (even private) declaration
+  in a derived-renamed namespace is refused by the planner without its row.
 - A quoted identifier pre-resolved to a declaration with projection fields
   (`coreFrame.trans`) respells its declaration part names-only and keeps the
   field components byte-identical; a changed field fails.

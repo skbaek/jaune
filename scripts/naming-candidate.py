@@ -604,8 +604,11 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
                                              records, used, collect)}
     else:
         # Module rows rename roots; each environment is compared with its image.
+        import gc
         results, failures = {}, []
         for root, env in before['fidelity'].items():
+            # One environment at a time; its comparison state is released
+            # before the next (collect-all semantics unchanged).
             try:
                 results[root] = FIDELITY.check(env, after['fidelity'][renamer.module(root)], mapping,
                                                records, used, collect)
@@ -613,6 +616,7 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
                 if not collect:
                     raise
                 failures.append(f'[{root}] {error}')
+            gc.collect()
         if failures:
             raise FIDELITY.Mismatch('\n'.join(failures))
     stale_quotations(records, used)

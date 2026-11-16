@@ -410,6 +410,23 @@ class NamingApplyTests(unittest.TestCase):
             text = text[:edit['start']] + edit['new'] + text[edit['end']:]
         self.assertEqual(text, 'inductive T where\n  | three («to» : Nat) (h : «to» = «to»)\ndef v := T.three («to» := 1) rfl\n')
 
+    def test_private_authored_declaration_in_derived_namespace_needs_its_row(self):
+        # N4 rule D moves only generated constants with a derived namespace; an
+        # authored private declaration there is still refused by the planner.
+        text = 'namespace Inv\ndef a := 0\ndef b := 1\nprivate def c := 2\nend Inv\n'
+        index = index_for(text, [('a', 'Pilot.Inv.a', 0, True), ('b', 'Pilot.Inv.b', 0, True),
+                                 ('c', '_private.Pilot.0.Pilot.Inv.c', 0, True)])
+        b1, b2 = text.index('Inv'), text.rindex('Inv')
+        self.syntax(text, index, namespaces=[(b1, b1 + 3, 'namespace', 'Pilot.Inv', ''),
+                                             (b2, b2 + 3, 'namespace', 'Pilot.Inv', '')])
+        mapping = [entry('Pilot.Inv.a', 'Pilot.Invariant.a'), entry('Pilot.Inv.b', 'Pilot.Invariant.b')]
+        _, problems = M.plan_file(text, index, mapping)
+        self.assertEqual(len(problems), 1)
+        self.assertIn('needs a map row under the new namespace', problems[0]['reason'])
+        mapping.append(entry('Pilot.Inv.c', 'Pilot.Invariant.c'))
+        _, problems = M.plan_file(text, index, mapping)
+        self.assertEqual(problems, [])
+
     def test_declaration_row_renames_its_namespace_syntax(self):
         text = 'namespace B256\ndef toNat := 0\ndef keep := 1\nend B256\n'
         index = index_for(text, [('toNat', 'Pilot.B256.toNat', 0, True), ('keep', 'Pilot.B256.keep', 0, True)])

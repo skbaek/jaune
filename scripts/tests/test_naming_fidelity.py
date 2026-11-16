@@ -526,6 +526,37 @@ class NamingFidelityTests(unittest.TestCase):
         finally:
             CHECK.Comparison.preferred_generated = original
 
+    def test_namespace_and_private_kind_literals_follow_a_derived_namespace(self):
+        rows = self.entries(('N.Inv.a', 'N.Invariant.a', 'declaration', {}), ('N.Inv.b', 'N.Invariant.b', 'declaration', {}))
+        def lit(*ps):
+            e = ['const', ['name', f'Lean.Name.mkStr{len(ps)}'], []]
+            for p in ps:
+                e = ['app', e, ['str', p]]
+            return e
+        def run(before_lits, after_lits):
+            kernel = lambda lits: dict(kernel=['definition', 'safe', ['app', lit(*lits[0]), lit(*lits[1])]], attributes={})
+            self.before = snapshot({'N.Inv.a': constant(), 'N.Inv.b': constant(2), '_private.M.0.N.Inv.tacticFoo': constant(7),
+                                    'gen': kernel(before_lits)}, ['N.Inv.a', 'N.Inv.b'])
+            self.after = snapshot({'N.Invariant.a': constant(), 'N.Invariant.b': constant(2),
+                                   '_private.M.0.N.Invariant.tacticFoo': constant(7), 'gen': kernel(after_lits)},
+                                  ['N.Invariant.a', 'N.Invariant.b'])
+            self.renames = rows
+            return self.run_check()
+        verdict = run([('N', 'Inv'), ('N', 'Inv', 'tacticFoo')], [('N', 'Invariant'), ('N', 'Invariant', 'tacticFoo')])
+        self.assertEqual(sorted(r[3] for r in verdict['derived_literals_respelled']), ['namespace literal', 'namespace literal'])
+        # Control: a literal under an unrenamed namespace stays literal.
+        with self.assertRaises(CHECK.Mismatch):
+            run([('N', 'Other'), ('N', 'Inv', 'tacticFoo')], [('N', 'Otherwise'), ('N', 'Invariant', 'tacticFoo')])
+        # Control: a literal under the renamed namespace that names no constant stays literal.
+        with self.assertRaises(CHECK.Mismatch):
+            run([('N', 'Inv'), ('N', 'Inv', 'zzz')], [('N', 'Invariant'), ('N', 'Invariant', 'zzz')])
+        # Control: an authored constant under the namespace is not moved by this path.
+        self.before = snapshot({'N.Inv.a': constant(), 'N.Inv.b': constant(2), 'N.Inv.c': constant(3),
+                                'gen': dict(kernel=['definition', 'safe', lit('N', 'Inv', 'c')], attributes={})},
+                               ['N.Inv.a', 'N.Inv.b', 'N.Inv.c'])
+        comparison = CHECK.Comparison(self.before, self.before, rows)
+        self.assertEqual(comparison.namespace_literal('N.Inv.c'), 'N.Inv.c')
+
     def test_module_named_auxiliaries_follow_module_rows(self):
         self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), ('A.Mod', 'A.Module', 'module', {}))
         aux = 'N._aux_A_Mod___elabRules_N_tac_1.go'
