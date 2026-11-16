@@ -149,7 +149,7 @@ def plan_sources(root, candidate, bundles, mapping):
             raise ValueError('unsupported naming inventory')
         excluded = {row['path']: row for row in inventory['excluded_sources']}
     capture = dict(capture_checked=0, capture_unverifiable=0, capture_requalified=0,
-                   capture_unverifiable_edited=0)
+                   capture_unverifiable_edited=0, quotation_no_global=0)
     for relative in sorted(candidate['files']):
         if not relative.endswith('.lean'):
             continue
@@ -195,7 +195,67 @@ def plan_sources(root, candidate, bundles, mapping):
             if right['start'] < left['end']:
                 row['unresolved'].append(dict(start=right['start'], end=left['end'],
                                               reason='overlapping rename and relocation edits'))
+    apply_reviewed_sites(root, candidate, texts, by_record)
     return records, moves
+
+
+REVIEWED_SITES = 'scripts/naming-sites.json'
+SITE_KEYS = {'path', 'line', 'column', 'token', 'sha256', 'decision', 'reason'}
+
+
+def apply_reviewed_sites(root, candidate, texts, by_record):
+    """Registered, reviewed decisions for individual unresolved tokens.
+
+    `scripts/naming-sites.json` lists sites the tool cannot resolve (a local
+    binder the compiler index records no reference for, a user-named goal),
+    each with its file digest, 1-based line and column (code points), exact
+    token, decision and reason. Only `unchanged` is a decision. A listed site
+    leaves `unresolved` for the record's `reviewed` list, kept in the plan. A
+    site whose file bytes differ, or that matches no unresolved token, is
+    itself unresolved: the list never silently goes stale, and any unlisted
+    use still fails the plan."""
+    if REVIEWED_SITES not in candidate['files']:
+        return
+    raw = APPLY.safe_path(root, REVIEWED_SITES).read_bytes()
+    if APPLY.digest(raw) != candidate['files'][REVIEWED_SITES]:
+        raise ValueError('reviewed naming sites changed during planning')
+    data = json.loads(raw)
+    if data.get('schema_version') != 1 or not isinstance(data.get('sites'), list):
+        raise ValueError('unsupported reviewed naming sites')
+    seen = set()
+    for site in data['sites']:
+        if (not isinstance(site, dict) or set(site) != SITE_KEYS or site['decision'] != 'unchanged' or
+                not isinstance(site['reason'], str) or not site['reason'].strip() or
+                type(site['line']) is not int or type(site['column']) is not int):
+            raise ValueError(f'invalid reviewed naming site: {site!r}')
+        key = (site['path'], site['line'], site['column'])
+        if key in seen:
+            raise ValueError(f'duplicate reviewed naming site: {key}')
+        seen.add(key)
+        record = by_record.get(site['path'])
+        if record is None:
+            raise ValueError(f'reviewed naming site names no Lean source: {site["path"]}')
+        if record['sha256'] != site['sha256']:
+            record['unresolved'].append(dict(start=0, end=0, reason=(
+                f'reviewed naming site {site["line"]}:{site["column"]} {site["token"]!r} is for other '
+                'source bytes; re-review it')))
+            continue
+        text = texts[site['path']]
+        lines = text.split('\n')
+        if not 1 <= site['line'] <= len(lines):
+            raise ValueError(f'reviewed naming site outside its source: {key}')
+        start = sum(len(line) + 1 for line in lines[:site['line'] - 1]) + site['column'] - 1
+        end = start + len(site['token'])
+        matched = [p for p in record['unresolved'] if p['start'] == start and p['end'] == end]
+        if not matched or text[start:end] != site['token']:
+            record['unresolved'].append(dict(start=start, end=end, reason=(
+                f'reviewed naming site {site["line"]}:{site["column"]} {site["token"]!r} matches no '
+                'unresolved token; remove or re-review it')))
+            continue
+        record['unresolved'] = [p for p in record['unresolved'] if p not in matched]
+        record.setdefault('reviewed', []).append(dict(
+            start=start, end=end, token=site['token'], decision=site['decision'], reason=site['reason'],
+            reported=sorted({p['reason'] for p in matched})))
 
 
 def universe_names(bundles):
@@ -263,8 +323,14 @@ def plan_modules(candidate, texts, records, renamer):
                 if name in renamer.modules:
                     record['edits'].append(dict(start=a, end=b, old=name, new=renamer.modules[name],
                                                 declaration=f'module {name}'))
+        # A namespace that shares a module's name (`namespace M` in M.lean) is
+        # namespace syntax: the compiler resolved it and namespace rows rename it.
+        namespace_spans = {(e['start'], e['end']) for e in record['edits']
+                           if e['declaration'].startswith('namespace ')}
         code = code_only(text)
         for match in pattern.finditer(code):
+            if (match.start(), match.end()) in namespace_spans:
+                continue
             if not any(a <= match.start() and match.end() <= b for a, b in spans):
                 record['unresolved'].append(dict(start=match.start(), end=match.end(),
                     reason=f'module name {match.group(0)!r} spelled outside an import '

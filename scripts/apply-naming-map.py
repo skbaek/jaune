@@ -595,9 +595,28 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         found = set()
         if universe is not None and i >= 0 and commands_q[i][0] <= start < commands_q[i][1]:
             found = resolve(universe.lookup('before', index_module), spelling, commands_q[i][2], commands_q[i][3])
+        in_scope = universe is not None and i >= 0 and commands_q[i][0] <= start < commands_q[i][1]
+        if not found and in_scope:
+            # No constant of the universe (every exported and referenced name,
+            # so every renamed one) resolves from the quoting scope, before or
+            # after the rename: the identifier pre-resolves to no renamed
+            # declaration (a quoted local binder such as `hx`) and stays as
+            # written. A resolution the model misses (an alias, a term-level
+            # `open`) changes the quotation's pre-resolution, which N4 compares.
+            scope_ns, scope_opens = commands_q[i][2], commands_q[i][3]
+            new_ns = renamer.scope(scope_ns) if scope_ns != '[anonymous]' else scope_ns
+            if not resolve(universe.lookup('after', index_module, renamer), spelling, new_ns,
+                           renamed_opens(scope_opens, renamer)):
+                add_cover(comps, ('quoted-local', spelling))
+                if stats is not None:
+                    stats['quotation_no_global'] = stats.get('quotation_no_global', 0) + 1
+                continue
+            add_cover(comps, ('unresolved', 'quotation identifier with no global resolution before the '
+                                            'rename would resolve to a constant after it (name capture)'))
+            continue
         if len(found) != 1:
             add_cover(comps, ('unresolved', 'quotation identifier with no unique global resolution '
-                                            '(a quoted local binder, or outside the modelled scope)'))
+                                            '(ambiguous, or outside the modelled scope)'))
             continue
         const = next(iter(found))
         add_cover(comps, ('const', const))

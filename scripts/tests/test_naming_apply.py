@@ -427,6 +427,42 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual([e['new'] for e in edits], ['J.U256'])
 
+    def test_quoted_local_binder_without_global_resolution_stays(self):
+        # `hx` is a word of a renamed declaration (J.hx), but in the quoting
+        # scope (namespace C, nothing open) no constant resolves from it before
+        # or after the rename: a quoted local binder, kept as written.
+        row = entry('J.hx', 'J.hypothesis')
+        renamer = M.MAP.Renamer([row])
+        universe = M.Universe({'J.hx', 'C.y'}, renamer)
+        text = 'namespace C\nmacro "m" : tactic => `(tactic| intro hx)\nend C\n'
+        index = index_for(text, [])
+        q = text.index('hx')
+        cmd = text.index('macro'), text.index('\nend C')
+        def plan(opens, names=None):
+            universe = M.Universe(names or {'J.hx', 'C.y'}, renamer)
+            self.syntax(text, index, commands=[(*cmd, 'macro', 'C', opens, [False] * 3)],
+                        quotation_identifiers=[(q, q + 2, 'hx')])
+            stats = {}
+            edits, problems = M.plan_file(text, index, [row], renamer, universe, stats)
+            return edits, problems, stats
+        edits, problems, stats = plan([])
+        self.assertEqual((edits, problems), ([], []))
+        self.assertEqual(stats['quotation_no_global'], 1)
+        # Control: with `open J` the same spelling pre-resolves to J.hx and is renamed.
+        edits, problems, _ = plan([['simple', 'J', []]])
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['hypothesis'])
+        # Control: a rename that would make the spelling resolve afterwards
+        # (C.z -> C.hx, captured) is reported, not kept.
+        row2 = entry('C.z', 'C.hx')
+        renamer = M.MAP.Renamer([row, row2])
+        universe = M.Universe({'J.hx', 'C.z'}, renamer)
+        self.syntax(text, index, commands=[(*cmd, 'macro', 'C', [], [False] * 3)],
+                    quotation_identifiers=[(q, q + 2, 'hx')])
+        edits, problems = M.plan_file(text, index, [row, row2], renamer, universe)
+        self.assertEqual(len(problems), 1)
+        self.assertIn('name capture', problems[0]['reason'])
+
     def test_explicit_open_alias_is_captured_by_namespace(self):
         # `open J (B256)` inside namespace C, which has its own U256: the
         # namespace wins over the alias after renaming, so qualify.

@@ -190,6 +190,60 @@ class NamingTreeTests(unittest.TestCase):
         self.assertEqual(plan['status'], 'unresolved')
         self.assertIn('outside an import', plan['files'][-1]['unresolved'][0]['reason'])
 
+    def test_namespace_named_like_its_module_is_namespace_syntax(self):
+        # `namespace A` inside A.lean spells the module's name, but the compiler
+        # resolved it as a namespace, which the agreeing member rows rename.
+        text = 'namespace A\ndef x := 1\ndef y := 2\nend A\n'
+        files = {'A.lean': text, 'lakefile.lean': ''}
+        fixture = TreeFixture(self.directory / 'nsmodule', files, imports={})
+        first, last = text.index('A'), text.rindex('A')
+        fixture.export('A', decls={'A.x': (text.index('def x'), text.index('def x') + 10, text.index('x')),
+                                   'A.y': (text.index('def y'), text.index('def y') + 10, text.index('y'))},
+                       commands=[], eof=[0, '[anonymous]', []],
+                       namespaces=[(first, first + 1, 'namespace', 'A', ''), (last, last + 1, 'end', 'A', '')])
+        rows = [dict(old='A', new='B', kind='module', layer='execution', rule='4', source='Synthetic module row'),
+                dict(old='A.x', new='B.x', kind='declaration', layer='execution', rule='4', source='Synthetic'),
+                dict(old='A.y', new='B.y', kind='declaration', layer='execution', rule='4', source='Synthetic')]
+        plan = fixture.plan(rows)
+        self.assertEqual(plan['status'], 'planned', plan)
+        self.assertEqual(sorted((e['old'], e['new']) for e in plan['files'][0]['edits']
+                                if e['declaration'].startswith('namespace')), [('A', 'B'), ('A', 'B')])
+        # Control: the same spelling without namespace metadata is reported.
+        fixture = TreeFixture(self.directory / 'nsmodule2', files, imports={})
+        fixture.export('A', decls={'A.x': (text.index('def x'), text.index('def x') + 10, text.index('x')),
+                                   'A.y': (text.index('def y'), text.index('def y') + 10, text.index('y'))},
+                       commands=[], eof=[0, '[anonymous]', []])
+        plan = fixture.plan(rows)
+        self.assertEqual(plan['status'], 'unresolved')
+        self.assertTrue(any('outside an import' in u['reason'] for f in plan['files'] for u in f['unresolved']))
+
+    def reviewed(self, name, sites, text='def f (st : Nat) := st\n'):
+        import hashlib
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        rows = [dict(path='A.lean', line=1, column=c, token='st', sha256=sha or digest, decision='unchanged',
+                     reason='local binder; the compiler index records no reference for it') for c, sha in sites]
+        files = {'A.lean': text, 'lakefile.lean': '',
+                 'scripts/naming-sites.json': json.dumps(dict(schema_version=1, sites=rows))}
+        fixture = TreeFixture(self.directory / name, files, imports={})
+        fixture.export('A', decls={}, commands=[], eof=[0, '[anonymous]', []])
+        row = dict(old='X.st', new='X.state', kind='declaration', layer='execution', rule='4', source='Synthetic')
+        plan = fixture.plan([row])
+        return plan, [u['reason'] for f in plan['files'] for u in f['unresolved']]
+
+    def test_reviewed_sites_record_unresolved_tokens_and_never_go_stale(self):
+        plan, reasons = self.reviewed('sites-none', [])
+        self.assertEqual(len(reasons), 2)  # both `st` tokens lack references
+        plan, reasons = self.reviewed('sites-one', [(8, None)])
+        self.assertEqual(len(reasons), 1)  # the unlisted use still fails the plan
+        plan, reasons = self.reviewed('sites-both', [(8, None), (21, None)])
+        self.assertEqual((plan['status'], reasons), ('planned', []))
+        reviewed = [r for f in plan['files'] for r in f.get('reviewed', [])]
+        self.assertEqual([(r['start'], r['token'], r['decision']) for r in reviewed], [(7, 'st', 'unchanged'), (20, 'st', 'unchanged')])
+        plan, reasons = self.reviewed('sites-stale', [(8, '0' * 64), (21, None)])
+        self.assertTrue(any('other source bytes' in r for r in reasons))
+        plan, reasons = self.reviewed('sites-nomatch', [(8, None), (21, None), (1, None)])
+        self.assertTrue(any('matches no unresolved token' in r for r in reasons))
+
     def test_lexed_imports_must_equal_compiler_headers(self):
         files = {'A.lean': 'def a := 1\n', 'B.lean': 'import A\ndef b := a\n', 'lakefile.lean': ''}
         fixture = TreeFixture(self.directory / 'headers', files, imports={'B': []})
@@ -279,6 +333,7 @@ class TreeFixture:
         self.root = directory / 'repo'
         self.root.mkdir(parents=True)
         for name, text in files.items():
+            (self.root / name).parent.mkdir(parents=True, exist_ok=True)
             (self.root / name).write_text(text)
         subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
         subprocess.run(['git', '-C', str(self.root), 'add', '.'], check=True)
@@ -301,7 +356,7 @@ class TreeFixture:
         line = text.count('\n', 0, i)
         return [line, len(text[text.rfind('\n', 0, i) + 1:i].encode('utf-16-le')) // 2]
 
-    def export(self, module, decls, commands, eof, refs=()):
+    def export(self, module, decls, commands, eof, refs=(), namespaces=()):
         text = self.files[module + '.lean']
         def b(i):
             return len(text[:i].encode())
@@ -319,7 +374,8 @@ class TreeFixture:
                      decls={name: self.lsp(text, start) + self.lsp(text, end) +
                             self.lsp(text, sel) + self.lsp(text, sel + len(name.split('.')[-1]))
                             for name, (start, end, sel) in decls.items()},
-                     naming_syntax=dict(version=2, literal_ranges=[], named_arguments=[], namespaces=[],
+                     naming_syntax=dict(version=2, literal_ranges=[], named_arguments=[],
+                                        namespaces=[[b(x), b(y), *rest] for x, y, *rest in namespaces],
                                         commands=[[b(x), b(y), *rest] for x, y, *rest in commands],
                                         imports=[], unresolved_syntax=[], eof_scope=eof))
         path = self.capture / f'{module}.json'
