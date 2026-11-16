@@ -324,6 +324,77 @@ class NamingTreeTests(unittest.TestCase):
         self.assertEqual(plan['status'], 'unresolved')
 
 
+
+    def consumer(self, client, refs, dep_decls, entries, consumer=True, dependency=True):
+        """A dependency package fixture (Dep.lean with its own whole-tree capture)
+        and a consumer tree importing it, as Blanc imports Jaune."""
+        base = self.directory / f'consumer{len(list(self.directory.iterdir()))}'
+        dep_text = 'namespace Dep\ndef Val := 1\nend Dep\nnamespace Q\ndef Thing := 2\nend Q\n'
+        dep = TreeFixture(base / 'dep', {'Dep.lean': dep_text, 'lakefile.lean': ''}, {})
+        dep.export('Dep', decls={name: (dep_text.index(name.split('.')[-1]), dep_text.index(name.split('.')[-1]) + 1,
+                                        dep_text.index(name.split('.')[-1])) for name in dep_decls},
+                   commands=[], eof=[0, '[anonymous]', []])
+        dep.plan([])  # writes the dependency's snapshot
+        files = {'B.lean': client, 'lakefile.lean': '', '.gitignore': '/.lake\n'}
+        fixture = TreeFixture(base / 'consumer', files, imports={'B': ['Dep']})
+        fixture.export('B', decls={}, commands=[(0, len(client.encode()), 'declaration', '[anonymous]',
+                                                [['simple', 'Dep', []], ['simple', 'Q', []]], [False] * 3)],
+                       eof=[0, '[anonymous]', []], refs=refs)
+        package = base / 'consumer/repo/.lake/packages/dep'
+        (package / '.lake/build/lib/lean').mkdir(parents=True)
+        (package / 'Dep.lean').write_text(dep_text)
+        olean = package / '.lake/build/lib/lean/Dep.olean'
+        olean.write_bytes(b'dep')
+        original = TREE.build_plan
+        def build(root, path, map_path, *rest):
+            data = json.loads(Path(path).read_text())
+            data['artifacts'] = TREE.CANDIDATE.bind_artifacts({'Dep': TREE.CANDIDATE.artifact_parts(olean)})
+            Path(path).write_text(json.dumps(data))
+            return original(root, path, map_path, consumer,
+                            [dep.capture / 'snapshot.json'] if dependency else [])
+        TREE.build_plan = build
+        try:
+            plan = fixture.plan(entries)
+        finally:
+            TREE.build_plan = original
+        return fixture, plan
+
+    def test_consumer_rewrites_imports_of_a_dependency_module_row(self):
+        client = 'import Dep\ndef b := 1\n'
+        refs = []
+        row = dict(old='Dep', new='Core.Dep', kind='module', layer='execution', rule='4', source='x')
+        fixture, plan = self.consumer(client, refs, ['Dep.Val', 'Q.Thing'], [row])
+        self.assertEqual((plan['status'], plan['moves'], plan['consumer']), ('planned', [], True), plan)
+        self.assertEqual(plan['dependencies'][0]['bound_modules'], 1)
+        self.assertEqual(TREE.apply_plan(fixture.root, plan, fixture.map), 1)
+        self.assertEqual((fixture.root / 'B.lean').read_text(), 'import Core.Dep\ndef b := 1\n')
+        # Without consumer mode a dependency module row is an unknown module.
+        with self.assertRaisesRegex(ValueError, 'unknown module'):
+            self.consumer(client, refs, ['Dep.Val', 'Q.Thing'], [row], consumer=False, dependency=False)
+        with self.assertRaisesRegex(ValueError, 'needs --dependency-snapshot'):
+            self.consumer(client, refs, ['Dep.Val', 'Q.Thing'], [row], dependency=False)
+
+    def test_consumer_capture_sees_dependency_constants_it_never_references(self):
+        # `Dep.Val` -> `Dep.Thing`; the consumer never mentions `Q.Thing`, but with
+        # `open Dep Q` a bare `Thing` would be ambiguous. Only the dependency's own
+        # capture knows `Q.Thing` exists.
+        client = 'import Dep\ndef b := Val\n'
+        refs = [('Dep.Val', 'Dep', client.index('Val'), client.index('Val') + 3)]
+        row = dict(old='Dep.Val', new='Dep.Thing', kind='declaration', layer='execution', rule='4', source='x')
+        fixture, plan = self.consumer(client, refs, ['Dep.Val', 'Q.Thing'], [row])
+        self.assertEqual(plan['status'], 'planned', plan)
+        edits = [e['new'] for r in plan['files'] for e in r['edits']]
+        self.assertEqual(edits, ['Dep.Thing'], plan)
+        self.assertEqual(plan['name_capture']['capture_requalified'], 1)
+        # A dependency capture whose source differs from the imported package refuses.
+        fixture2, _ = self.consumer(client, refs, ['Dep.Val', 'Q.Thing'], [row])
+        (fixture2.root / '.lake/packages/dep/Dep.lean').write_text('-- other revision\n')
+        snapshot = fixture2.capture / 'snapshot.json'
+        dep = fixture2.directory.parent / 'dep/capture/snapshot.json'
+        with self.assertRaisesRegex(ValueError, 'does not match the imported package source'):
+            TREE.build_plan(fixture2.root, snapshot, fixture2.map, True, [dep])
+
+
 class TreeFixture:
     """A git checkout plus a schema-3 capture whose exports carry syntax rows."""
 

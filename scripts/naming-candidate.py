@@ -320,8 +320,21 @@ def capture(args):
     save(out / 'source-before.json', source_before)
     # Use Lean's parser for the entire graph, not a line scanner: an omitted
     # import in an unexported, unchanged client would defeat reverse closure.
-    tool_build = run(root, out, 'tool-build', argv(args.build_prefix) + ['jaune-naming-fidelity'])
-    exporter = root / '.lake/build/bin/jaune-naming-fidelity'
+    # The exporter is built in the candidate itself, or, for a Lake project that
+    # consumes Jaune as a package (Blanc), in an explicit Jaune tool checkout on
+    # the same toolchain; it imports only Lean and runs in the candidate's
+    # `lake env`.
+    tool_root = root if args.tool_root is None else args.tool_root.resolve(strict=True)
+    if tool_root != root:
+        if args.tool_build_prefix is None:
+            raise ValueError('--tool-root needs --tool-build-prefix (the owned build in that checkout)')
+        if (tool_root / 'lean-toolchain').read_bytes() != (root / 'lean-toolchain').read_bytes():
+            raise ValueError('tool checkout and candidate use different Lean toolchains')
+    elif args.tool_build_prefix is not None:
+        raise ValueError('--tool-build-prefix is only for an external --tool-root')
+    tool_build = run(tool_root, out, 'tool-build',
+                     argv(args.tool_build_prefix or args.build_prefix) + ['jaune-naming-fidelity'])
+    exporter = tool_root / '.lake/build/bin/jaune-naming-fidelity'
     exporter_hash = file_sha(exporter)
     header_input = out / 'header-input.json'
     header_output = out / 'headers.json'
@@ -358,11 +371,14 @@ def capture(args):
     local_paths = {m: artifact_parts(root / '.lake/build/lib/lean' / (m.replace('.', '/') + '.olean'))
                    for m in producers}
     local_built = bind_artifacts(local_paths)
-    tool_sources = {p: initial['files'].get(p) for p in
-                    ('scripts/NamingFidelity.lean', 'scripts/NamingReferencesCore.lean',
-                     'scripts/check-naming-fidelity.py',
-                     'scripts/naming-candidate.py', 'scripts/check-naming-map.py',
-                     'scripts/apply-naming-map.py')}
+    tool_paths = ('scripts/NamingFidelity.lean', 'scripts/NamingReferencesCore.lean',
+                  'scripts/check-naming-fidelity.py',
+                  'scripts/naming-candidate.py', 'scripts/check-naming-map.py',
+                  'scripts/apply-naming-map.py')
+    if tool_root == root:
+        tool_sources = {p: initial['files'].get(p) for p in tool_paths}
+    else:
+        tool_sources = {p: file_sha(tool_root / p) for p in tool_paths}
     run(root, out, 'admit', argv(args.admit_command))
     try:
         imports, discovery, exports = {}, {}, {}
@@ -409,15 +425,22 @@ def capture(args):
             raise ValueError('import artifacts changed during export')
         if inventory(root, source_dirs) != source_before or file_sha(exporter) != exporter_hash:
             raise ValueError('candidate or exporter changed during export')
+        if tool_root != root and {p: file_sha(tool_root / p) for p in tool_paths} != tool_sources:
+            raise ValueError('tool checkout sources changed during export')
         result = dict(schema_version=3, status='OK', scope='local-import-closure', jobs=args.jobs,
                       candidate=initial, roots=args.module, selected=selected, build=build, tool_build=tool_build,
                       source_only=source_only, producers=producers,
                       headers_sha256=file_sha(header_output),
                       exporter_sha256=exporter_hash, tool_sources=tool_sources,
+                      **({} if tool_root == root else dict(tool_root=str(tool_root))),
+                      **(dict(purpose='plan') if args.plan_only else {}),
                       artifacts=bound, local_built=local_built, exports=exports)
-        # Validate the assembled bundle before advertising success.
-        read_environments({m: out / row['path'] for m, row in exports.items()},
-                          initial['modules'], selected)
+        # Validate the assembled bundle before advertising success. A plan-only
+        # capture (a consumer that is renamed but never fidelity-compared) skips
+        # the kernel-graph reader, which refuses forms N4 does not support yet.
+        if not args.plan_only:
+            read_environments({m: out / row['path'] for m, row in exports.items()},
+                              initial['modules'], selected)
     finally:
         run(root, out, 'release', argv(args.release_command))
     save(out / 'snapshot.json', result)
@@ -429,6 +452,8 @@ def read_snapshot(path, fidelity=True):
     data = json.loads(path.read_bytes())
     if data['schema_version'] not in (2, 3) or data['status'] != 'OK' or data['build']['exit'] != 0:
         raise ValueError('not a successful candidate capture')
+    if fidelity and data.get('purpose') == 'plan':
+        raise ValueError('plan-only capture cannot be used for fidelity comparison')
     candidate = data['candidate']
     header_path = path.parent / 'headers.json'
     if file_sha(header_path) != data['headers_sha256']:
@@ -581,6 +606,12 @@ def main():
     cap.add_argument('--output', type=Path, required=True)
     cap.add_argument('--reuse', type=Path,
                      help='prior capture directory whose identical exporter commands are reused (resume)')
+    cap.add_argument('--tool-root', type=Path,
+                     help='Jaune checkout that builds the exporter, for a candidate consuming Jaune as a package')
+    cap.add_argument('--tool-build-prefix',
+                     help='owned-build argv prefix (JSON) run in --tool-root')
+    cap.add_argument('--plan-only', action='store_true',
+                     help='capture for rename planning only; the snapshot is refused by compare')
     cap.add_argument('--jobs', type=int, default=1,
                      help='concurrent exporter processes; size the admission command for them')
     comp = commands.add_parser('compare')

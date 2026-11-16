@@ -359,6 +359,72 @@ class CandidateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'incomplete candidate export closure'):
                 CHECK.read_snapshot(path)
 
+    def test_plan_only_capture_is_refused_for_fidelity(self):
+        data = dict(schema_version=3, status='OK', build=dict(exit=0), purpose='plan',
+                    candidate=self.before['candidate'], roots=['Client'], selected=['Dep', 'Client'],
+                    exports={}, source_only=[], producers=['Dep', 'Client'], local_built={})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'snapshot.json'
+            source = copy.deepcopy(data['candidate'])
+            headers = dict(schema_version=1, modules={})
+            for module, row in source['modules'].items():
+                imports = row.pop('imports')
+                headers['modules'][module] = dict(path=row['path'], is_module=row.pop('is_module'),
+                                                  direct_imports=[[name, False, False, False] for name in imports])
+            (path.parent / 'source-before.json').write_text(json.dumps(source))
+            (path.parent / 'headers.json').write_text(json.dumps(headers))
+            data['headers_sha256'] = CHECK.file_sha(path.parent / 'headers.json')
+            data['selected'] = CHECK.closure(data['candidate']['modules'], ['Client'])
+            data['exports'] = {}
+            path.write_text(json.dumps(data))
+            # Fidelity refuses it before reading anything else.
+            with self.assertRaisesRegex(ValueError, 'plan-only capture'):
+                CHECK.read_snapshot(path)
+
+
+    def _tool_root_capture(self, tmp, toolchain, prefix=True):
+        import argparse
+        import subprocess
+        tmp = Path(tmp)
+        candidate, tool = tmp / 'candidate', tmp / 'tool'
+        for root, chain in ((candidate, 'leanprover/lean4:v4.35.0\n'), (tool, toolchain)):
+            root.mkdir()
+            (root / 'lean-toolchain').write_text(chain)
+            (root / 'Client.lean').write_text('def x := 1\n')
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            subprocess.run(['git', '-C', str(root), 'add', '-A'], check=True)
+            subprocess.run(['git', '-C', str(root), '-c', 'user.name=t', '-c', 'user.email=t@t',
+                            'commit', '-qm', 'fixture'], check=True)
+        # The fake owned build records where it ran and fails, ending capture.
+        build = json.dumps(['sh', '-c', 'pwd > built-here; exit 7', 'fake-build'])
+        args = argparse.Namespace(root=candidate, output=tmp / 'out', source_dir=['.'], module=['Client'],
+                                  source_only=[], build_prefix=json.dumps(['false']),
+                                  tool_root=tool, tool_build_prefix=build if prefix else None,
+                                  admit_command='["true"]', release_command='["true"]', reuse=None, jobs=1)
+        return candidate, tool, args
+
+    def test_external_tool_root_builds_the_exporter_there(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate, tool, args = self._tool_root_capture(tmp, 'leanprover/lean4:v4.35.0\n')
+            with self.assertRaisesRegex(ValueError, 'tool-build exited 7'):
+                CHECK.capture(args)
+            self.assertEqual((tool / 'built-here').read_text().strip(), str(tool.resolve()))
+            self.assertFalse((candidate / 'built-here').exists())
+            receipt = json.loads((args.output / 'tool-build.command.json').read_text())
+            self.assertEqual(receipt['cwd'], str(tool.resolve()))
+            self.assertEqual(receipt['argv'][-1], 'jaune-naming-fidelity')
+
+    def test_external_tool_root_needs_same_toolchain_and_its_own_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tool, args = self._tool_root_capture(tmp, 'leanprover/lean4:v4.34.0\n')
+            with self.assertRaisesRegex(ValueError, 'different Lean toolchains'):
+                CHECK.capture(args)
+            self.assertFalse((tool / 'built-here').exists())
+        with tempfile.TemporaryDirectory() as tmp:
+            _, tool, args = self._tool_root_capture(tmp, 'leanprover/lean4:v4.35.0\n', prefix=False)
+            with self.assertRaisesRegex(ValueError, 'needs --tool-build-prefix'):
+                CHECK.capture(args)
+
 
 if __name__ == '__main__':
     unittest.main()
