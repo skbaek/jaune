@@ -599,6 +599,26 @@ Derived Repr text of a renamed type therefore changes what `repr` prints;
 user-visible output is held byte-identical by the catalogue (t8n, cli, golden
 messages, trace, fixture lanes), not by N4.
 
+Names Lean derives (master decisions 2026-11-16, G0a). Three narrow rules,
+each with its controls in `scripts/tests/test_naming_fidelity.py`:
+- A constant Lean realizes on demand and neither export holds (a matcher
+  `P.match_8` behind a private equation lemma) is named after its parent: when
+  `P` is an exact map row and every further component is in the checker's
+  closed `GENERATED_SUFFIX` set (match_N, eq_N, eq_def, splitter, proof_N,
+  injEq, inj, sizeOf_spec, noConfusion, noConfusionType, casesOn, recOn, rec,
+  brecOn, below, ibelow, binductionOn, ctorIdx, congr_simp, _unfold, _sunfold),
+  it compares as the parent's new name with the same suffix. Any other suffix
+  is compared through the map as written.
+- Lean names macro and elab auxiliaries after their module
+  (`_aux_<Module_with_underscores>___elabRules_...`): the whole underscored
+  module component follows an exact module row; the rest of the name is
+  byte-identical.
+- A `Name` literal (`Lean.Name.mkStrN "A" ... "Z"`, as a double-backtick
+  literal elaborates) whose full name is exactly an old constant the map
+  renames compares as the new name; each respelling is listed in the verdict
+  (`derived_literals_respelled`, reason `name literal`). A literal naming no
+  renamed constant is compared as written.
+
 The low-level comparator's verdict remains `exported-modules`. It can compare
 archived schema-3 to schema-6 exports as well as schema 7 (the candidate
 workflow below requires schema 7), but neither a list

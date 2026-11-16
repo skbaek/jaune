@@ -373,6 +373,8 @@ class Comparison:
         self.left = dict(before['constants'])
         self.right = after['constants']
         self.respelled_literals = []
+        for name in list(self.left):
+            self.left[name] = self.respell_name_literals(name, self.left[name])
         for name, (target, cls) in sorted((before.get('derived') or {}).items()):
             if name in self.left:
                 self.left[name] = self.respell_derived(name, target, cls, self.left[name])
@@ -387,6 +389,44 @@ class Comparison:
         for source, target in mapping.relocations.values():
             self.relocated_modules |= {mapping.module(source), target}
             self.join(mapping.module(source), target)
+
+    def respell_name_literals(self, name, value):
+        """A `Name` literal (`Lean.Name.mkStrN "A" ... "Z"`) whose full name is
+        exactly an old constant the map renames is that constant's name: Lean
+        resolves a double-backtick literal (``Pres``) to the full name, and
+        renaming the constant respells it. It is compared as the new name
+        (fewer or more components change N); every respelling is recorded."""
+        mapping, known = self.mapping, self.before['constants']
+
+        def chain(e):
+            args = []
+            while isinstance(e, list) and len(e) == 3 and e[0] == 'app':
+                args.append(e[2])
+                e = e[1]
+            return e, list(reversed(args))
+
+        def walk(e):
+            if isinstance(e, dict):
+                return {k: walk(v) for k, v in e.items()}
+            if not isinstance(e, list):
+                return e
+            if len(e) == 3 and e[0] == 'app':
+                head, args = chain(e)
+                if (isinstance(head, list) and head[:1] == ['const'] and isinstance(head[1], list) and
+                        re.fullmatch(r'Lean\.Name\.mkStr[1-8]', head[1][1]) and
+                        len(args) == int(head[1][1][-1]) and
+                        all(isinstance(a, list) and len(a) == 2 and a[0] == 'str' for a in args)):
+                    full = '.'.join(a[1] for a in args)
+                    if mapping.renames(full) and full in known:
+                        parts = mapping(full).split('.')
+                        if len(parts) <= 8:
+                            self.respelled_literals.append([name, full, mapping(full), 'name literal'])
+                            out = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], head[2]]
+                            for part in parts:
+                                out = ['app', out, ['str', part]]
+                            return out
+            return [walk(x) for x in e]
+        return walk(value)
 
     def respell_derived(self, name, target, cls, value):
         """A deriving handler's output follows the rename (master decisions
@@ -504,11 +544,36 @@ class Comparison:
         # The raw text is the spelling up to `«»` escapes, or else literal.
         return ['rawSpelling'] if raw and plain_spelling(raw) == spelling else ['raw', raw]
 
+    GENERATED_SUFFIX = re.compile(r'^(match_\d+|eq_\d+|eq_def|splitter|proof_\d+|injEq|inj|sizeOf_spec|'
+                                  r'noConfusion|noConfusionType|casesOn|recOn|rec|brecOn|below|ibelow|'
+                                  r'binductionOn|ctorIdx|congr_simp|_unfold|_sunfold)$')
+
     def name(self, name):
         if '@' in name:  # A per-module key for colliding independent roots.
             base, module = name.rsplit('@', 1)
             return f'{self.mapping(base)}@{self.module_of(base, module)}'
-        return self.mapping(name)
+        mapped = self.mapping(name)
+        if '._aux_' in '.' + mapped:
+            # Lean names macro/elab auxiliaries after their module
+            # (`_aux_<Module_with_underscores>___elabRules_...`): a module row
+            # renames that component too.
+            for old, new in self.mapping.modules.items():
+                mangled_old, mangled_new = old.replace('.', '_'), new.replace('.', '_')
+                mapped = re.sub(r'(^|\.)_aux_' + re.escape(mangled_old) + r'___',
+                                lambda m: m.group(1) + '_aux_' + mangled_new + '___', mapped)
+        if mapped == name and name not in self.left:
+            # A constant Lean realizes on demand and no export holds (a matcher
+            # `P.match_8` behind a private equation lemma) is named after its
+            # parent: it follows the parent's exact row when every further
+            # component is a compiler-generated suffix.
+            parts = name.split('.')
+            for i in range(len(parts) - 1, 0, -1):
+                parent = '.'.join(parts[:i])
+                if parent in self.mapping.exact and all(self.GENERATED_SUFFIX.match(x) for x in parts[i:]):
+                    renamed = '.'.join([self.mapping(parent)] + parts[i:])
+                    if renamed not in self.right:  # absent from both exports
+                        return renamed
+        return mapped
 
     def module_of(self, name, module):
         private = MAP.split_private(name)

@@ -383,6 +383,50 @@ class NamingFidelityTests(unittest.TestCase):
         # Control: an instance with a source declaration range (hand-written) is not derived.
         self.assertEqual(derived(data(source, inst_range=True)), {})
 
+    def test_resolved_name_literals_follow_the_map(self):
+        def lit(*parts):
+            e = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], []]
+            for p in parts:
+                e = ['app', e, ['str', p]]
+            return dict(kernel=['definition', 'safe', e], attributes={})
+        self.renames = self.entries(('N.old', 'N.new', 'declaration', {}))
+        def check(before, after):
+            self.before = snapshot({'N.old': constant(), 'N.m': lit(*before)}, ['N.old', 'N.m'])
+            self.after = snapshot({'N.new': constant(), 'N.m': lit(*after)}, ['N.new', 'N.m'])
+            return self.run_check()
+        verdict = check(('N', 'old'), ('N', 'new'))
+        self.assertEqual([r[3] for r in verdict['derived_literals_respelled']], ['name literal'])
+        # Control: a literal that names no renamed constant is compared as written.
+        with self.assertRaises(CHECK.Mismatch):
+            check(('N', 'other'), ('N', 'another'))
+        # Control: a renamed constant's literal changed some other way fails.
+        with self.assertRaises(CHECK.Mismatch):
+            check(('N', 'old'), ('N', 'newer'))
+
+    def test_module_named_auxiliaries_follow_module_rows(self):
+        self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), ('A.Mod', 'A.Module', 'module', {}))
+        aux = 'N._aux_A_Mod___elabRules_N_tac_1.go'
+        self.before = snapshot({'N.old': constant(), aux: constant(3)}, ['N.old', aux])
+        self.after = snapshot({'N.new': constant(), aux.replace('A_Mod___', 'A_Module___'): constant(3)},
+                              ['N.new', aux.replace('A_Mod___', 'A_Module___')])
+        self.assertEqual(self.run_check()['status'], 'OK')
+        # Control: without the module row the auxiliary's new name is a difference.
+        self.renames = self.entries(('N.old', 'N.new', 'declaration', {}))
+        with self.assertRaisesRegex(CHECK.Mismatch, 'authored constant set changed'):
+            self.run_check()
+
+    def test_unexported_generated_names_follow_their_parent(self):
+        ref = lambda n: dict(kernel=['definition', 'safe', ['const', ['name', n], []]], attributes={})
+        self.renames = self.entries(('N.old', 'N.new', 'declaration', {}))
+        self.before = snapshot({'N.old': constant(), 'N.t': ref('N.old.match_8')}, ['N.old', 'N.t'])
+        self.after = snapshot({'N.new': constant(), 'N.t': ref('N.new.match_8')}, ['N.new', 'N.t'])
+        self.assertEqual(self.run_check()['status'], 'OK')
+        # Control: a suffix that is not compiler-generated does not follow.
+        self.before['constants']['N.t'] = ref('N.old.helper')
+        self.after['constants']['N.t'] = ref('N.new.helper')
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
     def test_generated_constants_keep_their_modules(self):
         self.before['constants']['gen'] = constant(5)
         self.after['constants']['gen2'] = constant(5)
