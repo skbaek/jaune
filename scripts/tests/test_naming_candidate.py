@@ -426,5 +426,12 @@ class CandidateTests(unittest.TestCase):
                 CHECK.capture(args)
 
 
+
+class ReviewedQuotationTests(unittest.TestCase):
+    def test_stale_record_fails(self):
+        CHECK.stale_quotations([{'constant': 'a'}], {0})
+        with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'stale'):
+            CHECK.stale_quotations([{'constant': 'a'}, {'constant': 'b'}], {0})
+
 if __name__ == '__main__':
     unittest.main()

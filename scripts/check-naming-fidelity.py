@@ -363,8 +363,10 @@ def read_exports(paths):
 
 
 class Comparison:
-    def __init__(self, before, after, mapping):
+    def __init__(self, before, after, mapping, reviewed=None, reviewed_used=None):
         self.before, self.after = before, after
+        self.reviewed = reviewed
+        self.reviewed_used = reviewed_used if reviewed_used is not None else set()
         if isinstance(mapping, dict):  # An exact old -> new table.
             mapping = MAP.Renamer([dict(old=a, new=b, kind='declaration') for a, b in mapping.items()])
         self.mapping = mapping
@@ -446,6 +448,22 @@ class Comparison:
             return e
         return walk(value)
 
+    def reviewed_quotation(self, left, right, path):
+        """A registered, reviewed capture-qualified quotation (master decision
+        2026-11-16; scripts/naming-quotations.json): accepted only when a record
+        names this generated constant, the before and after spellings, and a
+        map row whose old name the quotation pre-resolves to and whose fully
+        qualified new name is exactly the after spelling. Pre-resolution is
+        still compared. Used records are counted; unused ones are stale."""
+        decls = {d[1][1] for d in left[1] if d[0] == 'decl'}
+        for index, row in enumerate(self.reviewed or []):
+            if (path.startswith(f'constant {row["constant"]}.') and row['before'] == left[2] and
+                    row['after'] == right[2] and row['map_old'] in decls and
+                    self.mapping(row['map_old']) == row['map_new'] == right[2]):
+                self.reviewed_used.add(index)
+                return True
+        return False
+
     def find(self, module):
         while self.parent.get(module, module) != module:
             module = self.parent[module]
@@ -507,6 +525,8 @@ class Comparison:
             if not (isinstance(right, list) and len(right) == 5 and right[0] == 'quotedIdentifier'):
                 raise Mismatch(f'{path}: quoted identifier changed kind')
             spelling, raw = self.quoted(left, path)
+            if right[2] != spelling and self.reviewed_quotation(left, right, path):
+                spelling = right[2]
             if right[2] != spelling:
                 raise Mismatch(f'{path}: quoted spelling {left[2]!r} became {right[2]!r}, '
                                f'expected {spelling!r} (Syntax.getId observes it)')
@@ -735,13 +755,13 @@ class Comparison:
                     derived_literals_respelled=self.respelled_literals)
 
 
-def check(before, after, mapping):
+def check(before, after, mapping, reviewed=None, reviewed_used=None):
     MAP.validate_map(mapping)
     if before['version'] != after['version']:
         raise ValueError('Lean versions differ')
     renames = MAP.Renamer(mapping['entries'])
     # Imports are reported, not silently treated as a proof about their contents.
-    result = Comparison(before, after, renames).run()
+    result = Comparison(before, after, renames, reviewed, reviewed_used).run()
     result.update(before=before['receipts'], after=after['receipts'],
                   before_imports=before['modules'], after_imports=after['modules'],
                   before_coalesced_equations=before.get('coalesced_equations', []),

@@ -530,7 +530,17 @@ def affected_modules(before, after):
         affected |= more
 
 
-def compare(before, after, mapping, inventory=None):
+REVIEWED_KEYS = {'module', 'constant', 'before', 'after', 'map_old', 'map_new', 'decision', 'reason', 'precedent'}
+
+
+def stale_quotations(records, used):
+    """Every reviewed quotation record must have been used by some comparison."""
+    stale = [row for index, row in enumerate(records) if index not in used]
+    if stale:
+        raise FIDELITY.Mismatch(f'reviewed quotation records that occur nowhere (stale): {stale}')
+
+
+def compare(before, after, mapping, inventory=None, reviewed=None):
     left, right = before['candidate'], after['candidate']
     if left['source_dirs'] != right['source_dirs']:
         raise ValueError('module source layout changed; explicit relocation support is required')
@@ -570,6 +580,16 @@ def compare(before, after, mapping, inventory=None):
     if before.get('source_only', []) != after.get('source_only', []):
         raise ValueError('source-only root classification changed between candidates')
     renamer = FIDELITY.MAP.Renamer(mapping['entries'])
+    records, used = [], set()
+    if reviewed is not None:
+        data = json.loads(reviewed[0])
+        if data.get('schema_version') != 1 or not isinstance(data.get('quotations'), list):
+            raise ValueError('unsupported reviewed quotations')
+        for row in data['quotations']:
+            if not isinstance(row, dict) or set(row) != REVIEWED_KEYS or not all(
+                    isinstance(v, str) and v.strip() for v in row.values()):
+                raise ValueError(f'invalid reviewed quotation: {row!r}')
+        records = data['quotations']
     roots = {renamer.module(root): root for root in before['fidelity']}
     if roots.keys() != after['fidelity'].keys():
         if not any(row['kind'] in ('module', 'relocation') for row in mapping['entries']):
@@ -579,12 +599,16 @@ def compare(before, after, mapping, inventory=None):
         # stay keyed per module, and every check, guard and attribute command
         # keeps its module, so unrelated roots are not pooled.
         results = {'<union>': FIDELITY.check(union_environment(before['module_bundles']),
-                                             union_environment(after['module_bundles']), mapping)}
+                                             union_environment(after['module_bundles']), mapping,
+                                             records, used)}
     else:
         # Module rows rename roots; each environment is compared with its image.
-        results = {root: FIDELITY.check(env, after['fidelity'][renamer.module(root)], mapping)
+        results = {root: FIDELITY.check(env, after['fidelity'][renamer.module(root)], mapping, records, used)
                    for root, env in before['fidelity'].items()}
+    stale_quotations(records, used)
     result = dict(status='OK', environments=results)
+    if reviewed is not None:
+        result['reviewed_quotations'] = dict(sha256=sha(reviewed[0]), records=records)
     result.update(scope='candidate-affected-local-closure',
                   before_candidate=left['head'], after_candidate=right['head'],
                   before_inventory_sha256=sha(FIDELITY.encoded(left).encode()),
@@ -621,6 +645,8 @@ def main():
     comp.add_argument('--before', type=Path, required=True)
     comp.add_argument('--after', type=Path, required=True)
     comp.add_argument('--map', type=Path, required=True)
+    comp.add_argument('--reviewed-quotations', type=Path,
+                      help='scripts/naming-quotations.json: reviewed capture-qualified quotations')
     comp.add_argument('--inventory', type=Path,
                       help='scripts/naming-inventory.json of both candidates: registered exclusions')
     args = parser.parse_args()
@@ -632,8 +658,9 @@ def main():
             if args.inventory:
                 raw = args.inventory.read_bytes()
                 inventory = (raw, json.loads(raw))
+            reviewed = (args.reviewed_quotations.read_bytes(),) if args.reviewed_quotations else None
             result = compare(read_snapshot(args.before), read_snapshot(args.after),
-                             json.loads(args.map.read_bytes()), inventory)
+                             json.loads(args.map.read_bytes()), inventory, reviewed)
             result['map_sha256'] = file_sha(args.map)
         print(json.dumps(result, indent=2))
         return 0

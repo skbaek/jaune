@@ -124,6 +124,21 @@ class NamingFidelityTests(unittest.TestCase):
             with self.assertRaisesRegex(CHECK.Mismatch, 'quoted spelling'):
                 verdict(ident('B256', ['B256'], 'Jaune.B256', scoped),
                         ident('Jaune.U256', ['Jaune', 'U256'], 'Jaune.U256', scoped))
+            # A reviewed capture-qualified quotation is accepted only as recorded.
+            record = dict(module='M', constant='N.m', before='B256', after='Jaune.U256', map_old='Jaune.B256',
+                          map_new='Jaune.U256', decision='d', reason='r', precedent='p')
+            def reviewed(rec):
+                self.before = snapshot({'N.m': CHECK.quoted_identifiers(dict(kernel=ident('B256', ['B256'], 'Jaune.B256', scoped), attributes={}))}, ['N.m'])
+                self.after = snapshot({'N.m': CHECK.quoted_identifiers(dict(kernel=ident('Jaune.U256', ['Jaune', 'U256'], 'Jaune.U256', scoped), attributes={}))}, ['N.m'])
+                used = set()
+                verdict = CHECK.Comparison(self.before, self.after, self.renames, [rec], used).run()
+                return verdict['status'], used
+            self.assertEqual(reviewed(record), ('OK', {0}))
+            # Control: a record naming another constant, or another map row, does not apply.
+            for bad in (dict(record, constant='N.other'), dict(record, map_old='Jaune.Tx.receiver', map_new='Jaune.Tx.to'),
+                        dict(record, after='Jaune.Other', map_new='Jaune.Other')):
+                with self.assertRaisesRegex(CHECK.Mismatch, 'quoted spelling'):
+                    reviewed(bad)
             # The same spelling resolving to another declaration fails too.
             with self.assertRaisesRegex(CHECK.Mismatch, 'reference'):
                 verdict(ident('B256', ['B256'], 'Jaune.B256', scoped),
