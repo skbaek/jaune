@@ -423,6 +423,25 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual([e['new'] for e in edits], ['Address', 'instInhabitedAddress'])
 
+    def test_compiler_named_report_is_independent_of_hash_seed(self):
+        # Two renamed words occur in `gInvJ`; the reported word must not depend on
+        # set iteration order, or apply's recomputed plan differs from the saved one.
+        import subprocess, sys
+        code = (
+            "import importlib.util, json, sys\n"
+            f"spec = importlib.util.spec_from_file_location('m', {str(ROOT / 'scripts/apply-naming-map.py')!r})\n"
+            "M = importlib.util.module_from_spec(spec); spec.loader.exec_module(M)\n"
+            "sys.path.insert(0, %r)\n" % str(Path(__file__).parent) +
+            "from test_naming_apply import index_for, entry\n"
+            "text = 'def y := gInvJ\\n'\n"
+            "index = index_for(text, [('gInvJ', 'Pilot.gInvJ', 0, False)])\n"
+            "rows = [entry('Pilot.Inv', 'Pilot.Invariant'), entry('Pilot.J', 'Pilot.Joint')]\n"
+            "u = M.Universe({'Pilot.gInvJ', 'Pilot.Inv', 'Pilot.J'}, M.MAP.Renamer(rows), {'Pilot.gInvJ'})\n"
+            "print(M.plan_file(text, index, rows, None, u)[1][0]['reason'])\n")
+        reasons = {subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, check=True,
+                                  env={'PYTHONHASHSEED': str(seed)}).stdout for seed in range(12)}
+        self.assertEqual(len(reasons), 1, reasons)
+
     def test_field_abbreviation_keeps_the_local(self):
         text = 'def f (gas : Nat) : Tx := { gas }\n'
         index = index_for(text, [('gas', 'Pilot.Tx.gas', 1, False), ('Tx', 'Pilot.Tx', 0, False)])
