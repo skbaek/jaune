@@ -305,7 +305,7 @@ class Universe:
     def __init__(self, names, renamer, compiler_named=()):
         self.compiler_named = set(compiler_named)
         self.before = set(names)
-        self.after = {renamer(name) for name in self.before}
+        self.after = {generated_rename(renamer, name) or renamer(name) for name in self.before}
         self.private = {}
         for side, names in (('before', self.before), ('after', self.after)):
             for name in names:
@@ -511,7 +511,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                 if (start, end) in edits:
                     unverifiable_edited += 1
                 continue
-            target = renamer(const)
+            target = generated_rename(renamer, const) or renamer(const)
             current = edits[start, end]['new'] if (start, end) in edits else spelling
             new_ns, new_opens = renamer.scope(ns) if ns != '[anonymous]' else ns, renamed_opens(opens, renamer)
             checked += 1

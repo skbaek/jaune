@@ -76,6 +76,9 @@ class NamingApplyTests(unittest.TestCase):
                                  ('Op.gas.ext', 'Pilot.Op.gas.ext', 0, False)])
         edits, problems = M.plan_file(text, index, [entry('Pilot.Op.gas', 'Pilot.Op.gasOp')])
         self.assertEqual([(e['old'], e['new']) for e in edits], [('Op.gas.injEq', 'Op.gasOp.injEq')])
+        # The capture model knows the generated auxiliary's new name.
+        universe = M.Universe({'Pilot.Op.gas', 'Pilot.Op.gas.injEq'}, M.MAP.Renamer([entry('Pilot.Op.gas', 'Pilot.Op.gasOp')]))
+        self.assertIn('Pilot.Op.gasOp.injEq', universe.after)
         # An authorable descendant (`ext`) still needs its own row.
         self.assertEqual([p['reason'] for p in problems],
                          ['descendant of renamed declaration needs its own map row'])
