@@ -78,7 +78,7 @@ MODULE_TOKENS = {
     'Jaune.Fork': {
         'Bal': ('BlockAccessList', '4, 6', 'EIP-7928; `bal` no longer means two things (rule 6)', 'B'),
         'bal': ('blockAccessList', '4, 6', 'EIP-7928; `bal` no longer means two things (rule 6)', 'B'),
-        'Txr': ('TransactionRules', '4', 'follows `ForkRules.txr` -> `txRules`; `Tx` is retired as a token', 'B'),
+        'Txr': ('TransactionRules', '4', 'follows `ForkRules.txr` -> `transactionRules`; `Tx` is retired as a token', 'B'),
         'Sys': ('SystemCalls', '4', 'follows `ForkRules.sys` -> `systemCalls`', 'B'),
         'Settle': ('Settlement', '4', 'follows `ForkRules.settle` -> `settlement`', 'B'),
     },
@@ -167,6 +167,7 @@ for old, new, eip in [('zero', 'legacy', 'Legacy transaction'), ('one', 'eip2930
              f'{_EIP_API} schema title "{eip}"', 'B', 'constructor')
 explicit('BlockOutput.bal', 'BlockOutput.blockAccessListBuilder', '4, 6', 'EIP-7928 block access list; `bal` is retired (rule 6); the field holds the `BalBuilder` (the sibling field `blockAccessList` holds the built list), so it takes the builder name', 'M', 'field of a reshaped record (`BlockOutput`, W2); only the leaf changes')
 explicit('natBLT', 'natRlpItem', '1', 'follows `BLT` -> `Rlp.Item`', 'M')
+explicit('BlockAccessList.toBLT', 'BlockAccessList.toRlpItem', '1, 7', 'follows `BLT` -> `RlpItem` (the RLP definition speaks of items, Yellow Paper Appendix B), as its siblings `BlockAccessListAccountChanges.toRlpItem` and `Block.toRlpItem` (G0a landing review, finding 18)', 'M')
 explicit('RIPEMD160.Spec.mMsg', 'RIPEMD160.Spec.mMessageDigest', '5', 'the RIPEMD-160 paper\'s test message "message digest" (audit: not a bare `Message`)', 'M')
 explicit('RIPEMD160.Spec.dMsg', 'RIPEMD160.Spec.dMessageDigest', '5', 'the digest of the test message "message digest"', 'M')
 explicit('B256.Nof', 'U256.AddNoOverflow', '5', 'predicate: the sum of two words stays below 2^256 (review S2); Prop-valued defs are UpperCamelCase', 'M')
@@ -279,7 +280,7 @@ explicit('ForkRules.Valid.bal_iff_header', 'ForkRules.Valid.blockAccessListRules
 explicit('ForkRules.isPrecomp', 'ForkRules.isPrecompile', '1', 'Appendix B `isPrecomp` -> `isPrecompile`', 'B')
 explicit('instDecidableBalValid', 'instDecidableBlockAccessListRulesValid', '7', 'auto name Lean derives from `Decidable (ForkRules.blockAccessListRulesValid ..)`', 'M')
 explicit('instDecidableIsPrecomp', 'instDecidableIsPrecompile', '1, 7', 'follows `ForkRules.isPrecomp` -> `isPrecompile`', 'B')
-explicit('ForkRules.postBalDefect?', 'ForkRules.postBlockAccessListDefect?', '4, 6', 'follows `ForkRules.bal` -> `blockAccessList`', 'M')
+explicit('ForkRules.postBalDefect?', 'ForkRules.postBlockAccessListDefect?', '4, 6', 'follows `ForkRules.bal` -> `blockAccessListRules`', 'M')
 
 # -- gas constants under one `Gas` vocabulary (Appendix B) -----------------------------
 # new leaf, rule, source

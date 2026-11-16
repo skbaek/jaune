@@ -1126,10 +1126,10 @@ def BlockAccessListAccountChanges.toRlpItem (c : BlockAccessListAccountChanges) 
     .list (c.nonceChanges.map fun ⟨i, n⟩ => .list [natRlpItem i, natRlpItem n.toNat]),
     .list (c.codeChanges.map fun ⟨i, code⟩ => .list [natRlpItem i, .bytes code.toList]) ]
 
-def BlockAccessList.toBLT (l : BlockAccessList) : Rlp.Item := .list (l.map BlockAccessListAccountChanges.toRlpItem)
+def BlockAccessList.toRlpItem (l : BlockAccessList) : Rlp.Item := .list (l.map BlockAccessListAccountChanges.toRlpItem)
 
 /-- `rlp.encode(block_access_list)`. -/
-def BlockAccessList.encode (l : BlockAccessList) : Bytes := l.toBLT.toBytes
+def BlockAccessList.encode (l : BlockAccessList) : Bytes := l.toRlpItem.toBytes
 
 /-- `hash_block_access_list`. -/
 def BlockAccessList.hash (l : BlockAccessList) : U256 := l.encode.keccak

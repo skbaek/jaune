@@ -17058,7 +17058,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 6",
-      "source": "follows `ForkRules.bal` -> `blockAccessList` [M]"
+      "source": "follows `ForkRules.bal` -> `blockAccessListRules` [M]"
     },
     {
       "old": "Jaune.ForkRules.postBalDefect?_eq_none_iff",
@@ -20619,7 +20619,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `txRules`; `Tx` is retired as a token) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `transactionRules`; `Tx` is retired as a token) [B]"
     },
     {
       "old": "Jaune.byzantiumSettle",
@@ -20643,7 +20643,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `txRules`; `Tx` is retired as a token) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `transactionRules`; `Tx` is retired as a token) [B]"
     },
     {
       "old": "Jaune.calculateBlobGasPrice",
@@ -20709,7 +20709,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `txRules`; `Tx` is retired as a token) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `transactionRules`; `Tx` is retired as a token) [B]"
     },
     {
       "old": "Jaune.catchWithOOGPrecomp",
@@ -21920,7 +21920,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `txRules`; `Tx` is retired as a token) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `transactionRules`; `Tx` is retired as a token) [B]"
     },
     {
       "old": "Jaune.le_of_toInstType_eq_p",
@@ -21952,7 +21952,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `txRules`; `Tx` is retired as a token) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `transactionRules`; `Tx` is retired as a token) [B]"
     },
     {
       "old": "Jaune.natBLT",
@@ -22044,7 +22044,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `txRules`; `Tx` is retired as a token) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `transactionRules`; `Tx` is retired as a token) [B]"
     },
     {
       "old": "Jaune.rSClear",
@@ -22077,7 +22077,7 @@
       "kind": "declaration",
       "layer": "execution",
       "rule": "4, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `txRules`; `Tx` is retired as a token) [B]"
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `Txr` -> `TransactionRules` (follows `ForkRules.txr` -> `transactionRules`; `Tx` is retired as a token) [B]"
     },
     {
       "old": "Jaune.standardCallDataTokenCost",
@@ -22559,6 +22559,14 @@
       "rule": "7",
       "source": "follows `Acct` -> `Account` (the `@[ext]` lemma of the structure) [B]",
       "notes": "generated constant spelled by Blanc"
+    },
+    {
+      "old": "Jaune.BlockAccessList.toBLT",
+      "new": "Jaune.BlockAccessList.toRlpItem",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "1, 7",
+      "source": "follows `BLT` -> `RlpItem` (the RLP definition speaks of items, Yellow Paper Appendix B), as its siblings `BlockAccessListAccountChanges.toRlpItem` and `Block.toRlpItem` (G0a landing review, finding 18) [M]"
     }
   ]
 }
