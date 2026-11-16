@@ -249,6 +249,13 @@ Version-2 syntax metadata (both exporters) adds compiler-derived rows:
   constant of the universe whose last component is that word gets the same new
   last component (or none is renamed), and is otherwise reported.
 
+A definition spelled `def _root_.N.x` is compared as the full name and, when
+renamed, respelled as `_root_.` plus the full new name. A renamed
+declaration whose definition range spells its last component in any other
+form the planner does not model is unresolved; only a definition whose range
+does not spell its name at all (an anonymous `instance`) is skipped as
+compiler-named.
+
 Lean-generated constructor auxiliaries `C.injEq` and `C.inj` follow an
 exact row for the constructor `C` without a row of their own; authorable
 descendants such as `ext` still need rows.

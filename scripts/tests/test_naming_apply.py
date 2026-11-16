@@ -92,6 +92,18 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual([e['new'] for e in edits], ['_root_.Pilot.Opcode.extra'] * 2)
 
+    def test_unmodelled_definition_spelling_of_a_renamed_declaration_is_unresolved(self):
+        # A planted skip: the definition range spells `Other.extra` for `Pilot.Op.extra`.
+        text = 'def Other.extra : Nat := 1\n'
+        index = index_for(text, [('Other.extra', 'Pilot.Op.extra', 0, True)])
+        rows = [entry('Pilot.Op.extra', 'Pilot.Op.more')]
+        edits, problems = M.plan_file(text, index, rows)
+        self.assertEqual(edits, [])
+        self.assertEqual(len(problems), 1)
+        self.assertIn('not a modelled spelling', problems[0]['reason'])
+        # Unrenamed, the same compiler-named skip is silent as before.
+        self.assertEqual(M.plan_file(text, index, [entry('Pilot.Op.other', 'Pilot.Op.more')]), ([], []))
+
     def test_unresolved_use_is_reported(self):
         text = 'def a (x : Tx) := x.gas\n'
         _, problems = M.plan_file(text, index_for(text, []), [entry()])

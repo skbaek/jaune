@@ -458,7 +458,13 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                 # `def _root_.N.x` spells the full name: compare it whole.
                 parts = parts[1:] if parts[1:] == name_parts else parts
             if parts != name_parts[-len(parts):]:
-                continue  # Compiler-named (an anonymous instance): nothing spelled.
+                # Compiler-named (an anonymous instance): nothing spelled. But a
+                # renamed declaration whose definition spells its own last
+                # component in a form not modelled here must never pass silently.
+                if parts[-1:] == name_parts[-1:] and (renamer.renames(const) or generated_rename(renamer, const)):
+                    problems.append({'start': start, 'end': end, 'reason':
+                        f'definition spelling {spelling!r} of renamed {const} is not a modelled spelling of its name'})
+                continue
             context = '.'.join(name_parts[:-len(parts)])
             if context and renamer.scope(context) != context:
                 target = renamer(private[2] if private else const)
