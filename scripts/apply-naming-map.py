@@ -469,7 +469,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             if const is not None and universe is not None and const in universe.compiler_named:
                 last = MAP.tokenize_identifier(split_name(const)[-1])
                 renamed_words = {t for w in candidates for t in [w] if MAP.tokenize_identifier(w)}
-                hit = next((w for w in renamed_words
+                hit = next((w for w in sorted(renamed_words)
                             if any(last[i:i + len(MAP.tokenize_identifier(w))] == MAP.tokenize_identifier(w)
                                    for i in range(len(last)))), None)
                 if hit:
