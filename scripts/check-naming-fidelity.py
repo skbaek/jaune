@@ -133,6 +133,16 @@ def quoted_identifiers(e):
         if head == 'Lean.Syntax.ident' and len(args) == 4:
             items = _list(args[3])
             decoded = None if items is None else [_preresolved(x) for x in items]
+            if decoded == []:
+                # Unhygienic quotation (`local macro` without hygiene): no
+                # pre-resolution and a plain Name value. Resolved by spelling
+                # at the expansion site; rule E compares the spelling.
+                info, raw, val, _ = args
+                raw_head, raw_args = _unwind(raw)
+                raw_text = _lit(raw_args[0]) if raw_head in RAW_SUBSTRING and len(raw_args) == 1 else None
+                parts = _name(val)
+                if raw_text is not None and parts is not None and plain_spelling(raw_text) == '.'.join(parts):
+                    return ['unhygienicIdentifier', '.'.join(parts), raw_text, [raw_head, quoted_identifiers(info)]]
             if decoded and None not in decoded and any(d[0] == 'decl' for d in decoded):
                 info, raw, val, _ = args
                 raw_head, raw_args = _unwind(raw)
@@ -186,6 +196,33 @@ def spelled_name(source, a, b, name):
 
 
 ITEMS = ('guards', 'attributes', 'checks')
+
+
+def expansion_declarations(before, module, spelling):
+    """Declarations of `module` whose source invokes a local macro that
+    quotes `spelling`: the macro command is the one whose source contains the
+    quoted range; its keyword's other occurrences lie in these declarations,
+    whose kernel terms N4 compares under the map."""
+    source = (before.get('module_sources') or {}).get(module)
+    decls = (before.get('module_decls') or {}).get(module) or {}
+    sites = [(a, b) for a, b, n in (before.get('quotation_sites') or {}).get(module, []) if n == spelling]
+    if source is None or not sites:
+        return []
+    found = set()
+    for a, _ in sites:
+        line_start = source.rfind('\n', 0, a)
+        macro_start = source.rfind('\nlocal macro "', 0, a)
+        if macro_start < 0:
+            macro_start = source.rfind('\nmacro "', 0, a)
+        if macro_start < 0:
+            continue
+        key_start = source.index('"', macro_start) + 1
+        keyword = source[key_start:source.index('"', key_start)]
+        for m in re.finditer(r'(?<![\w"])' + re.escape(keyword) + r'(?![\w"])', source):
+            for name, (s, e) in decls.items():
+                if s <= m.start() < e:
+                    found.add(name)
+    return sorted(found)
 
 # Classes whose deriving handlers write constructor and field names into string
 # literals (`deriving Repr` prints `Jaune.T.ctor` and `{ field := ... }`).
@@ -255,6 +292,7 @@ def read_exports(paths):
     checks = []
     derived = {}
     dot_resolved = []
+    quotation_sites, module_sources, module_decls = {}, {}, {}
     item_modules = {key: [] for key in ITEMS}
     coalesced = set()
     version = None
@@ -314,6 +352,12 @@ def read_exports(paths):
         if missing:
             raise ValueError(f'{module}: authored definitions missing from kernel export: {sorted(missing)}')
         derived.update(derived_constants(data, None, byte_offsets, positions))
+        char_of = {b: i for i, b in enumerate(byte_offsets)}
+        quotation_sites[module] = [(char_of[a], char_of[b], n) for a, b, n in
+                                   data['index'].get('naming_syntax', {}).get('quotation_identifiers', [])
+                                   if a in char_of and b in char_of]
+        module_sources[module] = data['source']
+        module_decls[module] = {n: APPLY.span(positions, loc[:4]) for n, loc in data['index']['decls'].items()}
         data['constants'] = {n: quoted_identifiers(c) for n, c in data['constants'].items()}
         data['guards'] = [quoted_identifiers(g) for g in data['guards']]
         coalesced |= merge_constants(constants, roots, data['constants'], names)
@@ -385,13 +429,16 @@ def read_exports(paths):
                 modules=modules, receipts=receipts, version=version, checks=checks,
                 coalesced_equations=sorted(coalesced), owners=owners, holders=holders,
                 item_modules=item_modules, schemas=schemas, derived=derived,
-                dot_identifiers_resolved=len(dot_resolved))
+                dot_identifiers_resolved=len(dot_resolved), quotation_sites=quotation_sites,
+                module_sources=module_sources, module_decls=module_decls)
 
 
 class Comparison:
-    def __init__(self, before, after, mapping, reviewed=None, reviewed_used=None, collect=False):
+    def __init__(self, before, after, mapping, reviewed=None, reviewed_used=None, collect=False, plan_edits=None):
         self.before, self.after = before, after
         self.collect, self.problems = collect, []
+        self.plan_edits = plan_edits or set()
+        self.unhygienic_sites = {}
         self.reviewed = reviewed
         self.reviewed_used = reviewed_used if reviewed_used is not None else set()
         if isinstance(mapping, dict):  # An exact old -> new table.
@@ -580,6 +627,16 @@ class Comparison:
                 return True
         return False
 
+    def unhygienic_site(self, old, new):
+        """Rule E (master decision 2026-11-16): an unhygienic quoted respelling
+        must coincide with a plan edit at a quoted-identifier range of the same
+        spelling. Returns (module, start, end) or None."""
+        for module, rows in (self.before.get('quotation_sites') or {}).items():
+            for start, end, name in rows:
+                if name == old and (module, start, end, old, new) in self.plan_edits:
+                    return module, start, end
+        return None
+
     def find(self, module):
         while self.parent.get(module, module) != module:
             module = self.parent[module]
@@ -683,6 +740,22 @@ class Comparison:
         return self.mapping.module(module)
 
     def compare(self, left, right, path):
+        if isinstance(left, list) and len(left) == 4 and left[0] == 'unhygienicIdentifier':
+            if not (isinstance(right, list) and len(right) == 4 and right[0] == 'unhygienicIdentifier'):
+                raise Mismatch(f'{path}: unhygienic quoted identifier changed kind')
+            expected = self.respell_message(left[1], path)
+            if right[1] != expected:
+                raise Mismatch(f'{path}: unhygienic quoted spelling {left[1]!r} became {right[1]!r}, expected {expected!r}')
+            if self.raw_marker(right[2], right[1]) != self.raw_marker(left[2], left[1]):
+                raise Mismatch(f'{path}: unhygienic quoted raw text {left[2]!r} became {right[2]!r}')
+            if expected != left[1]:
+                site = self.unhygienic_site(left[1], expected)
+                if site is None:
+                    raise Mismatch(f'{path}: unhygienic respelling {left[1]!r} -> {expected!r} matches no plan edit '
+                                   'at a quoted identifier range')
+                self.unhygienic_sites.setdefault((left[1], expected), site)
+            self.compare(left[3], right[3], f'{path}.syntax')
+            return
         if isinstance(left, list) and len(left) == 5 and left[0] == 'quotedIdentifier':
             if not (isinstance(right, list) and len(right) == 5 and right[0] == 'quotedIdentifier'):
                 raise Mismatch(f'{path}: quoted identifier changed kind')
@@ -791,6 +864,10 @@ class Comparison:
                                                  [doc[2][0][2][0], ['atom', self.respell_message(text, 'guard_msgs')]]]]]
                 return ['syntax', 'Lean.guardMsgsCmd',
                         [respelled] + [self.normalize(item, side, coarse) for item in value[2][1:]]]
+        if len(value) == 4 and value[0] == 'unhygienicIdentifier':
+            spelling = self.respell_message(value[1], 'unhygienic') if side == 'before' else value[1]
+            return ['unhygienicIdentifier', spelling, self.raw_marker(value[2], value[1]),
+                    self.normalize(value[3], side, coarse)]
         if len(value) == 5 and value[0] == 'quotedIdentifier':
             spelling, raw = (self.quoted(value, 'normalize') if side == 'before'
                              else (value[2], self.raw_marker(value[3], value[2])))
@@ -967,13 +1044,18 @@ class Comparison:
                     derived_literals_respelled=self.respelled_literals)
 
 
-def check(before, after, mapping, reviewed=None, reviewed_used=None, collect=False):
+def check(before, after, mapping, reviewed=None, reviewed_used=None, collect=False, plan_edits=None):
     MAP.validate_map(mapping)
     if before['version'] != after['version']:
         raise ValueError('Lean versions differ')
     renames = MAP.Renamer(mapping['entries'])
     # Imports are reported, not silently treated as a proof about their contents.
-    result = Comparison(before, after, renames, reviewed, reviewed_used, collect).run()
+    comparison = Comparison(before, after, renames, reviewed, reviewed_used, collect, plan_edits)
+    result = comparison.run()
+    result['unhygienic_respellings'] = [
+        dict(old=old, new=new, module=site[0], range=[site[1], site[2]],
+             expansion_declarations=expansion_declarations(before, site[0], old))
+        for (old, new), site in sorted(comparison.unhygienic_sites.items())]
     result.update(before=before['receipts'], after=after['receipts'],
                   before_imports=before['modules'], after_imports=after['modules'],
                   before_dot_identifiers_resolved=before.get('dot_identifiers_resolved', 0),

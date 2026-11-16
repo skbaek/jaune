@@ -557,6 +557,44 @@ class NamingFidelityTests(unittest.TestCase):
         comparison = CHECK.Comparison(self.before, self.before, rows)
         self.assertEqual(comparison.namespace_literal('N.Inv.c'), 'N.Inv.c')
 
+    def test_unhygienic_quoted_identifiers_follow_the_map_at_plan_edits(self):
+        def c(n):
+            return ['const', ['name', n], []]
+        def app(f, *xs):
+            for x in xs:
+                f = ['app', f, x]
+            return f
+        def ident(raw):
+            parts = raw.split('.')
+            val = app(c(f'Lean.Name.mkStr{len(parts)}'), *[['str', x] for x in parts])
+            return app(c('Lean.Syntax.ident'), c('Lean.SourceInfo.none'), app(c("String.toRawSubstring'"), ['str', raw]),
+                       val, app(c('List.nil'), c('Lean.Syntax.Preresolved')))
+        rows = self.entries(('N.HdrEq', 'N.HeaderEq', 'declaration', {}))
+        def run(before, after, plan=True, hygienic=False):
+            self.before = snapshot({'N.HdrEq': constant(), 'N.m': CHECK.quoted_identifiers(dict(kernel=ident(before), attributes={}))},
+                                   ['N.HdrEq', 'N.m'])
+            self.after = snapshot({'N.HeaderEq': constant(), 'N.m': CHECK.quoted_identifiers(dict(kernel=ident(after), attributes={}))},
+                                  ['N.HeaderEq', 'N.m'])
+            self.before['quotation_sites'] = {'M': [(10, 15, 'HdrEq'), (20, 23, 'x13')]}
+            self.before['module_sources'] = {'M': ''}
+            edits = {('M', 10, 15, 'HdrEq', 'HeaderEq')} if plan else set()
+            return CHECK.check(self.before | dict(version='v'), self.after | dict(version='v'),
+                               dict(schema_version=1, retired_tokens=[], allowed_abbreviations=[], entries=[
+                                   dict(old='N.HdrEq', new='N.HeaderEq', kind='declaration', layer='execution', rule='4', source='x')]),
+                               plan_edits=edits)
+        self.assertEqual(CHECK.quoted_identifiers(ident('HdrEq'))[0], 'unhygienicIdentifier')
+        verdict = run('HdrEq', 'HeaderEq')
+        self.assertEqual([(r['old'], r['new'], r['module']) for r in verdict['unhygienic_respellings']], [('HdrEq', 'HeaderEq', 'M')])
+        # Control: changed beyond the respelling fails.
+        with self.assertRaises(CHECK.Mismatch):
+            run('HdrEq', 'HeaderEqs')
+        # Control: an unhygienic local naming no constant, changed, fails.
+        with self.assertRaises(CHECK.Mismatch):
+            run('x13', 'x14')
+        # Control: a respelling with no matching plan edit fails.
+        with self.assertRaisesRegex(CHECK.Mismatch, 'matches no plan edit'):
+            run('HdrEq', 'HeaderEq', plan=False)
+
     def test_module_named_auxiliaries_follow_module_rows(self):
         self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), ('A.Mod', 'A.Module', 'module', {}))
         aux = 'N._aux_A_Mod___elabRules_N_tac_1.go'

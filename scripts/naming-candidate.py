@@ -195,6 +195,8 @@ def extend_items(merged, data):
     merged['schemas'] |= set(data.get('schemas', ()))
     merged.setdefault('derived', {}).update(data.get('derived', {}))
     merged['dot_identifiers_resolved'] = merged.get('dot_identifiers_resolved', 0) + data.get('dot_identifiers_resolved', 0)
+    for field in ('quotation_sites', 'module_sources', 'module_decls'):
+        merged.setdefault(field, {}).update(data.get(field, {}))
 
 
 def union_environment(bundles):
@@ -541,7 +543,7 @@ def stale_quotations(records, used):
         raise FIDELITY.Mismatch(f'reviewed quotation records that occur nowhere (stale): {stale}')
 
 
-def compare(before, after, mapping, inventory=None, reviewed=None, collect=False):
+def compare(before, after, mapping, inventory=None, reviewed=None, collect=False, plan_edits=None):
     left, right = before['candidate'], after['candidate']
     if left['source_dirs'] != right['source_dirs']:
         raise ValueError('module source layout changed; explicit relocation support is required')
@@ -601,7 +603,7 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
         # keeps its module, so unrelated roots are not pooled.
         results = {'<union>': FIDELITY.check(union_environment(before['module_bundles']),
                                              union_environment(after['module_bundles']), mapping,
-                                             records, used, collect)}
+                                             records, used, collect, plan_edits)}
     else:
         # Module rows rename roots; each environment is compared with its image.
         import gc
@@ -611,7 +613,7 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
             # before the next (collect-all semantics unchanged).
             try:
                 results[root] = FIDELITY.check(env, after['fidelity'][renamer.module(root)], mapping,
-                                               records, used, collect)
+                                               records, used, collect, plan_edits)
             except FIDELITY.Mismatch as error:
                 if not collect:
                     raise
@@ -659,6 +661,8 @@ def main():
     comp.add_argument('--before', type=Path, required=True)
     comp.add_argument('--after', type=Path, required=True)
     comp.add_argument('--map', type=Path, required=True)
+    comp.add_argument('--plan', type=Path,
+                      help='the whole-tree plan the rename applied: rule E ties each unhygienic respelling to its edit')
     comp.add_argument('--collect-all', action='store_true',
                       help='report every mismatch class in one run (the verdict still fails on any)')
     comp.add_argument('--reviewed-quotations', type=Path,
@@ -675,8 +679,15 @@ def main():
                 raw = args.inventory.read_bytes()
                 inventory = (raw, json.loads(raw))
             reviewed = (args.reviewed_quotations.read_bytes(),) if args.reviewed_quotations else None
+            plan_edits = None
+            if args.plan:
+                plan = json.loads(args.plan.read_bytes())
+                path_module = {row['path']: name for name, row in
+                               json.loads(args.before.read_bytes())['candidate']['modules'].items()}
+                plan_edits = {(path_module.get(f['path']), e['start'], e['end'], e['old'], e['new'])
+                              for f in plan['files'] for e in f['edits']}
             result = compare(read_snapshot(args.before), read_snapshot(args.after),
-                             json.loads(args.map.read_bytes()), inventory, reviewed, args.collect_all)
+                             json.loads(args.map.read_bytes()), inventory, reviewed, args.collect_all, plan_edits)
             result['map_sha256'] = file_sha(args.map)
         print(json.dumps(result, indent=2))
         return 0

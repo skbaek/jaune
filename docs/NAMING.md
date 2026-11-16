@@ -653,6 +653,17 @@ each with its controls in `scripts/tests/test_naming_fidelity.py`:
   (reason `namespace literal`). A literal under an unrenamed namespace, or one
   naming no constant, stays literal; an authored (even private) declaration
   in a derived-renamed namespace is refused by the planner without its row.
+- Rule E, unhygienic quotations (`local macro` without hygiene): an
+  identifier with an empty pre-resolution list and a plain Name value is
+  resolved by spelling at each expansion site. Its before spelling is
+  respelled by the #guard_msgs stale-token rule (a spelling that still names
+  an after-side constant or a local stays; a stale one must respell
+  uniquely, names-only), and each respelling must coincide with an edit of
+  the applied plan (`compare --plan`) at a quoted-identifier range of that
+  spelling; otherwise it fails. The verdict lists each site with the
+  declarations that invoke the macro. Meaning at the expansion sites is
+  checked there: those declarations' own kernel terms are compared under the
+  map, which is why comparing the quotation's spelling suffices.
 - A quoted identifier pre-resolved to a declaration with projection fields
   (`coreFrame.trans`) respells its declaration part names-only and keeps the
   field components byte-identical; a changed field fails.
