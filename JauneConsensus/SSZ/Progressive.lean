@@ -198,7 +198,7 @@ macro_rules
         deriving DecidableEq, BEq
       /-- The roots of the fields, in order: the leaves `merkleize_progressive` places at the
       `1` positions of `active_fields`. -/
-      def $fieldRootsId $[{$ps : $pts}]* (x : $ty) : List B256 := [$roots,*]
+      def $fieldRootsId $[{$ps : $pts}]* (x : $ty) : List Jaune.B256 := [$roots,*]
       instance $[($ps : $pts)]* : Ssz $ty where
         fixedSize? := containerFixedSize [$[Ssz.fixedSize? $ts],*]
         serialize := fun x => serializeParts [$parts,*]
