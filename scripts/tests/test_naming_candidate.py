@@ -426,5 +426,202 @@ class CandidateTests(unittest.TestCase):
                 CHECK.capture(args)
 
 
+FAKES = ROOT / 'scripts/tests/naming/incremental'
+
+
+class IncrementalCaptureTests(unittest.TestCase):
+    """Per-module content-keyed reuse through the real `capture`, with a fake
+    Lake, owned build and exporter (no Lean). Graph: C imports B imports A;
+    D imports nothing local; every module imports the external `Init`."""
+
+    SOURCES = {'A.lean': 'def a := 1\n', 'B.lean': 'import A\ndef b := 2\n',
+               'C.lean': 'import B\ndef c := 3\n', 'D.lean': 'def d := 4\n'}
+
+    def setUp(self):
+        import os
+        import subprocess
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__('shutil').rmtree, self.tmp)
+        bin_dir, toolchain = self.tmp / 'bin', self.tmp / 'toolchain/lib/lean'
+        bin_dir.mkdir()
+        (bin_dir / 'lake').symlink_to(FAKES / 'fake_lake.py')
+        toolchain.mkdir(parents=True)
+        (toolchain / 'Init.olean').write_text('init')
+        self.calls = self.tmp / 'calls.log'
+        self.env = {'PATH': f'{bin_dir}:{os.environ["PATH"]}', 'FAKE_TOOLCHAIN_LIB': str(toolchain),
+                    'FAKE_CALLS': str(self.calls)}
+        self.saved = {k: os.environ.get(k) for k in [*self.env, 'FAKE_EXPORTER_VARIANT', 'FAKE_SCHEMA']}
+        self.addCleanup(self._restore_env)
+        os.environ.update(self.env)
+        self.root = self._candidate(self.tmp / 'candidate')
+        self.runs = 0
+
+    def _restore_env(self):
+        import os
+        for key, value in self.saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def _candidate(self, root):
+        import subprocess
+        root.mkdir()
+        files = dict(self.SOURCES, **{'lean-toolchain': 'leanprover/lean4:v4.35.0\n', '.gitignore': '.lake/\n'})
+        for name, text in files.items():
+            (root / name).write_text(text)
+        subprocess.run(['git', 'init', '-q', str(root)], check=True)
+        subprocess.run(['git', '-C', str(root), 'add', '-A'], check=True)
+        subprocess.run(['git', '-C', str(root), '-c', 'user.name=t', '-c', 'user.email=t@t',
+                        'commit', '-qm', 'fixture'], check=True)
+        return root
+
+    def capture(self, reuse=(), root=None):
+        import argparse
+        self.runs += 1
+        self.calls.write_text('')
+        args = argparse.Namespace(
+            root=root or self.root, output=self.tmp / f'out{self.runs}', source_dir=['.'],
+            module=['C', 'D'], source_only=[], build_prefix=json.dumps(['python3', str(FAKES / 'fake_build.py')]),
+            tool_root=None, tool_build_prefix=None, admit_command='["true"]', release_command='["true"]',
+            reuse=list(reuse) or None, jobs=2, plan_only=True)
+        CHECK.capture(args)
+        ran = sorted(line for line in self.calls.read_text().splitlines())
+        snapshot = json.loads((args.output / 'snapshot.json').read_bytes())
+        return args.output, ran, snapshot
+
+    def edit(self, name, text):
+        (self.root / name).write_text(text)
+
+    @staticmethod
+    def exports(modules):
+        return sorted(f'{mode} {m}' for m in modules for mode in ('export', 'imports'))
+
+    def test_cold_capture_elaborates_every_module(self):
+        _, ran, snapshot = self.capture()
+        self.assertEqual(ran, self.exports('ABCD'))
+        self.assertNotIn('provenance', snapshot)
+
+    def test_unchanged_candidate_reuses_everything(self):
+        cold, _, _ = self.capture()
+        warm, ran, snapshot = self.capture([cold])
+        self.assertEqual(ran, [])
+        self.assertEqual({m: row['export'] for m, row in snapshot['provenance'].items()},
+                         {m: dict(reused_from=str(cold)) for m in 'ABCD'})
+        for m in 'ABCD':
+            for kind in ('imports', 'export'):
+                self.assertEqual((warm / f'{m}.{kind}.json').read_bytes(), (cold / f'{m}.{kind}.json').read_bytes())
+
+    def test_leaf_edit_reruns_only_that_module(self):
+        """Control (a)."""
+        cold, _, _ = self.capture()
+        self.edit('C.lean', 'import B\ndef c := 30\n')
+        _, ran, snapshot = self.capture([cold])
+        self.assertEqual(ran, self.exports('C'))
+        self.assertEqual(snapshot['provenance']['C'], dict(imports='elaborated', export='elaborated'))
+
+    def test_imported_module_edit_reruns_its_importers_only(self):
+        """Control (b): A's artifacts change, so A, B and C rerun; D is reused."""
+        cold, _, _ = self.capture()
+        self.edit('A.lean', 'def a := 10\n')
+        _, ran, snapshot = self.capture([cold])
+        self.assertEqual(ran, self.exports('ABC'))
+        self.assertEqual(snapshot['provenance']['D']['export'], dict(reused_from=str(cold)))
+
+    def test_changed_exporter_reruns_all(self):
+        """Control (c), binary."""
+        import os
+        cold, _, _ = self.capture()
+        os.environ['FAKE_EXPORTER_VARIANT'] = '1'
+        _, ran, _ = self.capture([cold])
+        self.assertEqual(ran, self.exports('ABCD'))
+
+    def test_changed_export_schema_reruns_all(self):
+        """Control (c), schema."""
+        import os
+        from unittest import mock
+        cold, _, _ = self.capture()
+        os.environ['FAKE_SCHEMA'] = '8'
+        with mock.patch.object(CHECK.FIDELITY, 'CURRENT_SCHEMA', 8):
+            _, ran, _ = self.capture([cold])
+        # Every export reruns; `--imports` outputs (their own schema, same
+        # exporter binary) do not depend on the export schema and are reused.
+        self.assertEqual(ran, self.exports('ABCD')[:4])
+
+    def test_changed_configuration_reruns_all(self):
+        cold, _, _ = self.capture()
+        self.edit('lean-toolchain', 'leanprover/lean4:v4.35.1\n')
+        _, ran, _ = self.capture([cold])
+        self.assertEqual(ran, self.exports('ABCD'))
+
+    def test_changed_external_artifact_reruns_its_importers(self):
+        cold, _, _ = self.capture()
+        (Path(self.env['FAKE_TOOLCHAIN_LIB']) / 'Init.olean').write_text('init 2')
+        _, ran, _ = self.capture([cold])
+        self.assertEqual(ran, self.exports('ABCD'))
+
+    def test_shadowing_import_resolution_reruns(self):
+        """A reused `--imports` output must still name what Lean would load."""
+        cold, _, _ = self.capture()
+        shadow = self.root / '.lake/build/lib/lean/Init.olean'
+        shadow.write_text('init')  # same bytes, earlier search-path entry
+        with self.assertRaisesRegex(ValueError, 'uninventoried local import'):
+            self.capture([cold])
+        self.assertEqual(sorted(set(l.split()[0] for l in self.calls.read_text().splitlines())), ['imports'])
+
+    def test_prior_from_another_worktree_is_relocated(self):
+        """Paths are not part of the key: a second checkout of the same content
+        reuses every output, relocated byte-identically to a fresh capture."""
+        cold, _, _ = self.capture()
+        other = self._candidate(self.tmp / 'other')
+        warm, ran, _ = self.capture([cold], root=other)
+        self.assertEqual(ran, [])
+        fresh, _, _ = self.capture(root=other)
+        for m in 'ABCD':
+            for kind in ('imports', 'export'):
+                self.assertEqual((warm / f'{m}.{kind}.json').read_bytes(), (fresh / f'{m}.{kind}.json').read_bytes())
+        self.assertNotIn(str(self.root), (warm / 'C.export.json').read_text())
+
+    def test_complete_capture_without_reuse_index_is_a_prior(self):
+        cold, _, _ = self.capture()
+        (cold / 'reuse-index.json').unlink()
+        self.edit('C.lean', 'import B\ndef c := 30\n')
+        _, ran, _ = self.capture([cold])
+        self.assertEqual(ran, self.exports('C'))
+
+    def test_failed_export_capture_resumes(self):
+        import os
+        cold, _, _ = self.capture()
+        self.edit('A.lean', 'def a := 10\n')
+        os.environ['FAKE_SCHEMA'] = '6'  # every fresh export is refused at binding
+        with self.assertRaisesRegex(ValueError, 'export is not bound'):
+            self.capture([cold])
+        failed = self.tmp / f'out{self.runs}'
+        del os.environ['FAKE_SCHEMA']
+        # Exports of A, B, C ran (and were bound-refused); fix and resume from both.
+        for m in 'ABC':
+            (failed / f'{m}.export.json').unlink()
+        _, ran, _ = self.capture([failed, cold])
+        self.assertEqual(ran, ['export A', 'export B', 'export C'])  # imports come from the failed run
+
+    def test_reused_receipts_record_provenance_and_time(self):
+        cold, _, _ = self.capture()
+        receipt = json.loads((cold / 'A-export.command.json').read_bytes())
+        self.assertIsInstance(receipt['seconds'], float)
+        warm, _, _ = self.capture([cold])
+        reused = json.loads((warm / 'A-export.command.json').read_bytes())
+        self.assertEqual((reused['reused_from'], reused['seconds'], reused['cwd']),
+                         (str(cold), receipt['seconds'], str(self.root.resolve())))
+
+    def test_longest_prior_first_and_unknown_before_timed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prior = Path(tmp)
+            for label, seconds in (('A', 1.0), ('B', 30.0), ('C', 5.0)):
+                CHECK.save(prior / f'{label}.command.json', dict(seconds=seconds))
+            calls = [(None, None, label, []) for label in 'ABCDE']
+            order = CHECK.longest_first(calls, [dict(directory=prior)])
+            self.assertEqual([calls[i][2] for i in order], ['D', 'E', 'B', 'C', 'A'])
+
+
 if __name__ == '__main__':
     unittest.main()
