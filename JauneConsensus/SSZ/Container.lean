@@ -117,7 +117,7 @@ macro_rules
         deriving DecidableEq, BEq
       /-- The Merkle leaves of the fields, in order (`none` for an absent fork-gated field):
       the chunks `hash_tree_root` merkleizes and `compute_merkle_proof` builds proofs over. -/
-      def $fieldRootsId $[{$ps : $pts}]* (x : $ty) : List (Option B256) := [$roots,*]
+      def $fieldRootsId $[{$ps : $pts}]* (x : $ty) : List (Option Jaune.B256) := [$roots,*]
       instance $[($ps : $pts)]* : Ssz $ty where
         fixedSize? := containerFixedSize [$[Ssz.fixedSize? $ts],*]
         serialize := fun x => serializeParts [$parts,*]
