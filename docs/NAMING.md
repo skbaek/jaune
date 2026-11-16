@@ -66,6 +66,14 @@ or one of the following community abbreviations:
   `U16`, `U32`, `U64`, `U256`, `U128`, `Hash32`, `Nat`, `Int`, `Bool`,
   `ByteArray`, `Bytes`
 
+Lean's own lemma-name relation tokens are not abbreviations chosen by Jaune:
+`le`/`Le`, `lt`/`Lt`, `eq`/`Eq`, `ne`/`Ne` and their kin name the relation a
+theorem states, as in Lean core and Mathlib (`Nat.sub_le`, `List.length_le`).
+A theorem such as `HaltOp.run_gasLe` or `PlainOp.balanceCore_resultGasLe`
+(the gas after is `≤` the gas before) uses that convention, and rule 5 does
+not apply to the token (master decision 2026-11-17, after the G0a
+cross-family review, finding 19).
+
 Names adopted verbatim from a registered source (rules 1–3, such as opcode
 mnemonics `sload` or pyspec fields `eth1_data`) are checked against their
 registered source rather than this list.
