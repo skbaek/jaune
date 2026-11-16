@@ -236,8 +236,14 @@ Version-2 syntax metadata (both exporters) adds compiler-derived rows:
 - `quotation_identifiers`: identifiers inside syntax quotations (outside
   antiquotations). Lean pre-resolves them as global names when the quotation
   elaborates; they carry no ordinary reference. The planner resolves each with
-  the capture model below in the quoting command's scope and renames it; one
-  without a unique resolution (typically a quoted local binder) is reported.
+  the capture model below in the quoting command's scope and renames it. One
+  that resolves to no constant of the capture universe (every exported and
+  referenced name, so every renamed one) before the rename, and to none after
+  it, pre-resolves to no renamed declaration (a quoted local binder such as
+  `hx`) and stays as written; plans count these as `quotation_no_global`. A
+  resolution the model cannot see (an alias, a term-level `open`) would change
+  the quotation's pre-resolution, which N4 compares. An ambiguous spelling, one
+  outside the modelled scope, or one a rename would make resolve is reported.
 
 Lean-generated constructor auxiliaries `C.injEq` and `C.inj` follow an
 exact row for the constructor `C` without a row of their own; authorable
@@ -332,9 +338,20 @@ apply recomputes with them.
 
 Module rows move the file within its source directory and rewrite every import
 whose lexed position matches Lean's header parse of that file (a mismatch
-refuses). Any other spelling of the old module name in code (lakefile roots,
-the audit command's module prefix, name literals) is reported for a manual edit
-followed by N4. Relocation rows move the declaration's whole top-level command
+refuses). A namespace that shares the module's name (`namespace M` in `M.lean`)
+is namespace syntax, renamed by namespace rows like any other. Any other
+spelling of the old module name in code (lakefile roots, the audit command's
+module prefix, name literals) is reported for a manual edit followed by N4.
+
+Reviewed sites: `scripts/naming-sites.json` (optional, `schema_version` 1)
+records individual tokens the tool cannot resolve and a reviewer decided, such
+as a local binder the compiler index records no reference for or a user-named
+goal (`?x`, `case x`). Each site has the file's `sha256`, a 1-based `line` and
+`column` (code points), the exact `token`, a `decision` (only `unchanged`) and
+a nonempty `reason`. A listed site moves from the file's `unresolved` list to
+its `reviewed` list in the plan. A site whose file bytes differ, or that matches
+no unresolved token, is itself unresolved, so the list never goes stale
+silently, and any unlisted use still fails the plan. Relocation rows move the declaration's whole top-level command
 (doc comment and attributes included, renames inside it applied) to the end of
 the target module inside `section`/`open .../namespace ...`/`end` that restores
 its namespace and open declarations. The planner reports, and never invents:
