@@ -37,9 +37,9 @@ therefore returns the outcome together with the cache Python would hold afterwar
 -/
 
 namespace JauneConsensus.Gossip
-open Jaune (Bytes U256)
+open Jaune (Bytes B256)
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-! ## `Seen`, `PayloadValidationStatus` -/
 
@@ -55,7 +55,7 @@ structure StoreSeen (P : Preset) where
   partial_data_column_headers : List (Root × PartialDataColumnHeader P) := []
 
 /-- The cache of the store-dependent validators. -/
-abbrev SeenWithStore (P : Preset) := Seen (StoreSeen P)
+abbrev SSeen (P : Preset) := Seen (StoreSeen P)
 
 /-- `PayloadValidationStatus` (`specs/bellatrix/p2p-interface.md:47`): `PAYLOAD_STATUS_*`. -/
 inductive PayloadValidationStatus
@@ -65,38 +65,38 @@ inductive PayloadValidationStatus
 /-! ## Helpers -/
 
 /-- Run a model computation inside a gossip validation (its exceptions stay model exceptions). -/
-@[inline] def liftModel {α : Type} (x : Fallible α) : Validation α := ExceptT.lift x
+@[inline] def liftModel {α : Type} (x : M α) : GM α := ExceptT.lift x
 
 /-- `TARGET_AGGREGATORS_PER_COMMITTEE = 2**4` (`specs/phase0/validator.md`). -/
 def TARGET_AGGREGATORS_PER_COMMITTEE : Nat := 16
 
 /-- `get_generalized_index(BeaconBlockBody, "blob_kzg_commitments")`: the Electra and Fulu
 body has 13 fields (padded to 16 chunks) and `blob_kzg_commitments` is field 11. -/
-def blobKzgCommitmentsGindex : Nat := 16 + 11
+def BLOB_KZG_COMMITMENTS_GINDEX : Nat := 16 + 11
 
 /-- `store.block_states[get_head(store).root]`. -/
-def headState (ctx : Context) (store : Store P f) : Fallible (BeaconState P f) := do
-  lookup store.block_states (← getHead ctx.config store).root
+def headState (ctx : Ctx) (store : Store P f) : M (BeaconState P f) := do
+  lookup store.block_states (← getHead ctx.cfg store).root
     "store.block_states[get_head(store).root]"
 
 /-- `compute_subnet_for_attestation(committees_per_slot, slot, committee_index)`
 (`specs/phase0/validator.md:702`); `Uint64` arithmetic. -/
 def computeSubnetForAttestation (cfg : Config) (committeesPerSlot : U64) (slot : Slot)
-    (committeeIndex : CommitteeIndex) : Fallible U64 := do
+    (committeeIndex : CommitteeIndex) : M U64 := do
   let site := "compute_subnet_for_attestation"
-  let slotsSinceEpochStart ← U64.mod? slot (← u64Checked P.SLOTS_PER_EPOCH) site
+  let slotsSinceEpochStart ← U64.mod? slot (← c64 P.SLOTS_PER_EPOCH) site
   let committeesSinceEpochStart ← U64.mul? committeesPerSlot slotsSinceEpochStart site
   U64.mod? (← U64.add? committeesSinceEpochStart committeeIndex site)
-    (← u64Checked cfg.ATTESTATION_SUBNET_COUNT) site
+    (← c64 cfg.ATTESTATION_SUBNET_COUNT) site
 
 /-- `compute_subnet_for_blob_sidecar(blob_index)` (`specs/electra/validator.md:271`). -/
-def computeSubnetForBlobSidecar (cfg : Config) (blobIndex : BlobIndex) : Fallible U64 := do
-  U64.mod? blobIndex (← u64Checked cfg.BLOB_SIDECAR_SUBNET_COUNT_ELECTRA)
+def computeSubnetForBlobSidecar (cfg : Config) (blobIndex : BlobIndex) : M U64 := do
+  U64.mod? blobIndex (← c64 cfg.BLOB_SIDECAR_SUBNET_COUNT_ELECTRA)
     "compute_subnet_for_blob_sidecar"
 
 /-- `is_aggregator(state, slot, index, slot_signature)` (`specs/phase0/validator.md:733`). -/
 def isAggregator (state : BeaconState P f) (slot : Slot) (index : CommitteeIndex)
-    (slotSignature : BLSSignature) : Fallible Bool := do
+    (slotSignature : BLSSignature) : M Bool := do
   let committee ← getBeaconCommittee state slot index
   let modulo := max 1 (committee.size / TARGET_AGGREGATORS_PER_COMMITTEE)
   let v ← bytesToUint64 ((hashBytes slotSignature.toArray.toList).take 8)
@@ -106,18 +106,18 @@ def isAggregator (state : BeaconState P f) (slot : Slot) (index : CommitteeIndex
 the commitment's generalized index is `get_generalized_index(BeaconBlockBody,
 "blob_kzg_commitments", index)`, the list's data root (`* 2`) at width
 `MAX_BLOB_COMMITMENTS_PER_BLOCK` (a power of two in both presets). -/
-def verifyBlobSidecarInclusionProof (blobSidecar : BlobSidecar P) : Fallible Bool := do
-  let gindex := blobKzgCommitmentsGindex * 2 * getPowerOfTwoCeil P.MAX_BLOB_COMMITMENTS_PER_BLOCK +
+def verifyBlobSidecarInclusionProof (blobSidecar : BlobSidecar P) : M Bool := do
+  let gindex := BLOB_KZG_COMMITMENTS_GINDEX * 2 * getPowerOfTwoCeil P.MAX_BLOB_COMMITMENTS_PER_BLOCK +
     blobSidecar.index.toNat
   isValidMerkleBranch (Ssz.hashTreeRoot blobSidecar.kzg_commitment)
     blobSidecar.kzg_commitment_inclusion_proof.toArray.toList
-    (← u64Checked P.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH) (← getSubtreeIndex gindex)
+    (← c64 P.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH) (← getSubtreeIndex gindex)
     blobSidecar.signed_block_header.message.body_root
 
 /-- `verify_blob_kzg_proof(blob, commitment_bytes, proof_bytes)` (`specs/deneb/
 polynomial-commitments.md`), raising on malformed inputs as pyspec does. -/
-def verifyBlobKzgProofFallible (blob : Blob P) (commitment : KZGCommitment) (proof : KZGProof) :
-    Fallible Bool :=
+def verifyBlobKzgProofM (blob : Blob P) (commitment : KZGCommitment) (proof : KZGProof) :
+    M Bool :=
   liftCrypto "verify_blob_kzg_proof"
     (verifyBlobKzgProof blob.toArray.toList commitment.toArray.toList proof.toArray.toList)
 
@@ -129,19 +129,19 @@ of `verify_data_column_sidecar_inclusion_proof` (`specs/fulu/p2p-interface.md:24
 def verifyKzgCommitmentsInclusionProof
     (commitments : SszList KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
     (branch : SszVector Bytes32 P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH) (bodyRoot : Root) :
-    Fallible Bool := do
+    M Bool := do
   isValidMerkleBranch (Ssz.hashTreeRoot commitments) branch.toArray.toList
-    (← u64Checked P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH) (← getSubtreeIndex blobKzgCommitmentsGindex)
+    (← c64 P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH) (← getSubtreeIndex BLOB_KZG_COMMITMENTS_GINDEX)
     bodyRoot
 
 /-- `verify_data_column_sidecar_inclusion_proof(sidecar)` (`specs/fulu/p2p-interface.md:249`). -/
-def verifyDataColumnSidecarInclusionProof (sidecar : DataColumnSidecar P) : Fallible Bool :=
+def verifyDataColumnSidecarInclusionProof (sidecar : DataColumnSidecar P) : M Bool :=
   verifyKzgCommitmentsInclusionProof sidecar.kzg_commitments
     sidecar.kzg_commitments_inclusion_proof sidecar.signed_block_header.message.body_root
 
 /-- `verify_partial_data_column_header_inclusion_proof(header)`
 (`specs/fulu/partial-columns/p2p-interface.md`). -/
-def verifyPartialDataColumnHeaderInclusionProof (header : PartialDataColumnHeader P) : Fallible Bool :=
+def verifyPartialDataColumnHeaderInclusionProof (header : PartialDataColumnHeader P) : M Bool :=
   verifyKzgCommitmentsInclusionProof header.kzg_commitments
     header.kzg_commitments_inclusion_proof header.signed_block_header.message.body_root
 
@@ -150,7 +150,7 @@ def verifyPartialDataColumnHeaderInclusionProof (header : PartialDataColumnHeade
 past the end. -/
 def verifyPartialDataColumnSidecarKzgProofs (sidecar : PartialDataColumnSidecar P)
     (allCommitments : SszList KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
-    (columnIndex : ColumnIndex) : Fallible Bool := do
+    (columnIndex : ColumnIndex) : M Bool := do
   -- Get the blob indices from the bitmap
   let blobIndices := ((sidecar.cells_present_bitmap.bits.toList.zipIdx).filter (·.1)).map (·.2)
   -- The cell index is the column index for all cells in this column
@@ -158,14 +158,14 @@ def verifyPartialDataColumnSidecarKzgProofs (sidecar : PartialDataColumnSidecar 
   let commitments ← blobIndices.mapM fun i =>
     getAt allCommitments.toArray i "verify_partial_data_column_sidecar_kzg_proofs: all_commitments"
   -- Batch verify that the cells match the corresponding commitments and proofs
-  verifyCellKzgProofBatchFallible (commitments.map (·.toArray.toList)) cellIndices
+  verifyCellKzgProofBatchM (commitments.map (·.toArray.toList)) cellIndices
     (sidecar.partial_column.toArray.toList.map (·.toArray.toList))
     (sidecar.kzg_proofs.toArray.toList.map (·.toArray.toList))
 
 /-- The parent-state proposer check shared by the block and sidecar validators: a copy of
 `store.block_states[parent_root]`, `process_slots` to `slot`, `get_beacon_proposer_index`. -/
-def expectedProposer (ctx : Context) (store : Store P f) (parentRoot : Root) (slot : Slot) :
-    Fallible ValidatorIndex := do
+def expectedProposer (ctx : Ctx) (store : Store P f) (parentRoot : Root) (slot : Slot) :
+    M ValidatorIndex := do
   let parentState ← lookup store.block_states parentRoot "store.block_states[parent_root]"
   getBeaconProposerIndex (← processSlots ctx parentState slot)
 
@@ -173,10 +173,10 @@ def expectedProposer (ctx : Context) (store : Store P f) (parentRoot : Root) (sl
 
 /-- `validate_beacon_block_gossip` (Electra `specs/electra/p2p-interface.md:128`, Fulu
 `specs/fulu/p2p-interface.md:305`). `blockPayloadStatuses` is `block_payload_statuses`. -/
-def validateBeaconBlockGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P f)
+def validateBeaconBlockGossip (ctx : Ctx) (seen : SSeen P) (store : Store P f)
     (signedBeaconBlock : SignedBeaconBlock P f) (currentTimeMs : U64)
-    (blockPayloadStatuses : Root → Option PayloadValidationStatus) : Validation (SeenWithStore P) := do
-  let cfg := ctx.config
+    (blockPayloadStatuses : Root → Option PayloadValidationStatus) : GM (SSeen P) := do
+  let cfg := ctx.cfg
   let block := signedBeaconBlock.message
   let executionPayload := block.body.execution_payload
   -- [IGNORE] The block is the first block with valid signature received for the slot and proposer
@@ -243,10 +243,10 @@ def validateBeaconBlockGossip (ctx : Context) (seen : SeenWithStore P) (store : 
 /-! ## `beacon_aggregate_and_proof`, `beacon_attestation_{subnet_id}` -/
 
 /-- `validate_beacon_aggregate_and_proof_gossip` (`specs/electra/p2p-interface.md:232`). -/
-def validateBeaconAggregateAndProofGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P f)
+def validateBeaconAggregateAndProofGossip (ctx : Ctx) (seen : SSeen P) (store : Store P f)
     (signedAggregateAndProof : SignedAggregateAndProof P f) (currentTimeMs : U64) :
-    Validation (SeenWithStore P) := do
-  let cfg := ctx.config
+    GM (SSeen P) := do
+  let cfg := ctx.cfg
   let aggregateAndProof := signedAggregateAndProof.message
   let aggregate := aggregateAndProof.aggregate
   let aggregationBits := aggregate.aggregation_bits.bits.toList
@@ -254,7 +254,7 @@ def validateBeaconAggregateAndProofGossip (ctx : Context) (seen : SeenWithStore 
   if aggregate.data.index != U64.zero then reject "aggregate data index is non-zero"
   -- [REJECT] Exactly one committee is specified by the committee bits
   let committeeBits : Bitvector P.MAX_COMMITTEES_PER_SLOT ←
-    liftModel (ForkField.read aggregate.committee_bits "aggregate.committee_bits")
+    liftModel (Gated.read aggregate.committee_bits "aggregate.committee_bits")
   let committeeIndices ← getCommitteeIndices committeeBits
   let index ← match committeeIndices.toList with
     | [i] => pure i
@@ -333,9 +333,9 @@ def validateBeaconAggregateAndProofGossip (ctx : Context) (seen : SeenWithStore 
       addToSet seen.ext.aggregate_data_roots aggregateCacheKey aggregationBits } }
 
 /-- `validate_beacon_attestation_gossip` (`specs/electra/p2p-interface.md:375`). -/
-def validateBeaconAttestationGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P f)
-    (attestation : SingleAttestation) (currentTimeMs : U64) (subnetId : U64) : Validation (SeenWithStore P) := do
-  let cfg := ctx.config
+def validateBeaconAttestationGossip (ctx : Ctx) (seen : SSeen P) (store : Store P f)
+    (attestation : SingleAttestation) (currentTimeMs : U64) (subnetId : U64) : GM (SSeen P) := do
+  let cfg := ctx.cfg
   let data := attestation.data
   let committeeIndex := attestation.committee_index
   let attesterIndex := attestation.attester_index
@@ -394,9 +394,9 @@ def validateBeaconAttestationGossip (ctx : Context) (seen : SeenWithStore P) (st
 /-! ## Sidecars -/
 
 /-- `validate_blob_sidecar_gossip` (`specs/electra/p2p-interface.md:479`). -/
-def validateBlobSidecarGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P f)
-    (blobSidecar : BlobSidecar P) (currentTimeMs : U64) (subnetId : U64) : Validation (SeenWithStore P) := do
-  let cfg := ctx.config
+def validateBlobSidecarGossip (ctx : Ctx) (seen : SSeen P) (store : Store P f)
+    (blobSidecar : BlobSidecar P) (currentTimeMs : U64) (subnetId : U64) : GM (SSeen P) := do
+  let cfg := ctx.cfg
   let blockHeader := blobSidecar.signed_block_header.message
   -- [IGNORE] The sidecar is the first sidecar for the tuple
   let sidecarTuple := (blockHeader.slot, blockHeader.proposer_index, blobSidecar.index)
@@ -444,7 +444,7 @@ def validateBlobSidecarGossip (ctx : Context) (seen : SeenWithStore P) (store : 
   if !(← verifyBlobSidecarInclusionProof blobSidecar) then
     reject "invalid blob sidecar inclusion proof"
   -- [REJECT] The sidecar's blob is valid as verified by verify_blob_kzg_proof
-  if !(← verifyBlobKzgProofFallible blobSidecar.blob blobSidecar.kzg_commitment blobSidecar.kzg_proof) then
+  if !(← verifyBlobKzgProofM blobSidecar.blob blobSidecar.kzg_commitment blobSidecar.kzg_proof) then
     reject "invalid blob kzg proof"
   -- [REJECT] The sidecar is proposed by the expected proposer_index
   if blockHeader.proposer_index != (← expectedProposer ctx store parentRoot blockHeader.slot) then
@@ -454,9 +454,9 @@ def validateBlobSidecarGossip (ctx : Context) (seen : SeenWithStore P) (store : 
     blob_sidecar_tuples := seen.ext.blob_sidecar_tuples ++ [sidecarTuple] } }
 
 /-- `validate_data_column_sidecar_gossip` (`specs/fulu/p2p-interface.md:415`). -/
-def validateDataColumnSidecarGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P f)
-    (sidecar : DataColumnSidecar P) (currentTimeMs : U64) (subnetId : U64) : Validation (SeenWithStore P) := do
-  let cfg := ctx.config
+def validateDataColumnSidecarGossip (ctx : Ctx) (seen : SSeen P) (store : Store P f)
+    (sidecar : DataColumnSidecar P) (currentTimeMs : U64) (subnetId : U64) : GM (SSeen P) := do
+  let cfg := ctx.cfg
   let blockHeader := sidecar.signed_block_header.message
   -- [IGNORE] The sidecar is the first sidecar for the tuple
   let sidecarKey := (blockHeader.slot, blockHeader.proposer_index, sidecar.index)
@@ -514,22 +514,22 @@ def validateDataColumnSidecarGossip (ctx : Context) (seen : SeenWithStore P) (st
 /-! ## `partial_data_column_sidecar` -/
 
 /-- `seen.partial_data_column_headers.get(root)`. -/
-def cachedPartialHeader (seen : SeenWithStore P) (root : Root) : Option (PartialDataColumnHeader P) :=
+def cachedPartialHeader (seen : SSeen P) (root : Root) : Option (PartialDataColumnHeader P) :=
   (seen.ext.partial_data_column_headers.find? (·.1 == root)).map (·.2)
 
 /-- `seen.partial_data_column_headers[root] = header`. -/
-def cachePartialHeader (seen : SeenWithStore P) (root : Root) (header : PartialDataColumnHeader P) :
-    SeenWithStore P :=
+def cachePartialHeader (seen : SSeen P) (root : Root) (header : PartialDataColumnHeader P) :
+    SSeen P :=
   { seen with ext := { seen.ext with partial_data_column_headers :=
     (seen.ext.partial_data_column_headers.filter (·.1 != root)) ++ [(root, header)] } }
 
 /-- The header part of `validate_partial_data_column_sidecar_gossip`
 (`specs/fulu/partial-columns/p2p-interface.md:227`), from `if has_header:` through
 `seen.partial_data_column_headers[group_id.beacon_block_root] = header`. -/
-def validatePartialHeader (ctx : Context) (seen : SeenWithStore P) (store : Store P f)
+def validatePartialHeader (ctx : Ctx) (seen : SSeen P) (store : Store P f)
     (header : PartialDataColumnHeader P) (currentTimeMs : U64) (groupId : PartialDataColumnGroupID) :
-    Validation (SeenWithStore P) := do
-  let cfg := ctx.config
+    GM (SSeen P) := do
+  let cfg := ctx.cfg
   let blockHeader := header.signed_block_header.message
   -- [REJECT] The received header MUST equal any previously validated header for this block
   if let some priorHeader := cachedPartialHeader seen groupId.beacon_block_root then
@@ -581,10 +581,10 @@ def validatePartialHeader (ctx : Context) (seen : SeenWithStore P) (store : Stor
   pure (cachePartialHeader seen groupId.beacon_block_root header)
 
 /-- The cell part of `validate_partial_data_column_sidecar_gossip`, from `if has_cells:`. -/
-def validatePartialCells (ctx : Context) (seen : SeenWithStore P) (store : Store P f)
+def validatePartialCells (ctx : Ctx) (seen : SSeen P) (store : Store P f)
     (sidecar : PartialDataColumnSidecar P) (currentTimeMs : U64)
-    (groupId : PartialDataColumnGroupID) (columnIndex : ColumnIndex) : Validation Unit := do
-  let cfg := ctx.config
+    (groupId : PartialDataColumnGroupID) (columnIndex : ColumnIndex) : GM Unit := do
+  let cfg := ctx.cfg
   -- [IGNORE] A valid corresponding PartialDataColumnHeader has been seen
   let some header := cachedPartialHeader seen groupId.beacon_block_root
     | ignore "valid corresponding header has not been seen"
@@ -606,14 +606,14 @@ def validatePartialCells (ctx : Context) (seen : SeenWithStore P) (store : Store
 /-- `validate_partial_data_column_sidecar_gossip` (`specs/fulu/partial-columns/
 p2p-interface.md:227`): the outcome and the cache pyspec holds afterwards (see the module
 note). A model exception is the outer error. -/
-def validatePartialDataColumnSidecarGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P f)
+def validatePartialDataColumnSidecarGossip (ctx : Ctx) (seen : SSeen P) (store : Store P f)
     (sidecar : PartialDataColumnSidecar P) (currentTimeMs : U64)
-    (groupId : PartialDataColumnGroupID) (columnIndex : ColumnIndex) : Fallible (Outcome × SeenWithStore P) := do
+    (groupId : PartialDataColumnGroupID) (columnIndex : ColumnIndex) : M (Outcome × SSeen P) := do
   let headers := sidecar.header.toArray.toList
   let hasHeader := headers.length == 1
   let numCellsPresent := (sidecar.cells_present_bitmap.bits.toList.filter id).length
   let hasCells := numCellsPresent > 0
-  let pre : Validation Unit := do
+  let pre : GM Unit := do
     -- [REJECT] A header and/or cells are present in the message
     if !(hasHeader || hasCells) then reject "partial message is semantically empty"
     -- [REJECT] The cell count equals the number of set bits in the bitmap

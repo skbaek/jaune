@@ -31,7 +31,7 @@ variable {P : Preset}
 /-! ## B5(iv): EMPTY parent -/
 
 /-- `process_withdrawals` returns early when the parent block is EMPTY (CL:2073-2075). -/
-theorem processWithdrawalsGloas_early_return (st : Gloas.BeaconState P)
+theorem processWithdrawalsG_early_return (st : Gloas.BeaconState P)
     (h : st.latest_block_hash ≠ st.latest_execution_payload_bid.block_hash) :
     Gloas.processWithdrawals st = .ok st := by
   unfold Gloas.processWithdrawals
@@ -42,15 +42,15 @@ theorem processWithdrawalsGloas_early_return (st : Gloas.BeaconState P)
 /-- With `bls = false` the bid signature check returns what the `bls = true` check returns,
 whenever the signature it would check verifies; every rejection (unknown builder index, domain)
 is the same. -/
-theorem verifyExecutionPayloadBidSignature_bls_independent (cfg : Config) (ev : Bool)
+theorem verifyExecutionPayloadBidSignature_bls_indep (cfg : Config) (ev : Bool)
     (st : Gloas.BeaconState P) (sb : Gloas.SignedExecutionPayloadBid)
     (hsig : ∀ (builder : Gloas.Builder) (dom : Domain),
       st.builders.get sb.message.builder_index.toNat "verify_execution_payload_bid_signature" =
           .ok builder →
       Gloas.getDomain st Gloas.DOMAIN_BEACON_BUILDER = .ok dom →
       blsVerify true builder.pubkey (computeSigningRoot sb.message dom) sb.signature = true) :
-    Gloas.verifyExecutionPayloadBidSignature { config := cfg, blsActive := false, executionValid := ev } st sb =
-      Gloas.verifyExecutionPayloadBidSignature { config := cfg, blsActive := true, executionValid := ev } st sb := by
+    Gloas.verifyExecutionPayloadBidSignature { cfg, blsActive := false, executionValid := ev } st sb =
+      Gloas.verifyExecutionPayloadBidSignature { cfg, blsActive := true, executionValid := ev } st sb := by
   unfold Gloas.verifyExecutionPayloadBidSignature
   cases hb : st.builders.get sb.message.builder_index.toNat "verify_execution_payload_bid_signature" with
   | error e => rfl
@@ -65,17 +65,17 @@ theorem verifyExecutionPayloadBidSignature_bls_independent (cfg : Config) (ev : 
 /-- §0.3 `processExecutionPayloadBid_bls_indep`: with `bls = false` the bid processing equals its
 `bls = true` run whenever the bid signature it would check verifies. Every other check, effect
 and rejection is shared (the switch reaches the function only through the signature check). -/
-theorem processExecutionPayloadBid_bls_independent (cfg : Config) (ev : Bool)
+theorem processExecutionPayloadBid_bls_indep (cfg : Config) (ev : Bool)
     (st : Gloas.BeaconState P) (sb : Gloas.SignedExecutionPayloadBid)
     (hsig : ∀ (builder : Gloas.Builder) (dom : Domain),
       st.builders.get sb.message.builder_index.toNat "verify_execution_payload_bid_signature" =
           .ok builder →
       Gloas.getDomain st Gloas.DOMAIN_BEACON_BUILDER = .ok dom →
       blsVerify true builder.pubkey (computeSigningRoot sb.message dom) sb.signature = true) :
-    Gloas.processExecutionPayloadBid { config := cfg, blsActive := false, executionValid := ev } st sb =
-      Gloas.processExecutionPayloadBid { config := cfg, blsActive := true, executionValid := ev } st sb := by
+    Gloas.processExecutionPayloadBid { cfg, blsActive := false, executionValid := ev } st sb =
+      Gloas.processExecutionPayloadBid { cfg, blsActive := true, executionValid := ev } st sb := by
   unfold Gloas.processExecutionPayloadBid
-  rw [verifyExecutionPayloadBidSignature_bls_independent cfg ev st sb hsig]
+  rw [verifyExecutionPayloadBidSignature_bls_indep cfg ev st sb hsig]
 
 /-! ## B5(i) at function level: `apply_withdrawals` and one builder's balance -/
 
@@ -194,11 +194,11 @@ theorem routes_of_convert {bi j : U64} {w : Withdrawal}
   rw [← hj]
   exact eq_or_flag_of_mask w.validator_index.toNat_lt (by simpa using hb) this.symm
 
-theorem ProgressiveListOnSpine_modify_ok {s : Spine} {α : Type} {xs ys : ProgressiveListOnSpine s α} {j : Nat}
-    {g : α → Fallible α} {site : String} (h : xs.modify j g site = .ok ys) :
+theorem ProgressiveListS_modify_ok {s : Spine} {α : Type} {xs ys : ProgressiveListS s α} {j : Nat}
+    {g : α → M α} {site : String} (h : xs.modify j g site = .ok ys) :
     ∃ v v', xs.toArray[j]? = some v ∧ g v = .ok v' ∧ ys.toArray.size = xs.toArray.size ∧
       ∀ k, ys.toArray[k]? = if k = j then some v' else xs.toArray[k]? := by
-  unfold ProgressiveListOnSpine.modify ProgressiveListOnSpine.get getAt at h
+  unfold ProgressiveListS.modify ProgressiveListS.get getAt at h
   cases hv : xs.toArray[j]? with
   | none => simp [hv, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
   | some v =>
@@ -208,7 +208,7 @@ theorem ProgressiveListOnSpine_modify_ok {s : Spine} {α : Type} {xs ys : Progre
     | ok v' =>
       rw [hg] at h
       simp only at h
-      unfold ProgressiveListOnSpine.set at h
+      unfold ProgressiveListS.set at h
       have hj : j < xs.toArray.size := by
         rcases Array.getElem?_eq_some_iff.mp hv with ⟨hj, -⟩; exact hj
       simp only [hj, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at h
@@ -237,7 +237,7 @@ abbrev routedSum (bi : U64) (l : List Withdrawal) : Nat :=
   ((l.filter (fun w => decide (Routes bi w))).map (·.amount.toNat)).sum
 
 private theorem loop_builder_balance {bi : U64}
-    {body : Withdrawal → Gloas.BeaconState P → Fallible (ForInStep (Gloas.BeaconState P))}
+    {body : Withdrawal → Gloas.BeaconState P → M (ForInStep (Gloas.BeaconState P))}
     (hstep : ∀ w s r b, body w s = .ok r → s.builders.toArray[bi.toNat]? = some b →
       r = .yield r.value ∧ ∃ b', r.value.builders.toArray[bi.toNat]? = some b' ∧
         b' = { b with balance := b'.balance } ∧
@@ -315,7 +315,7 @@ theorem applyWithdrawals_builder_balance {st st' : Gloas.BeaconState P} {ws : Ar
       · rename_i bs hm
         simp only [Except.ok.injEq] at hr
         subst hr
-        obtain ⟨v, v', hv, hg, -, hk⟩ := ProgressiveListOnSpine_modify_ok hm
+        obtain ⟨v, v', hv, hg, -, hk⟩ := ProgressiveListS_modify_ok hm
         refine ⟨rfl, ?_⟩
         simp only [ForInStep.value]
         rw [hk]
@@ -370,7 +370,7 @@ theorem routed_le_runningBalance {bi : U64} {l : List Withdrawal} {bal : Nat}
 
 /-- A loop invariant indexed by the position in the list: a step at position `m` from a state
 satisfying `Inv m` yields a state satisfying `Inv (m+1)`, or stops at a state satisfying `Inv m`. -/
-theorem forIn_list_invariant {α β : Type} (L : List α) (body : α → β → Fallible (ForInStep β))
+theorem forIn_list_inv {α β : Type} (L : List α) (body : α → β → M (ForInStep β))
     (Inv : Nat → β → Prop)
     (hstep : ∀ m a b r, L[m]? = some a → Inv m b → body a b = .ok r →
       (∀ b', r = .yield b' → Inv (m + 1) b') ∧ (∀ b', r = .done b' → Inv m b')) :
@@ -396,7 +396,7 @@ theorem forIn_list_invariant {α β : Type} (L : List α) (body : α → β → 
         simp only [pure, Except.pure, Except.ok.injEq] at h
         subst h; exact ⟨m, hd _ rfl⟩
       | yield b' =>
-        exact forIn_list_invariant L body Inv hstep l (m + 1) b' out hL' (hy _ rfl) h
+        exact forIn_list_inv L body Inv hstep l (m + 1) b' out hL' (hy _ rfl) h
 
 theorem getBuilderWithdrawals_provenance {st : Gloas.BeaconState P} {idx : U64}
     {prior ws : Array Withdrawal} {idx' n : U64}
@@ -420,7 +420,7 @@ theorem getBuilderWithdrawals_provenance {st : Gloas.BeaconState P} {idx : U64}
     x.1.toNat = m ∧ x.2.1.size = m ∧ ∀ k (hk : k < x.2.1.size), ∃ e,
       L[k]? = some e ∧ x.2.1[k].address = e.fee_recipient ∧ x.2.1[k].amount = e.amount ∧
       Gloas.convertBuilderIndexToValidatorIndex e.builder_index = .ok x.2.1[k].validator_index
-  obtain ⟨m, hm1, hm2, hm3⟩ := forIn_list_invariant L _ Inv (by
+  obtain ⟨m, hm1, hm2, hm3⟩ := forIn_list_inv L _ Inv (by
       intro m a ⟨p, wsA, i⟩ r ha hI hr
       obtain ⟨hp, hsz, hold⟩ := hI
       simp only at hp hsz hold
@@ -455,9 +455,9 @@ theorem getBuilderWithdrawals_provenance {st : Gloas.BeaconState P} {idx : U64}
   obtain ⟨e, he, h1, h2, h3⟩ := hm3 k hk
   exact ⟨e, by simpa [L] using he, h1, h2, h3⟩
 
-theorem ProgressiveListOnSpine_get_ok {s : Spine} {α : Type} {xs : ProgressiveListOnSpine s α} {i : Nat}
+theorem ProgressiveListS_get_ok {s : Spine} {α : Type} {xs : ProgressiveListS s α} {i : Nat}
     {site : String} {x : α} (h : xs.get i site = .ok x) : xs.toArray[i]? = some x := by
-  unfold ProgressiveListOnSpine.get getAt at h
+  unfold ProgressiveListS.get getAt at h
   split at h
   · rename_i y hy; simp only [pure, Except.pure, Except.ok.injEq] at h; subst h; exact hy
   · cases h
@@ -498,7 +498,7 @@ theorem getBuildersSweepWithdrawals_provenance {st : Gloas.BeaconState P} {idx :
       Gloas.getBuilderBalanceAfterWithdrawals st bi (prior ++ x.2.1.extract 0 k) =
         .ok x.2.1[k].amount ∧
       U64.zero < x.2.1[k].amount
-  obtain ⟨m, hm⟩ := forIn_list_invariant _ _ Inv (by
+  obtain ⟨m, hm⟩ := forIn_list_inv _ _ Inv (by
       intro m a ⟨p, wsA, i, bi⟩ r _ hI hr
       simp only [Inv] at hI ⊢
       split at hr
@@ -532,7 +532,7 @@ theorem getBuildersSweepWithdrawals_provenance {st : Gloas.BeaconState P} {idx :
             simp_all [Array.getElem_push_lt hkm]
         · have hk' : k = wsA.size := by omega
           subst hk'
-          refine ⟨bi, b, ?_, ProgressiveListOnSpine_get_ok hb, hcond.1, ?_, ?_, ?_⟩
+          refine ⟨bi, b, ?_, ProgressiveListS_get_ok hb, hcond.1, ?_, ?_, ?_⟩
           · simpa using hv
           · simp
           · simp; exact hbal

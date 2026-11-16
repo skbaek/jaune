@@ -21,21 +21,21 @@ open Yaml
 
 /-- Read and Snappy-decode a case file. -/
 private def readSsz (c : Case) (file : String) : IO (Except String Bytes) := do
-  match Snappy.decompress (← IO.FS.readBinFile (c.directory / file)) with
+  match Snappy.decompress (← IO.FS.readBinFile (c.dir / file)) with
   | .ok b => pure (.ok b.toList)
   | .error e => pure (.error s!"{file}: snappy: {e}")
 
-private def readYamlFile (c : Case) (file : String) : IO (Except String YamlValue) := do
-  pure ((parse (← IO.FS.readBinFile (c.directory / file))).mapError (s!"{file}: " ++ toString ·))
+private def readYamlFile (c : Case) (file : String) : IO (Except String YVal) := do
+  pure ((parse (← IO.FS.readBinFile (c.dir / file))).mapError (s!"{file}: " ++ toString ·))
 
 private def decodeAs {α : Type} [Ssz α] (bytes : Bytes) (what : String) : Except String α :=
-  match (deserialize bytes : Fallible α) with
+  match (deserialize bytes : M α) with
   | .ok v => .ok v
   | .error r => .error s!"{what}: decode rejected: {repr r}"
 
 /-- Apply one operation case: `input` is the operation file, `apply` the processing call. -/
-@[nospecialize] def runOperation {P : Preset} {f : ConsensusFork} {α : Type} [Ssz α] (c : Case) (ctx : Context)
-    (input : String) (apply : Context → BeaconState P f → α → Fallible (BeaconState P f)) :
+@[nospecialize] def runOperation {P : Preset} {f : CFork} {α : Type} [Ssz α] (c : Case) (ctx : Ctx)
+    (input : String) (apply : Ctx → BeaconState P f → α → M (BeaconState P f)) :
     IO (Except String Unit) := do
   let pre ← readSsz c "pre.ssz_snappy"
   let op ← readSsz c (input ++ ".ssz_snappy")
@@ -76,7 +76,7 @@ private def executionValidOf (c : Case) : IO (Except String Bool) := do
   let doc ← readYamlFile c "execution.yaml"
   pure do
     let v ← doc
-    (v.field "execution_valid" >>= YamlValue.asBool).mapError toString
+    (v.field "execution_valid" >>= YVal.asBool).mapError toString
 
 /-! ## Gloas (`JauneConsensus/Gloas{Withdrawals,Operations,Block}.lean`)
 
@@ -88,7 +88,7 @@ Gloas arms decode, apply and compare that type. `withdrawals` has no input file 
 
 /-- Apply a Gloas step to the case's `pre` and compare with `post` (or expect a rejection). -/
 @[nospecialize] def runGloasStep {P : Preset} (c : Case)
-    (step : Gloas.BeaconState P → Except String (Fallible (Gloas.BeaconState P))) :
+    (step : Gloas.BeaconState P → Except String (M (Gloas.BeaconState P))) :
     IO (Except String Unit) := do
   let pre ← readSsz c "pre.ssz_snappy"
   let post ← if c.has "post.ssz_snappy" then (some <$> readSsz c "post.ssz_snappy") else pure none
@@ -109,8 +109,8 @@ Gloas arms decode, apply and compare that type. `withdrawals` has no input file 
         else throw "post state differs"
 
 /-- Apply one Gloas operation case: `input` is the operation file. -/
-@[nospecialize] def runGloasOperation {P : Preset} {α : Type} [Ssz α] (c : Case) (ctx : Context)
-    (input : String) (apply : Context → Gloas.BeaconState P → α → Fallible (Gloas.BeaconState P)) :
+@[nospecialize] def runGloasOperation {P : Preset} {α : Type} [Ssz α] (c : Case) (ctx : Ctx)
+    (input : String) (apply : Ctx → Gloas.BeaconState P → α → M (Gloas.BeaconState P)) :
     IO (Except String Unit) := do
   let op ← readSsz c (input ++ ".ssz_snappy")
   runGloasStep (P := P) c fun state => do
@@ -127,12 +127,12 @@ private def parentSlotOf (c : Case) : IO (Except String Slot) := do
     | none => throw "meta.yaml: no parent_slot"
     | some x =>
       let n ← x.asNat.mapError toString
-      match (U64.ofNat? n "parent_slot" : Fallible U64) with
+      match (U64.ofNat? n "parent_slot" : M U64) with
       | .ok s => pure s
       | .error r => throw s!"meta.yaml: parent_slot: {repr r}"
 
 /-- Run a Gloas `operations/<handler>` case at preset `P` under `ctx`. -/
-def gloasOperationsCase (P : Preset) (ctx : Context) (c : Case) : IO (Except String Unit) := do
+def gloasOperationsCase (P : Preset) (ctx : Ctx) (c : Case) : IO (Except String Unit) := do
   match c.key.handler with
   | "attestation" =>
     let parentSlot ← match ← parentSlotOf c with
@@ -151,10 +151,10 @@ def gloasOperationsCase (P : Preset) (ctx : Context) (c : Case) : IO (Except Str
     runGloasOperation (P := P) c ctx "builder_deposit_request" Gloas.processBuilderDepositRequest
   | "builder_exit_request" =>
     runGloasOperation (P := P) c ctx "builder_exit_request" fun x s r =>
-      Gloas.processBuilderExitRequest x.config s r
+      Gloas.processBuilderExitRequest x.cfg s r
   | "consolidation_request" =>
     runGloasOperation (P := P) c ctx "consolidation_request" fun x s r =>
-      Gloas.processConsolidationRequest x.config s r
+      Gloas.processConsolidationRequest x.cfg s r
   | "deposit_request" =>
     runGloasOperation (P := P) c ctx "deposit_request" fun _ s r =>
       pure (Gloas.processDepositRequest s r)
@@ -172,21 +172,21 @@ def gloasOperationsCase (P : Preset) (ctx : Context) (c : Case) : IO (Except Str
     runGloasOperation (P := P) c ctx "voluntary_exit" Gloas.processVoluntaryExit
   | "withdrawal_request" =>
     runGloasOperation (P := P) c ctx "withdrawal_request" fun x s r =>
-      Gloas.processWithdrawalRequest x.config s r
+      Gloas.processWithdrawalRequest x.cfg s r
   | "withdrawals" => runGloasStep (P := P) c fun s => pure (Gloas.processWithdrawals s)
   | h => pure (.error s!"UNIMPLEMENTED: no Gloas operations handler {h}")
 
 /-- Run an `operations/<handler>` case at its preset and fork under `cfg`. -/
 def operationsCase (cfg : Config) (c : Case) : IO (Except String Unit) := do
   let some P := Preset.ofName? c.preset | return .error s!"no preset {c.preset}"
-  let some f := ConsensusFork.ofName? c.key.fork | return .error s!"no fork {c.key.fork}"
+  let some f := CFork.ofName? c.key.fork | return .error s!"no fork {c.key.fork}"
   let blsActive ← match ← blsActiveOf c with
     | .ok b => pure b
     | .error e => return .error e
   let executionValid ← match ← executionValidOf c with
     | .ok b => pure b
     | .error e => return .error e
-  let ctx : Context := { config := cfg, blsActive := blsActive, executionValid := executionValid }
+  let ctx : Ctx := { cfg, blsActive, executionValid }
   if f == .gloas then return ← gloasOperationsCase P ctx c
   match c.key.handler with
   | "attestation" => runOperation (P := P) (f := f) c ctx "attestation" processAttestation
@@ -197,7 +197,7 @@ def operationsCase (cfg : Config) (c : Case) : IO (Except String Unit) := do
     runOperation (P := P) (f := f) c ctx "address_change" processBlsToExecutionChange
   | "consolidation_request" =>
     runOperation (P := P) (f := f) c ctx "consolidation_request" fun x s r =>
-      processConsolidationRequest x.config s r
+      processConsolidationRequest x.cfg s r
   | "deposit" => runOperation (P := P) (f := f) c ctx "deposit" processDeposit
   | "deposit_request" =>
     runOperation (P := P) (f := f) c ctx "deposit_request" fun _ s r => processDepositRequest s r
@@ -208,7 +208,7 @@ def operationsCase (cfg : Config) (c : Case) : IO (Except String Unit) := do
   | "voluntary_exit" => runOperation (P := P) (f := f) c ctx "voluntary_exit" processVoluntaryExit
   | "withdrawal_request" =>
     runOperation (P := P) (f := f) c ctx "withdrawal_request" fun x s r =>
-      processWithdrawalRequest x.config s r
+      processWithdrawalRequest x.cfg s r
   | "withdrawals" =>
     runOperation (P := P) (f := f) c ctx "execution_payload" fun _ s (p : ExecutionPayload P) =>
       processWithdrawals s p

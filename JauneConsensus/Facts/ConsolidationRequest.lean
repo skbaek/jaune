@@ -1,6 +1,6 @@
 import JauneConsensus.Facts.DepositRequest
 import JauneConsensus.Facts.ExpectedWithdrawals
-import JauneConsensus.Facts.AnchorInvariant
+import JauneConsensus.Facts.AnchorInv
 
 /-!
 # The outcome of `process_consolidation_request`, as a reusable characterization
@@ -23,7 +23,7 @@ namespace JauneConsensus.Facts
 
 open JauneConsensus
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-- Why `process_consolidation_request` ignored a request: one constructor per early return of
 the consolidation path, in the spec's order. (The switch-to-compounding path is tried first; a
@@ -75,7 +75,7 @@ inductive ConsolidationOutcome where
 /-- Which outcome `process_consolidation_request` gives `cr`, computed with the same reads and the
 same checked arithmetic as the function, in the spec's order. Changes no state. -/
 def classifyConsolidationRequest (cfg : Config) (state : BeaconState P f)
-    (cr : ConsolidationRequest) : Fallible ConsolidationOutcome := do
+    (cr : ConsolidationRequest) : M ConsolidationOutcome := do
   let site := "process_consolidation_request"
   if ← isValidSwitchToCompoundingRequest state cr then
     let some sourceIndex ← validatorIndexOf state cr.source_pubkey
@@ -99,7 +99,7 @@ def classifyConsolidationRequest (cfg : Config) (state : BeaconState P f)
   if !isActiveValidator target current then return .ignored .targetNotActive
   if source.exit_epoch != FAR_FUTURE_EPOCH then return .ignored .sourceExiting
   if target.exit_epoch != FAR_FUTURE_EPOCH then return .ignored .targetExiting
-  if current < (← U64.add? source.activation_epoch (← u64Checked cfg.SHARD_COMMITTEE_PERIOD) site) then
+  if current < (← U64.add? source.activation_epoch (← c64 cfg.SHARD_COMMITTEE_PERIOD) site) then
     return .ignored .sourceTooEarly
   if U64.zero < (← getPendingBalanceToWithdraw state sourceIndex) then
     return .ignored .sourcePendingWithdrawal
@@ -110,14 +110,14 @@ def classifyConsolidationRequest (cfg : Config) (state : BeaconState P f)
 source's effective balance, sets the source's exit and withdrawable epochs, and appends the
 pending consolidation. -/
 def applyConsolidationOutcome (cfg : Config) (state : BeaconState P f) (_cr : ConsolidationRequest) :
-    ConsolidationOutcome → Fallible (BeaconState P f)
+    ConsolidationOutcome → M (BeaconState P f)
   | .ignored _ => pure state
   | .switchToCompounding index => switchToCompoundingValidator state index
   | .pendingConsolidation sourceIndex targetIndex => do
     let site := "process_consolidation_request"
     let source ← state.validators.get sourceIndex.toNat site
     let (state, exitEpoch) ← computeConsolidationEpochAndUpdateChurn cfg state source.effective_balance
-    let withdrawable ← U64.add? exitEpoch (← u64Checked cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY) site
+    let withdrawable ← U64.add? exitEpoch (← c64 cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY) site
     let source ← state.validators.get sourceIndex.toNat site
     let validators ← state.validators.set sourceIndex.toNat
       { source with exit_epoch := exitEpoch, withdrawable_epoch := withdrawable } site
@@ -207,7 +207,7 @@ theorem processConsolidationRequest_eq (cfg : Config) (state : BeaconState P f)
                                         cases hb14 : (target.exit_epoch != FAR_FUTURE_EPOCH) with
                                         | true => rfl
                                         | false =>
-                                          cases h15 : u64Checked cfg.SHARD_COMMITTEE_PERIOD with
+                                          cases h15 : c64 cfg.SHARD_COMMITTEE_PERIOD with
                                           | error e => rfl
                                           | ok period =>
                                             simp only [ok_bind']
@@ -345,7 +345,7 @@ def PendingConsolidationChecks (cfg : Config) (state : BeaconState P f)
     ∃ current, getCurrentEpoch state = .ok current ∧
       isActiveValidator vs current = true ∧ isActiveValidator vt current = true ∧
       vs.exit_epoch = FAR_FUTURE_EPOCH ∧ vt.exit_epoch = FAR_FUTURE_EPOCH ∧
-      (∃ period actSum, u64Checked cfg.SHARD_COMMITTEE_PERIOD = .ok period ∧
+      (∃ period actSum, c64 cfg.SHARD_COMMITTEE_PERIOD = .ok period ∧
         U64.add? vs.activation_epoch period "process_consolidation_request" = .ok actSum ∧
         ¬ current < actSum) ∧
       (∃ pend, getPendingBalanceToWithdraw state s = .ok pend ∧ ¬ U64.zero < pend)
@@ -456,7 +456,7 @@ theorem classifyConsolidation_spec {cfg : Config} {state : BeaconState P f} {cr 
                                           intro h; cases h
                                           exact ⟨(fun _ h => nomatch h), (fun _ _ h => nomatch h)⟩
                                         | false =>
-                                          cases h15 : u64Checked cfg.SHARD_COMMITTEE_PERIOD with
+                                          cases h15 : c64 cfg.SHARD_COMMITTEE_PERIOD with
                                           | error e => intro h; cases h
                                           | ok period =>
                                             simp only [ok_bind']
@@ -608,7 +608,7 @@ theorem applyConsolidation_pending_spec {cfg : Config} {state s' : BeaconState P
     ∃ src exitEpoch withdrawable, state.validators.toArray[s.toNat]? = some src ∧
       (∃ st1, computeConsolidationEpochAndUpdateChurn cfg state src.effective_balance =
         .ok (st1, exitEpoch)) ∧
-      (∃ delay, u64Checked cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok delay ∧
+      (∃ delay, c64 cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok delay ∧
         U64.add? exitEpoch delay "process_consolidation_request" = .ok withdrawable) ∧
       ∀ j, s'.validators.toArray[j]? =
         if j = s.toNat then some { src with exit_epoch := exitEpoch, withdrawable_epoch := withdrawable }
@@ -645,7 +645,7 @@ theorem applyConsolidation_pending_spec {cfg : Config} {state s' : BeaconState P
     ⟨q, q', hq0, ?_, ?_⟩, src, exitEpoch, withdrawable, hsrc0,
     ⟨st1, hr1⟩, ⟨delay, hdelay, hw⟩, ?_⟩
   · rw [hs']
-    exact forkField_write_read hg
+    exact gated_write_read hg
   · unfold SszList.push at hq'
     split at hq'
     · cases hq'; rfl
@@ -666,8 +666,8 @@ theorem applyConsolidation_pending_spec {cfg : Config} {state s' : BeaconState P
 /-! ## Switch-to-compounding delta, source/target distinctness, and fold trace -/
 
 /-- `Gated.read` succeeds with the same value regardless of error-site label when it succeeds. -/
-private theorem forkField_read_ok_site {c : Bool} {α : Type} {g : ForkField c α} {s1 s2 : String} {x : α}
-    (h : ForkField.read g s1 = .ok x) : ForkField.read g s2 = .ok x := by
+private theorem gated_read_ok_site {c : Bool} {α : Type} {g : Gated c α} {s1 s2 : String} {x : α}
+    (h : Gated.read g s1 = .ok x) : Gated.read g s2 = .ok x := by
   cases c with
   | false => cases h
   | true => exact h
@@ -707,7 +707,7 @@ theorem PendingConsolidationChecks.source_ne_target {cfg : Config} {state : Beac
 
 /-- The compounding withdrawal credential computed by `switchToCompoundingValidator`. -/
 def compoundingWithdrawalCredentials (v : Validator) : Bytes32 :=
-  Jaune.Bytes.toU256 (COMPOUNDING_WITHDRAWAL_PREFIX :: v.withdrawal_credentials.toBytes.drop 1)
+  Jaune.Bytes.toB256 (COMPOUNDING_WITHDRAWAL_PREFIX :: v.withdrawal_credentials.toBytes.drop 1)
 
 /-- **State delta of `queue_excess_active_balance`**:
 - Always preserves `validators`, `balances.toArray.size`, `slot`, `pending_consolidations`,
@@ -727,10 +727,10 @@ theorem queueExcessActiveBalance_spec {state s' : BeaconState P f} {index : Vali
     s'.latest_block_header = state.latest_block_header ∧
     ((s' = state ∧
         ∃ bal minAct, state.balances.toArray[index.toNat]? = some bal ∧
-          u64Checked P.MIN_ACTIVATION_BALANCE = .ok minAct ∧ ¬ minAct < bal) ∨
+          c64 P.MIN_ACTIVATION_BALANCE = .ok minAct ∧ ¬ minAct < bal) ∨
       (∃ bal minAct excess v q q',
         state.balances.toArray[index.toNat]? = some bal ∧
-        u64Checked P.MIN_ACTIVATION_BALANCE = .ok minAct ∧
+        c64 P.MIN_ACTIVATION_BALANCE = .ok minAct ∧
         minAct < bal ∧
         U64.sub? bal minAct "queue_excess_active_balance" = .ok excess ∧
         state.validators.toArray[index.toNat]? = some v ∧
@@ -761,10 +761,10 @@ theorem queueExcessActiveBalance_spec {state s' : BeaconState P f} {index : Vali
     cases h
     obtain ⟨hbi, hbset⟩ := set_ok hbals
     have hq0 : state.pendingDeposits = .ok q :=
-      forkField_read_ok_site hq
+      gated_read_ok_site hq
     have hq1 : ({ state with balances := bals, pending_deposits := g } : BeaconState P f).pendingDeposits = .ok q' := by
       unfold BeaconState.pendingDeposits
-      exact forkField_write_read hg
+      exact gated_write_read hg
     refine ⟨rfl, by simp [hbset], rfl, rfl, rfl, rfl, rfl, .inr ⟨bal, minAct, excess, v, q, q',
       hbal0, hmin, hlt, hex, ssz_get_ok_iff.mp hv, hq0, hq1, push_ok hq', ?_, rfl⟩⟩
     intro j
@@ -902,11 +902,11 @@ theorem processConsolidationRequest_frame_and_queues (h : f.atLeast .electra = t
       s'.validators.toArray.size = state.validators.toArray.size ∧
       s'.balances.toArray.size = state.balances.toArray.size ∧
       (∀ pc, acceptedConsolidation o = some pc → pc.source_index ≠ pc.target_index) ∧
-      (ForkField.get h s'.pending_consolidations).toArray.toList =
-        (ForkField.get h state.pending_consolidations).toArray.toList ++
+      (Gated.get h s'.pending_consolidations).toArray.toList =
+        (Gated.get h state.pending_consolidations).toArray.toList ++
           (acceptedConsolidation o).toList ∧
-      (ForkField.get h s'.pending_deposits).toArray.toList =
-        (ForkField.get h state.pending_deposits).toArray.toList ++ extraDep ∧
+      (Gated.get h s'.pending_deposits).toArray.toList =
+        (Gated.get h state.pending_deposits).toArray.toList ++ extraDep ∧
       (∀ d ∈ extraDep, d.slot = GENESIS_SLOT) := by
   rw [processConsolidationRequest_eq] at hp
   obtain ⟨o, hc, ha⟩ := bind_eq_ok_iff.mp hp
@@ -931,13 +931,13 @@ theorem processConsolidationRequest_frame_and_queues (h : f.atLeast .electra = t
         (by simp [acceptedConsolidation, hpc]), ?_, (by intro _ hd; cases hd)⟩
       rw [heq, hmid_pd]
       simp
-    · have hq0_get : q = ForkField.get h mid.pending_deposits := by
+    · have hq0_get : q = Gated.get h mid.pending_deposits := by
         unfold BeaconState.pendingDeposits at hq0
-        rw [forkField_read_get h] at hq0
+        rw [gated_read_get h] at hq0
         exact (Except.ok.inj hq0).symm
-      have hq1_get : q' = ForkField.get h s'.pending_deposits := by
+      have hq1_get : q' = Gated.get h s'.pending_deposits := by
         unfold BeaconState.pendingDeposits at hq1
-        rw [forkField_read_get h] at hq1
+        rw [gated_read_get h] at hq1
         exact (Except.ok.inj hq1).symm
       let dep : PendingDeposit :=
         { pubkey := v'.pubkey
@@ -958,13 +958,13 @@ theorem processConsolidationRequest_frame_and_queues (h : f.atLeast .electra = t
     obtain ⟨hb_eq, hd_eq, hppw_eq, ⟨q, q', hq0, hq1, hpush⟩, _⟩ :=
       applyConsolidation_pending_spec hpend
     obtain ⟨hfr, hvsz⟩ := applyConsolidation_pending_frame hpend
-    have hq0_get : q = ForkField.get h state.pending_consolidations := by
+    have hq0_get : q = Gated.get h state.pending_consolidations := by
       unfold BeaconState.pendingConsolidations at hq0
-      rw [forkField_read_get h] at hq0
+      rw [gated_read_get h] at hq0
       exact (Except.ok.inj hq0).symm
-    have hq1_get : q' = ForkField.get h s'.pending_consolidations := by
+    have hq1_get : q' = Gated.get h s'.pending_consolidations := by
       unfold BeaconState.pendingConsolidations at hq1
-      rw [forkField_read_get h] at hq1
+      rw [gated_read_get h] at hq1
       exact (Except.ok.inj hq1).symm
     refine ⟨.pendingConsolidation s t, [], hc, ha,
       (by rw [hfr]), (by rw [hfr]), (by rw [hfr]), hppw_eq, hvsz, (by rw [hb_eq]),
@@ -1002,11 +1002,11 @@ theorem foldConsolidationRequests_frames_and_queues (h : f.atLeast .electra = tr
         s'.validators.toArray.size = state.validators.toArray.size ∧
         s'.balances.toArray.size = state.balances.toArray.size ∧
         (∀ pc ∈ outcomes.filterMap acceptedConsolidation, pc.source_index ≠ pc.target_index) ∧
-        (ForkField.get h s'.pending_consolidations).toArray.toList =
-          (ForkField.get h state.pending_consolidations).toArray.toList ++
+        (Gated.get h s'.pending_consolidations).toArray.toList =
+          (Gated.get h state.pending_consolidations).toArray.toList ++
             outcomes.filterMap acceptedConsolidation ∧
-        (ForkField.get h s'.pending_deposits).toArray.toList =
-          (ForkField.get h state.pending_deposits).toArray.toList ++ extraDeps ∧
+        (Gated.get h s'.pending_deposits).toArray.toList =
+          (Gated.get h state.pending_deposits).toArray.toList ++ extraDeps ∧
         (∀ d ∈ extraDeps, d.slot = GENESIS_SLOT) := by
   intro reqs
   induction reqs with

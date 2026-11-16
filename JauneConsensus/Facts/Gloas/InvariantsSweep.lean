@@ -10,39 +10,39 @@ unchanged or in range. `process_withdrawals` keeps it (`processWithdrawals_wFram
 generator with the leaf rules below.
 -/
 
-namespace JauneConsensus.Facts.Gloas.Invariant
+namespace JauneConsensus.Facts.Gloas.Inv
 
 open JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas
 
 variable {P : Preset}
 
 /-- Same identity and `withdrawable_epoch`. -/
-def BuilderIdentityWithdrawableEpoch (b b' : JauneConsensus.Gloas.Builder) : Prop :=
+def BIdW (b b' : JauneConsensus.Gloas.Builder) : Prop :=
   SameIdentity b b' ∧ b'.withdrawable_epoch = b.withdrawable_epoch
 
-theorem BuilderIdentityWithdrawableEpoch.refl (b : JauneConsensus.Gloas.Builder) : BuilderIdentityWithdrawableEpoch b b := ⟨⟨rfl, rfl, rfl⟩, rfl⟩
+theorem BIdW.refl (b : JauneConsensus.Gloas.Builder) : BIdW b b := ⟨⟨rfl, rfl, rfl⟩, rfl⟩
 
-theorem BuilderIdentityWithdrawableEpoch.trans {a b c : JauneConsensus.Gloas.Builder} (h₁ : BuilderIdentityWithdrawableEpoch a b) (h₂ : BuilderIdentityWithdrawableEpoch b c) :
-    BuilderIdentityWithdrawableEpoch a c :=
+theorem BIdW.trans {a b c : JauneConsensus.Gloas.Builder} (h₁ : BIdW a b) (h₂ : BIdW b c) :
+    BIdW a c :=
   ⟨⟨h₂.1.1.trans h₁.1.1, h₂.1.2.1.trans h₁.1.2.1, h₂.1.2.2.trans h₁.1.2.2⟩, h₂.2.trans h₁.2⟩
 
 /-- The frame of `process_withdrawals`. -/
-def WithdrawalsFrame (s s' : GloasState P) : Prop :=
+def WFrame (s s' : GSt P) : Prop :=
   s'.latest_execution_payload_bid = s.latest_execution_payload_bid ∧
     s'.latest_block_hash = s.latest_block_hash ∧
     s'.latest_block_header.slot = s.latest_block_header.slot ∧ s'.slot = s.slot ∧
     s'.builder_pending_payments = s.builder_pending_payments ∧
     s'.builders.toArray.size = s.builders.toArray.size ∧
     (∀ (j : Nat) (b : JauneConsensus.Gloas.Builder), s.builders.toArray[j]? = some b →
-      ∃ b', s'.builders.toArray[j]? = some b' ∧ BuilderIdentityWithdrawableEpoch b b') ∧
+      ∃ b', s'.builders.toArray[j]? = some b' ∧ BIdW b b') ∧
     (s'.next_withdrawal_builder_index = s.next_withdrawal_builder_index ∨
       (0 < s.builders.toArray.size →
         s'.next_withdrawal_builder_index.toNat < s.builders.toArray.size))
 
 /-- `WFrame` as a step relation. -/
-def withdrawalsFrame : StepRelation (GloasState P) where
-  relation := WithdrawalsFrame
-  refl _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ b h => ⟨b, h, BuilderIdentityWithdrawableEpoch.refl b⟩, Or.inl rfl⟩
+def wFrame : StepRel (GSt P) where
+  R := WFrame
+  refl _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ b h => ⟨b, h, BIdW.refl b⟩, Or.inl rfl⟩
   trans {a b c} h₁ h₂ := by
     obtain ⟨l1, k1, d1, t1, p1, z1, i1, n1⟩ := h₁
     obtain ⟨l2, k2, d2, t2, p2, z2, i2, n2⟩ := h₂
@@ -57,29 +57,29 @@ def withdrawalsFrame : StepRelation (GloasState P) where
         · exact Or.inr (fun hp => by rw [e2]; exact e1 hp)
       · exact Or.inr (fun hp => by rw [← z1]; exact e2 (by rw [z1]; exact hp))
 
-theorem withdrawalsFrame_of_invariant {s s' : GloasState P} (h : InvariantFrame s s') : WithdrawalsFrame s s' := by
+theorem wf_of_inv {s s' : GSt P} (h : InvFrame s s') : WFrame s s' := by
   obtain ⟨hb, hp, _, hl, hk, hd, ht, hn⟩ := h
-  exact ⟨hl, hk, hd, ht, hp, by rw [hb], fun j b hj => ⟨b, by rw [hb]; exact hj, BuilderIdentityWithdrawableEpoch.refl b⟩,
+  exact ⟨hl, hk, hd, ht, hp, by rw [hb], fun j b hj => ⟨b, by rw [hb]; exact hj, BIdW.refl b⟩,
     Or.inl hn⟩
 
-theorem withdrawalsFrame_of_modify {s : GloasState P} {i : Nat}
-    {g : JauneConsensus.Gloas.Builder → Fallible JauneConsensus.Gloas.Builder} {site : String}
-    {ys : ProgressiveListRightSpine JauneConsensus.Gloas.Builder}
-    (h : s.builders.modify i g site = .ok ys) (hg : ∀ b b', g b = .ok b' → BuilderIdentityWithdrawableEpoch b b') :
-    WithdrawalsFrame s { s with builders := ys } := by
-  unfold ProgressiveListOnSpine.modify at h
+theorem wf_of_modify {s : GSt P} {i : Nat}
+    {g : JauneConsensus.Gloas.Builder → M JauneConsensus.Gloas.Builder} {site : String}
+    {ys : ProgressiveListR JauneConsensus.Gloas.Builder}
+    (h : s.builders.modify i g site = .ok ys) (hg : ∀ b b', g b = .ok b' → BIdW b b') :
+    WFrame s { s with builders := ys } := by
+  unfold ProgressiveListS.modify at h
   obtain ⟨v, hv, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨v', hv', h⟩ := bind_eq_ok_iff.mp h
-  obtain ⟨h1, h2, h3⟩ := progressiveList_set_ok h
+  obtain ⟨h1, h2, h3⟩ := pl_set_ok h
   refine ⟨rfl, rfl, rfl, rfl, rfl, h1, fun j b hb => ?_, Or.inl rfl⟩
   by_cases hj : j = i
   · subst hj
-    rw [progressiveList_get_ok.mp hv] at hb; cases hb
+    rw [pl_get_ok.mp hv] at hb; cases hb
     exact ⟨v', h2, hg _ _ hv'⟩
-  · exact ⟨b, by rw [h3 j hj]; exact hb, BuilderIdentityWithdrawableEpoch.refl b⟩
+  · exact ⟨b, by rw [h3 j hj]; exact hb, BIdW.refl b⟩
 
-theorem updateNextWithdrawalBuilderIndex_withdrawalsFrame (s : GloasState P) (n : U64) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex s n) (withdrawalsFrame.relation s) := by
+theorem updateNextWithdrawalBuilderIndex_wf (s : GSt P) (n : U64) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex s n) (wFrame.R s) := by
   intro s' h
   unfold JauneConsensus.Gloas.updateNextWithdrawalBuilderIndex at h
   simp only [] at h
@@ -89,55 +89,55 @@ theorem updateNextWithdrawalBuilderIndex_withdrawalsFrame (s : GloasState P) (n 
     obtain ⟨len, hlen, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨nx, hnx, h⟩ := bind_eq_ok_iff.mp h
     cases h
-    refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ b hb => ⟨b, hb, BuilderIdentityWithdrawableEpoch.refl b⟩, Or.inr fun _ => ?_⟩
+    refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ b hb => ⟨b, hb, BIdW.refl b⟩, Or.inr fun _ => ?_⟩
     show nx.toNat < s.builders.toArray.size
     rw [U64.toNat_mod? hnx, U64.toNat_ofNat? hlen]
     exact Nat.mod_lt _ hpos
   · cases h
-    exact withdrawalsFrame.refl _
+    exact wFrame.refl _
 
 section Generator
 
 local macro_rules
   | `(tactic| gstep_close) =>
-    `(tactic| exact (show WithdrawalsFrame _ _ from
-      ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ b hb => ⟨b, hb, BuilderIdentityWithdrawableEpoch.refl b⟩, Or.inl rfl⟩))
+    `(tactic| exact (show WFrame _ _ from
+      ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ b hb => ⟨b, hb, BIdW.refl b⟩, Or.inl rfl⟩))
 local macro_rules
   | `(tactic| gstep_close) =>
-    `(tactic| exact withdrawalsFrame_of_modify (by assumption) (fun b b' hb => by
+    `(tactic| exact wf_of_modify (by assumption) (fun b b' hb => by
       obtain ⟨_, _, hb⟩ := bind_eq_ok_iff.mp hb; cases hb; exact ⟨⟨rfl, rfl, rfl⟩, rfl⟩))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (decreaseBalance_invariantFrame _ _ _) $h; exact withdrawalsFrame_of_invariant hh))
+    `(tactic| (have hh := StepRel.of_ok (decreaseBalance_invFrame _ _ _) $h; exact wf_of_inv hh))
 
-theorem applyWithdrawals_withdrawalsFrame (s : GloasState P) (ws : Array Withdrawal) :
-    Ok (JauneConsensus.Gloas.applyWithdrawals s ws) (withdrawalsFrame.relation s) := by
+theorem applyWithdrawals_wf (s : GSt P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.applyWithdrawals s ws) (wFrame.R s) := by
   unfold JauneConsensus.Gloas.applyWithdrawals; gvcg
 
-theorem updateNextWithdrawalIndex_withdrawalsFrame (s : GloasState P) (ws : Array Withdrawal) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalIndex s ws) (withdrawalsFrame.relation s) := by
+theorem updateNextWithdrawalIndex_wf (s : GSt P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalIndex s ws) (wFrame.R s) := by
   unfold JauneConsensus.Gloas.updateNextWithdrawalIndex; gvcg
 
-theorem updateNextWithdrawalValidatorIndex_withdrawalsFrame (s : GloasState P) (ws : Array Withdrawal) :
-    Ok (JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex s ws) (withdrawalsFrame.relation s) := by
+theorem updateNextWithdrawalValidatorIndex_wf (s : GSt P) (ws : Array Withdrawal) :
+    Ok (JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex s ws) (wFrame.R s) := by
   unfold JauneConsensus.Gloas.updateNextWithdrawalValidatorIndex; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (applyWithdrawals_withdrawalsFrame _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (applyWithdrawals_wf _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (updateNextWithdrawalIndex_withdrawalsFrame _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (updateNextWithdrawalIndex_wf _ _) $h; exact hh))
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (updateNextWithdrawalBuilderIndex_withdrawalsFrame _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (updateNextWithdrawalBuilderIndex_wf _ _) $h; exact hh))
 
 /-- `process_withdrawals` keeps `WFrame`. -/
-theorem processWithdrawals_withdrawalsFrame (s : GloasState P) :
-    Ok (JauneConsensus.Gloas.processWithdrawals s) (withdrawalsFrame.relation s) := by
+theorem processWithdrawals_wFrame (s : GSt P) :
+    Ok (JauneConsensus.Gloas.processWithdrawals s) (wFrame.R s) := by
   unfold JauneConsensus.Gloas.processWithdrawals; gvcg
-  all_goals exact StepRelation.ok_rebase withdrawalsFrame (withdrawalsFrame.refl _) (updateNextWithdrawalValidatorIndex_withdrawalsFrame _ _)
+  all_goals exact StepRel.ok_rebase wFrame (wFrame.refl _) (updateNextWithdrawalValidatorIndex_wf _ _)
 
 end Generator
 
-end JauneConsensus.Facts.Gloas.Invariant
+end JauneConsensus.Facts.Gloas.Inv

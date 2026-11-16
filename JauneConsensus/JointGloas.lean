@@ -63,22 +63,22 @@ inductive ParentPayload (P : Preset) where
 
 /-- The joint state: pre-crossing (the Electra/Fulu `JointState`), or a Gloas beacon state with
 the built-upon execution chain and the status of its latest block's payload. -/
-inductive GloasJointState (P : Preset) where
+inductive GJointState (P : Preset) where
   | pre (s : JointState P)
   | gloas (beacon : Gloas.BeaconState P) (exec : BlockChain) (parent : ParentPayload P)
 
 /-- The built-upon execution chain of either arm. -/
-def GloasJointState.execution : GloasJointState P → BlockChain
-  | .pre s => s.execution
+def GJointState.exec : GJointState P → BlockChain
+  | .pre s => s.exec
   | .gloas _ exec _ => exec
 
 /-- The Gloas beacon state, if any. -/
-def GloasJointState.gloas? : GloasJointState P → Option (Gloas.BeaconState P)
+def GJointState.gloas? : GJointState P → Option (Gloas.BeaconState P)
   | .pre _ => none
   | .gloas beacon _ _ => some beacon
 
 /-- A joint block: pre-crossing, or Gloas. -/
-inductive GloasBlock (P : Preset) where
+inductive GBlock (P : Preset) where
   | pre (b : AnySignedBlock P)
   | gloas (b : Gloas.SignedBeaconBlock P)
 
@@ -94,21 +94,21 @@ def Gloas.ExecutionPayload.executionWithdrawals (payload : Gloas.ExecutionPayloa
   payload.withdrawals.toArray.toList.map Withdrawal.toExecution
 
 /-- The payload's EIP-7928 block access list, as the bytes of its RLP encoding. -/
-def Gloas.ExecutionPayload.blockAccessListBytes (payload : Gloas.ExecutionPayload P) : Bytes :=
+def Gloas.ExecutionPayload.balBytes (payload : Gloas.ExecutionPayload P) : Bytes :=
   payload.block_access_list.bytes.toArray.toList
 
 /-- The Amsterdam execution header a Gloas payload stands for: `payloadHeader`'s fields, with
 `blockAccessListHash := keccak(block_access_list)` (EIP-7928) and `slotNumber := slot_number`
 (EIP-7843), which `payloadHeader` leaves `none`. -/
-def payloadHeaderGloas (payload : Gloas.ExecutionPayload P) (parentBeaconRoot : Root)
+def payloadHeaderG (payload : Gloas.ExecutionPayload P) (parentBeaconRoot : Root)
     (list : ExecutionRequestsList) : Header :=
   { parentHash := payload.parent_hash
     ommersHash := emptyOmmerHash
     coinbase := payload.fee_recipient
     stateRoot := payload.state_root
-    transactionsRoot := transactionsRootOf payload.txBytes
-    receiptsRoot := payload.receipts_root
-    logsBloom := payload.logs_bloom.toArray.toList
+    txsRoot := transactionsRootOf payload.txBytes
+    receiptRoot := payload.receipts_root
+    bloom := payload.logs_bloom.toArray.toList
     difficulty := 0
     number := payload.block_number.toNat
     gasLimit := payload.gas_limit.toNat
@@ -123,30 +123,30 @@ def payloadHeaderGloas (payload : Gloas.ExecutionPayload P) (parentBeaconRoot : 
     excessBlobGas := some payload.excess_blob_gas.toNat
     parentBeaconBlockRoot := some parentBeaconRoot
     requestsHash := some (computeRequestsHash list)
-    blockAccessListHash := some payload.blockAccessListBytes.keccak
+    blockAccessListHash := some payload.balBytes.keccak
     slotNumber := some payload.slot_number.toWord }
 
 /-- The execution block a Gloas `NewPayloadRequest` stands for: the header with the requests as
 the list `Gloas.getExecutionRequestsList` (types `0x00`–`0x04`), the transactions through
 `payloadTx` (a legacy RLP-list transaction decoded, a typed envelope kept as bytes), no ommers,
 the withdrawals. -/
-def payloadToBlockGloas (req : Gloas.NewPayloadRequest P) : Block :=
-  { header := payloadHeaderGloas req.execution_payload req.parent_beacon_block_root
+def payloadToBlockG (req : Gloas.NewPayloadRequest P) : Block :=
+  { header := payloadHeaderG req.execution_payload req.parent_beacon_block_root
       (Gloas.getExecutionRequestsList req.execution_requests)
-    transactions := req.execution_payload.txBytes.map payloadTransaction
+    txs := req.execution_payload.txBytes.map payloadTx
     ommers := []
-    withdrawals := req.execution_payload.executionWithdrawals }
+    wds := req.execution_payload.executionWithdrawals }
 
 /-! ## The engine on a Gloas payload -/
 
 /-- Why the Gloas engine refused a payload: one of `engineVerdict`'s reasons, or the block access
 list the body run builds differs, as bytes, from the payload's. -/
-inductive EngineRejectGloas where
+inductive EngineRejectG where
   | engine (e : EngineReject)
   | blockAccessList
 
 /-- A check that fails with `e`. -/
-def guardExcept {ε : Type} (c : Bool) (e : ε) : Except ε Unit :=
+def guardE {ε : Type} (c : Bool) (e : ε) : Except ε Unit :=
   if c then .ok () else .error e
 
 /-- The configured block transition's verdict as an engine verdict. -/
@@ -162,32 +162,32 @@ transaction, block hash, versioned hashes, chain identity, a fork paired with Gl
 size, the block transition, the body run producing exactly the request list), then the body
 run's block access list equal to the payload's as bytes. On success, the chain after the
 payload's block. -/
-def engineVerdictGloas (cfg : ChainConfig) (exec : BlockChain) (req : Gloas.NewPayloadRequest P) :
-    Except EngineRejectGloas BlockChain := do
+def engineVerdictG (cfg : ChainConfig) (exec : BlockChain) (req : Gloas.NewPayloadRequest P) :
+    Except EngineRejectG BlockChain := do
   let payload := req.execution_payload
-  let blk := payloadToBlockGloas req
-  guardExcept (!payload.txBytes.any List.isEmpty) (.engine .emptyTransaction)
-  guardExcept (decide (blk.header.hash = payload.block_hash)) (.engine .blockHash)
+  let blk := payloadToBlockG req
+  guardE (!payload.txBytes.any List.isEmpty) (.engine .emptyTransaction)
+  guardE (decide (blk.header.hash = payload.block_hash)) (.engine .blockHash)
   let hashes ← (blobVersionedHashesOf payload.txBytes).mapError
     (fun e => .engine (.transactionDecode e))
-  guardExcept (decide (hashes = req.versioned_hashes.toArray.toList)) (.engine .versionedHashes)
+  guardE (decide (hashes = req.versioned_hashes.toArray.toList)) (.engine .versionedHashes)
   (cfg.checkChainId exec).mapError (fun e => .engine (.chainContext e))
   let f ← (cfg.forkAt blk.header.number blk.header.timestamp).mapError
     (fun e => .engine (.forkLookup e))
-  guardExcept (decide (f.consensusFork? = some .gloas)) (.engine (.unpairedFork f))
-  (checkBlockRlpSize f.ruleSet.block blk.toRlpItem.toBytes.length).mapError
+  guardE (decide (f.consensusFork? = some .gloas)) (.engine (.unpairedFork f))
+  (checkBlockRlpSize f.ruleSet.block blk.toBLT.toBytes.length).mapError
     (fun e => .engine (.blockSize e))
   let post ← (transitionVerdict (stateTransitionScheduledE cfg f exec blk)).mapError .engine
-  let out ← (applyBody (initBenv f exec blk.header) blk.transactions blk.ommers blk.withdrawals).mapError
+  let out ← (applyBody (initBenv f exec blk.header) blk.txs blk.ommers blk.wds).mapError
     (fun e => .engine (.body e))
-  guardExcept (decide (out.2.requests = Gloas.getExecutionRequestsList req.execution_requests))
+  guardE (decide (out.2.requests = Gloas.getExecutionRequestsList req.execution_requests))
     (.engine .requestsMismatch)
-  guardExcept (decide (payload.blockAccessListBytes = out.2.blockAccessList.encode)) .blockAccessList
+  guardE (decide (payload.balBytes = out.2.blockAccessList.encode)) .blockAccessList
   pure post
 
 /-- The engine U6's envelope check takes: the Gloas verdict as a `Bool`. -/
 def envelopeEngine (cfg : ChainConfig) (exec : BlockChain) : Gloas.NewPayloadRequest P → Bool :=
-  fun req => (engineVerdictGloas cfg exec req).isOk
+  fun req => (engineVerdictG cfg exec req).isOk
 
 /-! ## The envelope arm -/
 
@@ -199,14 +199,14 @@ instance {state : Gloas.BeaconState P} {signedEnvelope : Gloas.SignedExecutionPa
 engine `envelopeEngine cfg exec`; then the payload's withdrawals equal to
 `payload_expected_withdrawals` as lists; then the engine once more on the same request, for
 the chain after the payload. Returns the request and that chain. -/
-def verifyEnvelopeGloas (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (state : Gloas.BeaconState P)
+def verifyEnvelopeG (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (state : Gloas.BeaconState P)
     (exec : BlockChain) (signedEnvelope : Gloas.SignedExecutionPayloadEnvelope P) :
-    Fallible (Gloas.NewPayloadRequest P × BlockChain) := do
-  Gloas.verifyExecutionPayloadEnvelopeWithBls bls ccfg (envelopeEngine cfg exec) state signedEnvelope
+    M (Gloas.NewPayloadRequest P × BlockChain) := do
+  Gloas.verifyExecutionPayloadEnvelopeB bls ccfg (envelopeEngine cfg exec) state signedEnvelope
   require (decide (Gloas.WithdrawalsMatchExpected state signedEnvelope))
     "joint step: envelope withdrawals == payload_expected_withdrawals (lists)"
   let req ← Gloas.envelopeNewPayloadRequest state signedEnvelope
-  match engineVerdictGloas cfg exec req with
+  match engineVerdictG cfg exec req with
   | .ok post => pure (req, post)
   | .error _ => throw (.assert "joint step: execution engine")
 
@@ -215,12 +215,12 @@ state the block arm leaves) takes the signed envelope `signedEnvelope`, checked 
 `verifyEnvelopeG` against the state and the built-upon chain, and records it as `.delivered`.
 The beacon state and `exec` do not move. A `.landed` or `.delivered` parent is refused: an
 envelope is only ever for the block just added. -/
-def deliver (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (s : GloasJointState P)
-    (signedEnvelope : Gloas.SignedExecutionPayloadEnvelope P) : Fallible (GloasJointState P) :=
+def deliver (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (s : GJointState P)
+    (signedEnvelope : Gloas.SignedExecutionPayloadEnvelope P) : M (GJointState P) :=
   match s with
   | .pre _ => throw (.assert "joint step: an envelope for a pre-Gloas state")
   | .gloas beacon exec .withheld => do
-    let (req, post) ← verifyEnvelopeGloas cfg ccfg bls beacon exec signedEnvelope
+    let (req, post) ← verifyEnvelopeG cfg ccfg bls beacon exec signedEnvelope
     pure (.gloas beacon exec (.delivered signedEnvelope req post))
   | .gloas _ _ _ =>
     throw (.assert "joint step: an envelope for a block whose payload is not withheld")
@@ -291,22 +291,22 @@ def settleParent (parent : ParentPayload P) (exec : BlockChain) (full : Bool)
 /-! ## The Gloas block arm (parametric in the slots and block functions) -/
 
 /-- The shape of Gloas `process_slots(state, slot)` (U5: `Gloas.processSlots`). -/
-abbrev GloasSlotsFunction (P : Preset) := Gloas.BeaconState P → Slot → Fallible (Gloas.BeaconState P)
+abbrev GloasSlotsFn (P : Preset) := Gloas.BeaconState P → Slot → M (Gloas.BeaconState P)
 
 /-- The shape of the rest of Gloas `state_transition` after `process_slots`: the block signature,
 `process_block` and the state-root check (U5: `Gloas.applySignedBlockWith`). -/
-abbrev GloasBlockFunction (P : Preset) :=
-  Gloas.BeaconState P → Gloas.SignedBeaconBlock P → Fallible (Gloas.BeaconState P)
+abbrev GloasBlockFn (P : Preset) :=
+  Gloas.BeaconState P → Gloas.SignedBeaconBlock P → M (Gloas.BeaconState P)
 
 /-- The Gloas→Gloas block arm: `processSlots` to the block's slot (`st0`), the execution-side
 settlement keyed on the FULL test at `st0`, then `blockTransition st0 b`, the rest of
 `state_transition` (the block signature, `process_block`, which settles the parent on the beacon
 side, and the state root). Parametric in both: `gloasStep` instantiates them with U5's
 `Gloas.processSlots` and `gloasBlockTransition`, `crossingStep` with `crossingSlots`. -/
-def gloasBlockArm (processSlots : GloasSlotsFunction P)
-    (blockTransition : GloasBlockFunction P)
+def gloasBlockArm (processSlots : GloasSlotsFn P)
+    (blockTransition : GloasBlockFn P)
     (beacon : Gloas.BeaconState P) (exec : BlockChain) (parent : ParentPayload P)
-    (b : Gloas.SignedBeaconBlock P) : Fallible (Gloas.BeaconState P × BlockChain × ParentSettle P) := do
+    (b : Gloas.SignedBeaconBlock P) : M (Gloas.BeaconState P × BlockChain × ParentSettle P) := do
   let st0 ← processSlots beacon b.message.slot
   let settled ← (settleParent parent exec (parentFull st0 b.message)
     b.message.body.parent_execution_requests).mapError fun r => .assert r.site
@@ -315,40 +315,40 @@ def gloasBlockArm (processSlots : GloasSlotsFunction P)
 
 /-- The end of a Gloas step: the block's own envelope if one is given (`deliver`, always on the
 `.withheld` state the block arm leaves), else the block's payload stays `.withheld`. -/
-def gloasDeliverOptional (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (post : Gloas.BeaconState P)
+def gloasDeliverOpt (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (post : Gloas.BeaconState P)
     (exec : BlockChain) (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) :
-    Fallible (GloasJointState P) :=
+    M (GJointState P) :=
   match env? with
   | none => pure (.gloas post exec .withheld)
   | some e => deliver cfg ccfg bls (.gloas post exec .withheld) e
 
 /-- The Gloas→Gloas step: the block arm, then the block's own envelope if one is given
 (`deliver`), else the block's payload is `.withheld`. -/
-def gloasStepWith (processSlots : GloasSlotsFunction P)
-    (blockTransition : GloasBlockFunction P)
+def gloasStepWith (processSlots : GloasSlotsFn P)
+    (blockTransition : GloasBlockFn P)
     (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (beacon : Gloas.BeaconState P)
     (exec : BlockChain) (parent : ParentPayload P) (b : Gloas.SignedBeaconBlock P)
-    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : Fallible (GloasJointState P) := do
+    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : M (GJointState P) := do
   let r ← gloasBlockArm processSlots blockTransition beacon exec parent b
-  gloasDeliverOptional cfg ccfg bls r.1 r.2.1 env?
+  gloasDeliverOpt cfg ccfg bls r.1 r.2.1 env?
 
 /-! ## The block arm instantiated with U5 -/
 
 /-- The Gloas processing context of a joint step: the configuration and the BLS switch (the
 Gloas `process_block` does not read the mocked `executionValid`). -/
-def gloasContext (ccfg : Config) (bls : Bool) : Context := { config := ccfg, blsActive := bls }
+def gloasCtx (ccfg : Config) (bls : Bool) : Ctx := { cfg := ccfg, blsActive := bls }
 
 /-- The rest of Gloas `state_transition` after `process_slots` (U5's `applySignedBlockWith` over
 the Gloas `process_block`): the block signature, `process_block` and the state root.
 `Gloas.stateTransition_eq` shows `process_slots` followed by this is `Gloas.stateTransition`. -/
-def gloasBlockTransition (ctx : Context) : GloasBlockFunction P :=
+def gloasBlockTransition (ctx : Ctx) : GloasBlockFn P :=
   fun st b => Gloas.applySignedBlockWith (Gloas.processBlock ctx) ctx.blsActive st b
 
 /-- The Gloas→Gloas step with U5's `Gloas.processSlots` and post-slots transition. -/
 def gloasStep (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (beacon : Gloas.BeaconState P)
     (exec : BlockChain) (parent : ParentPayload P) (b : Gloas.SignedBeaconBlock P)
-    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : Fallible (GloasJointState P) :=
-  gloasStepWith (Gloas.processSlots (gloasContext ccfg bls)) (gloasBlockTransition (gloasContext ccfg bls))
+    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : M (GJointState P) :=
+  gloasStepWith (Gloas.processSlots (gloasCtx ccfg bls)) (gloasBlockTransition (gloasCtx ccfg bls))
     cfg ccfg bls beacon exec parent b env?
 
 /-! ## The Fulu → Gloas crossing (design.md §2.4) -/
@@ -360,7 +360,7 @@ def gloasForkSlot (ccfg : Config) : Nat := ccfg.GLOAS_FORK_EPOCH * P.SLOTS_PER_E
 /-- The slots function of the crossing's block arm: none when the block is at the upgraded
 state's slot (the fork slot: `Gloas.processBlockAtSlot`, as the generators' `do_fork` applies
 the block), else Gloas `process_slots`. -/
-def crossingSlots (ctx : Context) : GloasSlotsFunction P := fun st slot =>
+def crossingSlots (ctx : Ctx) : GloasSlotsFn P := fun st slot =>
   if slot == st.slot then pure st else Gloas.processSlots ctx st slot
 
 /-- The crossing step: a Fulu joint state strictly before the Gloas fork slot and a Gloas block
@@ -371,15 +371,15 @@ Fulu block). The settlement must be FULL with empty requests (design.md §2.4, d
 an EMPTY settlement is refused here by name. -/
 def crossingStep (cfg : ChainConfig) (ccfg : Config) (bls : Bool)
     (beacon : BeaconState P .fulu) (exec : BlockChain) (b : Gloas.SignedBeaconBlock P)
-    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : Fallible (GloasJointState P) := do
+    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : M (GJointState P) := do
   require (decide (beacon.slot.toNat < gloasForkSlot (P := P) ccfg ∧
       gloasForkSlot (P := P) ccfg ≤ b.message.slot.toNat))
     "joint step: a Gloas block crossing from a Fulu state"
-  let ctx := gloasContext ccfg bls
+  let ctx := gloasCtx ccfg bls
   let upgraded ← Gloas.crossFromFulu ctx beacon
   let r ← gloasBlockArm (crossingSlots ctx) (gloasBlockTransition ctx) upgraded exec .landed b
   match r.2.2 with
-  | .landed => gloasDeliverOptional cfg ccfg bls r.1 r.2.1 env?
+  | .landed => gloasDeliverOpt cfg ccfg bls r.1 r.2.1 env?
   | _ => throw (.assert "joint step: the first Gloas block settles its landed parent FULL")
 
 /-! ## The joint step -/
@@ -392,8 +392,8 @@ def crossingStep (cfg : ChainConfig) (ccfg : Config) (bls : Bool)
 * a Gloas state and block: the Gloas arm (`gloasStep`);
 * every other pairing is refused by name (Gloas pairs with Amsterdam only; a pre-Gloas block on a
   Gloas state, or a Gloas block on an Electra state, fails closed). -/
-def jointStepGloas (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (s : GloasJointState P) (b : GloasBlock P)
-    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : Fallible (GloasJointState P) :=
+def jointStepG (cfg : ChainConfig) (ccfg : Config) (bls : Bool) (s : GJointState P) (b : GBlock P)
+    (env? : Option (Gloas.SignedExecutionPayloadEnvelope P)) : M (GJointState P) :=
   match s, b with
   | .pre s, .pre b => do
     require env?.isNone "joint step: an envelope with a pre-Gloas block"

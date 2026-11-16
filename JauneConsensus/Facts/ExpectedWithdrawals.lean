@@ -19,7 +19,7 @@ section ForInInv
 
 variable {α β ε : Type} {Inv : β → Prop}
 
-theorem list_forIn_ok_invariant {xs : List α} {init : β}
+theorem list_forIn_ok_inv {xs : List α} {init : β}
     {step : α → β → Except ε (ForInStep β)}
     (h0 : Inv init)
     (hy : ∀ x ∈ xs, ∀ b, Inv b → ∀ b', step x b = .ok (.yield b') → Inv b')
@@ -55,7 +55,7 @@ theorem list_forIn_ok_invariant {xs : List α} {init : β}
           fun y hmem b hb b'' hs => hd y (List.mem_cons_of_mem x hmem) b hb b'' hs
         exact ih hb' hy' hd' hEq
 
-theorem array_forIn_ok_invariant {α β ε : Type} {Inv : β → Prop}
+theorem array_forIn_ok_inv {α β ε : Type} {Inv : β → Prop}
     {xs : Array α} {init : β} {step : α → β → Except ε (ForInStep β)}
     (h0 : Inv init)
     (hy : ∀ x ∈ xs, ∀ b, Inv b → ∀ b', step x b = .ok (.yield b') → Inv b')
@@ -70,7 +70,7 @@ theorem array_forIn_ok_invariant {α β ε : Type} {Inv : β → Prop}
   have hd' : ∀ x ∈ xs.toList, ∀ b, Inv b → ∀ b', step x b = .ok (.done b') → Inv b' := by
     intro x hx b hb b' hs
     exact hd x (by simpa using hx) b hb b' hs
-  exact list_forIn_ok_invariant h0 hy' hd' h'
+  exact list_forIn_ok_inv h0 hy' hd' h'
 
 end ForInInv
 
@@ -87,7 +87,7 @@ each `done` step preserves it. A successful run therefore ends in the
 invariant for some consumed prefix, which is a sublist of the input.
 Loop 1 of `getExpectedWithdrawals` needs the position: an emitted withdrawal
 corresponds to the pending entry at the freshly consumed index. -/
-theorem list_forIn_ok_prefix_invariant {xs : List α} {init : β}
+theorem list_forIn_ok_pref_inv {xs : List α} {init : β}
     {step : α → β → Except ε (ForInStep β)}
     {PInv : List α → β → Prop}
     (h0 : PInv [] init)
@@ -132,7 +132,7 @@ theorem list_forIn_ok_prefix_invariant {xs : List α} {init : β}
           exact ih b' ⟨pref ++ [x], hlpref', hInv'⟩ htodo
   exact aux xs init ⟨[], by simp, h0⟩ h
 
-theorem array_forIn_ok_prefix_invariant {xs : Array α} {init : β}
+theorem array_forIn_ok_pref_inv {xs : Array α} {init : β}
     {step : α → β → Except ε (ForInStep β)}
     {PInv : List α → β → Prop}
     (h0 : PInv [] init)
@@ -145,7 +145,7 @@ theorem array_forIn_ok_prefix_invariant {xs : Array α} {init : β}
   have h' : ForIn.forIn xs.toList init step = .ok final := by
     rw [Array.forIn_toList]
     exact h
-  exact list_forIn_ok_prefix_invariant h0 hy hd h'
+  exact list_forIn_ok_pref_inv h0 hy hd h'
 
 end ForInPref
 
@@ -153,7 +153,7 @@ end ForInPref
 
 section Helpers
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-- `getAt xs i site = .ok x` iff `xs[i]? = some x`. -/
 theorem getAt_ok_iff {α : Type} {xs : Array α} {i : Nat} {site : String} {x : α} :
@@ -248,7 +248,7 @@ end Helpers
 
 section Recipient
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-- Every withdrawal in `ws` is paid to the credential address of its validator,
 read in `state`. -/
@@ -279,7 +279,7 @@ theorem getExpected_recipient (state : BeaconState P f)
         simp at hw
       have hInit' : (fun s : WithdrawalIndex × Array Withdrawal × Nat =>
           AllRecipientOk state s.2.1) (state.next_withdrawal_index, #[], 0) := hInit
-      refine array_forIn_ok_invariant (Inv := fun s : WithdrawalIndex × Array Withdrawal × Nat =>
+      refine array_forIn_ok_inv (Inv := fun s : WithdrawalIndex × Array Withdrawal × Nat =>
         AllRecipientOk state s.2.1) hInit' ?hy ?hd hForIn1
       · intro w hw b hb b' hstep
         by_cases hBreak : (epoch < w.withdrawable_epoch ∨
@@ -359,7 +359,7 @@ theorem getExpected_recipient (state : BeaconState P f)
       have hInit2 : (fun s : WithdrawalIndex × ValidatorIndex × Array Withdrawal =>
           AllRecipientOk state s.2.2) (s1.1, state.next_withdrawal_validator_index, s1.2.1) :=
         hWs1Ok
-      refine list_forIn_ok_invariant (Inv := fun s : WithdrawalIndex × ValidatorIndex × Array Withdrawal =>
+      refine list_forIn_ok_inv (Inv := fun s : WithdrawalIndex × ValidatorIndex × Array Withdrawal =>
         AllRecipientOk state s.2.2) hInit2 ?hy2 ?hd2 hForIn2
       · intro x hx b hb2 b' hstep
         obtain ⟨validator, hval, h1⟩ := bind_ok_elim hstep
@@ -544,7 +544,7 @@ theorem getExpected_recipient (state : BeaconState P f)
           AllRecipientOk state s.2.2)
           (state.next_withdrawal_index, state.next_withdrawal_validator_index, #[]) :=
         hWs1Ok
-      refine list_forIn_ok_invariant (Inv := fun s : WithdrawalIndex × ValidatorIndex × Array Withdrawal =>
+      refine list_forIn_ok_inv (Inv := fun s : WithdrawalIndex × ValidatorIndex × Array Withdrawal =>
         AllRecipientOk state s.2.2) hInit2 ?hyF ?hdF hForIn2
       · intro x hx b hb2 b' hstep
         obtain ⟨validator, hval, h1⟩ := bind_ok_elim hstep
@@ -723,12 +723,12 @@ end Recipient
 
 section Loop1
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-- `ws = ws1 ++ ws2` with `ws1` from loop 1, each entry bounded by its pending
 amount. `chosen` witnesses distinct pending positions in order. `pending` is
 the loop-1 input array: the pending list at Electra, `#[]` before. -/
-def FirstLoopWitness (ws1 : Array Withdrawal)
+def Loop1Witness (ws1 : Array Withdrawal)
     (pending : Array PendingPartialWithdrawal) (processed : Nat) : Prop :=
   ws1.size ≤ processed ∧
   processed ≤ pending.size ∧
@@ -744,7 +744,7 @@ def FirstLoopWitness (ws1 : Array Withdrawal)
 with the loop balance read `sBalU`, the withdrawn sum `wdrawnU`, and the
 result `balU`. The withdrawn sum is existentially hidden (`withdrawnFor` is
 private to `Block.lean`); the state read and the floor inputs are explicit. -/
-def FirstLoopEntryOk (state : BeaconState P f) (minAct : U64)
+def Loop1EntryOk (state : BeaconState P f) (minAct : U64)
     (w : Withdrawal) (p : PendingPartialWithdrawal) : Prop :=
   w.validator_index = p.validator_index ∧
   w.amount.toNat ≤ p.amount.toNat ∧
@@ -759,7 +759,7 @@ def FirstLoopEntryOk (state : BeaconState P f) (minAct : U64)
 `wdrawnU` (the withdrawn sum at emission, existentially hidden since
 `withdrawnFor` is private to `Block.lean`) to get `balU`, and
 `minAct ≤ balU.toNat - w.amount.toNat`. -/
-def FirstLoopFloor (state : BeaconState P f) (ws1 : Array Withdrawal) (minAct : Nat) : Prop :=
+def Loop1Floor (state : BeaconState P f) (ws1 : Array Withdrawal) (minAct : Nat) : Prop :=
   ∀ w ∈ ws1.toList, ∃ sBalU wdrawnU balU : U64,
     state.balances.get w.validator_index.toNat "get_expected_withdrawals" = .ok sBalU ∧
     U64.sub? sBalU wdrawnU "get_expected_withdrawals" = .ok balU ∧
@@ -768,7 +768,7 @@ def FirstLoopFloor (state : BeaconState P f) (ws1 : Array Withdrawal) (minAct : 
 /-- Loop-1 emissions package: the split, the shape witness, and the floor
 inputs. `getExpected_loop1_shape` and `getExpected_loop1_floor` are
 corollaries; the loop-1 invariant is established once, here. -/
-theorem firstLoop_emissions (state : BeaconState P f)
+theorem loop1_emissions (state : BeaconState P f)
     (ws : Array Withdrawal) (processed : Nat)
     (h : getExpectedWithdrawals state = .ok (ws, processed)) :
     ∃ (ws1 ws2 : Array Withdrawal) (pending : Array PendingPartialWithdrawal),
@@ -776,8 +776,8 @@ theorem firstLoop_emissions (state : BeaconState P f)
       (if he : f.atLeast .electra = true then
         ∃ l, state.pendingPartialWithdrawals = .ok l ∧ pending = l.toArray
         else pending = #[]) ∧
-      FirstLoopWitness ws1 pending processed ∧
-      FirstLoopFloor state ws1 P.MIN_ACTIVATION_BALANCE := by
+      Loop1Witness ws1 pending processed ∧
+      Loop1Floor state ws1 P.MIN_ACTIVATION_BALANCE := by
   unfold getExpectedWithdrawals at h
   dsimp at h
   obtain ⟨epoch, hepoch, h1⟩ := bind_ok_elim h
@@ -798,15 +798,15 @@ theorem firstLoop_emissions (state : BeaconState P f)
           chosen.length = s1.2.1.toList.length ∧
           (∀ (i : Nat) (w : Withdrawal) (p : PendingPartialWithdrawal),
             s1.2.1.toList[i]? = some w → chosen[i]? = some p →
-            FirstLoopEntryOk state minAct w p) := by
-      refine array_forIn_ok_prefix_invariant (PInv := fun pref b =>
+            Loop1EntryOk state minAct w p) := by
+      refine array_forIn_ok_pref_inv (PInv := fun pref b =>
         b.2.2 = pref.length ∧
         ∃ chosen : List PendingPartialWithdrawal,
           chosen.Sublist pref ∧
           chosen.length = b.2.1.toList.length ∧
           ∀ (i : Nat) (w : Withdrawal) (p : PendingPartialWithdrawal),
             b.2.1.toList[i]? = some w → chosen[i]? = some p →
-            FirstLoopEntryOk state minAct w p) ?h0 ?hy ?hd hForIn1
+            Loop1EntryOk state minAct w p) ?h0 ?hy ?hd hForIn1
       · refine ⟨rfl, [], List.Sublist.refl _, ?_, ?_⟩
         · simp
         · intro i w p h1 h2
@@ -919,7 +919,7 @@ theorem firstLoop_emissions (state : BeaconState P f)
       simpa using List.Sublist.append (List.Sublist.refl pref) List.Sublist.slnil
     have hLoop2 : ∃ rest : List Withdrawal,
         s2.2.2.toList = s1.2.1.toList ++ rest := by
-      refine list_forIn_ok_invariant (Inv := fun s : WithdrawalIndex × ValidatorIndex × Array Withdrawal =>
+      refine list_forIn_ok_inv (Inv := fun s : WithdrawalIndex × ValidatorIndex × Array Withdrawal =>
         ∃ rest : List Withdrawal, s.2.2.toList = s1.2.1.toList ++ rest)
         ⟨[], by simp⟩ ?hy2 ?hd2 hForIn2
       · intro x hx b hb2 b' hstep
@@ -1110,7 +1110,7 @@ theorem firstLoop_emissions (state : BeaconState P f)
     · intro w hmem
       simp at hmem
 
-theorem getExpected_firstLoop_shape (state : BeaconState P f)
+theorem getExpected_loop1_shape (state : BeaconState P f)
     (ws : Array Withdrawal) (processed : Nat)
     (h : getExpectedWithdrawals state = .ok (ws, processed)) :
     ∃ (ws1 ws2 : Array Withdrawal) (pending : Array PendingPartialWithdrawal),
@@ -1118,8 +1118,8 @@ theorem getExpected_firstLoop_shape (state : BeaconState P f)
       (if he : f.atLeast .electra = true then
         ∃ l, state.pendingPartialWithdrawals = .ok l ∧ pending = l.toArray
         else pending = #[]) ∧
-      FirstLoopWitness ws1 pending processed := by
-  obtain ⟨ws1, ws2, pending, hsplit, hpend, hwit, _hf⟩ := firstLoop_emissions state ws processed h
+      Loop1Witness ws1 pending processed := by
+  obtain ⟨ws1, ws2, pending, hsplit, hpend, hwit, _hf⟩ := loop1_emissions state ws processed h
   exact ⟨ws1, ws2, pending, hsplit, hpend, hwit⟩
 
 end Loop1
@@ -1128,16 +1128,16 @@ end Loop1
 
 section Floor
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
-theorem getExpected_firstLoop_floor (state : BeaconState P f)
+theorem getExpected_loop1_floor (state : BeaconState P f)
     (ws : Array Withdrawal) (processed : Nat)
     (h : getExpectedWithdrawals state = .ok (ws, processed)) :
     ∃ ws1 : Array Withdrawal,
       ws1.toList.Sublist ws.toList ∧
-        FirstLoopFloor state ws1 P.MIN_ACTIVATION_BALANCE := by
+        Loop1Floor state ws1 P.MIN_ACTIVATION_BALANCE := by
   obtain ⟨ws1, ws2, pending, hsplit, hpend, hwit, hfloor⟩ :=
-    firstLoop_emissions state ws processed h
+    loop1_emissions state ws processed h
   refine ⟨ws1, ?_, hfloor⟩
   rw [hsplit]
   simpa using List.Sublist.append (List.Sublist.refl _) List.Sublist.slnil
@@ -1149,7 +1149,7 @@ end Floor
 
 section Bounds
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 theorem getExpected_processed_le (state : BeaconState P f)
     (ws : Array Withdrawal) (processed : Nat)
@@ -1160,7 +1160,7 @@ theorem getExpected_processed_le (state : BeaconState P f)
         else pending = #[]) ∧
       processed ≤ pending.size := by
   obtain ⟨ws1, ws2, pending, hsplit, hpend, hwit, _hf⟩ :=
-    firstLoop_emissions state ws processed h
+    loop1_emissions state ws processed h
   exact ⟨pending, hpend, hwit.2.1⟩
 
 theorem slots_per_epoch_ge_two_mainnet : 2 ≤ Preset.mainnet.SLOTS_PER_EPOCH := by
@@ -1169,11 +1169,11 @@ theorem slots_per_epoch_ge_two_mainnet : 2 ≤ Preset.mainnet.SLOTS_PER_EPOCH :=
 theorem slots_per_epoch_ge_two_minimal : 2 ≤ Preset.minimal.SLOTS_PER_EPOCH := by
   decide
 
-theorem minActivationBalance_le_maxEffectiveBalance_mainnet :
+theorem minAct_le_maxEb_mainnet :
     Preset.mainnet.MIN_ACTIVATION_BALANCE ≤ Preset.mainnet.MAX_EFFECTIVE_BALANCE_ELECTRA := by
   decide
 
-theorem minActivationBalance_le_maxEffectiveBalance_minimal :
+theorem minAct_le_maxEb_minimal :
     Preset.minimal.MIN_ACTIVATION_BALANCE ≤ Preset.minimal.MAX_EFFECTIVE_BALANCE_ELECTRA := by
   decide
 

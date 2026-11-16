@@ -24,9 +24,9 @@ Consequences for the joint model:
 
 namespace JauneConsensus.Facts.Gloas
 
-open Jaune JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas.Invariant
+open Jaune JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas.Inv
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-- The execution payload header `process_execution_payload` writes for `payload`. -/
 def ExecutionPayload.toHeader (payload : ExecutionPayload P) : ExecutionPayloadHeader P :=
@@ -41,12 +41,12 @@ def ExecutionPayload.toHeader (payload : ExecutionPayload P) : ExecutionPayloadH
     excess_blob_gas := payload.excess_blob_gas }
 
 /-- `latest_execution_payload_header` is unchanged. -/
-def HeaderEq (s s' : BeaconState P f) : Prop :=
+def HdrEq (s s' : BeaconState P f) : Prop :=
   s'.latest_execution_payload_header = s.latest_execution_payload_header
 
 /-- `HdrEq` as a step relation. -/
-def headerEq : StepRelation (BeaconState P f) where
-  relation := HeaderEq
+def hdrEq : StepRel (BeaconState P f) where
+  R := HdrEq
   refl _ := rfl
   trans h₁ h₂ := Eq.trans h₂ h₁
 
@@ -56,543 +56,543 @@ syntax "hdr_tail" : tactic
 section HdrGen
 
 local macro_rules
-  | `(tactic| gstep_close) => `(tactic| exact (show HeaderEq _ _ from rfl))
+  | `(tactic| gstep_close) => `(tactic| exact (show HdrEq _ _ from rfl))
 
-theorem increaseBalance_header (s : BeaconState P f) (i : ValidatorIndex) (d : Gwei) :
-    Ok (JauneConsensus.increaseBalance s i d) (headerEq.relation s) := by
+theorem increaseBalance_hdr (s : BeaconState P f) (i : ValidatorIndex) (d : Gwei) :
+    Ok (JauneConsensus.increaseBalance s i d) (hdrEq.R s) := by
   unfold JauneConsensus.increaseBalance; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (increaseBalance_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (increaseBalance_hdr _ _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (increaseBalance_header _ _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (increaseBalance_header _ _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (increaseBalance_hdr _ _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (increaseBalance_hdr _ _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem decreaseBalance_header (s : BeaconState P f) (i : ValidatorIndex) (d : Gwei) :
-    Ok (JauneConsensus.decreaseBalance s i d) (headerEq.relation s) := by
+theorem decreaseBalance_hdr (s : BeaconState P f) (i : ValidatorIndex) (d : Gwei) :
+    Ok (JauneConsensus.decreaseBalance s i d) (hdrEq.R s) := by
   unfold JauneConsensus.decreaseBalance; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (decreaseBalance_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (decreaseBalance_hdr _ _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (decreaseBalance_header _ _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (decreaseBalance_header _ _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (decreaseBalance_hdr _ _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (decreaseBalance_hdr _ _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem setDepositRequestsStartIndex_header (s : BeaconState P f) (v : U64) :
-    Ok (JauneConsensus.BeaconState.setDepositRequestsStartIndex s v) (headerEq.relation s) := by
+theorem setDepositRequestsStartIndex_hdr (s : BeaconState P f) (v : U64) :
+    Ok (JauneConsensus.BeaconState.setDepositRequestsStartIndex s v) (hdrEq.R s) := by
   unfold JauneConsensus.BeaconState.setDepositRequestsStartIndex; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (setDepositRequestsStartIndex_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (setDepositRequestsStartIndex_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (setDepositRequestsStartIndex_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (setDepositRequestsStartIndex_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (setDepositRequestsStartIndex_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (setDepositRequestsStartIndex_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem setDepositBalanceToConsume_header (s : BeaconState P f) (v : Gwei) :
-    Ok (JauneConsensus.BeaconState.setDepositBalanceToConsume s v) (headerEq.relation s) := by
+theorem setDepositBalanceToConsume_hdr (s : BeaconState P f) (v : Gwei) :
+    Ok (JauneConsensus.BeaconState.setDepositBalanceToConsume s v) (hdrEq.R s) := by
   unfold JauneConsensus.BeaconState.setDepositBalanceToConsume; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (setDepositBalanceToConsume_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (setDepositBalanceToConsume_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (setDepositBalanceToConsume_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (setDepositBalanceToConsume_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (setDepositBalanceToConsume_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (setDepositBalanceToConsume_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem setExitBalanceToConsume_header (s : BeaconState P f) (v : Gwei) :
-    Ok (JauneConsensus.BeaconState.setExitBalanceToConsume s v) (headerEq.relation s) := by
+theorem setExitBalanceToConsume_hdr (s : BeaconState P f) (v : Gwei) :
+    Ok (JauneConsensus.BeaconState.setExitBalanceToConsume s v) (hdrEq.R s) := by
   unfold JauneConsensus.BeaconState.setExitBalanceToConsume; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (setExitBalanceToConsume_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (setExitBalanceToConsume_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (setExitBalanceToConsume_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (setExitBalanceToConsume_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (setExitBalanceToConsume_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (setExitBalanceToConsume_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem setEarliestExitEpoch_header (s : BeaconState P f) (v : Epoch) :
-    Ok (JauneConsensus.BeaconState.setEarliestExitEpoch s v) (headerEq.relation s) := by
+theorem setEarliestExitEpoch_hdr (s : BeaconState P f) (v : Epoch) :
+    Ok (JauneConsensus.BeaconState.setEarliestExitEpoch s v) (hdrEq.R s) := by
   unfold JauneConsensus.BeaconState.setEarliestExitEpoch; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (setEarliestExitEpoch_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (setEarliestExitEpoch_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (setEarliestExitEpoch_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (setEarliestExitEpoch_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (setEarliestExitEpoch_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (setEarliestExitEpoch_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem setConsolidationBalanceToConsume_header (s : BeaconState P f) (v : Gwei) :
-    Ok (JauneConsensus.BeaconState.setConsolidationBalanceToConsume s v) (headerEq.relation s) := by
+theorem setConsolidationBalanceToConsume_hdr (s : BeaconState P f) (v : Gwei) :
+    Ok (JauneConsensus.BeaconState.setConsolidationBalanceToConsume s v) (hdrEq.R s) := by
   unfold JauneConsensus.BeaconState.setConsolidationBalanceToConsume; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (setConsolidationBalanceToConsume_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (setConsolidationBalanceToConsume_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (setConsolidationBalanceToConsume_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (setConsolidationBalanceToConsume_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (setConsolidationBalanceToConsume_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (setConsolidationBalanceToConsume_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem setEarliestConsolidationEpoch_header (s : BeaconState P f) (v : Epoch) :
-    Ok (JauneConsensus.BeaconState.setEarliestConsolidationEpoch s v) (headerEq.relation s) := by
+theorem setEarliestConsolidationEpoch_hdr (s : BeaconState P f) (v : Epoch) :
+    Ok (JauneConsensus.BeaconState.setEarliestConsolidationEpoch s v) (hdrEq.R s) := by
   unfold JauneConsensus.BeaconState.setEarliestConsolidationEpoch; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (setEarliestConsolidationEpoch_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (setEarliestConsolidationEpoch_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (setEarliestConsolidationEpoch_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (setEarliestConsolidationEpoch_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (setEarliestConsolidationEpoch_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (setEarliestConsolidationEpoch_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem setPendingDeposits_header (s : BeaconState P f) (v : SszList PendingDeposit P.PENDING_DEPOSITS_LIMIT) :
-    Ok (JauneConsensus.BeaconState.setPendingDeposits s v) (headerEq.relation s) := by
+theorem setPendingDeposits_hdr (s : BeaconState P f) (v : SszList PendingDeposit P.PENDING_DEPOSITS_LIMIT) :
+    Ok (JauneConsensus.BeaconState.setPendingDeposits s v) (hdrEq.R s) := by
   unfold JauneConsensus.BeaconState.setPendingDeposits; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (setPendingDeposits_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (setPendingDeposits_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (setPendingDeposits_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (setPendingDeposits_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (setPendingDeposits_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (setPendingDeposits_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem setPendingPartialWithdrawals_header (s : BeaconState P f) (v : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT) :
-    Ok (JauneConsensus.BeaconState.setPendingPartialWithdrawals s v) (headerEq.relation s) := by
+theorem setPendingPartialWithdrawals_hdr (s : BeaconState P f) (v : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT) :
+    Ok (JauneConsensus.BeaconState.setPendingPartialWithdrawals s v) (hdrEq.R s) := by
   unfold JauneConsensus.BeaconState.setPendingPartialWithdrawals; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (setPendingPartialWithdrawals_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (setPendingPartialWithdrawals_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (setPendingPartialWithdrawals_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (setPendingPartialWithdrawals_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (setPendingPartialWithdrawals_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (setPendingPartialWithdrawals_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem setPendingConsolidations_header (s : BeaconState P f) (v : SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT) :
-    Ok (JauneConsensus.BeaconState.setPendingConsolidations s v) (headerEq.relation s) := by
+theorem setPendingConsolidations_hdr (s : BeaconState P f) (v : SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT) :
+    Ok (JauneConsensus.BeaconState.setPendingConsolidations s v) (hdrEq.R s) := by
   unfold JauneConsensus.BeaconState.setPendingConsolidations; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (setPendingConsolidations_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (setPendingConsolidations_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (setPendingConsolidations_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (setPendingConsolidations_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (setPendingConsolidations_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (setPendingConsolidations_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem setProposerLookahead_header (s : BeaconState P f) (v : SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)) :
-    Ok (JauneConsensus.BeaconState.setProposerLookahead s v) (headerEq.relation s) := by
+theorem setProposerLookahead_hdr (s : BeaconState P f) (v : SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)) :
+    Ok (JauneConsensus.BeaconState.setProposerLookahead s v) (hdrEq.R s) := by
   unfold JauneConsensus.BeaconState.setProposerLookahead; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (setProposerLookahead_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (setProposerLookahead_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (setProposerLookahead_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (setProposerLookahead_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (setProposerLookahead_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (setProposerLookahead_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem computeExitEpochAndUpdateChurn_header (cfg : Config) (s : BeaconState P f) (b : Gwei) :
-    Ok (JauneConsensus.computeExitEpochAndUpdateChurn cfg s b) (fun p => headerEq.relation s p.1) := by
+theorem computeExitEpochAndUpdateChurn_hdr (cfg : Config) (s : BeaconState P f) (b : Gwei) :
+    Ok (JauneConsensus.computeExitEpochAndUpdateChurn cfg s b) (fun p => hdrEq.R s p.1) := by
   unfold JauneConsensus.computeExitEpochAndUpdateChurn; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (computeExitEpochAndUpdateChurn_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (computeExitEpochAndUpdateChurn_hdr _ _ _) $h; exact hh))
 
-theorem computeConsolidationEpochAndUpdateChurn_header (cfg : Config) (s : BeaconState P f) (b : Gwei) :
-    Ok (JauneConsensus.computeConsolidationEpochAndUpdateChurn cfg s b) (fun p => headerEq.relation s p.1) := by
+theorem computeConsolidationEpochAndUpdateChurn_hdr (cfg : Config) (s : BeaconState P f) (b : Gwei) :
+    Ok (JauneConsensus.computeConsolidationEpochAndUpdateChurn cfg s b) (fun p => hdrEq.R s p.1) := by
   unfold JauneConsensus.computeConsolidationEpochAndUpdateChurn; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (computeConsolidationEpochAndUpdateChurn_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (computeConsolidationEpochAndUpdateChurn_hdr _ _ _) $h; exact hh))
 
-theorem pure_pair_header {α : Type} {s : BeaconState P f} {q : α} {a : BeaconState P f × α}
-    (h : (pure (s, q) : Fallible (BeaconState P f × α)) = .ok a) : HeaderEq s a.1 := by
+theorem pure_pair_hdr {α : Type} {s : BeaconState P f} {q : α} {a : BeaconState P f × α}
+    (h : (pure (s, q) : M (BeaconState P f × α)) = .ok a) : HdrEq s a.1 := by
   cases h; rfl
 
 section IVE
 
 /-- The exit queue epoch before Electra: a pair returned by `pure`. -/
 local macro_rules
-  | `(tactic| gstep_of $h) => `(tactic| (have hh := pure_pair_header $h; exact hh))
+  | `(tactic| gstep_of $h) => `(tactic| (have hh := pure_pair_hdr $h; exact hh))
 
 set_option maxHeartbeats 2000000 in
-theorem initiateValidatorExit_header (cfg : Config) (s : BeaconState P f) (i : ValidatorIndex) :
-    Ok (JauneConsensus.initiateValidatorExit cfg s i) (headerEq.relation s) := by
+theorem initiateValidatorExit_hdr (cfg : Config) (s : BeaconState P f) (i : ValidatorIndex) :
+    Ok (JauneConsensus.initiateValidatorExit cfg s i) (hdrEq.R s) := by
   unfold JauneConsensus.initiateValidatorExit; gvcg
 
 end IVE
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (initiateValidatorExit_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (initiateValidatorExit_hdr _ _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (initiateValidatorExit_header _ _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (initiateValidatorExit_header _ _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (initiateValidatorExit_hdr _ _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (initiateValidatorExit_hdr _ _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem slashValidator_header (cfg : Config) (s : BeaconState P f) (i : ValidatorIndex) (wb : Option ValidatorIndex) :
-    Ok (JauneConsensus.slashValidator cfg s i wb) (headerEq.relation s) := by
+theorem slashValidator_hdr (cfg : Config) (s : BeaconState P f) (i : ValidatorIndex) (wb : Option ValidatorIndex) :
+    Ok (JauneConsensus.slashValidator cfg s i wb) (hdrEq.R s) := by
   unfold JauneConsensus.slashValidator; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (slashValidator_header _ _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (slashValidator_hdr _ _ _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (slashValidator_header _ _ _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (slashValidator_header _ _ _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (slashValidator_hdr _ _ _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (slashValidator_hdr _ _ _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem queueExcessActiveBalance_header (s : BeaconState P f) (i : ValidatorIndex) :
-    Ok (JauneConsensus.queueExcessActiveBalance s i) (headerEq.relation s) := by
+theorem queueExcessActiveBalance_hdr (s : BeaconState P f) (i : ValidatorIndex) :
+    Ok (JauneConsensus.queueExcessActiveBalance s i) (hdrEq.R s) := by
   unfold JauneConsensus.queueExcessActiveBalance; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (queueExcessActiveBalance_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (queueExcessActiveBalance_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (queueExcessActiveBalance_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (queueExcessActiveBalance_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (queueExcessActiveBalance_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (queueExcessActiveBalance_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem switchToCompoundingValidator_header (s : BeaconState P f) (i : ValidatorIndex) :
-    Ok (JauneConsensus.switchToCompoundingValidator s i) (headerEq.relation s) := by
+theorem switchToCompoundingValidator_hdr (s : BeaconState P f) (i : ValidatorIndex) :
+    Ok (JauneConsensus.switchToCompoundingValidator s i) (hdrEq.R s) := by
   unfold JauneConsensus.switchToCompoundingValidator; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (switchToCompoundingValidator_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (switchToCompoundingValidator_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (switchToCompoundingValidator_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (switchToCompoundingValidator_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (switchToCompoundingValidator_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (switchToCompoundingValidator_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem addValidatorToRegistry_header (s : BeaconState P f) (pk : BLSPubkey) (wc : Bytes32) (a : U64) :
-    Ok (JauneConsensus.addValidatorToRegistry s pk wc a) (headerEq.relation s) := by
+theorem addValidatorToRegistry_hdr (s : BeaconState P f) (pk : BLSPubkey) (wc : Bytes32) (a : U64) :
+    Ok (JauneConsensus.addValidatorToRegistry s pk wc a) (hdrEq.R s) := by
   unfold JauneConsensus.addValidatorToRegistry; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (addValidatorToRegistry_header _ _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (addValidatorToRegistry_hdr _ _ _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (addValidatorToRegistry_header _ _ _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (addValidatorToRegistry_header _ _ _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (addValidatorToRegistry_hdr _ _ _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (addValidatorToRegistry_hdr _ _ _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem applyDeposit_header (ctx : Context) (s : BeaconState P f) (pk : BLSPubkey) (wc : Bytes32) (a : U64) (sig : BLSSignature) :
-    Ok (JauneConsensus.applyDeposit ctx s pk wc a sig) (headerEq.relation s) := by
+theorem applyDeposit_hdr (ctx : Ctx) (s : BeaconState P f) (pk : BLSPubkey) (wc : Bytes32) (a : U64) (sig : BLSSignature) :
+    Ok (JauneConsensus.applyDeposit ctx s pk wc a sig) (hdrEq.R s) := by
   unfold JauneConsensus.applyDeposit; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (applyDeposit_header _ _ _ _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (applyDeposit_hdr _ _ _ _ _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (applyDeposit_header _ _ _ _ _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (applyDeposit_header _ _ _ _ _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (applyDeposit_hdr _ _ _ _ _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (applyDeposit_hdr _ _ _ _ _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem processDeposit_header (ctx : Context) (s : BeaconState P f) (d : Deposit) :
-    Ok (JauneConsensus.processDeposit ctx s d) (headerEq.relation s) := by
+theorem processDeposit_hdr (ctx : Ctx) (s : BeaconState P f) (d : Deposit) :
+    Ok (JauneConsensus.processDeposit ctx s d) (hdrEq.R s) := by
   unfold JauneConsensus.processDeposit; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processDeposit_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processDeposit_hdr _ _ _) $h; exact hh))
 
-theorem processProposerSlashing_header (ctx : Context) (s : BeaconState P f) (ps : ProposerSlashing) :
-    Ok (JauneConsensus.processProposerSlashing ctx s ps) (headerEq.relation s) := by
+theorem processProposerSlashing_hdr (ctx : Ctx) (s : BeaconState P f) (ps : ProposerSlashing) :
+    Ok (JauneConsensus.processProposerSlashing ctx s ps) (hdrEq.R s) := by
   unfold JauneConsensus.processProposerSlashing; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processProposerSlashing_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processProposerSlashing_hdr _ _ _) $h; exact hh))
 
-theorem processAttesterSlashing_header (ctx : Context) (s : BeaconState P f) (as : AttesterSlashing P f) :
-    Ok (JauneConsensus.processAttesterSlashing ctx s as) (headerEq.relation s) := by
+theorem processAttesterSlashing_hdr (ctx : Ctx) (s : BeaconState P f) (as : AttesterSlashing P f) :
+    Ok (JauneConsensus.processAttesterSlashing ctx s as) (hdrEq.R s) := by
   unfold JauneConsensus.processAttesterSlashing; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processAttesterSlashing_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processAttesterSlashing_hdr _ _ _) $h; exact hh))
 
 set_option maxHeartbeats 4000000 in
-theorem processAttestation_header (ctx : Context) (s : BeaconState P f) (a : Attestation P f) :
-    Ok (JauneConsensus.processAttestation ctx s a) (headerEq.relation s) := by
+theorem processAttestation_hdr (ctx : Ctx) (s : BeaconState P f) (a : Attestation P f) :
+    Ok (JauneConsensus.processAttestation ctx s a) (hdrEq.R s) := by
   unfold JauneConsensus.processAttestation; jvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processAttestation_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processAttestation_hdr _ _ _) $h; exact hh))
 
-theorem processVoluntaryExit_header (ctx : Context) (s : BeaconState P f) (sve : SignedVoluntaryExit) :
-    Ok (JauneConsensus.processVoluntaryExit ctx s sve) (headerEq.relation s) := by
+theorem processVoluntaryExit_hdr (ctx : Ctx) (s : BeaconState P f) (sve : SignedVoluntaryExit) :
+    Ok (JauneConsensus.processVoluntaryExit ctx s sve) (hdrEq.R s) := by
   unfold JauneConsensus.processVoluntaryExit; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processVoluntaryExit_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processVoluntaryExit_hdr _ _ _) $h; exact hh))
 
-theorem processBlsToExecutionChange_header (ctx : Context) (s : BeaconState P f) (sac : SignedBLSToExecutionChange) :
-    Ok (JauneConsensus.processBlsToExecutionChange ctx s sac) (headerEq.relation s) := by
+theorem processBlsToExecutionChange_hdr (ctx : Ctx) (s : BeaconState P f) (sac : SignedBLSToExecutionChange) :
+    Ok (JauneConsensus.processBlsToExecutionChange ctx s sac) (hdrEq.R s) := by
   unfold JauneConsensus.processBlsToExecutionChange; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processBlsToExecutionChange_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processBlsToExecutionChange_hdr _ _ _) $h; exact hh))
 
-theorem processDepositRequest_header (s : BeaconState P f) (dr : DepositRequest) :
-    Ok (JauneConsensus.processDepositRequest s dr) (headerEq.relation s) := by
+theorem processDepositRequest_hdr (s : BeaconState P f) (dr : DepositRequest) :
+    Ok (JauneConsensus.processDepositRequest s dr) (hdrEq.R s) := by
   unfold JauneConsensus.processDepositRequest; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processDepositRequest_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processDepositRequest_hdr _ _) $h; exact hh))
 
-theorem processWithdrawalRequest_header (cfg : Config) (s : BeaconState P f) (wr : WithdrawalRequest) :
-    Ok (JauneConsensus.processWithdrawalRequest cfg s wr) (headerEq.relation s) := by
+theorem processWithdrawalRequest_hdr (cfg : Config) (s : BeaconState P f) (wr : WithdrawalRequest) :
+    Ok (JauneConsensus.processWithdrawalRequest cfg s wr) (hdrEq.R s) := by
   unfold JauneConsensus.processWithdrawalRequest; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processWithdrawalRequest_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processWithdrawalRequest_hdr _ _ _) $h; exact hh))
 
-theorem processConsolidationRequest_header (cfg : Config) (s : BeaconState P f) (cr : ConsolidationRequest) :
-    Ok (JauneConsensus.processConsolidationRequest cfg s cr) (headerEq.relation s) := by
+theorem processConsolidationRequest_hdr (cfg : Config) (s : BeaconState P f) (cr : ConsolidationRequest) :
+    Ok (JauneConsensus.processConsolidationRequest cfg s cr) (hdrEq.R s) := by
   unfold JauneConsensus.processConsolidationRequest; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processConsolidationRequest_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processConsolidationRequest_hdr _ _ _) $h; exact hh))
 
 set_option maxHeartbeats 2000000 in
-theorem processOperations_header (ctx : Context) (s : BeaconState P f) (body : BeaconBlockBody P f) :
-    Ok (JauneConsensus.processOperations ctx s body) (headerEq.relation s) := by
+theorem processOperations_hdr (ctx : Ctx) (s : BeaconState P f) (body : BeaconBlockBody P f) :
+    Ok (JauneConsensus.processOperations ctx s body) (hdrEq.R s) := by
   unfold JauneConsensus.processOperations; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processOperations_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processOperations_hdr _ _ _) $h; exact hh))
 
-theorem processBlockHeader_header (s : BeaconState P f) (blk : BeaconBlock P f) :
-    Ok (JauneConsensus.processBlockHeader s blk) (headerEq.relation s) := by
+theorem processBlockHeader_hdr (s : BeaconState P f) (blk : BeaconBlock P f) :
+    Ok (JauneConsensus.processBlockHeader s blk) (hdrEq.R s) := by
   unfold JauneConsensus.processBlockHeader; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processBlockHeader_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processBlockHeader_hdr _ _) $h; exact hh))
 
-theorem processRandao_header (ctx : Context) (s : BeaconState P f) (body : BeaconBlockBody P f) :
-    Ok (JauneConsensus.processRandao ctx s body) (headerEq.relation s) := by
+theorem processRandao_hdr (ctx : Ctx) (s : BeaconState P f) (body : BeaconBlockBody P f) :
+    Ok (JauneConsensus.processRandao ctx s body) (hdrEq.R s) := by
   unfold JauneConsensus.processRandao; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processRandao_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processRandao_hdr _ _ _) $h; exact hh))
 
-theorem processEth1Data_header (s : BeaconState P f) (body : BeaconBlockBody P f) :
-    Ok (JauneConsensus.processEth1Data s body) (headerEq.relation s) := by
+theorem processEth1Data_hdr (s : BeaconState P f) (body : BeaconBlockBody P f) :
+    Ok (JauneConsensus.processEth1Data s body) (hdrEq.R s) := by
   unfold JauneConsensus.processEth1Data; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processEth1Data_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processEth1Data_hdr _ _) $h; exact hh))
 
 set_option maxHeartbeats 4000000 in
-theorem processSyncAggregate_header (ctx : Context) (s : BeaconState P f) (sa : SyncAggregate P) :
-    Ok (JauneConsensus.processSyncAggregate ctx s sa) (headerEq.relation s) := by
+theorem processSyncAggregate_hdr (ctx : Ctx) (s : BeaconState P f) (sa : SyncAggregate P) :
+    Ok (JauneConsensus.processSyncAggregate ctx s sa) (hdrEq.R s) := by
   unfold JauneConsensus.processSyncAggregate; jvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processSyncAggregate_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processSyncAggregate_hdr _ _ _) $h; exact hh))
 
 set_option maxHeartbeats 2000000 in
-theorem processWithdrawals_header (s : BeaconState P f) (pl : ExecutionPayload P) :
-    Ok (JauneConsensus.processWithdrawals s pl) (headerEq.relation s) := by
+theorem processWithdrawals_hdr (s : BeaconState P f) (pl : ExecutionPayload P) :
+    Ok (JauneConsensus.processWithdrawals s pl) (hdrEq.R s) := by
   unfold JauneConsensus.processWithdrawals; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processWithdrawals_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processWithdrawals_hdr _ _) $h; exact hh))
 
 set_option maxHeartbeats 4000000 in
-theorem weighJustificationAndFinalization_header (s : BeaconState P f) (t p c : Gwei) :
-    Ok (JauneConsensus.weighJustificationAndFinalization s t p c) (headerEq.relation s) := by
+theorem weighJustificationAndFinalization_hdr (s : BeaconState P f) (t p c : Gwei) :
+    Ok (JauneConsensus.weighJustificationAndFinalization s t p c) (hdrEq.R s) := by
   unfold JauneConsensus.weighJustificationAndFinalization; jvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (weighJustificationAndFinalization_header _ _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (weighJustificationAndFinalization_hdr _ _ _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (weighJustificationAndFinalization_header _ _ _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (weighJustificationAndFinalization_header _ _ _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (weighJustificationAndFinalization_hdr _ _ _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (weighJustificationAndFinalization_hdr _ _ _ _); exact (show HdrEq _ _ from rfl)))
 
 set_option maxHeartbeats 4000000 in
-theorem processJustificationAndFinalization_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processJustificationAndFinalization cfg s) (headerEq.relation s) := by
+theorem processJustificationAndFinalization_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processJustificationAndFinalization cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processJustificationAndFinalization; jvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processJustificationAndFinalization_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processJustificationAndFinalization_hdr _ _) $h; exact hh))
 
 set_option maxHeartbeats 4000000 in
-theorem processInactivityUpdates_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processInactivityUpdates cfg s) (headerEq.relation s) := by
+theorem processInactivityUpdates_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processInactivityUpdates cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processInactivityUpdates; jvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processInactivityUpdates_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processInactivityUpdates_hdr _ _) $h; exact hh))
 
-theorem processRewardsAndPenalties_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processRewardsAndPenalties cfg s) (headerEq.relation s) := by
+theorem processRewardsAndPenalties_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processRewardsAndPenalties cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processRewardsAndPenalties; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processRewardsAndPenalties_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processRewardsAndPenalties_hdr _ _) $h; exact hh))
 
-theorem processRegistryUpdatesElectra_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processRegistryUpdatesElectra cfg s) (headerEq.relation s) := by
+theorem processRegistryUpdatesElectra_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processRegistryUpdatesElectra cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processRegistryUpdatesElectra; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processRegistryUpdatesElectra_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processRegistryUpdatesElectra_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (processRegistryUpdatesElectra_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (processRegistryUpdatesElectra_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (processRegistryUpdatesElectra_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (processRegistryUpdatesElectra_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem processRegistryUpdatesDeneb_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processRegistryUpdatesDeneb cfg s) (headerEq.relation s) := by
+theorem processRegistryUpdatesDeneb_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processRegistryUpdatesDeneb cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processRegistryUpdatesDeneb; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processRegistryUpdatesDeneb_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processRegistryUpdatesDeneb_hdr _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (processRegistryUpdatesDeneb_header _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (processRegistryUpdatesDeneb_header _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (processRegistryUpdatesDeneb_hdr _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (processRegistryUpdatesDeneb_hdr _ _); exact (show HdrEq _ _ from rfl)))
 
-theorem processRegistryUpdates_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processRegistryUpdates cfg s) (headerEq.relation s) := by
+theorem processRegistryUpdates_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processRegistryUpdates cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processRegistryUpdates; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processRegistryUpdates_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processRegistryUpdates_hdr _ _) $h; exact hh))
 
 set_option maxHeartbeats 4000000 in
-theorem processSlashings_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processSlashings cfg s) (headerEq.relation s) := by
+theorem processSlashings_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processSlashings cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processSlashings; jvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processSlashings_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processSlashings_hdr _ _) $h; exact hh))
 
-theorem processEth1DataReset_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processEth1DataReset cfg s) (headerEq.relation s) := by
+theorem processEth1DataReset_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processEth1DataReset cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processEth1DataReset; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processEth1DataReset_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processEth1DataReset_hdr _ _) $h; exact hh))
 
-theorem applyPendingDeposit_header (ctx : Context) (s : BeaconState P f) (d : PendingDeposit) :
-    Ok (JauneConsensus.applyPendingDeposit ctx s d) (headerEq.relation s) := by
+theorem applyPendingDeposit_hdr (ctx : Ctx) (s : BeaconState P f) (d : PendingDeposit) :
+    Ok (JauneConsensus.applyPendingDeposit ctx s d) (hdrEq.R s) := by
   unfold JauneConsensus.applyPendingDeposit; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (applyPendingDeposit_header _ _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (applyPendingDeposit_hdr _ _ _) $h; exact hh))
 
 local macro_rules
   | `(tactic| hdr_tail) =>
     `(tactic| first
-      | exact (applyPendingDeposit_header _ _ _)
-      | (refine StepRelation.ok_rebase headerEq ?_ (applyPendingDeposit_header _ _ _); exact (show HeaderEq _ _ from rfl)))
+      | exact (applyPendingDeposit_hdr _ _ _)
+      | (refine StepRel.ok_rebase hdrEq ?_ (applyPendingDeposit_hdr _ _ _); exact (show HdrEq _ _ from rfl)))
 
 section PendingDeposits
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (refine StepRelation.forIn_array_relation _ (fun x => x.2.2.2.2) ?_ _ _ $h; intro _ _; gvcg))
+    `(tactic| (refine StepRel.forIn_array_rel _ (fun x => x.2.2.2.2) ?_ _ _ $h; intro _ _; gvcg))
 
 set_option maxHeartbeats 4000000 in
-theorem processPendingDeposits_header (ctx : Context) (s : BeaconState P f) :
-    Ok (JauneConsensus.processPendingDeposits ctx s) (headerEq.relation s) := by
+theorem processPendingDeposits_hdr (ctx : Ctx) (s : BeaconState P f) :
+    Ok (JauneConsensus.processPendingDeposits ctx s) (hdrEq.R s) := by
   unfold JauneConsensus.processPendingDeposits; gvcg
   all_goals hdr_tail
 
@@ -600,86 +600,86 @@ end PendingDeposits
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processPendingDeposits_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processPendingDeposits_hdr _ _) $h; exact hh))
 
-theorem processPendingConsolidations_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processPendingConsolidations cfg s) (headerEq.relation s) := by
+theorem processPendingConsolidations_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processPendingConsolidations cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processPendingConsolidations; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processPendingConsolidations_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processPendingConsolidations_hdr _ _) $h; exact hh))
 
-theorem processEffectiveBalanceUpdates_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processEffectiveBalanceUpdates cfg s) (headerEq.relation s) := by
+theorem processEffectiveBalanceUpdates_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processEffectiveBalanceUpdates cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processEffectiveBalanceUpdates; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processEffectiveBalanceUpdates_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processEffectiveBalanceUpdates_hdr _ _) $h; exact hh))
 
-theorem processSlashingsReset_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processSlashingsReset cfg s) (headerEq.relation s) := by
+theorem processSlashingsReset_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processSlashingsReset cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processSlashingsReset; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processSlashingsReset_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processSlashingsReset_hdr _ _) $h; exact hh))
 
-theorem processRandaoMixesReset_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processRandaoMixesReset cfg s) (headerEq.relation s) := by
+theorem processRandaoMixesReset_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processRandaoMixesReset cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processRandaoMixesReset; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processRandaoMixesReset_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processRandaoMixesReset_hdr _ _) $h; exact hh))
 
-theorem processHistoricalSummariesUpdate_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processHistoricalSummariesUpdate cfg s) (headerEq.relation s) := by
+theorem processHistoricalSummariesUpdate_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processHistoricalSummariesUpdate cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processHistoricalSummariesUpdate; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processHistoricalSummariesUpdate_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processHistoricalSummariesUpdate_hdr _ _) $h; exact hh))
 
-theorem processParticipationFlagUpdates_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processParticipationFlagUpdates cfg s) (headerEq.relation s) := by
+theorem processParticipationFlagUpdates_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processParticipationFlagUpdates cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processParticipationFlagUpdates; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processParticipationFlagUpdates_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processParticipationFlagUpdates_hdr _ _) $h; exact hh))
 
-theorem processSyncCommitteeUpdates_header (ctx : Context) (s : BeaconState P f) :
-    Ok (JauneConsensus.processSyncCommitteeUpdates ctx s) (headerEq.relation s) := by
+theorem processSyncCommitteeUpdates_hdr (ctx : Ctx) (s : BeaconState P f) :
+    Ok (JauneConsensus.processSyncCommitteeUpdates ctx s) (hdrEq.R s) := by
   unfold JauneConsensus.processSyncCommitteeUpdates; gvcg
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processSyncCommitteeUpdates_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processSyncCommitteeUpdates_hdr _ _) $h; exact hh))
 
-theorem processProposerLookahead_header (cfg : Config) (s : BeaconState P f) :
-    Ok (JauneConsensus.processProposerLookahead cfg s) (headerEq.relation s) := by
+theorem processProposerLookahead_hdr (cfg : Config) (s : BeaconState P f) :
+    Ok (JauneConsensus.processProposerLookahead cfg s) (hdrEq.R s) := by
   unfold JauneConsensus.processProposerLookahead; gvcg
   all_goals hdr_tail
 
 local macro_rules
   | `(tactic| gstep_of $h) =>
-    `(tactic| (have hh := StepRelation.of_ok (processProposerLookahead_header _ _) $h; exact hh))
+    `(tactic| (have hh := StepRel.of_ok (processProposerLookahead_hdr _ _) $h; exact hh))
 
 
 /-- `process_slot` with its two hashes abstracted: the proof never meets `hash_tree_root` of a
 state. -/
-def processSlotAbstractedHashesForkIndexed (h₁ : BeaconState P f → Root) (h₂ : BeaconBlockHeader → Root)
-    (state : BeaconState P f) : Fallible (BeaconState P f) := do
+def processSlotHF (h₁ : BeaconState P f → Root) (h₂ : BeaconBlockHeader → Root)
+    (state : BeaconState P f) : M (BeaconState P f) := do
   let slotsPerHistoricalRoot ← u64 P.SLOTS_PER_HISTORICAL_ROOT "SLOTS_PER_HISTORICAL_ROOT"
   let i := (← state.slot.mod? slotsPerHistoricalRoot "process_slot: slot % SLOTS_PER_HISTORICAL_ROOT").toNat
   let previousStateRoot : Root := h₁ state
   let state := { state with
     state_roots := ← state.state_roots.set i previousStateRoot "process_slot: state_roots" }
   let state :=
-    if Bytes32.beq state.latest_block_header.state_root (0 : Jaune.U256) then
+    if B256.beq state.latest_block_header.state_root (0 : B256) then
       { state with latest_block_header :=
           { state.latest_block_header with state_root := previousStateRoot } }
     else state
@@ -687,22 +687,22 @@ def processSlotAbstractedHashesForkIndexed (h₁ : BeaconState P f → Root) (h�
   pure { state with
     block_roots := ← state.block_roots.set i previousBlockRoot "process_slot: block_roots" }
 
-theorem processSlot_eqForkIndexed (s : BeaconState P f) :
-    JauneConsensus.processSlot s = processSlotAbstractedHashesForkIndexed Ssz.hashTreeRoot Ssz.hashTreeRoot s := rfl
+theorem processSlot_eqF (s : BeaconState P f) :
+    JauneConsensus.processSlot s = processSlotHF Ssz.hashTreeRoot Ssz.hashTreeRoot s := rfl
 
-theorem processSlotAbstractedHashesForkIndexed_header (h₁ : BeaconState P f → Root) (h₂ : BeaconBlockHeader → Root)
-    (s : BeaconState P f) : Ok (processSlotAbstractedHashesForkIndexed h₁ h₂ s) (headerEq.relation s) := by
+theorem processSlotHF_hdr (h₁ : BeaconState P f → Root) (h₂ : BeaconBlockHeader → Root)
+    (s : BeaconState P f) : Ok (processSlotHF h₁ h₂ s) (hdrEq.R s) := by
   intro s' h
-  unfold processSlotAbstractedHashesForkIndexed at h
+  unfold processSlotHF at h
   repeat (obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h)
   cases h
-  show HeaderEq _ _
-  unfold HeaderEq
+  show HdrEq _ _
+  unfold HdrEq
   split <;> rfl
 
-theorem processSlot_header (s : BeaconState P f) :
-    Ok (JauneConsensus.processSlot s) (headerEq.relation s) := by
-  rw [processSlot_eqForkIndexed]; exact processSlotAbstractedHashesForkIndexed_header _ _ s
+theorem processSlot_hdr (s : BeaconState P f) :
+    Ok (JauneConsensus.processSlot s) (hdrEq.R s) := by
+  rw [processSlot_eqF]; exact processSlotHF_hdr _ _ s
 
 end HdrGen
 
@@ -715,20 +715,20 @@ local macro "epoch_tail" : tactic => `(tactic| (
   obtain ⟨x11, h11, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨x12, h12, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨x13, h13, h⟩ := bind_eq_ok_iff.mp h
-  have f14 : HeaderEq x13 s' := by
+  have f14 : HdrEq x13 s' := by
     split at h
-    · exact processProposerLookahead_header _ _ _ h
+    · exact processProposerLookahead_hdr _ _ _ h
     · cases h; rfl
-  exact (headerEq).trans (processEffectiveBalanceUpdates_header _ _ _ h8) <|
-    (headerEq).trans (processSlashingsReset_header _ _ _ h9) <|
-    (headerEq).trans (processRandaoMixesReset_header _ _ _ h10) <|
-    (headerEq).trans (processHistoricalSummariesUpdate_header _ _ _ h11) <|
-    (headerEq).trans (processParticipationFlagUpdates_header _ _ _ h12) <|
-    (headerEq).trans (processSyncCommitteeUpdates_header _ _ _ h13) f14))
+  exact (hdrEq).trans (processEffectiveBalanceUpdates_hdr _ _ _ h8) <|
+    (hdrEq).trans (processSlashingsReset_hdr _ _ _ h9) <|
+    (hdrEq).trans (processRandaoMixesReset_hdr _ _ _ h10) <|
+    (hdrEq).trans (processHistoricalSummariesUpdate_hdr _ _ _ h11) <|
+    (hdrEq).trans (processParticipationFlagUpdates_hdr _ _ _ h12) <|
+    (hdrEq).trans (processSyncCommitteeUpdates_hdr _ _ _ h13) f14))
 
 /-- `process_epoch` keeps `latest_execution_payload_header`. -/
-theorem processEpoch_header (ctx : Context) (s : BeaconState P f) :
-    Ok (processEpoch ctx s) (headerEq.relation s) := by
+theorem processEpoch_hdr (ctx : Ctx) (s : BeaconState P f) :
+    Ok (processEpoch ctx s) (hdrEq.R s) := by
   intro s' h
   unfold processEpoch at h
   obtain ⟨x1, h1, h⟩ := bind_eq_ok_iff.mp h
@@ -737,35 +737,35 @@ theorem processEpoch_header (ctx : Context) (s : BeaconState P f) :
   obtain ⟨x4, h4, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨x5, h5, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨x6, h6, h⟩ := bind_eq_ok_iff.mp h
-  have f6 : HeaderEq s x6 :=
-    headerEq.trans (processJustificationAndFinalization_header _ _ _ h1) <|
-    headerEq.trans (processInactivityUpdates_header _ _ _ h2) <|
-    headerEq.trans (processRewardsAndPenalties_header _ _ _ h3) <|
-    headerEq.trans (processRegistryUpdates_header _ _ _ h4) <|
-    headerEq.trans (processSlashings_header _ _ _ h5) (processEth1DataReset_header _ _ _ h6)
+  have f6 : HdrEq s x6 :=
+    hdrEq.trans (processJustificationAndFinalization_hdr _ _ _ h1) <|
+    hdrEq.trans (processInactivityUpdates_hdr _ _ _ h2) <|
+    hdrEq.trans (processRewardsAndPenalties_hdr _ _ _ h3) <|
+    hdrEq.trans (processRegistryUpdates_hdr _ _ _ h4) <|
+    hdrEq.trans (processSlashings_hdr _ _ _ h5) (processEth1DataReset_hdr _ _ _ h6)
   simp only [] at h
   split at h
   · obtain ⟨y7, h7a, h⟩ := bind_eq_ok_iff.mp h
     obtain ⟨x7, h7, h⟩ := bind_eq_ok_iff.mp h
-    have f7 : HeaderEq x6 x7 := headerEq.trans (processPendingDeposits_header _ _ _ h7a)
-      (processPendingConsolidations_header _ _ _ h7)
-    refine headerEq.trans f6 (headerEq.trans f7 ?_)
+    have f7 : HdrEq x6 x7 := hdrEq.trans (processPendingDeposits_hdr _ _ _ h7a)
+      (processPendingConsolidations_hdr _ _ _ h7)
+    refine hdrEq.trans f6 (hdrEq.trans f7 ?_)
     epoch_tail
   · obtain ⟨x7, h7, h⟩ := bind_eq_ok_iff.mp h
     cases h7
-    refine headerEq.trans f6 ?_
+    refine hdrEq.trans f6 ?_
     epoch_tail
 
-theorem range_forIn_invariant' {β : Type} (I : β → Prop) {r : Std.Legacy.Range} {init out : β}
-    {body : Nat → β → Fallible (ForInStep β)} (hb : ∀ a b x, I b → body a b = .ok x → I x.value)
+theorem range_forIn_inv' {β : Type} (I : β → Prop) {r : Std.Legacy.Range} {init out : β}
+    {body : Nat → β → M (ForInStep β)} (hb : ∀ a b x, I b → body a b = .ok x → I x.value)
     (h : forIn r init body = .ok out) (hI : I init) : I out := by
   rw [Std.Legacy.Range.forIn_eq_forIn_range'] at h
-  exact list_forIn_relation (fun a b => I a → I b) (fun _ h => h) (fun _ _ _ h1 h2 x => h2 (h1 x))
+  exact list_forIn_rel (fun a b => I a → I b) (fun _ h => h) (fun _ _ _ h1 h2 x => h2 (h1 x))
     body (fun a b x hx hIb => hb a b x hIb hx) _ init out h hI
 
 /-- `process_slots` with any epoch function keeping the header keeps the header. -/
-theorem processSlotsWith_header {pe : BeaconState P f → Fallible (BeaconState P f)}
-    (hE : ∀ a, Ok (pe a) (headerEq.relation a)) {s s' : BeaconState P f} {slot : Slot}
+theorem processSlotsWith_hdr {pe : BeaconState P f → M (BeaconState P f)}
+    (hE : ∀ a, Ok (pe a) (hdrEq.R a)) {s s' : BeaconState P f} {slot : Slot}
     (h : processSlotsWith pe s slot = .ok s') :
     s'.latest_execution_payload_header = s.latest_execution_payload_header := by
   unfold processSlotsWith at h
@@ -773,13 +773,13 @@ theorem processSlotsWith_header {pe : BeaconState P f → Fallible (BeaconState 
   obtain ⟨spe, hspe, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨out, hout, h⟩ := bind_eq_ok_iff.mp h
   cases h
-  refine range_forIn_invariant' (fun m : BeaconState P f => m.latest_execution_payload_header =
+  refine range_forIn_inv' (fun m : BeaconState P f => m.latest_execution_payload_header =
     s.latest_execution_payload_header) (fun a b x hb hx => ?_) hout rfl
   obtain ⟨st1, h1, hx⟩ := bind_eq_ok_iff.mp hx
   obtain ⟨next, hn, hx⟩ := bind_eq_ok_iff.mp hx
   obtain ⟨r, hr, hx⟩ := bind_eq_ok_iff.mp hx
   have f1 : st1.latest_execution_payload_header = b.latest_execution_payload_header :=
-    processSlot_header _ _ h1
+    processSlot_hdr _ _ h1
   simp only [] at hx
   split at hx
   · obtain ⟨st2, he, hx⟩ := bind_eq_ok_iff.mp hx
@@ -793,17 +793,17 @@ theorem processSlotsWith_header {pe : BeaconState P f → Fallible (BeaconState 
     rw [f1, hb]
 
 /-- **`process_slots` keeps `latest_execution_payload_header`.** -/
-theorem processSlots_header {ctx : Context} {s s' : BeaconState P f} {slot : Slot}
+theorem processSlots_header {ctx : Ctx} {s s' : BeaconState P f} {slot : Slot}
     (h : processSlots ctx s slot = .ok s') :
     s'.latest_execution_payload_header = s.latest_execution_payload_header :=
-  processSlotsWith_header (fun a => processEpoch_header ctx a) h
+  processSlotsWith_hdr (fun a => processEpoch_hdr ctx a) h
 
 section ExecPayload
 
 local macro_rules | `(tactic| gstep_close) => `(tactic| rfl)
 
 /-- `process_execution_payload` writes the payload's header. -/
-theorem processExecutionPayload_header (ctx : Context) (s : BeaconState P f)
+theorem processExecutionPayload_header (ctx : Ctx) (s : BeaconState P f)
     (body : BeaconBlockBody P f) :
     Ok (processExecutionPayload ctx s body) (fun s' =>
       s'.latest_execution_payload_header = ExecutionPayload.toHeader body.execution_payload) := by
@@ -813,7 +813,7 @@ end ExecPayload
 
 /-- **`process_block` writes `latest_execution_payload_header` once, to the payload's header**
 (in `process_execution_payload`); the phases after it keep it. -/
-theorem processBlock_header {ctx : Context} {s s' : BeaconState P f} {blk : BeaconBlock P f}
+theorem processBlock_header {ctx : Ctx} {s s' : BeaconState P f} {blk : BeaconBlock P f}
     (h : processBlock ctx s blk = .ok s') :
     s'.latest_execution_payload_header = ExecutionPayload.toHeader blk.body.execution_payload := by
   unfold processBlock processBlockWith at h
@@ -824,11 +824,11 @@ theorem processBlock_header {ctx : Context} {s s' : BeaconState P f} {blk : Beac
   obtain ⟨s5, h5, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨s6, h6, h⟩ := bind_eq_ok_iff.mp h
   have e3 := processExecutionPayload_header _ _ _ _ h3
-  exact (headerEq.trans (processRandao_header _ _ _ _ h4) (headerEq.trans (processEth1Data_header _ _ _ h5)
-    (headerEq.trans (processOperations_header _ _ _ _ h6) (processSyncAggregate_header _ _ _ _ h)))).trans e3
+  exact (hdrEq.trans (processRandao_hdr _ _ _ _ h4) (hdrEq.trans (processEth1Data_hdr _ _ _ h5)
+    (hdrEq.trans (processOperations_hdr _ _ _ _ h6) (processSyncAggregate_hdr _ _ _ _ h)))).trans e3
 
 /-- `state_transition` is `process_slots` then `process_block` (and the two checks). -/
-theorem stateTransition_split {ctx : Context} {s s' : BeaconState P f} {sb : SignedBeaconBlock P f}
+theorem stateTransition_split {ctx : Ctx} {s s' : BeaconState P f} {sb : SignedBeaconBlock P f}
     {vr : Bool} (h : stateTransition ctx s sb vr = .ok s') :
     ∃ m, processSlots ctx s sb.message.slot = .ok m ∧ processBlock ctx m sb.message = .ok s' := by
   unfold stateTransition stateTransitionWith at h
@@ -846,7 +846,7 @@ theorem stateTransition_split {ctx : Context} {s s' : BeaconState P f} {sb : Sig
     cases h; exact hy
 
 /-- **`state_transition` leaves the block's payload header.** -/
-theorem stateTransition_header {ctx : Context} {s s' : BeaconState P f} {sb : SignedBeaconBlock P f}
+theorem stateTransition_header {ctx : Ctx} {s s' : BeaconState P f} {sb : SignedBeaconBlock P f}
     {vr : Bool} (h : stateTransition ctx s sb vr = .ok s') :
     s'.latest_execution_payload_header =
       ExecutionPayload.toHeader sb.message.body.execution_payload := by
@@ -854,11 +854,11 @@ theorem stateTransition_header {ctx : Context} {s s' : BeaconState P f} {sb : Si
   exact processBlock_header hb
 
 /-- The crossing's block at the fork slot: the signature check, `process_block`, the state root. -/
-theorem atSlot_processBlock {ctx : Context} {bls : Bool} {s s' : BeaconState P f}
+theorem atSlot_processBlock {ctx : Ctx} {bls : Bool} {s s' : BeaconState P f}
     {sb : SignedBeaconBlock P f}
     (h : (do require (← verifyBlockSignature bls s sb) "state_transition: verify_block_signature"
              let s ← processBlock ctx s sb.message
-             require (Bytes32.beq sb.message.state_root (Ssz.hashTreeRoot s))
+             require (B256.beq sb.message.state_root (Ssz.hashTreeRoot s))
                "state_transition: block.state_root"
              pure s) = .ok s') :
     processBlock ctx s sb.message = .ok s' := by
@@ -870,8 +870,8 @@ theorem atSlot_processBlock {ctx : Context} {bls : Bool} {s s' : BeaconState P f
 
 /-- The engine's request for a block with an accepted payload hashes to the payload's
 `block_hash`, which is the block's payload header's. -/
-theorem engineVerdict_head {cfg : ChainConfig} {cf : ConsensusFork} {exec exec' : BlockChain}
-    {g : ConsensusFork} (hg : g.atLeast .electra = true) {blk : BeaconBlock P g}
+theorem engineVerdict_head {cfg : ChainConfig} {cf : CFork} {exec exec' : BlockChain}
+    {g : CFork} (hg : g.atLeast .electra = true) {blk : BeaconBlock P g}
     {req : NewPayloadRequest P} (hreq : NewPayloadRequest.ofBlock blk = .ok req)
     (hv : engineVerdict cfg cf exec req = .ok exec') :
     (payloadToBlock req).header.hash =
@@ -888,7 +888,7 @@ at the post-state's fork, on a request whose execution block hashes to the post-
 hash is `latest_execution_payload_header.block_hash`, whatever held before the step.) -/
 theorem jointStep_head {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s s' : JointState P}
     {b : AnySignedBlock P} (h : jointStep cfg ccfg bls s b = .ok s') :
-    ∃ req : NewPayloadRequest P, engineVerdict cfg s'.fork s.execution req = .ok s'.execution ∧
+    ∃ req : NewPayloadRequest P, engineVerdict cfg s'.fork s.exec req = .ok s'.exec ∧
       (payloadToBlock req).header.hash = s'.beacon.latest_execution_payload_header.block_hash := by
   obtain ⟨sf, beacon, exec⟩ := s
   obtain ⟨g, sb⟩ := b
@@ -915,7 +915,7 @@ theorem jointStep_head {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s s' : 
 /-- **The crossing reads its Fulu head relation from the pre-state.** `crossFromFulu` upgrades a
 Fulu state whose `latest_execution_payload_header` is the pre-crossing state's (the Fulu
 `process_slots` to the fork slot keeps it). -/
-theorem crossFromFulu_header {ctx : Context} {pre : JauneConsensus.BeaconState P .fulu}
+theorem crossFromFulu_header {ctx : Ctx} {pre : JauneConsensus.BeaconState P .fulu}
     {post : JauneConsensus.Gloas.BeaconState P}
     (h : JauneConsensus.Gloas.crossFromFulu ctx pre = .ok post) :
     ∃ atFork : JauneConsensus.BeaconState P .fulu,

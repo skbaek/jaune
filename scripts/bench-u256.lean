@@ -31,20 +31,20 @@ step 5, so the row's delta across revisions is still attributable to the
 decoder alone; the encode half is a fixed additive offset.
 -/
 
-def sample : U256 :=
-  (0x123456789abcdef0 : UInt64).toU256 <<< 128 ||| 0xfedcba9876543211
+def sample : B256 :=
+  (0x123456789abcdef0 : UInt64).toB256 <<< 128 ||| 0xfedcba9876543211
 
-def drive (n : Nat) (seed : U256) (f : Nat → U256 → U256) : U256 :=
+def drive (n : Nat) (seed : B256) (f : Nat → B256 → B256) : B256 :=
   go n seed where
-  go : Nat → U256 → U256
+  go : Nat → B256 → B256
     | 0, x => x
     | n + 1, x => go n (f n x)
 
-@[noinline] def forceB256 (x : U256) : IO U256 := pure x
+@[noinline] def forceB256 (x : B256) : IO B256 := pure x
 
 def bench (label : String) (iterations : Nat) (nonce : Nat)
-    (f : Nat → U256 → U256) : IO Unit := do
-  let seed := sample + nonce.toU256
+    (f : Nat → B256 → B256) : IO Unit := do
+  let seed := sample + nonce.toB256
   let start ← IO.monoNanosNow
   let sink ← forceB256 (drive iterations seed f)
   let finish ← IO.monoNanosNow
@@ -72,19 +72,19 @@ def benchBlake2 (label : String) (iterations : Nat) (nonce : Nat)
 
 def main : IO Unit := do
   let nonce ← IO.monoNanosNow
-  bench "add" 1000000 nonce (fun i x => x + sample + i.toU256)
-  bench "and" 1000000 nonce (fun i x => (x &&& sample) ^^^ i.toU256)
-  bench "lt" 1000000 nonce (fun i x => if x < sample then x + i.toU256 else x - i.toU256)
-  bench "mul" 200000 nonce (fun i x => x * sample + i.toU256)
-  bench "div-2^128" 20000 nonce (fun i x => x / ((1 : Nat).toU256 <<< 128) + sample + i.toU256)
-  bench "div-3" 20000 nonce (fun i x => x / 3 + sample + i.toU256)
-  bench "exp" 100 nonce (fun i x => U256.exp x (i + 1).toU256)
-  bench "codec" 200000 nonce (fun i x => (x + i.toU256).toBytes.toU256)
+  bench "add" 1000000 nonce (fun i x => x + sample + i.toB256)
+  bench "and" 1000000 nonce (fun i x => (x &&& sample) ^^^ i.toB256)
+  bench "lt" 1000000 nonce (fun i x => if x < sample then x + i.toB256 else x - i.toB256)
+  bench "mul" 200000 nonce (fun i x => x * sample + i.toB256)
+  bench "div-2^128" 20000 nonce (fun i x => x / ((1 : Nat).toB256 <<< 128) + sample + i.toB256)
+  bench "div-3" 20000 nonce (fun i x => x / 3 + sample + i.toB256)
+  bench "exp" 100 nonce (fun i x => B256.bexp x (i + 1).toB256)
+  bench "codec" 200000 nonce (fun i x => (x + i.toB256).toBytes.toB256)
   -- Step-6 precompile inner-loop rows.  `sha256` hashes a fresh 32-byte list
   -- per iteration (one padded chunk, so one full 64-round compression);
   -- `blake2f-12` runs one 12-round BLAKE2b compression, the round count of
   -- the EIP-152 reference vectors.
-  bench "sha256" 100000 nonce (fun i x => Bytes.sha256 (x + i.toU256).toBytes)
+  bench "sha256" 100000 nonce (fun i x => Bytes.sha256 (x + i.toB256).toBytes)
   benchBlake2 "blake2f-12" 100000 nonce 12
   -- Keccak rows (keccak/bytelayer arc).  Each iteration hashes a fresh
   -- digest-dependent byte list, so the call cannot be hoisted.  The rows
@@ -93,7 +93,7 @@ def main : IO Unit := do
   -- storage-slot shape (one permutation); `keccak512` spans four permutations
   -- and three full-rate blocks.
   bench "keccak64" 100000 nonce
-    (fun i x => Bytes.keccak ((x + i.toU256).toBytes ++ (x - i.toU256).toBytes))
+    (fun i x => Bytes.keccak ((x + i.toB256).toBytes ++ (x - i.toB256).toBytes))
   bench "keccak512" 20000 nonce
     (fun i x => Bytes.keccak ((List.range 16).flatMap
-      (fun j => (x + (16 * i + j).toU256).toBytes)))
+      (fun j => (x + (16 * i + j).toB256).toBytes)))

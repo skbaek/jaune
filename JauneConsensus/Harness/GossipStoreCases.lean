@@ -29,15 +29,15 @@ before Fulu) is refused.
 -/
 
 namespace JauneConsensus.Harness
-open Jaune (Bytes U256)
+open Jaune (Bytes B256)
 open Yaml
-open Gossip (StoreSeen SeenWithStore PayloadValidationStatus)
+open Gossip (StoreSeen SSeen PayloadValidationStatus)
 
 private def hexRoot (what s : String) : Except String Root :=
   match s.toList with
   | '0' :: 'x' :: cs =>
-    match YamlValue.hexBytes cs with
-    | some bs => if bs.length == 32 then .ok (Bytes32.ofBytes bs) else .error s!"{what}: not 32 bytes"
+    match YVal.hexBytes cs with
+    | some bs => if bs.length == 32 then .ok (B256.ofBytes bs) else .error s!"{what}: not 32 bytes"
     | none => .error s!"{what}: bad hex {s}"
   | _ => .error s!"{what}: no 0x prefix in {s}"
 
@@ -48,20 +48,20 @@ private def payloadStatusOf : String → Except String PayloadValidationStatus
   | s => .error s!"payload_status {s}"
 
 /-- The store of a case, and its `block_payload_statuses`. -/
-structure GossipStoreSetup (P : Preset) (f : ConsensusFork) where
+structure GossipStoreSetup (P : Preset) (f : CFork) where
   store : Store P f
   payloadStatuses : List (Root × PayloadValidationStatus)
 
 /-- Set the store up as the module note says. -/
-def gossipStoreSetup {P : Preset} {f : ConsensusFork} (env : GossipEnvironment) (ctx : Context) :
+def gossipStoreSetup {P : Preset} {f : CFork} (env : GossipEnv) (ctx : Ctx) :
     IO (Except String (GossipStoreSetup P f)) := ExceptT.run do
-  let m := env.caseMetadata
+  let m := env.caseMeta
   let some anchor := m.blocks.head? | throw "no anchor block"
   let state : BeaconState P f ← ExceptT.mk (env.decode "state")
   let anchorBlock : SignedBeaconBlock P f ← ExceptT.mk (env.decode anchor.block)
   if anchor.failed || anchor.pending || anchor.payload.isSome then
     throw "anchor block marked failed, pending or with a payload"
-  let mut store ← match getForkchoiceStore ctx.config state anchorBlock.message with
+  let mut store ← match getForkchoiceStore ctx.cfg state anchorBlock.message with
     | .ok s => pure s
     | .error r => throw s!"get_forkchoice_store: {repr r}"
   let mut statuses : List (Root × PayloadValidationStatus) := []
@@ -96,7 +96,7 @@ def gossipStoreSetup {P : Preset} {f : ConsensusFork} (env : GossipEnvironment) 
     let keys := fc.keys
     if !(keys.all (· ∈ ["epoch", "root", "block"])) || keys.contains "root" == keys.contains "block" then
       throw s!"finalized_checkpoint: keys {keys}"
-    let epochN ← ExceptT.mk (pure ((fc.field "epoch").bind YamlValue.asNat |>.mapError toString))
+    let epochN ← ExceptT.mk (pure ((fc.field "epoch").bind YVal.asNat |>.mapError toString))
     let epoch ← match U64.ofNat? epochN "finalized_checkpoint.epoch" with
       | .ok e => pure e
       | .error _ => throw "finalized_checkpoint.epoch out of range"
@@ -113,21 +113,21 @@ def gossipStoreSetup {P : Preset} {f : ConsensusFork} (env : GossipEnvironment) 
   pure { store, payloadStatuses := statuses }
 
 /-- The initial `Seen`, with `seen_partial_data_column_headers` preloaded. -/
-def gossipStoreSeen {P : Preset} (env : GossipEnvironment) : IO (Except String (SeenWithStore P)) := ExceptT.run do
-  let mut seen : SeenWithStore P := Gossip.Seen.empty {}
-  for (rootHex, file) in env.caseMetadata.seenPartialHeaders do
+def gossipStoreSeen {P : Preset} (env : GossipEnv) : IO (Except String (SSeen P)) := ExceptT.run do
+  let mut seen : SSeen P := Gossip.Seen.empty {}
+  for (rootHex, file) in env.caseMeta.seenPartialHeaders do
     let root ← ExceptT.mk (pure (hexRoot "seen_partial_data_column_headers.block_root" rootHex))
     let header : PartialDataColumnHeader P ← ExceptT.mk (env.decode file)
     seen := Gossip.cachePartialHeader seen root header
   pure seen
 
 /-- Run one Store-dependent handler `h` at fork `f`. -/
-def runStoreGossip (P : Preset) (f : ConsensusFork) (env : GossipEnvironment) (h : String) :
+def runStoreGossip (P : Preset) (f : CFork) (env : GossipEnv) (h : String) :
     IO (Except String (List Gossip.Outcome)) := ExceptT.run do
-  let ctx : Context := { config := env.config, blsActive := env.blsActive }
+  let ctx : Ctx := { cfg := env.cfg, blsActive := env.blsActive }
   let setup : GossipStoreSetup P f ← ExceptT.mk (gossipStoreSetup env ctx)
   let store := setup.store
-  let seen : SeenWithStore P ← ExceptT.mk (gossipStoreSeen env)
+  let seen : SSeen P ← ExceptT.mk (gossipStoreSeen env)
   let time (m : GossipMessage) := gossipNeed "current_time_ms" m.currentTimeMs
   let subnet (m : GossipMessage) := gossipNeed "subnet_id" m.subnetId
   let fulu := f.atLeast .fulu
@@ -154,7 +154,7 @@ def runStoreGossip (P : Preset) (f : ConsensusFork) (env : GossipEnvironment) (h
     if !fulu then throw "partial_data_column_sidecar starts at Fulu"
     let mut seen := seen
     let mut out := #[]
-    for m in env.caseMetadata.messages do
+    for m in env.caseMeta.messages do
       let sidecar : PartialDataColumnSidecar P ← ExceptT.mk (env.decode m.message)
       let some gid := m.groupId | throw s!"{m.message}: group_id is missing"
       let groupId : PartialDataColumnGroupID ← ExceptT.mk (env.decode gid)
@@ -183,14 +183,14 @@ structure GloasGossipStoreSetup (P : Preset) where
   payloadStatuses : List (Root × PayloadValidationStatus)
 
 /-- Set the Gloas store up. -/
-def gloasGossipStoreSetup {P : Preset} (env : GossipEnvironment) (ctx : Context) :
+def gloasGossipStoreSetup {P : Preset} (env : GossipEnv) (ctx : Ctx) :
     IO (Except String (GloasGossipStoreSetup P)) := ExceptT.run do
-  let m := env.caseMetadata
+  let m := env.caseMeta
   let some anchor := m.blocks.head? | throw "no anchor block"
   let state : Gloas.BeaconState P ← ExceptT.mk (env.decode "state")
   let anchorBlock : Gloas.SignedBeaconBlock P ← ExceptT.mk (env.decode anchor.block)
   if anchor.failed || anchor.pending then throw "anchor block marked failed or pending"
-  let mut store ← match Gloas.getForkchoiceStore ctx.config state anchorBlock.message with
+  let mut store ← match Gloas.getForkchoiceStore ctx.cfg state anchorBlock.message with
     | .ok s => pure s
     | .error r => throw s!"get_forkchoice_store: {repr r}"
   let noVotes : Array (Option Bool) := Array.replicate P.PTC_SIZE none
@@ -227,7 +227,7 @@ def gloasGossipStoreSetup {P : Preset} (env : GossipEnvironment) (ctx : Context)
     let keys := fc.keys
     if !(keys.all (· ∈ ["epoch", "root", "block"])) || keys.contains "root" == keys.contains "block" then
       throw s!"finalized_checkpoint: keys {keys}"
-    let epochN ← ExceptT.mk (pure ((fc.field "epoch").bind YamlValue.asNat |>.mapError toString))
+    let epochN ← ExceptT.mk (pure ((fc.field "epoch").bind YVal.asNat |>.mapError toString))
     let epoch ← match U64.ofNat? epochN "finalized_checkpoint.epoch" with
       | .ok e => pure e
       | .error _ => throw "finalized_checkpoint.epoch out of range"
@@ -250,14 +250,14 @@ def gloasBidCasePrefixes : List String :=
   ["proposer_preferences_", "execution_payload_envelope_", "execution_payload_bid_"]
 
 /-- Run one Gloas Store-dependent handler `h`. -/
-def runGloasStoreGossip (P : Preset) (env : GossipEnvironment) (h : String) :
+def runGloasStoreGossip (P : Preset) (env : GossipEnv) (h : String) :
     IO (Except String (List Gossip.Outcome)) := ExceptT.run do
-  let ctx : Context := { config := env.config, blsActive := env.blsActive }
+  let ctx : Ctx := { cfg := env.cfg, blsActive := env.blsActive }
   let setup : GloasGossipStoreSetup P ← ExceptT.mk (gloasGossipStoreSetup env ctx)
   let store := setup.store
-  if !env.caseMetadata.seenPartialHeaders.isEmpty then
+  if !env.caseMeta.seenPartialHeaders.isEmpty then
     throw "seen_partial_data_column_headers: Gloas has no partial headers"
-  let seen : Gloas.SeenWithStore P := Gossip.Seen.empty {}
+  let seen : Gloas.GSeen P := Gossip.Seen.empty {}
   let statuses (r : Root) := (setup.payloadStatuses.find? (·.1 == r)).map (·.2)
   let time (m : GossipMessage) := gossipNeed "current_time_ms" m.currentTimeMs
   let subnet (m : GossipMessage) := gossipNeed "subnet_id" m.subnetId
@@ -276,7 +276,7 @@ def runGloasStoreGossip (P : Preset) (env : GossipEnvironment) (h : String) :
       pure (Gloas.validateDataColumnSidecarGossip ctx s store x (← time m) (← subnet m))
   | "partial_data_column_sidecar" =>
     let mut out := #[]
-    for m in env.caseMetadata.messages do
+    for m in env.caseMeta.messages do
       if m.currentTimeMs.isSome then throw s!"{m.message}: current_time_ms: the validator takes none"
       let x : Gloas.PartialDataColumnSidecar P ← ExceptT.mk (env.decode m.message)
       let some gid := m.groupId | throw s!"{m.message}: group_id is missing"
@@ -299,8 +299,8 @@ def runGloasStoreGossip (P : Preset) (env : GossipEnvironment) (h : String) :
   | "execution_payload_bid" =>
     let mut seen := seen
     let mut out := #[]
-    for m in env.caseMetadata.messages do
-      let v : Gossip.Validation (Gloas.SeenWithStore P) ←
+    for m in env.caseMeta.messages do
+      let v : Gossip.GM (Gloas.GSeen P) ←
         if m.message.startsWith "proposer_preferences_" then do
           let x : Gloas.SignedProposerPreferences ← ExceptT.mk (env.decode m.message)
           pure (Gloas.validateProposerPreferencesGossip ctx seen store x

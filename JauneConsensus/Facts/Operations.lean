@@ -13,13 +13,13 @@ namespace JauneConsensus.Facts
 
 open JauneConsensus
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-- The operations of `process_operations` that precede the withdrawal-requests loop, in spec order:
 the deposit-count check, the slashings, attestations, deposits, voluntary exits and
 `bls_to_execution_change`s, and the deposit requests. -/
-def preRequests (ctx : Context) (state : BeaconState P f) (body : BeaconBlockBody P f) :
-    Fallible (BeaconState P f) := do
+def preRequests (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
+    M (BeaconState P f) := do
   let site := "process_operations"
   if f.atLeast .fulu then
     require (body.deposits.length == 0) s!"{site}: no deposits (Fulu)"
@@ -44,20 +44,20 @@ def preRequests (ctx : Context) (state : BeaconState P f) (body : BeaconBlockBod
   for op in body.voluntary_exits.toArray do state ← processVoluntaryExit ctx state op
   for op in body.bls_to_execution_changes.toArray do state ← processBlsToExecutionChange ctx state op
   if f.atLeast .electra then
-    let requests ← ForkField.read body.execution_requests "execution_requests"
+    let requests ← Gated.read body.execution_requests "execution_requests"
     for op in requests.deposits.toArray do state ← processDepositRequest state op
   pure state
 
 /-- The withdrawal-requests loop of `process_operations` (Electra): the left fold of
 `process_withdrawal_request` over the requests, in order. -/
 def foldWithdrawalRequests (cfg : Config) (st : BeaconState P f) (reqs : List WithdrawalRequest) :
-    Fallible (BeaconState P f) :=
+    M (BeaconState P f) :=
   List.foldlM (fun s wr => processWithdrawalRequest cfg s wr) st reqs
 
 /-- The states of the withdrawal-requests fold: the state before each request, then the final
 state. Its length is `reqs.length + 1`, and its last element is the fold's result. -/
 def withdrawalRequestTrace (cfg : Config) :
-    BeaconState P f → List WithdrawalRequest → Fallible (List (BeaconState P f))
+    BeaconState P f → List WithdrawalRequest → M (List (BeaconState P f))
   | st, [] => pure [st]
   | st, wr :: rest => do
     let st' ← processWithdrawalRequest cfg st wr
@@ -66,18 +66,18 @@ def withdrawalRequestTrace (cfg : Config) :
 
 /-- The consolidation-requests loop of `process_operations` (Electra), which follows the
 withdrawal requests. -/
-def postRequests (ctx : Context) (state : BeaconState P f) (body : BeaconBlockBody P f) :
-    Fallible (BeaconState P f) := do
+def postRequests (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
+    M (BeaconState P f) := do
   let mut state := state
   if f.atLeast .electra then
-    let requests ← ForkField.read body.execution_requests "execution_requests"
-    for op in requests.consolidations.toArray do state ← processConsolidationRequest ctx.config state op
+    let requests ← Gated.read body.execution_requests "execution_requests"
+    for op in requests.consolidations.toArray do state ← processConsolidationRequest ctx.cfg state op
   pure state
 
 /-! ## Loop lemmas -/
 
 /-- The fold a `for` loop unfolds to, with each step wrapped as a yield, returns the plain fold. -/
-theorem foldlM_yield_value {α β : Type} (g : β → α → Fallible β) (L : List α) :
+theorem foldlM_yield_value {α β : Type} (g : β → α → M β) (L : List α) :
     ∀ init : β, ForInStep.value <$> L.foldlM (fun b a => match b with
         | .yield b => do let b' ← g b a; pure (ForInStep.yield b')
         | .done b => pure (ForInStep.done b)) (ForInStep.yield init) = L.foldlM g init := by
@@ -91,37 +91,37 @@ theorem foldlM_yield_value {α β : Type} (g : β → α → Fallible β) (L : L
     | ok b => exact ih b
 
 /-- A `for` loop whose body always yields is the left fold of its body over the list. -/
-theorem forArray_yield {α β : Type} (xs : Array α) (g : β → α → Fallible β) (init : β) :
+theorem forArr_yield {α β : Type} (xs : Array α) (g : β → α → M β) (init : β) :
     forIn xs init (fun a b => do let b' ← g b a; pure (ForInStep.yield b')) =
       xs.toList.foldlM g init := by
   rw [Array.forIn_eq_foldlM, ← Array.foldlM_toList]
   exact foldlM_yield_value g xs.toList init
 
 /-- A gated read under the fork fact succeeds with the gated value. -/
-theorem forkField_read_get {c : Bool} (h : c = true) {α : Type} (x : ForkField c α) (site : String) :
-    ForkField.read x site = .ok (ForkField.get h x) := by
+theorem gated_read_get {c : Bool} (h : c = true) {α : Type} (x : Gated c α) (site : String) :
+    Gated.read x site = .ok (Gated.get h x) := by
   subst h
   rfl
 
 /-- A bind on `Except.ok` reduces. -/
-theorem ok_bind' {α β : Type} (a : α) (f : α → Fallible β) : (Except.ok a : Fallible α) >>= f = f a := rfl
+theorem ok_bind' {α β : Type} (a : α) (f : α → M β) : (Except.ok a : M α) >>= f = f a := rfl
 
 /-- The split of `process_operations` at its withdrawal-requests loop (Electra and Fulu). -/
-theorem processOperations_split (ctx : Context) (st : BeaconState P f) (body : BeaconBlockBody P f)
+theorem processOperations_split (ctx : Ctx) (st : BeaconState P f) (body : BeaconBlockBody P f)
     (h : f.atLeast .electra = true) :
     processOperations ctx st body =
       preRequests ctx st body >>= fun s =>
-        foldWithdrawalRequests ctx.config s (ForkField.get h body.execution_requests).withdrawals.toArray.toList
+        foldWithdrawalRequests ctx.cfg s (Gated.get h body.execution_requests).withdrawals.toArray.toList
           >>= fun s' => postRequests ctx s' body := by
   unfold processOperations preRequests foldWithdrawalRequests postRequests
-  simp only [h, forkField_read_get h, forArray_yield, pure_bind, bind_assoc, Bool.not_true,
+  simp only [h, gated_read_get h, forArr_yield, pure_bind, bind_assoc, Bool.not_true,
     Bool.false_eq_true, ite_true, ite_false]
   cases hfu : f.atLeast .fulu
   · simp only [Bool.false_eq_true, ite_false]
     cases hx : st.depositRequestsStartIndex with
     | error e => rfl
     | ok x =>
-      rw [show (Except.ok x : Fallible U64) = pure x from rfl]
+      rw [show (Except.ok x : M U64) = pure x from rfl]
       simp only [pure_bind]
       split_ifs <;> simp only [bind_assoc, pure_bind, ok_bind']
   · simp only [ite_true, bind_assoc, pure_bind, ok_bind']
@@ -234,8 +234,8 @@ theorem foldWithdrawalRequests_eq_trace_last (cfg : Config) (st : BeaconState P 
 /-- The operations of `process_operations` that precede the deposit-requests loop, in spec order:
 the deposit-count check, the slashings, attestations, Eth1 bridge `deposits`, voluntary exits and
 `bls_to_execution_change`s. -/
-def preDeposits (ctx : Context) (state : BeaconState P f) (body : BeaconBlockBody P f) :
-    Fallible (BeaconState P f) := do
+def preDeposits (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
+    M (BeaconState P f) := do
   let site := "process_operations"
   if f.atLeast .fulu then
     require (body.deposits.length == 0) s!"{site}: no deposits (Fulu)"
@@ -263,13 +263,13 @@ def preDeposits (ctx : Context) (state : BeaconState P f) (body : BeaconBlockBod
 /-- The deposit-requests loop of `process_operations` (Electra and Fulu): the left fold of
 `process_deposit_request` over the requests, in order. -/
 def foldDepositRequests (state : BeaconState P f) (drs : List DepositRequest) :
-    Fallible (BeaconState P f) :=
+    M (BeaconState P f) :=
   List.foldlM (fun s dr => processDepositRequest s dr) state drs
 
 /-- The states of the deposit-requests fold: the state before each request, then the final state.
 Its length is `drs.length + 1`, and its last element is the fold's result. -/
 def depositRequestTrace :
-    BeaconState P f → List DepositRequest → Fallible (List (BeaconState P f))
+    BeaconState P f → List DepositRequest → M (List (BeaconState P f))
   | st, [] => pure [st]
   | st, dr :: rest => do
     let st' ← processDepositRequest st dr
@@ -278,31 +278,31 @@ def depositRequestTrace :
 
 /-- The operations of `process_operations` up to and including the deposit-requests loop
 (`preDeposits >>= foldDepositRequests`), i.e. the state handed to `foldWithdrawalRequests`. -/
-def postDeposits (ctx : Context) (state : BeaconState P f) (body : BeaconBlockBody P f) :
-    Fallible (BeaconState P f) :=
+def postDeposits (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
+    M (BeaconState P f) :=
   preRequests ctx state body
 
 /-- The operations of `process_operations` that precede the consolidation-requests loop (Electra and
 Fulu): `preRequests` followed by `foldWithdrawalRequests`. -/
-def preConsolidations (ctx : Context) (state : BeaconState P f) (body : BeaconBlockBody P f) :
-    Fallible (BeaconState P f) := do
+def preConsolidations (ctx : Ctx) (state : BeaconState P f) (body : BeaconBlockBody P f) :
+    M (BeaconState P f) := do
   let s ← preRequests ctx state body
   if f.atLeast .electra then
-    let requests ← ForkField.read body.execution_requests "execution_requests"
-    foldWithdrawalRequests ctx.config s requests.withdrawals.toArray.toList
+    let requests ← Gated.read body.execution_requests "execution_requests"
+    foldWithdrawalRequests ctx.cfg s requests.withdrawals.toArray.toList
   else
     pure s
 
 /-- The consolidation-requests loop of `process_operations` (Electra and Fulu): the left fold of
 `process_consolidation_request` over the requests, in order. -/
 def foldConsolidationRequests (cfg : Config) (st : BeaconState P f)
-    (reqs : List ConsolidationRequest) : Fallible (BeaconState P f) :=
+    (reqs : List ConsolidationRequest) : M (BeaconState P f) :=
   List.foldlM (fun s cr => processConsolidationRequest cfg s cr) st reqs
 
 /-- The states of the consolidation-requests fold: the state before each request, then the final
 state. Its length is `reqs.length + 1`, and its last element is the fold's result. -/
 def consolidationRequestTrace (cfg : Config) :
-    BeaconState P f → List ConsolidationRequest → Fallible (List (BeaconState P f))
+    BeaconState P f → List ConsolidationRequest → M (List (BeaconState P f))
   | st, [] => pure [st]
   | st, cr :: rest => do
     let st' ← processConsolidationRequest cfg st cr
@@ -310,8 +310,8 @@ def consolidationRequestTrace (cfg : Config) :
     pure (st :: tr)
 
 /-- Generic trace specification for any monadic step fold. -/
-theorem stepTrace_spec {α β : Type} (step : β → α → Fallible β)
-    (trace : β → List α → Fallible (List β))
+theorem stepTrace_spec {α β : Type} (step : β → α → M β)
+    (trace : β → List α → M (List β))
     (hnil : ∀ st, trace st [] = pure [st])
     (hcons : ∀ st x rest, trace st (x :: rest) = (do
       let st' ← step st x
@@ -364,8 +364,8 @@ theorem stepTrace_spec {α β : Type} (step : β → α → Fallible β)
 termination_by reqs => reqs.length
 
 /-- Generic equivalence between a `List.foldlM` and the last element of its step trace. -/
-theorem foldlM_eq_stepTrace_last {α β : Type} (step : β → α → Fallible β)
-    (trace : β → List α → Fallible (List β))
+theorem foldlM_eq_stepTrace_last {α β : Type} (step : β → α → M β)
+    (trace : β → List α → M (List β))
     (hnil : ∀ st, trace st [] = pure [st])
     (hcons : ∀ st x rest, trace st (x :: rest) = (do
       let st' ← step st x
@@ -411,8 +411,8 @@ theorem foldlM_eq_stepTrace_last {α β : Type} (step : β → α → Fallible �
         exact key
 
 /-- Conversly, every successful `List.foldlM` produces a step trace ending at its result. -/
-theorem stepTrace_of_foldlM {α β : Type} (step : β → α → Fallible β)
-    (trace : β → List α → Fallible (List β))
+theorem stepTrace_of_foldlM {α β : Type} (step : β → α → M β)
+    (trace : β → List α → M (List β))
     (hnil : ∀ st, trace st [] = pure [st])
     (hcons : ∀ st x rest, trace st (x :: rest) = (do
       let st' ← step st x
@@ -440,50 +440,50 @@ theorem stepTrace_of_foldlM {α β : Type} (step : β → α → Fallible β)
       · rw [List.getLast_cons hne']; exact hlast
 
 /-- `preRequests` splits into `preDeposits` followed by `foldDepositRequests` (Electra and Fulu). -/
-theorem preRequests_eq_preDeposits_fold (ctx : Context) (st : BeaconState P f)
+theorem preRequests_eq_preDeposits_fold (ctx : Ctx) (st : BeaconState P f)
     (body : BeaconBlockBody P f) (h : f.atLeast .electra = true) :
     preRequests ctx st body =
       preDeposits ctx st body >>= fun s =>
-        foldDepositRequests s (ForkField.get h body.execution_requests).deposits.toArray.toList := by
+        foldDepositRequests s (Gated.get h body.execution_requests).deposits.toArray.toList := by
   unfold preRequests preDeposits foldDepositRequests
-  simp only [h, forkField_read_get h, forArray_yield, pure_bind, Bool.not_true,
+  simp only [h, gated_read_get h, forArr_yield, pure_bind, Bool.not_true,
     Bool.false_eq_true, ite_true, ite_false]
   cases hfu : f.atLeast .fulu
   · simp only [Bool.false_eq_true, ite_false]
     cases hx : st.depositRequestsStartIndex with
     | error e => rfl
     | ok x =>
-      rw [show (Except.ok x : Fallible U64) = pure x from rfl]
+      rw [show (Except.ok x : M U64) = pure x from rfl]
       simp only [pure_bind]
       split_ifs <;> simp only [bind_assoc, ok_bind', bind_pure]
   · simp only [ite_true, bind_assoc, ok_bind', bind_pure]
 
 /-- `postRequests` is `foldConsolidationRequests` (Electra and Fulu). -/
-theorem postRequests_eq_foldConsolidationRequests (ctx : Context) (st : BeaconState P f)
+theorem postRequests_eq_foldConsolidationRequests (ctx : Ctx) (st : BeaconState P f)
     (body : BeaconBlockBody P f) (h : f.atLeast .electra = true) :
     postRequests ctx st body =
-      foldConsolidationRequests ctx.config st
-        (ForkField.get h body.execution_requests).consolidations.toArray.toList := by
+      foldConsolidationRequests ctx.cfg st
+        (Gated.get h body.execution_requests).consolidations.toArray.toList := by
   unfold postRequests foldConsolidationRequests
-  simp only [h, forkField_read_get h, forArray_yield, ite_true, ok_bind', bind_pure]
+  simp only [h, gated_read_get h, forArr_yield, ite_true, ok_bind', bind_pure]
 
 /-- `preConsolidations` under Electra/Fulu is `preRequests >>= foldWithdrawalRequests`. -/
-theorem preConsolidations_eq (ctx : Context) (st : BeaconState P f) (body : BeaconBlockBody P f)
+theorem preConsolidations_eq (ctx : Ctx) (st : BeaconState P f) (body : BeaconBlockBody P f)
     (h : f.atLeast .electra = true) :
     preConsolidations ctx st body =
       preRequests ctx st body >>= fun s =>
-        foldWithdrawalRequests ctx.config s
-          (ForkField.get h body.execution_requests).withdrawals.toArray.toList := by
+        foldWithdrawalRequests ctx.cfg s
+          (Gated.get h body.execution_requests).withdrawals.toArray.toList := by
   unfold preConsolidations
-  simp only [h, forkField_read_get h, ite_true, ok_bind']
+  simp only [h, gated_read_get h, ite_true, ok_bind']
 
 /-- Split of `process_operations` at its consolidation-requests loop (Electra and Fulu). -/
-theorem processOperations_split_consolidations (ctx : Context) (st : BeaconState P f)
+theorem processOperations_split_consolidations (ctx : Ctx) (st : BeaconState P f)
     (body : BeaconBlockBody P f) (h : f.atLeast .electra = true) :
     processOperations ctx st body =
       preConsolidations ctx st body >>= fun s =>
-        foldConsolidationRequests ctx.config s
-          (ForkField.get h body.execution_requests).consolidations.toArray.toList := by
+        foldConsolidationRequests ctx.cfg s
+          (Gated.get h body.execution_requests).consolidations.toArray.toList := by
   rw [processOperations_split ctx st body h, preConsolidations_eq ctx st body h, bind_assoc]
   apply bind_congr; intro s
   apply bind_congr; intro s'
@@ -492,16 +492,16 @@ theorem processOperations_split_consolidations (ctx : Context) (st : BeaconState
 /-- Full four-stage split of `process_operations` across all three execution-request loops
 (Electra and Fulu): `preDeposits`, `foldDepositRequests`, `foldWithdrawalRequests`, and
 `foldConsolidationRequests`. -/
-theorem processOperations_split_all (ctx : Context) (st : BeaconState P f)
+theorem processOperations_split_all (ctx : Ctx) (st : BeaconState P f)
     (body : BeaconBlockBody P f) (h : f.atLeast .electra = true) :
     processOperations ctx st body =
       preDeposits ctx st body >>= fun s1 =>
         foldDepositRequests s1
-          (ForkField.get h body.execution_requests).deposits.toArray.toList >>= fun s2 =>
-          foldWithdrawalRequests ctx.config s2
-            (ForkField.get h body.execution_requests).withdrawals.toArray.toList >>= fun s3 =>
-            foldConsolidationRequests ctx.config s3
-              (ForkField.get h body.execution_requests).consolidations.toArray.toList := by
+          (Gated.get h body.execution_requests).deposits.toArray.toList >>= fun s2 =>
+          foldWithdrawalRequests ctx.cfg s2
+            (Gated.get h body.execution_requests).withdrawals.toArray.toList >>= fun s3 =>
+            foldConsolidationRequests ctx.cfg s3
+              (Gated.get h body.execution_requests).consolidations.toArray.toList := by
   rw [processOperations_split ctx st body h, preRequests_eq_preDeposits_fold ctx st body h,
     bind_assoc]
   apply bind_congr; intro s1
@@ -571,14 +571,14 @@ theorem consolidationRequestTrace_of_fold (cfg : Config) {st out : BeaconState P
 
 /-- The state after `process_withdrawals`: the header step, then the withdrawals step. -/
 def blockAfterWithdrawals (state : BeaconState P f) (block : BeaconBlock P f) :
-    Fallible (BeaconState P f) := do
+    M (BeaconState P f) := do
   let state ← processBlockHeader state block
   processWithdrawals state block.body.execution_payload
 
 /-- The state handed to `process_operations`: the header, withdrawals, execution payload, RANDAO
 and eth1 steps of `process_block`, in order. -/
-def blockBeforeOperations (ctx : Context) (state : BeaconState P f) (block : BeaconBlock P f) :
-    Fallible (BeaconState P f) := do
+def blockBeforeOps (ctx : Ctx) (state : BeaconState P f) (block : BeaconBlock P f) :
+    M (BeaconState P f) := do
   let state ← blockAfterWithdrawals state block
   let state ← processExecutionPayload ctx state block.body
   let state ← processRandao ctx state block.body
@@ -586,8 +586,8 @@ def blockBeforeOperations (ctx : Context) (state : BeaconState P f) (block : Bea
 
 /-- The steps of `process_block` from the execution payload on: the operations and the sync
 aggregate. -/
-def blockRest (ctx : Context) (state : BeaconState P f) (block : BeaconBlock P f) :
-    Fallible (BeaconState P f) := do
+def blockRest (ctx : Ctx) (state : BeaconState P f) (block : BeaconBlock P f) :
+    M (BeaconState P f) := do
   let state ← processExecutionPayload ctx state block.body
   let state ← processRandao ctx state block.body
   let state ← processEth1Data state block.body
@@ -595,7 +595,7 @@ def blockRest (ctx : Context) (state : BeaconState P f) (block : BeaconBlock P f
   processSyncAggregate ctx state block.body.sync_aggregate
 
 /-- `process_block` is the withdrawals state followed by the rest of the steps. -/
-theorem processBlockWith_eq_afterWithdrawals (ctx : Context) (state : BeaconState P f)
+theorem processBlockWith_eq_afterWithdrawals (ctx : Ctx) (state : BeaconState P f)
     (block : BeaconBlock P f) :
     processBlockWith ctx state block =
       blockAfterWithdrawals state block >>= fun s => blockRest ctx s block := by
@@ -603,12 +603,12 @@ theorem processBlockWith_eq_afterWithdrawals (ctx : Context) (state : BeaconStat
   simp only [bind_assoc]
 
 /-- `process_block` exposes the state handed to `process_operations`. -/
-theorem processBlockWith_split (ctx : Context) (state : BeaconState P f) (block : BeaconBlock P f) :
+theorem processBlockWith_split (ctx : Ctx) (state : BeaconState P f) (block : BeaconBlock P f) :
     processBlockWith ctx state block =
-      blockBeforeOperations ctx state block >>= fun s =>
+      blockBeforeOps ctx state block >>= fun s =>
         processOperations ctx s block.body >>= fun s' =>
           processSyncAggregate ctx s' block.body.sync_aggregate := by
-  unfold processBlockWith blockBeforeOperations blockAfterWithdrawals
+  unfold processBlockWith blockBeforeOps blockAfterWithdrawals
   simp only [bind_assoc]
 
 

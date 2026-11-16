@@ -14,16 +14,16 @@ the two entry points, so the conformance harness and later theorems name one fun
 
 namespace JauneConsensus
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-- `process_slots(state, slot)`. -/
-def processSlots (ctx : Context) (state : BeaconState P f) (slot : Slot) : Fallible (BeaconState P f) :=
+def processSlots (ctx : Ctx) (state : BeaconState P f) (slot : Slot) : M (BeaconState P f) :=
   processSlotsWith (processEpoch ctx) state slot
 
 /-- `state_transition(state, signed_block, validate_result)`; the BLS switch is
 `ctx.blsActive`. -/
-def stateTransition (ctx : Context) (state : BeaconState P f) (signedBlock : SignedBeaconBlock P f)
-    (validateResult : Bool := true) : Fallible (BeaconState P f) :=
+def stateTransition (ctx : Ctx) (state : BeaconState P f) (signedBlock : SignedBeaconBlock P f)
+    (validateResult : Bool := true) : M (BeaconState P f) :=
   stateTransitionWith (processEpoch ctx) (processBlock ctx) ctx.blsActive state signedBlock
     validateResult
 

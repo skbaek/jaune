@@ -14,8 +14,8 @@ mocked execution engine's verdict (`execution.yaml`); state transitions outside 
 namespace JauneConsensus
 
 /-- The processing context: configuration and the harness switches. -/
-structure Context where
-  config : Config
+structure Ctx where
+  cfg : Config
   /-- pyspec `bls.bls_active`. -/
   blsActive : Bool := true
   /-- The mocked `execution_engine.verify_and_notify_new_payload` verdict. -/

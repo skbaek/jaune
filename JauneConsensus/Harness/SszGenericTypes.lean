@@ -103,92 +103,92 @@ yaml_container ProgressiveComplexTestStruct [A, B, C, D, E, F, G, H]
 
 /-- `CompatibleUnionA = CompatibleUnion({1: ProgressiveSingleFieldContainerTestStruct})`. -/
 inductive CompatibleUnionA where
-  | selector1 (v : ProgressiveSingleFieldContainerTestStruct)
+  | s1 (v : ProgressiveSingleFieldContainerTestStruct)
   deriving DecidableEq, BEq
 
 /-- `CompatibleUnionBC = CompatibleUnion({2: ProgressiveSingleListContainerTestStruct,
 3: ProgressiveVarTestStruct})`. -/
 inductive CompatibleUnionBC where
-  | selector2 (v : ProgressiveSingleListContainerTestStruct)
-  | selector3 (v : ProgressiveVarTestStruct)
+  | s2 (v : ProgressiveSingleListContainerTestStruct)
+  | s3 (v : ProgressiveVarTestStruct)
   deriving DecidableEq, BEq
 
 /-- `CompatibleUnionABCA = CompatibleUnion({1: ProgressiveSingleFieldContainerTestStruct,
 2: ProgressiveSingleListContainerTestStruct, 3: ProgressiveVarTestStruct,
 4: ProgressiveSingleFieldContainerTestStruct})`. -/
 inductive CompatibleUnionABCA where
-  | selector1 (v : ProgressiveSingleFieldContainerTestStruct)
-  | selector2 (v : ProgressiveSingleListContainerTestStruct)
-  | selector3 (v : ProgressiveVarTestStruct)
-  | selector4 (v : ProgressiveSingleFieldContainerTestStruct)
+  | s1 (v : ProgressiveSingleFieldContainerTestStruct)
+  | s2 (v : ProgressiveSingleListContainerTestStruct)
+  | s3 (v : ProgressiveVarTestStruct)
+  | s4 (v : ProgressiveSingleFieldContainerTestStruct)
   deriving DecidableEq, BEq
 
 /-- Decode the data of a union option. -/
-def unionOption {α β : Type} [Ssz α] (wrap : α → β) (data : Bytes) : Option (Fallible β) :=
-  some (wrap <$> (deserialize data : Fallible α))
+def unionOption {α β : Type} [Ssz α] (wrap : α → β) (data : Bytes) : Option (M β) :=
+  some (wrap <$> (deserialize data : M α))
 
 instance : Ssz CompatibleUnionA where
   fixedSize? := none
-  serialize | .selector1 v => serializeUnion 1 (serialize v)
+  serialize | .s1 v => serializeUnion 1 (serialize v)
   deserialize bs := deserializeUnion bs fun sel data =>
-    if sel = 1 then unionOption .selector1 data else none
-  hashTreeRoot | .selector1 v => mixInSelector (hashTreeRoot v) 1
+    if sel = 1 then unionOption .s1 data else none
+  hashTreeRoot | .s1 v => mixInSelector (hashTreeRoot v) 1
 
 instance : Ssz CompatibleUnionBC where
   fixedSize? := none
   serialize
-    | .selector2 v => serializeUnion 2 (serialize v)
-    | .selector3 v => serializeUnion 3 (serialize v)
+    | .s2 v => serializeUnion 2 (serialize v)
+    | .s3 v => serializeUnion 3 (serialize v)
   deserialize bs := deserializeUnion bs fun sel data =>
-    if sel = 2 then unionOption .selector2 data
-    else if sel = 3 then unionOption .selector3 data else none
+    if sel = 2 then unionOption .s2 data
+    else if sel = 3 then unionOption .s3 data else none
   hashTreeRoot
-    | .selector2 v => mixInSelector (hashTreeRoot v) 2
-    | .selector3 v => mixInSelector (hashTreeRoot v) 3
+    | .s2 v => mixInSelector (hashTreeRoot v) 2
+    | .s3 v => mixInSelector (hashTreeRoot v) 3
 
 instance : Ssz CompatibleUnionABCA where
   fixedSize? := none
   serialize
-    | .selector1 v => serializeUnion 1 (serialize v)
-    | .selector2 v => serializeUnion 2 (serialize v)
-    | .selector3 v => serializeUnion 3 (serialize v)
-    | .selector4 v => serializeUnion 4 (serialize v)
+    | .s1 v => serializeUnion 1 (serialize v)
+    | .s2 v => serializeUnion 2 (serialize v)
+    | .s3 v => serializeUnion 3 (serialize v)
+    | .s4 v => serializeUnion 4 (serialize v)
   deserialize bs := deserializeUnion bs fun sel data =>
-    if sel = 1 then unionOption .selector1 data
-    else if sel = 2 then unionOption .selector2 data
-    else if sel = 3 then unionOption .selector3 data
-    else if sel = 4 then unionOption .selector4 data else none
+    if sel = 1 then unionOption .s1 data
+    else if sel = 2 then unionOption .s2 data
+    else if sel = 3 then unionOption .s3 data
+    else if sel = 4 then unionOption .s4 data else none
   hashTreeRoot
-    | .selector1 v => mixInSelector (hashTreeRoot v) 1
-    | .selector2 v => mixInSelector (hashTreeRoot v) 2
-    | .selector3 v => mixInSelector (hashTreeRoot v) 3
-    | .selector4 v => mixInSelector (hashTreeRoot v) 4
+    | .s1 v => mixInSelector (hashTreeRoot v) 1
+    | .s2 v => mixInSelector (hashTreeRoot v) 2
+    | .s3 v => mixInSelector (hashTreeRoot v) 3
+    | .s4 v => mixInSelector (hashTreeRoot v) 4
 
 /-- The selector and data of a union value (`{selector: n, data: ...}`). -/
-def unionParts (y : Yaml.YamlValue) : Yaml.Result (Nat × Yaml.YamlValue) := do
+def unionParts (y : Yaml.YVal) : Yaml.Res (Nat × Yaml.YVal) := do
   let sel ← (← y.field "selector").asNat
   pure (sel, ← y.field "data")
 
 instance : FromYaml CompatibleUnionA where
   fromYaml y := do
     match ← unionParts y with
-    | (1, d) => .selector1 <$> fromYaml d
+    | (1, d) => .s1 <$> fromYaml d
     | _ => throw (.shape "CompatibleUnionA selector")
 
 instance : FromYaml CompatibleUnionBC where
   fromYaml y := do
     match ← unionParts y with
-    | (2, d) => .selector2 <$> fromYaml d
-    | (3, d) => .selector3 <$> fromYaml d
+    | (2, d) => .s2 <$> fromYaml d
+    | (3, d) => .s3 <$> fromYaml d
     | _ => throw (.shape "CompatibleUnionBC selector")
 
 instance : FromYaml CompatibleUnionABCA where
   fromYaml y := do
     match ← unionParts y with
-    | (1, d) => .selector1 <$> fromYaml d
-    | (2, d) => .selector2 <$> fromYaml d
-    | (3, d) => .selector3 <$> fromYaml d
-    | (4, d) => .selector4 <$> fromYaml d
+    | (1, d) => .s1 <$> fromYaml d
+    | (2, d) => .s2 <$> fromYaml d
+    | (3, d) => .s3 <$> fromYaml d
+    | (4, d) => .s4 <$> fromYaml d
     | _ => throw (.shape "CompatibleUnionABCA selector")
 
 

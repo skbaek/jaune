@@ -30,11 +30,11 @@ namespace Jaune
 /-- Decidable equality of `BLT`, by structural recursion over the nested
 inductive, so that the kernel can evaluate it. (The `deriving` handler does not
 apply to this nested inductive.) -/
-def Rlp.Item.decEq : (a b : Rlp.Item) → Decidable (a = b)
+def BLT.decEq : (a b : BLT) → Decidable (a = b)
   | .bytes x, .bytes y =>
     if h : x = y then isTrue (h ▸ rfl) else isFalse (fun e => by cases e; exact h rfl)
   | .list xs, .list ys =>
-    match Rlp.Item.decEq.decEqList xs ys with
+    match BLT.decEq.decEqList xs ys with
     | isTrue h => isTrue (h ▸ rfl)
     | isFalse h => isFalse (fun e => by cases e; exact h rfl)
   | .bytes _, .list _ => isFalse (fun e => by cases e)
@@ -42,10 +42,10 @@ def Rlp.Item.decEq : (a b : Rlp.Item) → Decidable (a = b)
 termination_by structural a => a
 where
   /-- Decidable equality of `List BLT`, mutual with `BLT.decEq`. -/
-  decEqList : (xs ys : List Rlp.Item) → Decidable (xs = ys)
+  decEqList : (xs ys : List BLT) → Decidable (xs = ys)
   | [], [] => isTrue rfl
   | x :: xs, y :: ys =>
-    match Rlp.Item.decEq x y, Rlp.Item.decEq.decEqList xs ys with
+    match BLT.decEq x y, BLT.decEq.decEqList xs ys with
     | isTrue h1, isTrue h2 => isTrue (h1 ▸ h2 ▸ rfl)
     | isFalse h1, _ => isFalse (fun e => by cases e; exact h1 rfl)
     | _, isFalse h2 => isFalse (fun e => by cases e; exact h2 rfl)
@@ -53,12 +53,12 @@ where
   | _ :: _, [] => isFalse (fun e => by cases e)
   termination_by structural xs => xs
 
-instance : DecidableEq Rlp.Item := Rlp.Item.decEq
+instance : DecidableEq BLT := BLT.decEq
 
 /-- One step of `Bytes.toBLTDiff?` at fuel `k + 1`, with the list decoder at
 fuel `k` passed as `ts`. The body is `Bytes.toBLTDiff?`'s, verbatim. -/
-def Bytes.toRlpItemDiffStep (ts : Bytes → Option (List Rlp.Item)) :
-    Bytes → Option (Rlp.Item × Bytes)
+def Bytes.toBLTDiffStep (ts : Bytes → Option (List BLT)) :
+    Bytes → Option (BLT × Bytes)
   | [] => none
   | b :: bs =>
     match Jaune.UInt8.toBools b with
@@ -80,63 +80,63 @@ def Bytes.toRlpItemDiffStep (ts : Bytes → Option (List Rlp.Item)) :
       return ⟨.list rs, bs'⟩
 
 /-- Structural twin of `Bytes.toBLTs?`. -/
-def Bytes.toRlpItemsS : Nat → Bytes → Option (List Rlp.Item)
+def Bytes.toBLTsS : Nat → Bytes → Option (List BLT)
   | _, [] => some []
   | 0, _ :: _ => none
   | k + 1, bs@(_ :: _) => do
-    let (r, bs') ← Bytes.toRlpItemDiffStep (Bytes.toRlpItemsS k) bs
-    let rs ← Bytes.toRlpItemsS k bs'
+    let (r, bs') ← Bytes.toBLTDiffStep (Bytes.toBLTsS k) bs
+    let rs ← Bytes.toBLTsS k bs'
     return (r :: rs)
 
 /-- Structural twin of `Bytes.toBLTDiff?`. -/
-def Bytes.toRlpItemDiffS : Nat → Bytes → Option (Rlp.Item × Bytes)
+def Bytes.toBLTDiffS : Nat → Bytes → Option (BLT × Bytes)
   | 0, _ => none
-  | k + 1, bs => Bytes.toRlpItemDiffStep (Bytes.toRlpItemsS k) bs
+  | k + 1, bs => Bytes.toBLTDiffStep (Bytes.toBLTsS k) bs
 
 /-- Structural twin of `Bytes.toBLT?`. -/
-def Bytes.toRlpItemS (bs : Bytes) : Option Rlp.Item :=
-  match Bytes.toRlpItemDiffS bs.length bs with
+def Bytes.toBLTS (bs : Bytes) : Option BLT :=
+  match Bytes.toBLTDiffS bs.length bs with
   | some (r, []) => some r
   | _ => none
 
-theorem Bytes.toRlpItemDiff?_succ (k : Nat) (bs : Bytes) :
-    Bytes.toRlpItemDiff? (k + 1) bs = Bytes.toRlpItemDiffStep (Bytes.toRlpItems? k) bs := by
+theorem Bytes.toBLTDiff?_succ (k : Nat) (bs : Bytes) :
+    Bytes.toBLTDiff? (k + 1) bs = Bytes.toBLTDiffStep (Bytes.toBLTs? k) bs := by
   cases bs with
-  | nil => simp [Bytes.toRlpItemDiff?, Bytes.toRlpItemDiffStep]
-  | cons b bs => rw [Bytes.toRlpItemDiff?]; rfl
+  | nil => simp [Bytes.toBLTDiff?, Bytes.toBLTDiffStep]
+  | cons b bs => rw [Bytes.toBLTDiff?]; rfl
 
-private theorem Bytes.toRlpItems?_eq_toRlpItemsS_aux :
-    ∀ k, Bytes.toRlpItems? k = Bytes.toRlpItemsS k := by
+private theorem Bytes.toBLTs?_eq_toBLTsS_aux :
+    ∀ k, Bytes.toBLTs? k = Bytes.toBLTsS k := by
   intro k
   induction k with
   | zero =>
     funext bs
-    cases bs <;> simp [Bytes.toRlpItems?, Bytes.toRlpItemsS]
+    cases bs <;> simp [Bytes.toBLTs?, Bytes.toBLTsS]
   | succ k ih =>
     funext bs
     cases bs with
-    | nil => simp [Bytes.toRlpItems?, Bytes.toRlpItemsS]
+    | nil => simp [Bytes.toBLTs?, Bytes.toBLTsS]
     | cons b bs =>
-      rw [Bytes.toRlpItems?, Bytes.toRlpItemsS, Bytes.toRlpItemDiff?_succ, ih]
+      rw [Bytes.toBLTs?, Bytes.toBLTsS, Bytes.toBLTDiff?_succ, ih]
 
 /-- The public list decoder equals its structural twin at every fuel. -/
-theorem Bytes.toRlpItems?_eq_toRlpItemsS (k : Nat) (bs : Bytes) :
-    Bytes.toRlpItems? k bs = Bytes.toRlpItemsS k bs := by
-  rw [Bytes.toRlpItems?_eq_toRlpItemsS_aux]
+theorem Bytes.toBLTs?_eq_toBLTsS (k : Nat) (bs : Bytes) :
+    Bytes.toBLTs? k bs = Bytes.toBLTsS k bs := by
+  rw [Bytes.toBLTs?_eq_toBLTsS_aux]
 
 /-- The public item decoder equals its structural twin at every fuel. -/
-theorem Bytes.toRlpItemDiff?_eq_toRlpItemDiffS (k : Nat) (bs : Bytes) :
-    Bytes.toRlpItemDiff? k bs = Bytes.toRlpItemDiffS k bs := by
+theorem Bytes.toBLTDiff?_eq_toBLTDiffS (k : Nat) (bs : Bytes) :
+    Bytes.toBLTDiff? k bs = Bytes.toBLTDiffS k bs := by
   cases k with
-  | zero => cases bs <;> simp [Bytes.toRlpItemDiff?, Bytes.toRlpItemDiffS]
+  | zero => cases bs <;> simp [Bytes.toBLTDiff?, Bytes.toBLTDiffS]
   | succ k =>
-    rw [Bytes.toRlpItemDiff?_succ, Bytes.toRlpItemDiffS, Bytes.toRlpItems?_eq_toRlpItemsS_aux]
+    rw [Bytes.toBLTDiff?_succ, Bytes.toBLTDiffS, Bytes.toBLTs?_eq_toBLTsS_aux]
 
 /-- The public decoder equals its structural twin on every input; rewrite with
 this, then `decide +kernel`. -/
-theorem Bytes.toRlpItem?_eq_toRlpItemS (bs : Bytes) : Bytes.toRlpItem? bs = Bytes.toRlpItemS bs := by
-  unfold Bytes.toRlpItem? Bytes.toRlpItemS
-  rw [Bytes.toRlpItemDiff?_eq_toRlpItemDiffS]
+theorem Bytes.toBLT?_eq_toBLTS (bs : Bytes) : Bytes.toBLT? bs = Bytes.toBLTS bs := by
+  unfold Bytes.toBLT? Bytes.toBLTS
+  rw [Bytes.toBLTDiff?_eq_toBLTDiffS]
   rfl
 
 /-! ### The encoder
@@ -191,7 +191,7 @@ theorem Nat.toBytesPack_eq_toBytesPackS (n : Nat) :
   | succ m => rw [Nat.toBytesPack, Nat.toBytesPackS, Nat.toBytes_eq_toBytesS]
 
 /-- The byte-string branch of `BLT.toBytes`, through `Nat.toBytesPackS`. -/
-def Rlp.Item.bytesToBytesS : Bytes → Bytes
+def BLT.bytesToBytesS : Bytes → Bytes
   | [b] => if b < (0x80) then [b] else [0x81, b]
   | bs =>
     if bs.length < 56
@@ -201,7 +201,7 @@ def Rlp.Item.bytesToBytesS : Bytes → Bytes
 
 /-- The list header `BLTs.toBytes` puts before a joined payload, through
 `Nat.toBytesPackS`. -/
-def Rlp.Items.wrapS (bs : Bytes) : Bytes :=
+def BLTs.wrapS (bs : Bytes) : Bytes :=
   let len := bs.length
   if len < 56
   then (0xC0 + len.toUInt8) :: bs
@@ -211,66 +211,66 @@ def Rlp.Items.wrapS (bs : Bytes) : Bytes :=
 mutual
 
   /-- Structural twin of `BLT.toBytes`. -/
-  def Rlp.Item.toBytesS : Rlp.Item → Bytes
-    | .bytes bs => Rlp.Item.bytesToBytesS bs
-    | .list rs => Rlp.Items.wrapS (Rlp.Items.toBytesJoinS rs)
+  def BLT.toBytesS : BLT → Bytes
+    | .bytes bs => BLT.bytesToBytesS bs
+    | .list rs => BLTs.wrapS (BLTs.toBytesJoinS rs)
 
   /-- Structural twin of `BLTs.toBytesJoin`. -/
-  def Rlp.Items.toBytesJoinS : List Rlp.Item → Bytes
+  def BLTs.toBytesJoinS : List BLT → Bytes
     | [] => []
-    | r :: rs => Rlp.Item.toBytesS r ++ Rlp.Items.toBytesJoinS rs
+    | r :: rs => BLT.toBytesS r ++ BLTs.toBytesJoinS rs
 
 end
 
 /-- Structural twin of `BLTs.toBytes`. -/
-def Rlp.Items.toBytesS (rs : List Rlp.Item) : Bytes := Rlp.Items.wrapS (Rlp.Items.toBytesJoinS rs)
+def BLTs.toBytesS (rs : List BLT) : Bytes := BLTs.wrapS (BLTs.toBytesJoinS rs)
 
-theorem Rlp.Item.toBytes_bytes_eq_bytesToBytesS (bs : Bytes) :
-    Rlp.Item.toBytes (.bytes bs) = Rlp.Item.bytesToBytesS bs := by
+theorem BLT.toBytes_bytes_eq_bytesToBytesS (bs : Bytes) :
+    BLT.toBytes (.bytes bs) = BLT.bytesToBytesS bs := by
   match bs with
-  | [b] => simp [Rlp.Item.toBytes, Rlp.Item.bytesToBytesS]
-  | [] => simp [Rlp.Item.toBytes, Rlp.Item.bytesToBytesS]
+  | [b] => simp [BLT.toBytes, BLT.bytesToBytesS]
+  | [] => simp [BLT.toBytes, BLT.bytesToBytesS]
   | b :: c :: bs =>
-    simp only [Rlp.Item.toBytes, Rlp.Item.bytesToBytesS, Nat.toBytesPack_eq_toBytesPackS]
+    simp only [BLT.toBytes, BLT.bytesToBytesS, Nat.toBytesPack_eq_toBytesPackS]
 
-theorem Rlp.Items.toBytes_eq_wrapS (rs : List Rlp.Item) :
-    Rlp.Items.toBytes rs = Rlp.Items.wrapS (Rlp.Items.toBytesJoin rs) := by
-  simp only [Rlp.Items.toBytes, Rlp.Items.wrapS, Nat.toBytesPack_eq_toBytesPackS]
+theorem BLTs.toBytes_eq_wrapS (rs : List BLT) :
+    BLTs.toBytes rs = BLTs.wrapS (BLTs.toBytesJoin rs) := by
+  simp only [BLTs.toBytes, BLTs.wrapS, Nat.toBytesPack_eq_toBytesPackS]
 
 mutual
 
   /-- The public encoder equals its structural twin; rewrite with this, then
   `decide +kernel`. -/
-  theorem Rlp.Item.toBytes_eq_toBytesS : (r : Rlp.Item) → Rlp.Item.toBytes r = Rlp.Item.toBytesS r
-    | .bytes bs => by rw [Rlp.Item.toBytes_bytes_eq_bytesToBytesS, Rlp.Item.toBytesS]
+  theorem BLT.toBytes_eq_toBytesS : (r : BLT) → BLT.toBytes r = BLT.toBytesS r
+    | .bytes bs => by rw [BLT.toBytes_bytes_eq_bytesToBytesS, BLT.toBytesS]
     | .list rs => by
-      rw [Rlp.Item.toBytes, Rlp.Items.toBytes_eq_wrapS, Rlp.Items.toBytesJoin_eq_toBytesJoinS rs, Rlp.Item.toBytesS]
+      rw [BLT.toBytes, BLTs.toBytes_eq_wrapS, BLTs.toBytesJoin_eq_toBytesJoinS rs, BLT.toBytesS]
 
-  theorem Rlp.Items.toBytesJoin_eq_toBytesJoinS :
-      (rs : List Rlp.Item) → Rlp.Items.toBytesJoin rs = Rlp.Items.toBytesJoinS rs
-    | [] => by rw [Rlp.Items.toBytesJoin, Rlp.Items.toBytesJoinS]
+  theorem BLTs.toBytesJoin_eq_toBytesJoinS :
+      (rs : List BLT) → BLTs.toBytesJoin rs = BLTs.toBytesJoinS rs
+    | [] => by rw [BLTs.toBytesJoin, BLTs.toBytesJoinS]
     | r :: rs => by
-      rw [Rlp.Items.toBytesJoin, Rlp.Items.toBytesJoinS, Rlp.Item.toBytes_eq_toBytesS r,
-        Rlp.Items.toBytesJoin_eq_toBytesJoinS rs]
+      rw [BLTs.toBytesJoin, BLTs.toBytesJoinS, BLT.toBytes_eq_toBytesS r,
+        BLTs.toBytesJoin_eq_toBytesJoinS rs]
 
 end
 
-theorem Rlp.Items.toBytes_eq_toBytesS (rs : List Rlp.Item) : Rlp.Items.toBytes rs = Rlp.Items.toBytesS rs := by
-  rw [Rlp.Items.toBytes_eq_wrapS, Rlp.Items.toBytesJoin_eq_toBytesJoinS, Rlp.Items.toBytesS]
+theorem BLTs.toBytes_eq_toBytesS (rs : List BLT) : BLTs.toBytes rs = BLTs.toBytesS rs := by
+  rw [BLTs.toBytes_eq_wrapS, BLTs.toBytesJoin_eq_toBytesJoinS, BLTs.toBytesS]
 
 /-! ### Controls
 
 The build fails here if a twin stops being kernel-evaluable or stops matching
 the public codec on a long-form item (length of length, nested list). -/
 
-example : Bytes.toRlpItem? [0xf8, 0x02, 0x81, 0xff] = some (.list [.bytes [0xff]]) := by
-  rw [Bytes.toRlpItem?_eq_toRlpItemS]; decide +kernel
+example : Bytes.toBLT? [0xf8, 0x02, 0x81, 0xff] = some (.list [.bytes [0xff]]) := by
+  rw [Bytes.toBLT?_eq_toBLTS]; decide +kernel
 
-example : Bytes.toRlpItem? [0xc4, 0xc3, 0x82, 0x01, 0xaa] =
+example : Bytes.toBLT? [0xc4, 0xc3, 0x82, 0x01, 0xaa] =
     some (.list [.list [.bytes [0x01, 0xaa]]]) := by
-  rw [Bytes.toRlpItem?_eq_toRlpItemS]; decide +kernel
+  rw [Bytes.toBLT?_eq_toBLTS]; decide +kernel
 
-example : (Rlp.Item.bytes (List.replicate 56 0)).toBytes = 0xb8 :: 0x38 :: List.replicate 56 0 := by
-  rw [Rlp.Item.toBytes_eq_toBytesS]; decide +kernel
+example : (BLT.bytes (List.replicate 56 0)).toBytes = 0xb8 :: 0x38 :: List.replicate 56 0 := by
+  rw [BLT.toBytes_eq_toBytesS]; decide +kernel
 
 end Jaune

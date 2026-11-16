@@ -32,7 +32,7 @@ variable {P : Preset}
 
 /-- `weigh_justification_and_finalization` (phase0). -/
 def weighJustificationAndFinalization (state : BeaconState P) (totalActiveBalance : Gwei)
-    (previousEpochTargetBalance currentEpochTargetBalance : Gwei) : Fallible (BeaconState P) := do
+    (previousEpochTargetBalance currentEpochTargetBalance : Gwei) : M (BeaconState P) := do
   let site := "weigh_justification_and_finalization"
   let previousEpoch ← getPreviousEpoch state
   let currentEpoch ← getCurrentEpoch state
@@ -41,8 +41,8 @@ def weighJustificationAndFinalization (state : BeaconState P) (totalActiveBalanc
   let mut state := { state with previous_justified_checkpoint := state.current_justified_checkpoint }
   let old := state.justification_bits.bits
   let mut bits : Array Bool := #[false] ++ old.extract 0 (JUSTIFICATION_BITS_LENGTH - 1)
-  let three ← u64Checked 3
-  let two ← u64Checked 2
+  let three ← c64 3
+  let two ← c64 2
   let total2 ← totalActiveBalance.mul? two site
   if (← previousEpochTargetBalance.mul? three site) ≥ total2 then
     state := { state with current_justified_checkpoint :=
@@ -55,9 +55,9 @@ def weighJustificationAndFinalization (state : BeaconState P) (totalActiveBalanc
   if h : bits.size = JUSTIFICATION_BITS_LENGTH then
     state := { state with justification_bits := ⟨bits, h⟩ }
   else throw (.assert s!"{site}: justification_bits length")
-  let b (i : Nat) : Fallible Bool := getAt bits i s!"{site}: bits"
-  let allOf (is : List Nat) : Fallible Bool := is.allM b
-  let finalizes (is : List Nat) (cp : Checkpoint) (k : U64) : Fallible Bool := do
+  let b (i : Nat) : M Bool := getAt bits i s!"{site}: bits"
+  let allOf (is : List Nat) : M Bool := is.allM b
+  let finalizes (is : List Nat) (cp : Checkpoint) (k : U64) : M Bool := do
     if ← allOf is then
       let e ← cp.epoch.add? k site
       pure (e == currentEpoch)
@@ -74,7 +74,7 @@ def weighJustificationAndFinalization (state : BeaconState P) (totalActiveBalanc
 
 /-- `process_justification_and_finalization` (Altair). -/
 def processJustificationAndFinalization (_cfg : Config) (state : BeaconState P) :
-    Fallible (BeaconState P) := do
+    M (BeaconState P) := do
   let current ← getCurrentEpoch state
   if current.toNat ≤ GENESIS_EPOCH.toNat + 1 then return state
   let previousIndices ← getUnslashedParticipatingIndices state TIMELY_TARGET_FLAG_INDEX
@@ -89,15 +89,15 @@ def processJustificationAndFinalization (_cfg : Config) (state : BeaconState P) 
 /-! ## Inactivity, rewards and penalties -/
 
 /-- `process_inactivity_updates` (Altair; `saturating_sub` is `x - min(x, y)`). -/
-def processInactivityUpdates (cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processInactivityUpdates (cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_inactivity_updates"
   if (← getCurrentEpoch state) == GENESIS_EPOCH then return state
   let n := state.validators.toArray.size
   let participating := indexTable n
     (← getUnslashedParticipatingIndices state TIMELY_TARGET_FLAG_INDEX (← getPreviousEpoch state))
   let leak ← isInInactivityLeak state
-  let bias ← u64Checked cfg.INACTIVITY_SCORE_BIAS
-  let recovery ← u64Checked cfg.INACTIVITY_SCORE_RECOVERY_RATE
+  let bias ← c64 cfg.INACTIVITY_SCORE_BIAS
+  let recovery ← c64 cfg.INACTIVITY_SCORE_RECOVERY_RATE
   let mut scores := state.inactivity_scores
   for index in ← getEligibleValidatorIndices state do
     let i := index.toNat
@@ -110,12 +110,12 @@ def processInactivityUpdates (cfg : Config) (state : BeaconState P) : Fallible (
   pure { state with inactivity_scores := scores }
 
 /-- The four deltas of `process_rewards_and_penalties` (Altair). -/
-def rewardsAndPenaltiesDeltas (cfg : Config) (state : BeaconState P) : Fallible (List Deltas) := do
+def rewardsAndPenaltiesDeltas (cfg : Config) (state : BeaconState P) : M (List Deltas) := do
   let flagDeltas ← (List.range PARTICIPATION_FLAG_WEIGHTS.length).mapM (getFlagIndexDeltas state)
   pure (flagDeltas ++ [← getInactivityPenaltyDeltas cfg state])
 
 /-- `process_rewards_and_penalties` (Altair). -/
-def processRewardsAndPenalties (cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processRewardsAndPenalties (cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   if (← getCurrentEpoch state) == GENESIS_EPOCH then return state
   let deltas ← rewardsAndPenaltiesDeltas cfg state
   let mut state := state
@@ -130,11 +130,11 @@ def processRewardsAndPenalties (cfg : Config) (state : BeaconState P) : Fallible
 
 /-- `process_registry_updates` (Electra): each iteration reads the validator from the current
 state; an ejection goes through the Gloas `initiate_validator_exit`. -/
-def processRegistryUpdates (cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processRegistryUpdates (cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_registry_updates"
   let currentEpoch ← getCurrentEpoch state
   let activationEpoch ← computeActivationExitEpoch P currentEpoch
-  let ejection ← u64Checked cfg.EJECTION_BALANCE
+  let ejection ← c64 cfg.EJECTION_BALANCE
   let mut state := state
   for i in List.range state.validators.toArray.size do
     let validator ← state.validators.get i site
@@ -151,15 +151,15 @@ def processRegistryUpdates (cfg : Config) (state : BeaconState P) : Fallible (Be
 
 /-- `process_slashings` (Electra): a penalty per effective-balance increment;
 `Gwei(sum(state.slashings))` is checked `uint64` addition. -/
-def processSlashings (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processSlashings (_cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_slashings"
   let epoch ← getCurrentEpoch state
   let totalBalance ← getTotalActiveBalance state
   let sumSlashings ← state.slashings.toArray.foldlM (fun acc x => acc.add? x site) U64.zero
-  let scaled ← sumSlashings.mul? (← u64Checked P.PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX) site
+  let scaled ← sumSlashings.mul? (← c64 P.PROPORTIONAL_SLASHING_MULTIPLIER_BELLATRIX) site
   let adjusted := if scaled < totalBalance then scaled else totalBalance
-  let increment ← u64Checked P.EFFECTIVE_BALANCE_INCREMENT
-  let half ← u64Checked (P.EPOCHS_PER_SLASHINGS_VECTOR / 2)
+  let increment ← c64 P.EFFECTIVE_BALANCE_INCREMENT
+  let half ← c64 (P.EPOCHS_PER_SLASHINGS_VECTOR / 2)
   let penaltyPerIncrement ← adjusted.div? (← totalBalance.div? increment site) site
   let mut state := state
   for i in List.range state.validators.toArray.size do
@@ -172,9 +172,9 @@ def processSlashings (_cfg : Config) (state : BeaconState P) : Fallible (BeaconS
   pure state
 
 /-- `process_eth1_data_reset` (phase0). -/
-def processEth1DataReset (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processEth1DataReset (_cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let nextEpoch ← (← getCurrentEpoch state).add? U64.one "process_eth1_data_reset"
-  let r ← nextEpoch.mod? (← u64Checked P.EPOCHS_PER_ETH1_VOTING_PERIOD) "process_eth1_data_reset"
+  let r ← nextEpoch.mod? (← c64 P.EPOCHS_PER_ETH1_VOTING_PERIOD) "process_eth1_data_reset"
   if r.toNat == 0 then pure { state with eth1_data_votes := SszList.empty }
   else pure state
 
@@ -185,8 +185,8 @@ def findValidatorIndex (state : BeaconState P) (pubkey : BLSPubkey) : Option Nat
   state.validators.toArray.findIdx? (·.pubkey == pubkey)
 
 /-- `apply_pending_deposit(state, deposit)` (Electra). -/
-def applyPendingDeposit (ctx : Context) (state : BeaconState P) (deposit : PendingDeposit) :
-    Fallible (BeaconState P) := do
+def applyPendingDeposit (ctx : Ctx) (state : BeaconState P) (deposit : PendingDeposit) :
+    M (BeaconState P) := do
   match findValidatorIndex state deposit.pubkey with
   | none =>
     if ← isValidDepositSignature ctx deposit.pubkey deposit.withdrawal_credentials deposit.amount
@@ -198,11 +198,11 @@ def applyPendingDeposit (ctx : Context) (state : BeaconState P) (deposit : Pendi
 /-- `process_pending_deposits(state)` (Gloas, :1659, EIP-8061): deposits consume
 `get_activation_churn_limit`; there is no Eth1-bridge check. `processed_amount` is `Gwei` from its
 first addition, so its arithmetic is checked `uint64`. -/
-def processPendingDeposits (ctx : Context) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processPendingDeposits (ctx : Ctx) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_pending_deposits"
   let nextEpoch ← (← getCurrentEpoch state).add? U64.one site
   let availableForProcessing ← state.deposit_balance_to_consume.add?
-    (← getActivationChurnLimit ctx.config state) site
+    (← getActivationChurnLimit ctx.cfg state) site
   let mut processedAmount := U64.zero
   let mut nextDepositIndex := 0
   let mut depositsToPostpone : Array PendingDeposit := #[]
@@ -241,11 +241,11 @@ def processPendingDeposits (ctx : Context) (state : BeaconState P) : Fallible (B
   let toConsume ← if isChurnLimitReached then availableForProcessing.sub? processedAmount site
     else pure U64.zero
   -- Accumulate churn only if the churn limit has been hit.
-  pure { state with pending_deposits := ProgressiveListOnSpine.ofArray rest
+  pure { state with pending_deposits := ProgressiveListS.ofArray rest
                     deposit_balance_to_consume := toConsume }
 
 /-- `process_pending_consolidations` (Electra). -/
-def processPendingConsolidations (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processPendingConsolidations (_cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_pending_consolidations"
   let nextEpoch ← (← getCurrentEpoch state).add? U64.one site
   let pending := state.pending_consolidations
@@ -264,12 +264,12 @@ def processPendingConsolidations (_cfg : Config) (state : BeaconState P) : Falli
     state ← increaseBalance state pc.target_index sourceEffective
     next := next + 1
   pure { state with pending_consolidations :=
-    ProgressiveListOnSpine.ofArray (pending.toArray.extract next pending.length) }
+    ProgressiveListS.ofArray (pending.toArray.extract next pending.length) }
 
 /-- `process_builder_pending_payments(state)` (Gloas, :1719): the previous epoch's payments
 (the first `SLOTS_PER_EPOCH`) whose weight reaches the quorum become pending withdrawals; the
 current epoch's payments move down and the second half is emptied. -/
-def processBuilderPendingPayments (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processBuilderPendingPayments (_cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_builder_pending_payments"
   let quorum ← getBuilderPaymentQuorumThreshold state
   let payments := state.builder_pending_payments.toArray
@@ -288,17 +288,17 @@ def processBuilderPendingPayments (_cfg : Config) (state : BeaconState P) : Fall
     builder_pending_payments := ← SszVector.ofArray shifted site }
 
 /-- `process_effective_balance_updates` (Electra): the ceiling is `get_max_effective_balance`. -/
-def processEffectiveBalanceUpdates (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processEffectiveBalanceUpdates (_cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_effective_balance_updates"
-  let inc ← u64Checked P.EFFECTIVE_BALANCE_INCREMENT
-  let hysteresisIncrement ← inc.div? (← u64Checked P.HYSTERESIS_QUOTIENT) site
-  let downward ← hysteresisIncrement.mul? (← u64Checked P.HYSTERESIS_DOWNWARD_MULTIPLIER) site
-  let upward ← hysteresisIncrement.mul? (← u64Checked P.HYSTERESIS_UPWARD_MULTIPLIER) site
+  let inc ← c64 P.EFFECTIVE_BALANCE_INCREMENT
+  let hysteresisIncrement ← inc.div? (← c64 P.HYSTERESIS_QUOTIENT) site
+  let downward ← hysteresisIncrement.mul? (← c64 P.HYSTERESIS_DOWNWARD_MULTIPLIER) site
+  let upward ← hysteresisIncrement.mul? (← c64 P.HYSTERESIS_UPWARD_MULTIPLIER) site
   let mut validators := state.validators
   for i in List.range validators.toArray.size do
     let validator ← validators.get i site
     let balance ← state.balances.get i site
-    let maxEffective ← u64Checked (getMaxEffectiveBalance P validator)
+    let maxEffective ← c64 (getMaxEffectiveBalance P validator)
     -- `a < b or c < d`, short-circuiting as Python's `or` does
     let low ← balance.add? downward site
     let update ← if low < validator.effective_balance then pure true
@@ -314,27 +314,27 @@ def processEffectiveBalanceUpdates (_cfg : Config) (state : BeaconState P) : Fal
 /-! ## Resets, summaries and participation -/
 
 /-- `process_slashings_reset` (phase0). -/
-def processSlashingsReset (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processSlashingsReset (_cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_slashings_reset"
   let nextEpoch ← (← getCurrentEpoch state).add? U64.one site
-  let i ← nextEpoch.mod? (← u64Checked P.EPOCHS_PER_SLASHINGS_VECTOR) site
+  let i ← nextEpoch.mod? (← c64 P.EPOCHS_PER_SLASHINGS_VECTOR) site
   pure { state with slashings := ← state.slashings.set i.toNat U64.zero site }
 
 /-- `process_randao_mixes_reset` (phase0). -/
-def processRandaoMixesReset (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processRandaoMixesReset (_cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_randao_mixes_reset"
   let currentEpoch ← getCurrentEpoch state
   let nextEpoch ← currentEpoch.add? U64.one site
-  let i ← nextEpoch.mod? (← u64Checked P.EPOCHS_PER_HISTORICAL_VECTOR) site
+  let i ← nextEpoch.mod? (← c64 P.EPOCHS_PER_HISTORICAL_VECTOR) site
   let mix ← getRandaoMix state currentEpoch
   pure { state with randao_mixes := ← state.randao_mixes.set i.toNat mix site }
 
 /-- `process_historical_summaries_update` (Capella). -/
 def processHistoricalSummariesUpdate (_cfg : Config) (state : BeaconState P) :
-    Fallible (BeaconState P) := do
+    M (BeaconState P) := do
   let site := "process_historical_summaries_update"
   let nextEpoch ← (← getCurrentEpoch state).add? U64.one site
-  let period ← u64Checked (P.SLOTS_PER_HISTORICAL_ROOT / P.SLOTS_PER_EPOCH)
+  let period ← c64 (P.SLOTS_PER_HISTORICAL_ROOT / P.SLOTS_PER_EPOCH)
   if (← nextEpoch.mod? period site).toNat == 0 then
     let summary : HistoricalSummary :=
       { block_summary_root := hashTreeRoot state.block_roots
@@ -344,17 +344,17 @@ def processHistoricalSummariesUpdate (_cfg : Config) (state : BeaconState P) :
 
 /-- `process_participation_flag_updates` (Altair). -/
 def processParticipationFlagUpdates (_cfg : Config) (state : BeaconState P) :
-    Fallible (BeaconState P) := do
+    M (BeaconState P) := do
   pure { state with
     previous_epoch_participation := state.current_epoch_participation
     current_epoch_participation :=
-      ProgressiveListOnSpine.ofArray (Array.replicate state.validators.toArray.size UIntN.zero) }
+      ProgressiveListS.ofArray (Array.replicate state.validators.toArray.size UIntN.zero) }
 
 /-- `process_sync_committee_updates` (Altair), with the Gloas next sync committee. -/
-def processSyncCommitteeUpdates (ctx : Context) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processSyncCommitteeUpdates (ctx : Ctx) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_sync_committee_updates"
   let nextEpoch ← (← getCurrentEpoch state).add? U64.one site
-  if (← nextEpoch.mod? (← u64Checked P.EPOCHS_PER_SYNC_COMMITTEE_PERIOD) site).toNat == 0 then
+  if (← nextEpoch.mod? (← c64 P.EPOCHS_PER_SYNC_COMMITTEE_PERIOD) site).toNat == 0 then
     let next ← getNextSyncCommittee state
     pure { state with current_sync_committee := state.next_sync_committee,
                       next_sync_committee := next }
@@ -363,12 +363,12 @@ def processSyncCommitteeUpdates (ctx : Context) (state : BeaconState P) : Fallib
 /-! ## Lookaheads -/
 
 /-- `process_proposer_lookahead` (Fulu), with the Gloas `get_beacon_proposer_indices`. -/
-def processProposerLookahead (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processProposerLookahead (_cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_proposer_lookahead"
   let la := state.proposer_lookahead.toArray
   let lastEpochStart := la.size - P.SLOTS_PER_EPOCH
   require (la.size ≥ P.SLOTS_PER_EPOCH) s!"{site}: len(proposer_lookahead) >= SLOTS_PER_EPOCH"
-  let e ← (← (← getCurrentEpoch state).add? (← u64Checked P.MIN_SEED_LOOKAHEAD) site).add? U64.one site
+  let e ← (← (← getCurrentEpoch state).add? (← c64 P.MIN_SEED_LOOKAHEAD) site).add? U64.one site
   let lastEpochProposers ← getBeaconProposerIndices state e
   require (lastEpochProposers.size == la.size - lastEpochStart)
     s!"{site}: last epoch proposers fill the tail"
@@ -378,15 +378,15 @@ def processProposerLookahead (_cfg : Config) (state : BeaconState P) : Fallible 
 /-- `process_ptc_window(state)` (Gloas, :1737): shift the window one epoch forward, then fill the
 last epoch with `compute_ptc` for each slot of epoch `current + MIN_SEED_LOOKAHEAD + 1`. The new
 committees are computed after the shift; `compute_ptc` does not read the window. -/
-def processPtcWindow (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
+def processPtcWindow (_cfg : Config) (state : BeaconState P) : M (BeaconState P) := do
   let site := "process_ptc_window"
   let window := state.ptc_window.toArray
   let spe := P.SLOTS_PER_EPOCH
   require (decide (spe ≤ window.size)) s!"{site}: SLOTS_PER_EPOCH <= len(ptc_window)"
-  let nextEpoch ← (← (← getCurrentEpoch state).add? (← u64Checked P.MIN_SEED_LOOKAHEAD) site).add?
+  let nextEpoch ← (← (← getCurrentEpoch state).add? (← c64 P.MIN_SEED_LOOKAHEAD) site).add?
     U64.one site
   let startSlot ← computeStartSlotAtEpoch P nextEpoch
-  let endSlot ← startSlot.add? (← u64Checked spe) site
+  let endSlot ← startSlot.add? (← c64 spe) site
   let mut last : Array (PayloadTimelinessCommittee P) := #[]
   for slot in [startSlot.toNat:endSlot.toNat] do
     last := last.push (← computePtc state (← U64.ofNat? slot "Slot"))
@@ -395,8 +395,8 @@ def processPtcWindow (_cfg : Config) (state : BeaconState P) : Fallible (BeaconS
 /-! ## `process_epoch` -/
 
 /-- `process_epoch(state)` (Gloas, :1633). -/
-def processEpoch (ctx : Context) (state : BeaconState P) : Fallible (BeaconState P) := do
-  let cfg := ctx.config
+def processEpoch (ctx : Ctx) (state : BeaconState P) : M (BeaconState P) := do
+  let cfg := ctx.cfg
   let state ← processJustificationAndFinalization cfg state
   let state ← processInactivityUpdates cfg state
   let state ← processRewardsAndPenalties cfg state

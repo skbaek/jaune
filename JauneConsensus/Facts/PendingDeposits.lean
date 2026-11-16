@@ -29,7 +29,7 @@ namespace JauneConsensus.Facts
 
 open JauneConsensus
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-! ## `apply_pending_deposit` -/
 
@@ -47,8 +47,8 @@ inductive PendingDepositOutcome where
 
 /-- Which outcome `apply_pending_deposit` gives `deposit`, with the same reads as the function, in
 the spec's order. Changes no state. -/
-def classifyPendingDeposit (ctx : Context) (state : BeaconState P f) (deposit : PendingDeposit) :
-    Fallible PendingDepositOutcome := do
+def classifyPendingDeposit (ctx : Ctx) (state : BeaconState P f) (deposit : PendingDeposit) :
+    M PendingDepositOutcome := do
   match findValidatorIndex state deposit.pubkey with
   | none =>
     if ← isValidDepositSignature ctx deposit.pubkey deposit.withdrawal_credentials deposit.amount
@@ -59,14 +59,14 @@ def classifyPendingDeposit (ctx : Context) (state : BeaconState P f) (deposit : 
 
 /-- The state change of each outcome. -/
 def applyPendingDepositOutcome (state : BeaconState P f) (deposit : PendingDeposit) :
-    PendingDepositOutcome → Fallible (BeaconState P f)
+    PendingDepositOutcome → M (BeaconState P f)
   | .newValidator =>
     addValidatorToRegistry state deposit.pubkey deposit.withdrawal_credentials deposit.amount
   | .topUp index => increaseBalance state index deposit.amount
   | .noCredit => pure state
 
 /-- Equational characterization: `apply_pending_deposit` is classify-then-apply. -/
-theorem applyPendingDeposit_eq (ctx : Context) (state : BeaconState P f) (deposit : PendingDeposit) :
+theorem applyPendingDeposit_eq (ctx : Ctx) (state : BeaconState P f) (deposit : PendingDeposit) :
     applyPendingDeposit ctx state deposit =
       classifyPendingDeposit ctx state deposit >>= applyPendingDepositOutcome state deposit := by
   unfold applyPendingDeposit classifyPendingDeposit
@@ -88,9 +88,9 @@ theorem applyPendingDeposit_noCredit {state : BeaconState P f} {deposit : Pendin
 /-- The signing check of a deposit's proof of possession, unfolded: under `ctx.blsActive` it is
 `bls.Verify(pubkey, compute_signing_root(DepositMessage(pubkey, credentials, amount), domain),
 signature)` with `domain = compute_domain(DOMAIN_DEPOSIT)` (genesis fork version, zero root). -/
-theorem isValidDepositSignature_true {ctx : Context} {pk : BLSPubkey} {wc : Bytes32} {amount : U64}
+theorem isValidDepositSignature_true {ctx : Ctx} {pk : BLSPubkey} {wc : Bytes32} {amount : U64}
     {sig : BLSSignature} (h : isValidDepositSignature ctx pk wc amount sig = .ok true) :
-    ∃ domain, computeDomainDefault ctx.config DOMAIN_DEPOSIT = .ok domain ∧
+    ∃ domain, computeDomainDefault ctx.cfg DOMAIN_DEPOSIT = .ok domain ∧
       blsVerify ctx.blsActive pk
         (computeSigningRoot ({ pubkey := pk, withdrawal_credentials := wc, amount } : DepositMessage)
           domain) sig = true := by
@@ -101,7 +101,7 @@ theorem isValidDepositSignature_true {ctx : Context} {pk : BLSPubkey} {wc : Byte
 /-- **D-S9, the new-validator outcome**: the key is no validator's, and the proof of possession
 verifies (`is_valid_deposit_signature`, which under `ctx.blsActive` is Jaune's BLS
 `Verify`). -/
-theorem classifyPendingDeposit_newValidator {ctx : Context} {state : BeaconState P f}
+theorem classifyPendingDeposit_newValidator {ctx : Ctx} {state : BeaconState P f}
     {deposit : PendingDeposit}
     (h : classifyPendingDeposit ctx state deposit = .ok .newValidator) :
     findValidatorIndex state deposit.pubkey = none ∧
@@ -125,7 +125,7 @@ theorem classifyPendingDeposit_newValidator {ctx : Context} {state : BeaconState
 /-- **D-S9, the no-credit outcome**: the key is no validator's and the proof of possession does
 not verify. Nothing is credited: the state is unchanged (the deposit's ETH stays in the deposit
 contract, with no validator). -/
-theorem classifyPendingDeposit_noCredit {ctx : Context} {state : BeaconState P f}
+theorem classifyPendingDeposit_noCredit {ctx : Ctx} {state : BeaconState P f}
     {deposit : PendingDeposit}
     (h : classifyPendingDeposit ctx state deposit = .ok .noCredit) :
     findValidatorIndex state deposit.pubkey = none ∧
@@ -148,7 +148,7 @@ theorem classifyPendingDeposit_noCredit {ctx : Context} {state : BeaconState P f
 
 /-- **D-S9, the top-up outcome**: the key is a validator's, and `index` is the first validator
 with it. -/
-theorem classifyPendingDeposit_topUp {ctx : Context} {state : BeaconState P f}
+theorem classifyPendingDeposit_topUp {ctx : Ctx} {state : BeaconState P f}
     {deposit : PendingDeposit} {index : ValidatorIndex}
     (h : classifyPendingDeposit ctx state deposit = .ok (.topUp index)) :
     findValidatorIndex state deposit.pubkey = some index.toNat := by
@@ -283,7 +283,7 @@ theorem applyPendingDeposit_newValidator_credit {state s' : BeaconState P f}
 /-- The loop state of `process_pending_deposits`, in the spec's variable order:
 `processed_amount`, `next_deposit_index`, `deposits_to_postpone`, `is_churn_limit_reached`, and
 the state. -/
-abbrev PendingDepositsAccumulator (P : Preset) (f : ConsensusFork) :=
+abbrev PendingDepositsAcc (P : Preset) (f : CFork) :=
   U64 × Nat × Array PendingDeposit × Bool × BeaconState P f
 
 /-- One iteration of the loop of `process_pending_deposits`, with the loop's `break`s as `done`
@@ -292,9 +292,9 @@ Fulu), the finality break, the per-epoch count break; then the validator's exit 
 epochs (when the key is known); then: a withdrawn validator's deposit is applied without
 consuming churn; an exiting validator's deposit is postponed; otherwise the churn break, or the
 deposit is applied consuming churn. -/
-def pendingDepositStep (ctx : Context) (nextEpoch availableForProcessing : U64) (finalizedSlot : Slot)
-    (requestsStart : U64) (deposit : PendingDeposit) (acc : PendingDepositsAccumulator P f) :
-    Fallible (ForInStep (PendingDepositsAccumulator P f)) := do
+def pendingDepositStep (ctx : Ctx) (nextEpoch availableForProcessing : U64) (finalizedSlot : Slot)
+    (requestsStart : U64) (deposit : PendingDeposit) (acc : PendingDepositsAcc P f) :
+    M (ForInStep (PendingDepositsAcc P f)) := do
   let site := "process_pending_deposits"
   let processedAmount := acc.1
   let nextDepositIndex := acc.2.1
@@ -326,8 +326,8 @@ def pendingDepositStep (ctx : Context) (nextEpoch availableForProcessing : U64) 
     return .yield (pa, nextDepositIndex + 1, depositsToPostpone, false, state)
 
 /-- The loop as a recursion over the queue. -/
-def pendingDepositsLoop (ctx : Context) (nextEpoch availableForProcessing : U64) (finalizedSlot : Slot)
-    (requestsStart : U64) : List PendingDeposit → PendingDepositsAccumulator P f → Fallible (PendingDepositsAccumulator P f)
+def pendingDepositsLoop (ctx : Ctx) (nextEpoch availableForProcessing : U64) (finalizedSlot : Slot)
+    (requestsStart : U64) : List PendingDeposit → PendingDepositsAcc P f → M (PendingDepositsAcc P f)
   | [], acc => pure acc
   | d :: ds, acc => do
     match ← pendingDepositStep ctx nextEpoch availableForProcessing finalizedSlot requestsStart d acc with
@@ -336,8 +336,8 @@ def pendingDepositsLoop (ctx : Context) (nextEpoch availableForProcessing : U64)
 
 /-- A `for` loop over a list whose body agrees pointwise with `step` is the recursion of
 `step`. -/
-theorem forIn_list_eq_loop {α β : Type} (body step : α → β → Fallible (ForInStep β))
-    (hb : ∀ a b, body a b = step a b) (loop : List α → β → Fallible β)
+theorem forIn_list_eq_loop {α β : Type} (body step : α → β → M (ForInStep β))
+    (hb : ∀ a b, body a b = step a b) (loop : List α → β → M β)
     (hnil : ∀ b, loop [] b = pure b)
     (hcons : ∀ a as b, loop (a :: as) b = (do
       match ← step a b with
@@ -358,9 +358,9 @@ theorem forIn_list_eq_loop {α β : Type} (body step : α → β → Fallible (F
       | yield b' => exact ih b'
 
 /-- The recursion is the `for` loop of the step. -/
-theorem pendingDepositsLoop_eq_forIn (ctx : Context) (nextEpoch availableForProcessing : U64)
+theorem pendingDepositsLoop_eq_forIn (ctx : Ctx) (nextEpoch availableForProcessing : U64)
     (finalizedSlot : Slot) (requestsStart : U64) (xs : List PendingDeposit)
-    (acc : PendingDepositsAccumulator P f) :
+    (acc : PendingDepositsAcc P f) :
     pendingDepositsLoop ctx nextEpoch availableForProcessing finalizedSlot requestsStart xs acc =
       forIn xs acc (pendingDepositStep ctx nextEpoch availableForProcessing finalizedSlot
         requestsStart) :=
@@ -373,12 +373,12 @@ available for processing, the finalized slot, the requests start index, the queu
 `pendingDepositsLoop` over the queue from `(0, 0, [], False, state)`, then the epilogue: the queue
 becomes the unprocessed suffix followed by the postponed deposits, and the churn carried forward is
 `available - processed` if the churn limit was reached and zero otherwise. -/
-theorem processPendingDeposits_eq (ctx : Context) (state : BeaconState P f) :
+theorem processPendingDeposits_eq (ctx : Ctx) (state : BeaconState P f) :
     processPendingDeposits ctx state = (do
       let site := "process_pending_deposits"
       let nextEpoch ← (← getCurrentEpoch state).add? U64.one site
       let availableForProcessing ← (← state.depositBalanceToConsume).add?
-        (← getActivationExitChurnLimit ctx.config state) site
+        (← getActivationExitChurnLimit ctx.cfg state) site
       let finalizedSlot ← computeStartSlotAtEpoch P state.finalized_checkpoint.epoch
       let requestsStart ← state.depositRequestsStartIndex
       let pending ← state.pendingDeposits
@@ -405,7 +405,7 @@ theorem processPendingDeposits_eq (ctx : Context) (state : BeaconState P f) :
   rcases acc with ⟨pa, idx, post, flag, st⟩
   unfold pendingDepositStep
   dsimp only
-  by_cases h1 : (!f.atLeast ConsensusFork.fulu && decide (d.slot > GENESIS_SLOT) &&
+  by_cases h1 : (!f.atLeast CFork.fulu && decide (d.slot > GENESIS_SLOT) &&
       decide (st.eth1_deposit_index < requestsStart)) = true
   · rw [ite_eq_left h1, ite_eq_left h1]
   · rw [ite_eq_right h1, ite_eq_right h1]
@@ -464,7 +464,7 @@ def PendingDepositFlags (state : BeaconState P f) (deposit : PendingDeposit) (ne
 break (before Fulu: a deposit request while `eth1_deposit_index < deposit_requests_start_index`),
 the finality break (`deposit.slot > finalized_slot`), the per-epoch count break
 (`next_deposit_index >= MAX_PENDING_DEPOSITS_PER_EPOCH`). -/
-def PendingDepositEarlyBreak (f : ConsensusFork) (P : Preset) (finalizedSlot requestsStart : U64)
+def PendingDepositEarlyBreak (f : CFork) (P : Preset) (finalizedSlot requestsStart : U64)
     (deposit : PendingDeposit) (nextDepositIndex : Nat) (state : BeaconState P f) : Prop :=
   (!(f.atLeast .fulu) && decide (deposit.slot > GENESIS_SLOT) &&
       decide (state.eth1_deposit_index < requestsStart)) = true ∨
@@ -480,9 +480,9 @@ def PendingDepositEarlyBreak (f : ConsensusFork) (P : Preset) (finalizedSlot req
 4. otherwise, if `processed + amount > available`, the churn break: the loop stops with
    `is_churn_limit_reached` set;
 5. otherwise the deposit is applied, consuming its amount of churn. -/
-theorem pendingDepositStep_spec {ctx : Context} {nextEpoch avail : U64} {finalizedSlot : Slot}
+theorem pendingDepositStep_spec {ctx : Ctx} {nextEpoch avail : U64} {finalizedSlot : Slot}
     {requestsStart : U64} {d : PendingDeposit} {pa : U64} {idx : Nat} {post : Array PendingDeposit}
-    {flag : Bool} {st : BeaconState P f} {r : ForInStep (PendingDepositsAccumulator P f)}
+    {flag : Bool} {st : BeaconState P f} {r : ForInStep (PendingDepositsAcc P f)}
     (h : pendingDepositStep ctx nextEpoch avail finalizedSlot requestsStart d
       (pa, idx, post, flag, st) = .ok r) :
     (PendingDepositEarlyBreak f P finalizedSlot requestsStart d idx st ∧
@@ -500,7 +500,7 @@ theorem pendingDepositStep_spec {ctx : Context} {nextEpoch avail : U64} {finaliz
           applyPendingDeposit ctx st d = .ok s' ∧ r = .yield (x, idx + 1, post, false, s')))) := by
   unfold pendingDepositStep at h
   dsimp only at h
-  by_cases h1 : (!f.atLeast ConsensusFork.fulu && decide (d.slot > GENESIS_SLOT) &&
+  by_cases h1 : (!f.atLeast CFork.fulu && decide (d.slot > GENESIS_SLOT) &&
       decide (st.eth1_deposit_index < requestsStart)) = true
   · rw [ite_eq_left h1] at h
     exact .inl ⟨.inl h1, (Except.ok.inj h).symm⟩
@@ -601,9 +601,9 @@ queue and split them, in order, into those it applied and those it postponed; th
 input state with `apply_pending_deposit` applied to the applied ones in order; the postponed ones
 are appended to the postponement buffer; the index advanced by `k`; and if `k` is short of the
 queue, the iteration at deposit `k` stopped the loop. -/
-theorem pendingDepositsLoop_fate {ctx : Context} {nextEpoch avail : U64} {finalizedSlot : Slot}
+theorem pendingDepositsLoop_fate {ctx : Ctx} {nextEpoch avail : U64} {finalizedSlot : Slot}
     {requestsStart : U64} :
-    ∀ (L : List PendingDeposit) (acc out : PendingDepositsAccumulator P f),
+    ∀ (L : List PendingDeposit) (acc out : PendingDepositsAcc P f),
       pendingDepositsLoop ctx nextEpoch avail finalizedSlot requestsStart L acc = .ok out →
       ∃ k applied postponed, k ≤ L.length ∧ IsMerge applied postponed (L.take k) ∧
         List.foldlM (applyPendingDeposit ctx) acc.2.2.2.2 applied = .ok out.2.2.2.2 ∧
@@ -670,15 +670,15 @@ applied (each through `apply_pending_deposit`, in order, from the input state: s
 exactly one of `PendingDepositOutcome`'s three outcomes) and the deposits it postponed; the new
 queue is the unreached suffix followed by the postponed deposits; and the registry and balances
 are those the applications produced. -/
-theorem processPendingDeposits_fate (hE : f.atLeast .electra = true) {ctx : Context}
+theorem processPendingDeposits_fate (hE : f.atLeast .electra = true) {ctx : Ctx}
     {state s' : BeaconState P f} (hp : processPendingDeposits ctx state = .ok s') :
     ∃ k applied postponed mid,
-      k ≤ (ForkField.get hE state.pending_deposits).toArray.size ∧
-      IsMerge applied postponed ((ForkField.get hE state.pending_deposits).toArray.toList.take k) ∧
+      k ≤ (Gated.get hE state.pending_deposits).toArray.size ∧
+      IsMerge applied postponed ((Gated.get hE state.pending_deposits).toArray.toList.take k) ∧
       List.foldlM (applyPendingDeposit ctx) state applied = .ok mid ∧
-      (ForkField.get hE s'.pending_deposits).toArray =
-        (ForkField.get hE state.pending_deposits).toArray.extract k
-          (ForkField.get hE state.pending_deposits).toArray.size ++ postponed.toArray ∧
+      (Gated.get hE s'.pending_deposits).toArray =
+        (Gated.get hE state.pending_deposits).toArray.extract k
+          (Gated.get hE state.pending_deposits).toArray.size ++ postponed.toArray ∧
       s'.validators = mid.validators ∧ s'.balances = mid.balances := by
   rw [processPendingDeposits_eq] at hp
   dsimp only at hp
@@ -690,9 +690,9 @@ theorem processPendingDeposits_fate (hE : f.atLeast .electra = true) {ctx : Cont
   obtain ⟨fs, -, hp⟩ := bind_ok_elim hp
   obtain ⟨rs, -, hp⟩ := bind_ok_elim hp
   obtain ⟨pending, hpend, hp⟩ := bind_ok_elim hp
-  have hpq : pending = ForkField.get hE state.pending_deposits := by
+  have hpq : pending = Gated.get hE state.pending_deposits := by
     unfold BeaconState.pendingDeposits at hpend
-    rw [forkField_read_get hE] at hpend
+    rw [gated_read_get hE] at hpend
     exact (Except.ok.inj hpend).symm
   subst hpq
   obtain ⟨out, hloop, hp⟩ := bind_ok_elim hp
@@ -710,14 +710,14 @@ theorem processPendingDeposits_fate (hE : f.atLeast .electra = true) {ctx : Cont
   cases hst1
   refine ⟨k, ap, pp, out.2.2.2.2, by simpa using hk, hm, hfold, ?_, hfr.1, hfr.2.1⟩
   rw [hfr.2.2]
-  have hgq : g = ForkField.mk hE q := by
-    rw [forkField_write_eq hE] at hg; exact (Except.ok.inj hg).symm
-  rw [hgq, ForkField.get_mk]
+  have hgq : g = Gated.mk hE q := by
+    rw [gated_write_eq hE] at hg; exact (Except.ok.inj hg).symm
+  rw [hgq, Gated.get_mk]
   unfold SszList.ofArray at hq
   split at hq
   · cases hq
-    show (ForkField.get hE state.pending_deposits).toArray.extract out.2.1
-      (ForkField.get hE state.pending_deposits).length ++ out.2.2.1 = _
+    show (Gated.get hE state.pending_deposits).toArray.extract out.2.1
+      (Gated.get hE state.pending_deposits).length ++ out.2.2.1 = _
     simp only at hidx hpost
     rw [hpost, hidx, Nat.zero_add, Array.empty_append]
     rfl

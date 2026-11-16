@@ -14,9 +14,9 @@ Typed `uint64` arithmetic is checked (`U64`); Python `int` arithmetic is `Nat`.
 -/
 
 namespace JauneConsensus
-open Jaune (Bytes U256)
+open Jaune (Bytes B256)
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 
 /-! ## Participation and rewards -/
@@ -24,7 +24,7 @@ variable {P : Preset} {f : ConsensusFork}
 /-- `get_unslashed_participating_indices(state, flag_index, epoch)` (Altair). The result is a set
 in pyspec; here it is the active indices that qualify, in index order (no duplicates). -/
 def getUnslashedParticipatingIndices (state : BeaconState P f) (flagIndex : Nat) (epoch : Epoch) :
-    Fallible (Array ValidatorIndex) := do
+    M (Array ValidatorIndex) := do
   let current ← getCurrentEpoch state
   let previous ← getPreviousEpoch state
   require (epoch == previous || epoch == current)
@@ -42,8 +42,8 @@ def getUnslashedParticipatingIndices (state : BeaconState P f) (flagIndex : Nat)
 
 /-- `get_base_reward_per_increment(state)` (Altair):
 `Gwei(EFFECTIVE_BALANCE_INCREMENT * BASE_REWARD_FACTOR // integer_squareroot(total_active))`. -/
-def getBaseRewardPerIncrement (state : BeaconState P f) : Fallible Gwei := do
-  let num ← (← u64Checked P.EFFECTIVE_BALANCE_INCREMENT).mul? (← u64Checked P.BASE_REWARD_FACTOR)
+def getBaseRewardPerIncrement (state : BeaconState P f) : M Gwei := do
+  let num ← (← c64 P.EFFECTIVE_BALANCE_INCREMENT).mul? (← c64 P.BASE_REWARD_FACTOR)
     "get_base_reward_per_increment"
   num.div? (← integerSquareroot (← getTotalActiveBalance state)) "get_base_reward_per_increment"
 
@@ -51,27 +51,27 @@ def getBaseRewardPerIncrement (state : BeaconState P f) : Fallible Gwei := do
 (`perIncrement`). pyspec recomputes that value for every index from the same state; computing it
 once gives the same value. -/
 def getBaseRewardWith (state : BeaconState P f) (perIncrement : Gwei) (index : ValidatorIndex) :
-    Fallible Gwei := do
+    M Gwei := do
   let v ← state.validators.get index.toNat "get_base_reward"
-  let increments ← v.effective_balance.div? (← u64Checked P.EFFECTIVE_BALANCE_INCREMENT) "get_base_reward"
+  let increments ← v.effective_balance.div? (← c64 P.EFFECTIVE_BALANCE_INCREMENT) "get_base_reward"
   increments.mul? perIncrement "get_base_reward"
 
 /-- `get_base_reward(state, index)` (Altair). -/
-def getBaseReward (state : BeaconState P f) (index : ValidatorIndex) : Fallible Gwei := do
+def getBaseReward (state : BeaconState P f) (index : ValidatorIndex) : M Gwei := do
   getBaseRewardWith state (← getBaseRewardPerIncrement state) index
 
 /-- `get_finality_delay(state) = get_previous_epoch(state) - state.finalized_checkpoint.epoch`
 (phase0, `uint64`). -/
-def getFinalityDelay (state : BeaconState P f) : Fallible U64 := do
+def getFinalityDelay (state : BeaconState P f) : M U64 := do
   (← getPreviousEpoch state).sub? state.finalized_checkpoint.epoch "get_finality_delay"
 
 /-- `is_in_inactivity_leak(state) = get_finality_delay(state) > MIN_EPOCHS_TO_INACTIVITY_PENALTY`
 (phase0). -/
-def isInInactivityLeak (state : BeaconState P f) : Fallible Bool := do
+def isInInactivityLeak (state : BeaconState P f) : M Bool := do
   pure ((← getFinalityDelay state).toNat > P.MIN_EPOCHS_TO_INACTIVITY_PENALTY)
 
 /-- `get_eligible_validator_indices(state)` (phase0). -/
-def getEligibleValidatorIndices (state : BeaconState P f) : Fallible (Array ValidatorIndex) := do
+def getEligibleValidatorIndices (state : BeaconState P f) : M (Array ValidatorIndex) := do
   let previous ← getPreviousEpoch state
   let mut out := #[]
   let mut i := 0
@@ -96,27 +96,27 @@ abbrev Deltas := Array Gwei × Array Gwei
 
 /-- `rewards[index] += delta` on a per-validator array (`Gwei` addition). -/
 def addAt (xs : Array Gwei) (index : ValidatorIndex) (delta : Gwei) (site : String) :
-    Fallible (Array Gwei) := do
+    M (Array Gwei) := do
   let v ← getAt xs index.toNat site
   pure (xs.setIfInBounds index.toNat (← v.add? delta site))
 
 /-- `get_flag_index_deltas(state, flag_index)` (Altair). -/
-def getFlagIndexDeltas (state : BeaconState P f) (flagIndex : Nat) : Fallible Deltas := do
+def getFlagIndexDeltas (state : BeaconState P f) (flagIndex : Nat) : M Deltas := do
   let n := state.validators.toArray.size
   let mut rewards := Array.replicate n U64.zero
   let mut penalties := Array.replicate n U64.zero
   let previous ← getPreviousEpoch state
   let participating ← getUnslashedParticipatingIndices state flagIndex previous
   let isParticipating := indexTable n participating
-  let weight ← u64Checked (← getAt PARTICIPATION_FLAG_WEIGHTS.toArray flagIndex
+  let weight ← c64 (← getAt PARTICIPATION_FLAG_WEIGHTS.toArray flagIndex
     "get_flag_index_deltas: PARTICIPATION_FLAG_WEIGHTS")
-  let inc ← u64Checked P.EFFECTIVE_BALANCE_INCREMENT
+  let inc ← c64 P.EFFECTIVE_BALANCE_INCREMENT
   let participatingBalance ← getTotalBalance state participating
   let participatingIncrements ← participatingBalance.div? inc "get_flag_index_deltas"
   let activeIncrements ← (← getTotalActiveBalance state).div? inc "get_flag_index_deltas"
   let perIncrement ← getBaseRewardPerIncrement state
   let leak ← isInInactivityLeak state
-  let denom ← u64Checked WEIGHT_DENOMINATOR
+  let denom ← c64 WEIGHT_DENOMINATOR
   for index in ← getEligibleValidatorIndices state do
     let baseReward ← getBaseRewardWith state perIncrement index
     if ← getAt isParticipating index.toNat "get_flag_index_deltas" then
@@ -134,14 +134,14 @@ def getFlagIndexDeltas (state : BeaconState P f) (flagIndex : Nat) : Fallible De
 
 /-- `get_inactivity_penalty_deltas(state)` (`specs/bellatrix/beacon-chain.md`, with
 `INACTIVITY_PENALTY_QUOTIENT_BELLATRIX`). -/
-def getInactivityPenaltyDeltas (cfg : Config) (state : BeaconState P f) : Fallible Deltas := do
+def getInactivityPenaltyDeltas (cfg : Config) (state : BeaconState P f) : M Deltas := do
   let n := state.validators.toArray.size
   let rewards := Array.replicate n U64.zero
   let mut penalties := Array.replicate n U64.zero
   let previous ← getPreviousEpoch state
   let matching := indexTable n (← getUnslashedParticipatingIndices state TIMELY_TARGET_FLAG_INDEX previous)
-  let denom ← (← u64Checked cfg.INACTIVITY_SCORE_BIAS).mul?
-    (← u64Checked P.INACTIVITY_PENALTY_QUOTIENT_BELLATRIX) "get_inactivity_penalty_deltas"
+  let denom ← (← c64 cfg.INACTIVITY_SCORE_BIAS).mul?
+    (← c64 P.INACTIVITY_PENALTY_QUOTIENT_BELLATRIX) "get_inactivity_penalty_deltas"
   for index in ← getEligibleValidatorIndices state do
     if !(← getAt matching index.toNat "get_inactivity_penalty_deltas") then
       let v ← state.validators.get index.toNat "get_inactivity_penalty_deltas"
@@ -156,16 +156,16 @@ def getInactivityPenaltyDeltas (cfg : Config) (state : BeaconState P f) : Fallib
 /-- `get_next_sync_committee_indices(state)` before Electra (`specs/altair/beacon-chain.md`):
 sampling weighted by effective balance with one random byte per candidate, against
 `MAX_EFFECTIVE_BALANCE`. Fuel as below. -/
-def getNextSyncCommitteeIndicesAltair (state : BeaconState P f) : Fallible (Array ValidatorIndex) := do
+def getNextSyncCommitteeIndicesAltair (state : BeaconState P f) : M (Array ValidatorIndex) := do
   let site := "get_next_sync_committee_indices"
   let epoch ← (← getCurrentEpoch state).add? U64.one site
-  let maxRandomByte ← u64Checked (2 ^ 8 - 1)
+  let maxRandomByte ← c64 (2 ^ 8 - 1)
   let active ← getActiveValidatorIndices state epoch
   let count ← U64.ofNat? active.size site
   let seed ← getSeed state epoch DOMAIN_SYNC_COMMITTEE
-  let maxEb ← u64Checked P.MAX_EFFECTIVE_BALANCE
+  let maxEb ← c64 P.MAX_EFFECTIVE_BALANCE
   -- `i` is a Python `int`; `uint64(i % count)` and `uint64(i // 32)` are the typed casts
-  let rec loop (fuel : Nat) (i : Nat) (acc : Array ValidatorIndex) : Fallible (Array ValidatorIndex) := do
+  let rec loop (fuel : Nat) (i : Nat) (acc : Array ValidatorIndex) : M (Array ValidatorIndex) := do
     match fuel with
     | 0 => throw (.assert s!"{site}: loop bound")
     | fuel + 1 =>
@@ -178,49 +178,49 @@ def getNextSyncCommitteeIndicesAltair (state : BeaconState P f) : Fallible (Arra
         (i % 32) site
       let v ← state.validators.get candidate.toNat site
       let acc := if (← v.effective_balance.mul? maxRandomByte site).toNat ≥
-          (← maxEb.mul? (← u64Checked randomByte.toNat) site).toNat then acc.push candidate else acc
+          (← maxEb.mul? (← c64 randomByte.toNat) site).toNat then acc.push candidate else acc
       loop fuel (i + 1) acc
-  loop samplingFuel 0 #[]
+  loop SAMPLING_FUEL 0 #[]
 
 /-- `get_next_sync_committee_indices(state)` (`specs/electra/beacon-chain.md`): sampling weighted
 by effective balance with 16-bit random values. pyspec's `while` loop runs on `SAMPLING_FUEL`
 iterations (`Accessors.lean`, with its probability bound) and rejects with `Reject.assert` if
 it is exhausted. -/
-def getNextSyncCommitteeIndices (state : BeaconState P f) : Fallible (Array ValidatorIndex) := do
+def getNextSyncCommitteeIndices (state : BeaconState P f) : M (Array ValidatorIndex) := do
   let site := "get_next_sync_committee_indices"
   let epoch ← (← getCurrentEpoch state).add? U64.one site
-  let maxRandomValue ← u64Checked (2 ^ 16 - 1)
+  let maxRandomValue ← c64 (2 ^ 16 - 1)
   let active ← getActiveValidatorIndices state epoch
   let count ← U64.ofNat? active.size site
   let seed ← getSeed state epoch DOMAIN_SYNC_COMMITTEE
-  let maxEb ← u64Checked P.MAX_EFFECTIVE_BALANCE_ELECTRA
-  let rec loop (fuel : Nat) (i : U64) (acc : Array ValidatorIndex) : Fallible (Array ValidatorIndex) := do
+  let maxEb ← c64 P.MAX_EFFECTIVE_BALANCE_ELECTRA
+  let rec loop (fuel : Nat) (i : U64) (acc : Array ValidatorIndex) : M (Array ValidatorIndex) := do
     match fuel with
     | 0 => throw (.assert s!"{site}: loop bound")
     | fuel + 1 =>
       if acc.size ≥ P.SYNC_COMMITTEE_SIZE then return acc
       let shuffled ← computeShuffledIndex P (← i.mod? count site) count seed
       let candidate ← getAt active shuffled.toNat site
-      let randomBytes := hashBytes (seed.toBytes ++ uintToBytes 8 (← i.div? (← u64Checked 16) site).toNat)
-      let offset := (← (← i.mod? (← u64Checked 16) site).mul? (← u64Checked 2) site).toNat
+      let randomBytes := hashBytes (seed.toBytes ++ uintToBytes 8 (← i.div? (← c64 16) site).toNat)
+      let offset := (← (← i.mod? (← c64 16) site).mul? (← c64 2) site).toNat
       let randomValue ← bytesToUint64 ((randomBytes.drop offset).take 2)
       let v ← state.validators.get candidate.toNat site
       let acc := if (← v.effective_balance.mul? maxRandomValue site).toNat ≥
           (← maxEb.mul? randomValue site).toNat then acc.push candidate else acc
       loop fuel (← i.add? U64.one site) acc
-  loop samplingFuel U64.zero #[]
+  loop SAMPLING_FUEL U64.zero #[]
 
 /-- `get_next_sync_committee(state)` (Altair; Electra's sampling from Electra on): the sampled
 validators' pubkeys and their aggregate (`eth_aggregate_pubkeys`, `Crypto/Boundary.lean`). From
 `v1.7.0-beta.4` pyspec computes `bls.AggregatePKs` whatever the BLS switch, because the
 aggregate is state data (`eth_consensus_specs/utils/bls.py`), so it is never stubbed. -/
-def getNextSyncCommittee (state : BeaconState P f) : Fallible (SyncCommittee P) := do
+def getNextSyncCommittee (state : BeaconState P f) : M (SyncCommittee P) := do
   let site := "get_next_sync_committee"
   let indices ← if f.atLeast .electra then getNextSyncCommitteeIndices state
     else getNextSyncCommitteeIndicesAltair state
   let pubkeys ← indices.mapM fun i => do
     pure (← state.validators.get i.toNat site).pubkey
-  let agg ← ethAggregatePubkeysFallible (pubkeys.toList.map (·.toArray.toList))
+  let agg ← ethAggregatePubkeysM (pubkeys.toList.map (·.toArray.toList))
   let aggregate : BLSPubkey ← SszVector.ofArray agg.toArray site
   pure { pubkeys := ← SszVector.ofArray pubkeys site, aggregate_pubkey := aggregate }
 

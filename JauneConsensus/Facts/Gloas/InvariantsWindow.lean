@@ -1,4 +1,4 @@
-import JauneConsensus.Facts.Gloas.InvariantsReferences
+import JauneConsensus.Facts.Gloas.InvariantsRefs
 
 /-!
 # G3-07: preservation (goal `eip8282-gloas-cross-layer-v1`, G3a)
@@ -15,13 +15,13 @@ import JauneConsensus.Facts.Gloas.InvariantsReferences
   boundary together with `L`'s window index (`processSlots_noLiveWeight`).
 -/
 
-namespace JauneConsensus.Facts.Gloas.Invariant
+namespace JauneConsensus.Facts.Gloas.Inv
 
 open JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas
 
 variable {P : Preset}
 
-theorem processBlockHeader_lt {s s' : GloasState P} {blk : JauneConsensus.Gloas.BeaconBlock P}
+theorem processBlockHeader_lt {s s' : GSt P} {blk : JauneConsensus.Gloas.BeaconBlock P}
     (h : JauneConsensus.Gloas.processBlockHeader s blk = .ok s') :
     s.latest_block_header.slot.toNat < blk.slot.toNat := by
   unfold JauneConsensus.Gloas.processBlockHeader at h
@@ -30,71 +30,71 @@ theorem processBlockHeader_lt {s s' : GloasState P} {blk : JauneConsensus.Gloas.
   exact of_decide_eq_true (require_ok h2)
 
 /-- A payment entry is kept or emptied. -/
-def PaymentKeep (s s' : GloasState P) : Prop :=
+def PayKeep (s s' : GSt P) : Prop :=
   ∀ j : Nat, s'.builder_pending_payments.toArray[j]? = s.builder_pending_payments.toArray[j]? ∨
     s'.builder_pending_payments.toArray[j]? = some JauneConsensus.Gloas.BuilderPendingPayment.empty
 
-theorem paymentKeep_refl (s : GloasState P) : PaymentKeep s s := fun _ => Or.inl rfl
+theorem payKeep_refl (s : GSt P) : PayKeep s s := fun _ => Or.inl rfl
 
-theorem paymentKeep_trans {a b c : GloasState P} (h₁ : PaymentKeep a b) (h₂ : PaymentKeep b c) : PaymentKeep a c := by
+theorem payKeep_trans {a b c : GSt P} (h₁ : PayKeep a b) (h₂ : PayKeep b c) : PayKeep a c := by
   intro j
   rcases h₂ j with e | e
   · rw [e]; exact h₁ j
   · exact Or.inr e
 
-theorem paymentKeep_of_eq {s s' : GloasState P}
-    (h : s'.builder_pending_payments = s.builder_pending_payments) : PaymentKeep s s' :=
+theorem payKeep_of_eq {s s' : GSt P}
+    (h : s'.builder_pending_payments = s.builder_pending_payments) : PayKeep s s' :=
   fun _ => Or.inl (by rw [h])
 
 /-- Up to the bid, a block only keeps or empties payment entries. -/
-theorem beforeBid_paymentKeep {ctx : Context} {s s1 s2 s3 : GloasState P} {blk : JauneConsensus.Gloas.BeaconBlock P}
+theorem beforeBid_payKeep {ctx : Ctx} {s s1 s2 s3 : GSt P} {blk : JauneConsensus.Gloas.BeaconBlock P}
     (h1 : JauneConsensus.Gloas.processParentExecutionPayload ctx s blk = .ok s1)
     (h2 : JauneConsensus.Gloas.processBlockHeader s1 blk = .ok s2)
-    (h3 : JauneConsensus.Gloas.processWithdrawals s2 = .ok s3) : PaymentKeep s s3 := by
-  have k1 : PaymentKeep s s1 := by
+    (h3 : JauneConsensus.Gloas.processWithdrawals s2 = .ok s3) : PayKeep s s3 := by
+  have k1 : PayKeep s s1 := by
     rcases processParentExecutionPayload_cases h1 with ⟨hs1, _⟩ | ⟨_, a, d, e, ha, hd, he, hs⟩
-    · rw [hs1]; exact paymentKeep_refl _
+    · rw [hs1]; exact payKeep_refl _
     obtain ⟨x, fx, hx⟩ := applyParentPrefix_split ha
-    have kx : PaymentKeep s x := by
+    have kx : PayKeep s x := by
       rcases hx with ⟨idx, hset⟩ | ⟨_, rfl, _, _⟩ | rfl
       · obtain ⟨_, p, _, _, _, hemp, hoth⟩ := settleBuilderPayment_frame hset
         intro j
         by_cases hj : j = idx.toNat
         · subst hj; exact Or.inr hemp
         · exact Or.inl (hoth j hj)
-      · exact paymentKeep_of_eq rfl
-      · exact paymentKeep_refl _
+      · exact payKeep_of_eq rfl
+      · exact payKeep_refl _
     have hd' : d.builder_pending_payments = a.builder_pending_payments :=
-      forIn_yield_invariant (fun m => m.builder_pending_payments = a.builder_pending_payments) _
+      forIn_yield_inv (fun m => m.builder_pending_payments = a.builder_pending_payments) _
         (fun m _ m' hI hm => by
           show _ = _
-          rw [(depositRequest_cases hm).1]; exact hI) _ _ _ hd rfl
+          rw [(depReq_cases hm).1]; exact hI) _ _ _ hd rfl
     have he' : e.builder_pending_payments = d.builder_pending_payments :=
-      forIn_yield_invariant (fun m => m.builder_pending_payments = d.builder_pending_payments) _
+      forIn_yield_inv (fun m => m.builder_pending_payments = d.builder_pending_payments) _
         (fun m _ m' hI hm => by
           show _ = _
-          rw [(exitRequest_cases hm).1]; exact hI) _ _ _ he rfl
+          rw [(exitReq_cases hm).1]; exact hI) _ _ _ he rfl
     have hs' := (applyParentSuffix_post hs).2.1
-    exact paymentKeep_trans kx (paymentKeep_of_eq (by rw [hs', he', hd', fx.2.1]))
+    exact payKeep_trans kx (payKeep_of_eq (by rw [hs', he', hd', fx.2.1]))
   obtain ⟨_, _, hm2⟩ := processBlockHeader_post h2
-  have k2 : PaymentKeep s1 s2 := paymentKeep_of_eq (by rw [hm2])
-  exact paymentKeep_trans k1 (paymentKeep_trans k2 (paymentKeep_of_eq (processWithdrawals_withdrawalQueue h3).2))
+  have k2 : PayKeep s1 s2 := payKeep_of_eq (by rw [hm2])
+  exact payKeep_trans k1 (payKeep_trans k2 (payKeep_of_eq (processWithdrawals_wq h3).2))
 
 /-- After a block, `L`'s window index is the current slot's entry. -/
-theorem bidIndex_of_slot {s : GloasState P} (hL : s.latest_execution_payload_bid.slot = s.slot) :
+theorem bidIndex_of_slot {s : GSt P} (hL : s.latest_execution_payload_bid.slot = s.slot) :
     bidIndex s = some (P.SLOTS_PER_EPOCH + s.slot.toNat % P.SLOTS_PER_EPOCH) := by
-  unfold bidIndex currentEpoch; simp only []; rw [hL]; simp
+  unfold bidIndex curEpoch; simp only []; rw [hL]; simp
 
 /-- **G3-07 and FutureEmpty over `process_block`** (from FutureEmpty at the pre-state; needs
 `1 ≤ MIN_ATTESTATION_INCLUSION_DELAY` and `0 < SLOTS_PER_EPOCH`). -/
 theorem processBlock_noLiveWeight (hdel : 1 ≤ P.MIN_ATTESTATION_INCLUSION_DELAY)
-    (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Context} {s s' : GloasState P}
+    (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx} {s s' : GSt P}
     {blk : JauneConsensus.Gloas.BeaconBlock P}
     (h : JauneConsensus.Gloas.processBlock ctx s blk = .ok s') (hfe : FutureEmpty s) :
     NoLiveWeightOnLatestBid s' ∧ FutureEmpty s' := by
   have hsl := processBlock_slots h
   obtain ⟨s1, s2, s3, s4, s5, s6, s7, h1, h2, h3, h4, h5, h6, h7, h8⟩ := processBlock_phases h
-  have k3 := beforeBid_paymentKeep h1 h2 h3
+  have k3 := beforeBid_payKeep h1 h2 h3
   have hlt := processBlockHeader_lt h2
   obtain ⟨hbs, _, hm2⟩ := processBlockHeader_post h2
   have hs1 : s1.slot = s.slot := by
@@ -105,14 +105,14 @@ theorem processBlock_noLiveWeight (hdel : 1 ≤ P.MIN_ATTESTATION_INCLUSION_DELA
     rcases processParentExecutionPayload_cases h1 with ⟨hs1, _⟩ | ⟨_, a, d, e, ha, hd, he, hs⟩
     · rw [hs1]
     · exact (parentFull_frame ha hd he hs).2.2.2.2.1
-  have w3 := processWithdrawals_withdrawalsFrame _ _ h3
+  have w3 := processWithdrawals_wFrame _ _ h3
   have hs3 : s3.slot = s.slot := by rw [w3.2.2.2.1, show s2.slot = s1.slot by rw [hm2], hs1]
   have b4 := processExecutionPayloadBid_post h4
   obtain ⟨hL4, hbslot, _, _, _, _, _, hs4, _, _, hnp, hpp⟩ := id b4
-  have f5 := processRandao_invariantFrame _ _ _ _ h5
-  have f6 := processEth1Data_invariantFrame _ _ _ h6
-  obtain ⟨c7, _, hp7⟩ := processOperations_operations _ _ _ _ _ h7
-  have f8 := processSyncAggregate_invariantFrame _ _ _ _ h8
+  have f5 := processRandao_invFrame _ _ _ _ h5
+  have f6 := processEth1Data_invFrame _ _ _ h6
+  obtain ⟨c7, _, hp7⟩ := processOperations_ops _ _ _ _ _ h7
+  have f8 := processSyncAggregate_invFrame _ _ _ _ h8
   have hs6 : s6.slot = s.slot := by rw [f6.2.2.2.2.2.2.1, f5.2.2.2.2.2.2.1, hs4, hs3]
   set K := P.SLOTS_PER_EPOCH + s.slot.toNat % P.SLOTS_PER_EPOCH with hK
   -- the current slot's entry before the bid is empty
@@ -188,7 +188,7 @@ theorem processBlock_noLiveWeight (hdel : 1 ≤ P.MIN_ATTESTATION_INCLUSION_DELA
 
 /-! ## `process_slots` -/
 
-theorem shifted_low {A : Array JauneConsensus.Gloas.BuilderPendingPayment} {n k : Nat}
+theorem shifted_lo {A : Array JauneConsensus.Gloas.BuilderPendingPayment} {n k : Nat}
     (hA : A.size = 2 * n) (hk : k < n) :
     (A.extract n A.size ++ Array.replicate n JauneConsensus.Gloas.BuilderPendingPayment.empty)[k]? =
       A[n + k]? := by
@@ -197,7 +197,7 @@ theorem shifted_low {A : Array JauneConsensus.Gloas.BuilderPendingPayment} {n k 
   simp only [hA]
   rw [if_pos (by omega)]
 
-theorem shifted_high {A : Array JauneConsensus.Gloas.BuilderPendingPayment} {n k : Nat}
+theorem shifted_hi {A : Array JauneConsensus.Gloas.BuilderPendingPayment} {n k : Nat}
     (hA : A.size = 2 * n) (hk1 : n ≤ k) (hk2 : k < 2 * n) :
     (A.extract n A.size ++ Array.replicate n JauneConsensus.Gloas.BuilderPendingPayment.empty)[k]? =
       some JauneConsensus.Gloas.BuilderPendingPayment.empty := by
@@ -215,24 +215,24 @@ theorem div_succ_of_mod_ne {t n : Nat} (h : (t + 1) % n ≠ 0) :
   omega
 
 /-- One slot iteration keeps G3-07 and FutureEmpty. -/
-theorem slotIteration_noLiveWeight (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Context} {st st1 st2 : GloasState P}
-    {next : U64} (hI : NoLiveWeightOnLatestBid st ∧ FutureEmpty st) (f1 : InvariantFrame st st1)
+theorem slotIter_noLiveWeight (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx} {st st1 st2 : GSt P}
+    {next : U64} (hI : NoLiveWeightOnLatestBid st ∧ FutureEmpty st) (f1 : InvFrame st st1)
     (hn : next.toNat = st.slot.toNat + 1)
     (hc : (st2 = st1 ∧ next.toNat % P.SLOTS_PER_EPOCH ≠ 0) ∨
       (next.toNat % P.SLOTS_PER_EPOCH = 0 ∧ JauneConsensus.Gloas.processEpoch ctx st1 = .ok st2)) :
     NoLiveWeightOnLatestBid { st2 with slot := next } ∧ FutureEmpty { st2 with slot := next } := by
   obtain ⟨g7, fe⟩ := hI
   have hL2 : st2.latest_execution_payload_bid = st.latest_execution_payload_bid :=
-    (slotIteration_core f1 hc).2.1
+    (slotIter_core f1 hc).2.1
   have hH2 : st2.latest_block_header.slot = st.latest_block_header.slot :=
-    (slotIteration_core f1 hc).2.2.2.1
+    (slotIter_core f1 hc).2.2.2.1
   rcases hc with ⟨rfl, hne⟩ | ⟨h0, he⟩
   · -- inside an epoch: same window, same entries
     rw [hn] at hne
     obtain ⟨hdiv, hmod⟩ := div_succ_of_mod_ne hne
     have hp : st2.builder_pending_payments = st.builder_pending_payments := f1.2.1
     have hbi : bidIndex { st2 with slot := next } = bidIndex st := by
-      unfold bidIndex currentEpoch; simp only []; rw [hL2, hn, hdiv]
+      unfold bidIndex curEpoch; simp only []; rw [hL2, hn, hdiv]
     refine ⟨fun k hk => ?_, fun j hj hjs => ?_, fun _ => ?_⟩
     · rw [hbi] at hk
       show ∃ E, st2.builder_pending_payments.toArray[k]? = some E ∧ _
@@ -263,37 +263,37 @@ theorem slotIteration_noLiveWeight (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Context
     refine ⟨fun k hk => ?_, fun j hj hjs => ?_, fun _ => ?_⟩
     · show ∃ E, st2.builder_pending_payments.toArray[k]? = some E ∧ _
       rw [hp2, hL2]
-      unfold bidIndex currentEpoch at hk
+      unfold bidIndex curEpoch at hk
       simp only [] at hk
       rw [hL2, hdiv] at hk
       have hLm := Nat.mod_lt st.latest_execution_payload_bid.slot.toNat hspe
       split at hk
       · cases hk
-        rw [shifted_high hsz (by omega) (by omega)]
+        rw [shifted_hi hsz (by omega) (by omega)]
         exact ⟨_, rfl, rfl, Or.inr rfl⟩
       · split at hk
         · rename_i hne1 heq
           cases hk
-          rw [shifted_low hsz hLm, hpa]
-          exact g7 _ (by unfold bidIndex currentEpoch; simp only []; rw [if_pos (by omega)])
+          rw [shifted_lo hsz hLm, hpa]
+          exact g7 _ (by unfold bidIndex curEpoch; simp only []; rw [if_pos (by omega)])
         · cases hk
     · show st2.builder_pending_payments.toArray[_]? = _
-      rw [hp2]; exact shifted_high hsz (by omega) (by omega)
+      rw [hp2]; exact shifted_hi hsz (by omega) (by omega)
     · show st2.builder_pending_payments.toArray[_]? = _
       simp only []
-      rw [hp2, h0]; exact shifted_high hsz (by omega) (by omega)
+      rw [hp2, h0]; exact shifted_hi hsz (by omega) (by omega)
 
 /-- **G3-07 and FutureEmpty over `process_slots`.** -/
-theorem processSlots_noLiveWeight (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Context} {s s' : GloasState P}
+theorem processSlots_noLiveWeight (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx} {s s' : GSt P}
     {slot : U64} (h : JauneConsensus.Gloas.processSlots ctx s slot = .ok s')
     (hu : NoLiveWeightOnLatestBid s ∧ FutureEmpty s) :
     NoLiveWeightOnLatestBid s' ∧ FutureEmpty s' :=
-  processSlots_induction (ctx := ctx) (fun m => NoLiveWeightOnLatestBid m ∧ FutureEmpty m)
-    (fun _ _ _ _ hI f1 hn hc => slotIteration_noLiveWeight hspe hI f1 hn hc) h hu
+  processSlots_ind (ctx := ctx) (fun m => NoLiveWeightOnLatestBid m ∧ FutureEmpty m)
+    (fun _ _ _ _ hI f1 hn hc => slotIter_noLiveWeight hspe hI f1 hn hc) h hu
 
 /-- **G3-07 and FutureEmpty over `state_transition`.** -/
 theorem stateTransition_noLiveWeight (hdel : 1 ≤ P.MIN_ATTESTATION_INCLUSION_DELAY)
-    (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Context} {s s' : GloasState P}
+    (hspe : 0 < P.SLOTS_PER_EPOCH) {ctx : Ctx} {s s' : GSt P}
     {sb : JauneConsensus.Gloas.SignedBeaconBlock P} {v : Bool}
     (h : JauneConsensus.Gloas.stateTransition ctx s sb v = .ok s')
     (hu : NoLiveWeightOnLatestBid s ∧ FutureEmpty s) :
@@ -301,4 +301,4 @@ theorem stateTransition_noLiveWeight (hdel : 1 ≤ P.MIN_ATTESTATION_INCLUSION_D
   obtain ⟨m, hm, hb⟩ := stateTransition_split h
   exact processBlock_noLiveWeight hdel hspe hb (processSlots_noLiveWeight hspe hm hu).2
 
-end JauneConsensus.Facts.Gloas.Invariant
+end JauneConsensus.Facts.Gloas.Inv

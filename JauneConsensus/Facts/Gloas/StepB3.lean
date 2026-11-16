@@ -1,7 +1,7 @@
 import JauneConsensus.Facts.JointGloas
 import JauneConsensus.Facts.Gloas.TraceLink
 import JauneConsensus.Facts.Gloas.InvariantsCoverBlock
-import JauneConsensus.Facts.Gloas.StepFateAndLatency
+import JauneConsensus.Facts.Gloas.StepB246
 
 /-!
 # B3 over one Gloas joint step (goal `eip8282-gloas-cross-layer-v1`, MBS)
@@ -39,7 +39,7 @@ variable {P : Preset}
 
 /-- The block transition after the slots is Gloas `process_block` (the block signature and state
 root checks write nothing). -/
-theorem gloasBlockTransition_eq_processBlock {ctx : Context} {st post : Gloas.BeaconState P}
+theorem gloasBlockTransition_eq_processBlock {ctx : Ctx} {st post : Gloas.BeaconState P}
     {b : Gloas.SignedBeaconBlock P} (h : gloasBlockTransition ctx st b = .ok post) :
     Gloas.processBlock ctx st b.message = .ok post := by
   unfold gloasBlockTransition Gloas.applySignedBlockWith at h
@@ -52,42 +52,42 @@ theorem gloasBlockTransition_eq_processBlock {ctx : Context} {st post : Gloas.Be
   exact hs
 
 /-- The step's end (the envelope, or `.withheld`) keeps the beacon state and the chain. -/
-theorem gloasDeliverOptional_beacon {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem gloasDeliverOpt_beacon {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {post : Gloas.BeaconState P} {exec : BlockChain}
-    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GloasJointState P}
-    (h : gloasDeliverOptional cfg ccfg bls post exec env? = .ok s') :
+    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GJointState P}
+    (h : gloasDeliverOpt cfg ccfg bls post exec env? = .ok s') :
     ∃ parent', s' = .gloas post exec parent' := by
   cases env? with
   | none => cases h; exact ⟨_, rfl⟩
   | some e =>
-    simp only [gloasDeliverOptional, deliver] at h
+    simp only [gloasDeliverOpt, deliver] at h
     obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
     cases h
     exact ⟨_, rfl⟩
 
 /-- The crossing's slots function keeps the builder registry. -/
-theorem crossingSlots_builders {ctx : Context} {s s' : Gloas.BeaconState P} {slot : U64}
+theorem crossingSlots_builders {ctx : Ctx} {s s' : Gloas.BeaconState P} {slot : U64}
     (h : crossingSlots ctx s slot = .ok s') : s'.builders = s.builders := by
   unfold crossingSlots at h
   split at h
   · cases h; rfl
-  · exact Invariant.processSlots_identityStable h
+  · exact Inv.processSlots_identityStable h
 
 /-! ## Scans keep invariants -/
 
 /-- An invariant of each call holds at every state of a scan. -/
-theorem scanFallible_invariant {σ α : Type} {f : σ → α → Fallible σ} (I : σ → Prop)
+theorem scanM_inv {σ α : Type} {f : σ → α → M σ} (I : σ → Prop)
     (hstep : ∀ x a y, I x → f x a = .ok y → I y) :
-    ∀ (xs : List α) {s : σ} {tr : List σ}, I s → scanFallible f s xs = .ok tr →
+    ∀ (xs : List α) {s : σ} {tr : List σ}, I s → scanM f s xs = .ok tr →
       ∀ (k : Nat) (m : σ), tr[k]? = some m → I m
   | [], s, tr, hs, h, k, m, hk => by
-    simp only [scanFallible, pure, Except.pure, Except.ok.injEq] at h
+    simp only [scanM, pure, Except.pure, Except.ok.injEq] at h
     subst h
     cases k with
     | zero => simp at hk; rw [← hk]; exact hs
     | succ k => simp at hk
   | a :: xs, s, tr, hs, h, k, m, hk => by
-    simp only [scanFallible, bind, Except.bind] at h
+    simp only [scanM, bind, Except.bind] at h
     split at h
     · cases h
     · rename_i s' hs'
@@ -100,7 +100,7 @@ theorem scanFallible_invariant {σ α : Type} {f : σ → α → Fallible σ} (I
         | zero => simp at hk; rw [← hk]; exact hs
         | succ k =>
           simp only [List.getElem?_cons_succ] at hk
-          exact scanFallible_invariant I hstep xs (hstep s a s' hs hs') hrest k m hk
+          exact scanM_inv I hstep xs (hstep s a s' hs hs') hrest k m hk
 
 /-! ## B3: the writers at a Gloas step -/
 
@@ -111,12 +111,12 @@ change is an exit initiated (`ExitInitiated`) by the builder exit request at exi
 `k`, classified `initiate i` at `trE[k]`; or a reset top-up by the builder deposit request at
 deposit-trace position `k`; or a fresh record (`BuilderCreated`). The traces are read at
 `postSlots`. Needs `2 ≤ SLOTS_PER_EPOCH` (`ValidJointG.slotsPerEpoch`). -/
-theorem GloasStepView.withdrawableEpoch_writers (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
+theorem GStepView.withdrawableEpoch_writers (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {preB postB : Gloas.BeaconState P} {preExec postExec : BlockChain}
     {preParent postParent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
     {i : Nat} {x x' : Gloas.Builder} (hx : V.postSlots.builders.toArray[i]? = some x)
     (hx' : postB.builders.toArray[i]? = some x') (hne : x.withdrawable_epoch ≠ x'.withdrawable_epoch) :
     ∃ trD trE, builderDepositTrace ccfg bls V.postSlots b = .ok trD ∧
@@ -127,7 +127,7 @@ theorem GloasStepView.withdrawableEpoch_writers (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
             classifyBuilderExit ccfg m e = .ok (.initiate i)) ∨
         (∃ k r m m', (blockBuilderDeposits b)[k]? = some r ∧ trD[k]? = some m ∧
             trD[k + 1]? = some m' ∧
-            Gloas.processBuilderDepositRequest (gloasContext ccfg bls) m r = .ok m' ∧
+            Gloas.processBuilderDepositRequest (gloasCtx ccfg bls) m r = .ok m' ∧
             classifyBuilderDeposit ccfg bls m r = .ok (.topUp i r.amount true)) ∨
         BuilderCreated V.postSlots postB i) :=
   withdrawableEpoch_writers_trace hspe (V.processBlock) hx hx' hne
@@ -135,7 +135,7 @@ theorem GloasStepView.withdrawableEpoch_writers (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
 /-- Along the builder-deposit loop, a builder slot holding a record at `FAR_FUTURE_EPOCH` keeps
 holding one (a top-up keeps `withdrawable_epoch` unless it is a reset, which needs it off
 `FAR_FUTURE_EPOCH`; a registration writes `FAR_FUTURE_EPOCH`). -/
-theorem depositRequest_keeps_far {ctx : Context} {m m' : Gloas.BeaconState P}
+theorem depReq_keeps_far {ctx : Ctx} {m m' : Gloas.BeaconState P}
     {r : Gloas.BuilderDepositRequest} (h : Gloas.processBuilderDepositRequest ctx m r = .ok m')
     {i : Nat} (hI : ∃ c, m.builders.toArray[i]? = some c ∧ c.withdrawable_epoch = FAR_FUTURE_EPOCH) :
     ∃ c, m'.builders.toArray[i]? = some c ∧ c.withdrawable_epoch = FAR_FUTURE_EPOCH := by
@@ -158,12 +158,12 @@ initiated by the builder exit request `e` at exit-trace position `k` of the bloc
 passed the first-match, activity, source-address and pending-balance checks,
 `classifyBuilderExit_meaning`), its call running `trE[k] → trE[k+1]`. Needs
 `2 ≤ SLOTS_PER_EPOCH`. -/
-theorem GloasStepView.exitInitiated (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
+theorem GStepView.exitInitiated (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {preB postB : Gloas.BeaconState P} {preExec postExec : BlockChain}
     {preParent postParent : ParentPayload P} {b : Gloas.SignedBeaconBlock P}
     {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)}
-    (V : GloasStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
+    (V : GStepView cfg ccfg bls preB preExec preParent b env? postB postExec postParent)
     {i : Nat} (hin : ExitInitiated V.postSlots postB i) :
     ∃ (k : Nat) (e : Gloas.BuilderExitRequest) (trE : List (Gloas.BeaconState P))
       (m m' : Gloas.BeaconState P),
@@ -181,7 +181,7 @@ theorem GloasStepView.exitInitiated (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
     obtain ⟨s0, h0, hs⟩ := builderDepositTrace_scan hD
     have hI0 : ∃ c, s0.builders.toArray[i]? = some c ∧ c.withdrawable_epoch = FAR_FUTURE_EPOCH :=
       ⟨x, by rw [builderDepositTrace_head_builders hD h0]; exact hx, hfar⟩
-    obtain ⟨c, hc, hcf⟩ := scanFallible_invariant _ (fun _ _ _ hI hy => depositRequest_keeps_far hy hI) _ hI0 hs k m hm
+    obtain ⟨c, hc, hcf⟩ := scanM_inv _ (fun _ _ _ hI hy => depReq_keeps_far hy hI) _ hI0 hs k m hm
     obtain ⟨_, htop, _⟩ := classifyBuilderDeposit_meaning hcl
     obtain ⟨_, _, _, c0, hc0, hreset⟩ := (htop i r.amount true).mp rfl
     rw [hc] at hc0; cases hc0
@@ -191,12 +191,12 @@ theorem GloasStepView.exitInitiated (hspe : 2 ≤ P.SLOTS_PER_EPOCH)
 /-! ## B3 at the crossing: no exit (O-a) -/
 
 /-- With no builder requests, the parent settlement keeps the builder registry. -/
-theorem processParentExecutionPayload_builders_of_empty {ctx : Context} {st mid : Gloas.BeaconState P}
+theorem processParentExecutionPayload_builders_of_empty {ctx : Ctx} {st mid : Gloas.BeaconState P}
     {b : Gloas.SignedBeaconBlock P} (hd : blockBuilderDeposits b = [])
     (he : blockBuilderExits b = [])
     (h : Gloas.processParentExecutionPayload ctx st b.message = .ok mid) :
     mid.builders = st.builders := by
-  rcases Invariant.processParentExecutionPayload_cases h with ⟨rfl, _⟩ | ⟨_, a, d, e, ha, hdd, hee, hs⟩
+  rcases Inv.processParentExecutionPayload_cases h with ⟨rfl, _⟩ | ⟨_, a, d, e, ha, hdd, hee, hs⟩
   · rfl
   · simp only [blockBuilderDeposits] at hd
     simp only [blockBuilderExits] at he
@@ -204,17 +204,17 @@ theorem processParentExecutionPayload_builders_of_empty {ctx : Context} {st mid 
     rw [he] at hee
     simp only [List.forIn_nil, pure, Except.pure, Except.ok.injEq] at hdd hee
     subst hdd hee
-    rw [(Invariant.applyParentSuffix_post hs).1, applyParentPrefix_builders ha]
+    rw [(Inv.applyParentSuffix_post hs).1, applyParentPrefix_builders ha]
 
 /-- With no builder requests, `process_block` keeps every builder's pubkey and
 `withdrawable_epoch` (and the registry's length). -/
-theorem processBlock_pubkeyWithdrawableEpoch_of_empty {ctx : Context} {st post : Gloas.BeaconState P}
+theorem processBlock_pkWe_of_empty {ctx : Ctx} {st post : Gloas.BeaconState P}
     {b : Gloas.SignedBeaconBlock P} (hd : blockBuilderDeposits b = [])
     (he : blockBuilderExits b = []) (h : Gloas.processBlock ctx st b.message = .ok post) :
-    BuildersPubkeyWithdrawableEpoch st post := by
+    BuildersPkWe st post := by
   obtain ⟨mid, hmid, hpk⟩ := processBlock_after_parent ctx st b.message post h
   have hb := processParentExecutionPayload_builders_of_empty hd he hmid
-  exact pubkeyWithdrawableEpoch.trans (pubkeyWithdrawableEpoch_of_eq hb) hpk
+  exact pkWe.trans (pkWe_of_eq hb) hpk
 
 /-- **B3 at the crossing step (G2b obligation O-a): the crossing initiates no exit.** A successful
 crossing step from a Fulu state upgrades it (`Gloas.crossFromFulu`, ending in
@@ -224,30 +224,30 @@ crossing step from a Fulu state upgrades it (`Gloas.crossFromFulu`, ending in
 keeps every builder's pubkey and `withdrawable_epoch`. Hence, from `postSlots` to the post-state:
 no exit is initiated (`ExitInitiated`), no record is created (`BuilderCreated`), every builder of
 the post-state is at `FAR_FUTURE_EPOCH`, and no `withdrawable_epoch` changes (so no reset). -/
-theorem jointStepGloas_crossing_noExit {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepG_crossing_noExit {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {beacon : BeaconState P .fulu} {exec : BlockChain} {b : Gloas.SignedBeaconBlock P}
-    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GloasJointState P}
-    (h : jointStepGloas cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? = .ok s') :
+    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GJointState P}
+    (h : jointStepG cfg ccfg bls (.pre ⟨.fulu, beacon, exec⟩) (.gloas b) env? = .ok s') :
     ∃ (upgraded postSlots post : Gloas.BeaconState P) (parent' : ParentPayload P),
-      Gloas.crossFromFulu (gloasContext ccfg bls) beacon = .ok upgraded ∧
-      crossingSlots (gloasContext ccfg bls) upgraded b.message.slot = .ok postSlots ∧
-      Gloas.processBlock (gloasContext ccfg bls) postSlots b.message = .ok post ∧
+      Gloas.crossFromFulu (gloasCtx ccfg bls) beacon = .ok upgraded ∧
+      crossingSlots (gloasCtx ccfg bls) upgraded b.message.slot = .ok postSlots ∧
+      Gloas.processBlock (gloasCtx ccfg bls) postSlots b.message = .ok post ∧
       s' = .gloas post exec parent' ∧
       postSlots.builders = upgraded.builders ∧
       blockBuilderDeposits b = [] ∧ blockBuilderExits b = [] ∧
-      BuildersFar postSlots ∧ BuildersFar post ∧ BuildersPubkeyWithdrawableEpoch postSlots post ∧
+      BuildersFar postSlots ∧ BuildersFar post ∧ BuildersPkWe postSlots post ∧
       (∀ i, ¬ ExitInitiated postSlots post i) ∧ (∀ i, ¬ BuilderCreated postSlots post i) := by
-  obtain ⟨_, _, upgraded, postSlots, post, hup, h0, _, hr, hbt, hd⟩ := jointStepGloas_cross_ok_iff.mp h
+  obtain ⟨_, _, upgraded, postSlots, post, hup, h0, _, hr, hbt, hd⟩ := jointStepG_cross_ok_iff.mp h
   obtain ⟨atFork, hat⟩ := crossFromFulu_upgrade hup
   obtain ⟨hfar, _⟩ := upgradeToGloas_builders hat
   have hbs := crossingSlots_builders h0
   have hpb := gloasBlockTransition_eq_processBlock hbt
-  obtain ⟨parent', hs⟩ := gloasDeliverOptional_beacon hd
+  obtain ⟨parent', hs⟩ := gloasDeliverOpt_beacon hd
   have hdl : blockBuilderDeposits b = [] := by
     simp only [blockBuilderDeposits, hr]; rfl
   have hel : blockBuilderExits b = [] := by
     simp only [blockBuilderExits, hr]; rfl
-  have hpk := processBlock_pubkeyWithdrawableEpoch_of_empty hdl hel hpb
+  have hpk := processBlock_pkWe_of_empty hdl hel hpb
   have hfs : BuildersFar postSlots := fun i x hx => hfar i x (by rw [← hbs]; exact hx)
   have hfp : BuildersFar post := by
     intro i x hx
@@ -271,12 +271,12 @@ theorem jointStepGloas_crossing_noExit {cfg : ChainConfig} {ccfg : Config} {bls 
 /-- **Pre-Gloas steps have no builders.** A successful joint step from a pre-crossing state with
 a pre-Gloas block stays pre-crossing: its states are `JointState`s (Electra/Fulu), which carry no
 builder registry, so no builder record is created and no exit is initiated there. -/
-theorem jointStepGloas_pre_noBuilders {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
+theorem jointStepG_pre_noBuilders {cfg : ChainConfig} {ccfg : Config} {bls : Bool}
     {s : JointState P} {b : AnySignedBlock P}
-    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GloasJointState P}
-    (h : jointStepGloas cfg ccfg bls (.pre s) (.pre b) env? = .ok s') :
+    {env? : Option (Gloas.SignedExecutionPayloadEnvelope P)} {s' : GJointState P}
+    (h : jointStepG cfg ccfg bls (.pre s) (.pre b) env? = .ok s') :
     ∃ j : JointState P, s' = .pre j := by
-  obtain ⟨_, _, j, _, hj⟩ := jointStepGloas_pre_ok_iff.mp h
+  obtain ⟨_, _, j, _, hj⟩ := jointStepG_pre_ok_iff.mp h
   exact ⟨j, hj⟩
 
 end JauneConsensus.Facts.Gloas

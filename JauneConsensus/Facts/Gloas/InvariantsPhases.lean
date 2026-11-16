@@ -11,7 +11,7 @@ import JauneConsensus.Facts.Gloas.InvariantsFrames
   unchanged or in range.
 -/
 
-namespace JauneConsensus.Facts.Gloas.Invariant
+namespace JauneConsensus.Facts.Gloas.Inv
 
 open JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas
 
@@ -19,9 +19,9 @@ variable {P : Preset}
 
 /-! ## The block, phase by phase -/
 
-theorem processBlock_phases {ctx : Context} {s s' : GloasState P} {blk : JauneConsensus.Gloas.BeaconBlock P}
+theorem processBlock_phases {ctx : Ctx} {s s' : GSt P} {blk : JauneConsensus.Gloas.BeaconBlock P}
     (h : JauneConsensus.Gloas.processBlock ctx s blk = .ok s') :
-    ∃ s1 s2 s3 s4 s5 s6 s7 : GloasState P,
+    ∃ s1 s2 s3 s4 s5 s6 s7 : GSt P,
       JauneConsensus.Gloas.processParentExecutionPayload ctx s blk = .ok s1 ∧
       JauneConsensus.Gloas.processBlockHeader s1 blk = .ok s2 ∧
       JauneConsensus.Gloas.processWithdrawals s2 = .ok s3 ∧
@@ -45,7 +45,7 @@ theorem processBlock_phases {ctx : Context} {s s' : GloasState P} {blk : JauneCo
 
 /-- `process_block_header` writes only the header, whose slot is the block's, which is the
 state's. -/
-theorem processBlockHeader_post {s s' : GloasState P} {blk : JauneConsensus.Gloas.BeaconBlock P}
+theorem processBlockHeader_post {s s' : GSt P} {blk : JauneConsensus.Gloas.BeaconBlock P}
     (h : JauneConsensus.Gloas.processBlockHeader s blk = .ok s') :
     blk.slot = s.slot ∧ s'.latest_block_header.slot = blk.slot ∧
       s' = { s with latest_block_header := s'.latest_block_header } := by
@@ -63,7 +63,7 @@ theorem processBlockHeader_post {s s' : GloasState P} {blk : JauneConsensus.Gloa
 /-! ## The bid -/
 
 /-- What `process_execution_payload_bid` checked and wrote. -/
-def BidPost (s : GloasState P) (sb : JauneConsensus.Gloas.SignedExecutionPayloadBid) (s' : GloasState P) :
+def BidPost (s : GSt P) (sb : JauneConsensus.Gloas.SignedExecutionPayloadBid) (s' : GSt P) :
     Prop :=
   s'.latest_execution_payload_bid = sb.message ∧ sb.message.slot = s.slot ∧
     sb.message.parent_block_hash = s.latest_block_hash ∧
@@ -84,26 +84,26 @@ def BidPost (s : GloasState P) (sb : JauneConsensus.Gloas.SignedExecutionPayload
       ∀ j, j ≠ P.SLOTS_PER_EPOCH + s.slot.toNat % P.SLOTS_PER_EPOCH →
         s'.builder_pending_payments.toArray[j]? = s.builder_pending_payments.toArray[j]?)
 
-theorem u64Checked_toNat {n : Nat} {x : U64} (h : u64Checked n = .ok x) : x.toNat = n := U64.toNat_ofNat? h
+theorem c64_toNat {n : Nat} {x : U64} (h : c64 n = .ok x) : x.toNat = n := U64.toNat_ofNat? h
 
 theorem require_eq_ok_iff {c : Bool} {site : String} {u : Unit} :
     require c site = .ok u ↔ c = true :=
   ⟨require_ok, fun h => by subst h; rfl⟩
 
-theorem bid_active_facts {s : GloasState P} {bi v : U64} {b0 : JauneConsensus.Gloas.Builder} {st2 : String}
+theorem bid_active_facts {s : GSt P} {bi v : U64} {b0 : JauneConsensus.Gloas.Builder} {st2 : String}
     (hact : JauneConsensus.Gloas.isActiveBuilder s bi = .ok true)
     (hget : s.builders.get bi.toNat st2 = .ok b0)
     (hcov : JauneConsensus.Gloas.canBuilderCoverBid s bi v = .ok true) :
     ∃ b, s.builders.toArray[bi.toNat]? = some b ∧ b.withdrawable_epoch = FAR_FUTURE_EPOCH ∧
       JauneConsensus.Gloas.canBuilderCoverBid s bi v = .ok true := by
-  have hb := progressiveList_get_ok.mp hget
+  have hb := pl_get_ok.mp hget
   rw [isActiveBuilder_of_get hb] at hact
   have h1 := Except.ok.inj hact
   simp only [Bool.and_eq_true] at h1
   exact ⟨b0, hb, U64.beq_eq_true_iff.mp h1.2, hcov⟩
 
 set_option maxHeartbeats 1000000 in
-theorem processExecutionPayloadBid_post {ctx : Context} {s s' : GloasState P}
+theorem processExecutionPayloadBid_post {ctx : Ctx} {s s' : GSt P}
     {sb : JauneConsensus.Gloas.SignedExecutionPayloadBid}
     (h : JauneConsensus.Gloas.processExecutionPayloadBid ctx s sb = .ok s') : BidPost s sb s' := by
   revert s' h
@@ -114,10 +114,10 @@ theorem processExecutionPayloadBid_post {ctx : Context} {s s' : GloasState P}
     apply ok_pure
     first
     | (rename_i _ hc _ hm _ ha _ hs _ hlast
-       have e4 := u64Checked_toNat hc
+       have e4 := c64_toNat hc
        have e3 := U64.toNat_mod? hm
        have e2 := U64.toNat_add? ha
-       obtain ⟨h1, h2⟩ := sszVector_set_ok hs
+       obtain ⟨h1, h2⟩ := sv_set_ok hs
        cases hlast
        simp only [require_eq_ok_iff] at *
        subst_vars
@@ -134,7 +134,7 @@ theorem processExecutionPayloadBid_post {ctx : Context} {s s' : GloasState P}
        | exact Or.inl ⟨‹sb.message.builder_index = _›, ‹sb.message.value = U64.zero›⟩
        | exact Or.inr (bid_active_facts
            ‹JauneConsensus.Gloas.isActiveBuilder s sb.message.builder_index = .ok true›
-           ‹ProgressiveListOnSpine.get s.builders sb.message.builder_index.toNat _ = _›
+           ‹ProgressiveListS.get s.builders sb.message.builder_index.toNat _ = _›
            ‹JauneConsensus.Gloas.canBuilderCoverBid s sb.message.builder_index sb.message.value = .ok true›))
     | (rename_i _ hlast
        cases hlast
@@ -149,5 +149,5 @@ theorem processExecutionPayloadBid_post {ctx : Context} {s s' : GloasState P}
        | exact Or.inl ⟨‹sb.message.builder_index = _›, ‹sb.message.value = U64.zero›⟩
        | exact Or.inr (bid_active_facts
            ‹JauneConsensus.Gloas.isActiveBuilder s sb.message.builder_index = .ok true›
-           ‹ProgressiveListOnSpine.get s.builders sb.message.builder_index.toNat _ = _›
+           ‹ProgressiveListS.get s.builders sb.message.builder_index.toNat _ = _›
            ‹JauneConsensus.Gloas.canBuilderCoverBid s sb.message.builder_index sb.message.value = .ok true›))

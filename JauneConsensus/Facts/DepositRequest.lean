@@ -18,7 +18,7 @@ namespace JauneConsensus.Facts
 
 open JauneConsensus
 
-variable {P : Preset} {f : ConsensusFork}
+variable {P : Preset} {f : CFork}
 
 /-- The `PendingDeposit` that `process_deposit_request` appends for `dr` at slot `slot`. -/
 def depositRequestPending (dr : DepositRequest) (slot : Slot) : PendingDeposit :=
@@ -27,17 +27,17 @@ def depositRequestPending (dr : DepositRequest) (slot : Slot) : PendingDeposit :
 
 /-- `deposit_requests_start_index` after `process_deposit_request`: before Fulu it is set to the
 request's index when it was `UNSET_DEPOSIT_REQUESTS_START_INDEX`; otherwise it is unchanged. -/
-def depositRequestStartIndex (f : ConsensusFork) (old : U64) (dr : DepositRequest) : U64 :=
+def depositRequestStartIndex (f : CFork) (old : U64) (dr : DepositRequest) : U64 :=
   if !(f.atLeast .fulu) && old == UNSET_DEPOSIT_REQUESTS_START_INDEX then dr.index else old
 
 /-- A gated write under the fork fact succeeds with the gated value. -/
-theorem forkField_write_eq {α : Type} {c : Bool} (h : c = true) (x : α) (site : String) :
-    ForkField.write c x site = .ok (ForkField.mk h x) := by
+theorem gated_write_eq {α : Type} {c : Bool} (h : c = true) (x : α) (site : String) :
+    Gated.write c x site = .ok (Gated.mk h x) := by
   subst h; rfl
 
 /-- `Gated.mk` after `Gated.get` is the identity. -/
-theorem forkField_mk_get {α : Type} {c : Bool} (h : c = true) (x : ForkField c α) :
-    ForkField.mk h (ForkField.get h x) = x := by
+theorem gated_mk_get {α : Type} {c : Bool} (h : c = true) (x : Gated c α) :
+    Gated.mk h (Gated.get h x) = x := by
   subst h; rfl
 
 /-- **The equation of `process_deposit_request`** (Electra and Fulu): it is the append of
@@ -48,41 +48,41 @@ theorem processDepositRequest_eq (h : f.atLeast .electra = true) (state : Beacon
     (dr : DepositRequest) :
     processDepositRequest state dr =
       (fun q => { state with
-        deposit_requests_start_index := ForkField.mk h
-          (depositRequestStartIndex f (ForkField.get h state.deposit_requests_start_index) dr)
-        pending_deposits := ForkField.mk h q }) <$>
-        (ForkField.get h state.pending_deposits).push (depositRequestPending dr state.slot)
+        deposit_requests_start_index := Gated.mk h
+          (depositRequestStartIndex f (Gated.get h state.deposit_requests_start_index) dr)
+        pending_deposits := Gated.mk h q }) <$>
+        (Gated.get h state.pending_deposits).push (depositRequestPending dr state.slot)
           "process_deposit_request" := by
   unfold processDepositRequest depositRequestStartIndex depositRequestPending
   simp only [BeaconState.depositRequestsStartIndex, BeaconState.setDepositRequestsStartIndex,
-    BeaconState.pendingDeposits, BeaconState.setPendingDeposits, forkField_read_get h,
-    forkField_write_eq h, ok_bind']
-  cases hq : (ForkField.get h state.pending_deposits).push
+    BeaconState.pendingDeposits, BeaconState.setPendingDeposits, gated_read_get h,
+    gated_write_eq h, ok_bind']
+  cases hq : (Gated.get h state.pending_deposits).push
       { pubkey := dr.pubkey, withdrawal_credentials := dr.withdrawal_credentials,
         amount := dr.amount, signature := dr.signature, slot := state.slot }
       "process_deposit_request" with
   | error e =>
     cases hfu : f.atLeast .fulu <;>
-      cases hu : (ForkField.get h state.deposit_requests_start_index ==
+      cases hu : (Gated.get h state.deposit_requests_start_index ==
         UNSET_DEPOSIT_REQUESTS_START_INDEX) <;>
       simp only [Bool.not_false, Bool.not_true, Bool.true_and, Bool.false_and, Bool.false_eq_true,
         ite_true, ite_false, pure_bind, hq] <;> rfl
   | ok q =>
     cases hfu : f.atLeast .fulu <;>
-      cases hu : (ForkField.get h state.deposit_requests_start_index ==
+      cases hu : (Gated.get h state.deposit_requests_start_index ==
         UNSET_DEPOSIT_REQUESTS_START_INDEX) <;>
       simp only [hu, Bool.not_false, Bool.not_true, Bool.true_and, Bool.false_and,
-        Bool.false_eq_true, ite_true, ite_false, pure_bind, ok_bind', hq, forkField_mk_get] <;> rfl
+        Bool.false_eq_true, ite_true, ite_false, pure_bind, ok_bind', hq, gated_mk_get] <;> rfl
 
 /-- `process_deposit_request` succeeds exactly when the pending-deposit queue has room for one
 more entry. -/
 theorem processDepositRequest_ok_iff (h : f.atLeast .electra = true) (state : BeaconState P f)
     (dr : DepositRequest) :
     (∃ s', processDepositRequest state dr = .ok s') ↔
-      (ForkField.get h state.pending_deposits).toArray.size + 1 ≤ P.PENDING_DEPOSITS_LIMIT := by
+      (Gated.get h state.pending_deposits).toArray.size + 1 ≤ P.PENDING_DEPOSITS_LIMIT := by
   rw [processDepositRequest_eq h]
   unfold SszList.push
-  by_cases hs : (ForkField.get h state.pending_deposits).toArray.size + 1 ≤ P.PENDING_DEPOSITS_LIMIT
+  by_cases hs : (Gated.get h state.pending_deposits).toArray.size + 1 ≤ P.PENDING_DEPOSITS_LIMIT
   · simp only [hs, dite_true, iff_true]
     exact ⟨_, rfl⟩
   · simp only [hs, dite_false, iff_false]
@@ -94,26 +94,26 @@ exactly `depositRequestPending dr state.slot` appended (the request's key, crede
 signature, at the state's slot). -/
 theorem processDepositRequest_pending (h : f.atLeast .electra = true) {state s' : BeaconState P f}
     {dr : DepositRequest} (hp : processDepositRequest state dr = .ok s') :
-    (ForkField.get h s'.pending_deposits).toArray =
-      (ForkField.get h state.pending_deposits).toArray.push (depositRequestPending dr state.slot) := by
+    (Gated.get h s'.pending_deposits).toArray =
+      (Gated.get h state.pending_deposits).toArray.push (depositRequestPending dr state.slot) := by
   rw [processDepositRequest_eq h] at hp
   unfold SszList.push at hp
   split at hp
   · cases hp
-    simp only [ForkField.get_mk]
+    simp only [Gated.get_mk]
   · cases hp
 
 /-- On success the start index is `depositRequestStartIndex f old dr`: set to the request's index
 before Fulu when it was unset, unchanged otherwise. -/
 theorem processDepositRequest_startIndex (h : f.atLeast .electra = true)
     {state s' : BeaconState P f} {dr : DepositRequest} (hp : processDepositRequest state dr = .ok s') :
-    ForkField.get h s'.deposit_requests_start_index =
-      depositRequestStartIndex f (ForkField.get h state.deposit_requests_start_index) dr := by
+    Gated.get h s'.deposit_requests_start_index =
+      depositRequestStartIndex f (Gated.get h state.deposit_requests_start_index) dr := by
   rw [processDepositRequest_eq h] at hp
   unfold SszList.push at hp
   split at hp
   · cases hp
-    simp only [ForkField.get_mk]
+    simp only [Gated.get_mk]
   · cases hp
 
 /-- On success every field other than the pending-deposit queue and the start index is unchanged:
@@ -141,11 +141,11 @@ and every other field of `BeaconState` (including `slot`, `validators`, `balance
 theorem foldDepositRequests_spec (h : f.atLeast .electra = true) :
     ∀ (drs : List DepositRequest) {state s' : BeaconState P f},
       foldDepositRequests state drs = .ok s' →
-      (ForkField.get h s'.pending_deposits).toArray =
-        (ForkField.get h state.pending_deposits).toArray ++
+      (Gated.get h s'.pending_deposits).toArray =
+        (Gated.get h state.pending_deposits).toArray ++
           (drs.map (depositRequestPending · state.slot)).toArray ∧
-      ForkField.get h s'.deposit_requests_start_index =
-        drs.foldl (depositRequestStartIndex f) (ForkField.get h state.deposit_requests_start_index) ∧
+      Gated.get h s'.deposit_requests_start_index =
+        drs.foldl (depositRequestStartIndex f) (Gated.get h state.deposit_requests_start_index) ∧
       s' = { state with
         deposit_requests_start_index := s'.deposit_requests_start_index
         pending_deposits := s'.pending_deposits } := by
@@ -182,8 +182,8 @@ credentials, amount and signature and the state's slot (the loop does not change
 theorem foldDepositRequests_pending (h : f.atLeast .electra = true) :
     ∀ (drs : List DepositRequest) {state s' : BeaconState P f},
       foldDepositRequests state drs = .ok s' →
-      (ForkField.get h s'.pending_deposits).toArray =
-        (ForkField.get h state.pending_deposits).toArray ++
+      (Gated.get h s'.pending_deposits).toArray =
+        (Gated.get h state.pending_deposits).toArray ++
           (drs.map (depositRequestPending · state.slot)).toArray ∧
       s'.slot = state.slot ∧ s'.validators = state.validators ∧ s'.balances = state.balances := by
   intro drs state s' hp

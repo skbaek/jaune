@@ -37,11 +37,11 @@ instance : ToString UsageError where
 
 structure Opts where
   cmd : String := ""
-  preset : Option DirectoryName := none
-  fork : Option DirectoryName := none
-  runner : Option DirectoryName := none
-  handler : Option DirectoryName := none
-  suite : Option DirectoryName := none
+  preset : Option DirName := none
+  fork : Option DirName := none
+  runner : Option DirName := none
+  handler : Option DirName := none
+  suite : Option DirName := none
   tier : Tier := .full
   vectors : Option System.FilePath := none
   manifestDir : String := "scripts"
@@ -73,7 +73,7 @@ def loadSelection (o : Opts) : IO (Manifest × Selection) := do
     | some v => pure v
     | none =>
       match ← IO.getEnv "HOME" with
-      | some h => pure (System.FilePath.mk h / defaultVectorsDirectory preset / "extracted")
+      | some h => pure (System.FilePath.mk h / defaultVectorsDir preset / "extracted")
       | none => throw (IO.userError "refused: no --vectors and no HOME")
   let md := System.FilePath.mk o.manifestDir
   let prov ← IO.FS.readFile (md / "consensus-vectors.json")
@@ -144,11 +144,11 @@ def gloasPairing : List Jaune.Fork :=
 #guard gloasPairing == [.amsterdam]
 
 def cmdForkRules (n : String) : IO UInt32 := do
-  if JauneConsensus.ConsensusFork.ofName? n == some .gloas then
+  if JauneConsensus.CFork.ofName? n == some .gloas then
     IO.println s!"gloas: execution {gloasPairing} (pairing only: the Gloas rules are the separate \
       Gloas modules, not a CFork.rules? entry)"
     return 0
-  match JauneConsensus.ConsensusFork.resolve n with
+  match JauneConsensus.CFork.resolve n with
   | .ok d =>
     IO.println s!"{d.fork}: execution {d.blobs.map (·.1)}, max blobs {d.blobs.map (·.2)}, \
       request types {d.requestTypes.map (·.toNat)}"
@@ -161,10 +161,10 @@ def cmdForkRules (n : String) : IO UInt32 := do
 64-byte list, `hashPairKernel`, `hashPair`) over the same pseudo-random inputs, and check that
 all three agree on every input (a differential run beside `hashPair_eq`). -/
 def cmdBenchHashPair (n : Nat) : IO UInt32 := do
-  let inputs : Array (Jaune.U256 × Jaune.U256) := (Array.range n).map fun k =>
-    (Jaune.Nat.toU256 (k * 0x9e3779b97f4a7c15f39cc0605cedc834 + k ^ 5 + 17),
-     Jaune.Nat.toU256 ((k + 7) * 0xc2b2ae3d27d4eb4f165667b19e3779f9 + k ^ 3))
-  let time (name : String) (f : Jaune.U256 → Jaune.U256 → Jaune.U256) :
+  let inputs : Array (Jaune.B256 × Jaune.B256) := (Array.range n).map fun k =>
+    (Jaune.Nat.toB256 (k * 0x9e3779b97f4a7c15f39cc0605cedc834 + k ^ 5 + 17),
+     Jaune.Nat.toB256 ((k + 7) * 0xc2b2ae3d27d4eb4f165667b19e3779f9 + k ^ 3))
+  let time (name : String) (f : Jaune.B256 → Jaune.B256 → Jaune.B256) :
       IO (Array (List UInt8)) := do
     let t0 ← IO.monoNanosNow
     let mut acc : UInt8 := 0
@@ -197,7 +197,7 @@ def cmdBenchStateRoot (file : String) : IO UInt32 := do
     | IO.println "bench-state-root: snappy failed"; return 1
   let bs := bytes.toList
   let t0 ← IO.monoMsNow
-  let .ok (s : JauneConsensus.BeaconState .mainnet .electra) := (JauneConsensus.deserialize bs : JauneConsensus.Fallible _)
+  let .ok (s : JauneConsensus.BeaconState .mainnet .electra) := (JauneConsensus.deserialize bs : JauneConsensus.M _)
     | IO.println "bench-state-root: decode failed"; return 1
   let t1 ← IO.monoMsNow
   let ser := JauneConsensus.serialize s
@@ -215,10 +215,10 @@ def cmdBenchStateRoot (file : String) : IO UInt32 := do
   let rm := JauneConsensus.serialize s.randao_mixes
   let vs := JauneConsensus.serialize s.validators
   let t8 ← IO.monoMsNow
-  let .ok (_ : JauneConsensus.SszVector JauneConsensus.Bytes32 65536) := (JauneConsensus.deserialize rm : JauneConsensus.Fallible _)
+  let .ok (_ : JauneConsensus.SszVector JauneConsensus.Bytes32 65536) := (JauneConsensus.deserialize rm : JauneConsensus.M _)
     | IO.println "randao decode failed"; return 1
   let t9 ← IO.monoMsNow
-  let .ok (_ : JauneConsensus.SszList JauneConsensus.Validator 1099511627776) := (JauneConsensus.deserialize vs : JauneConsensus.Fallible _)
+  let .ok (_ : JauneConsensus.SszList JauneConsensus.Validator 1099511627776) := (JauneConsensus.deserialize vs : JauneConsensus.M _)
     | IO.println "validators decode failed"; return 1
   let t10 ← IO.monoMsNow
   let _ := JauneConsensus.serialize s.randao_mixes
@@ -254,12 +254,12 @@ def main (args : List String) : IO UInt32 := do
         let dir := match o.dir with
           | some d => d
           | none => System.FilePath.mk "scripts/consensus/recorded-pairs"
-        commandRecordedPairs dir o.negativeControl
+        cmdRecordedPairs dir o.negativeControl
       | "recorded-pairs-gloas" =>
         let dir := match o.dir with
           | some d => d
           | none => System.FilePath.mk "scripts/consensus/recorded-devnet8"
-        RecordedGloas.commandRecordedPairsGloas dir
+        RecordedGloas.cmdRecordedPairsGloas dir
       | _ =>
         IO.eprintln usage
         pure 2
