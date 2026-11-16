@@ -459,6 +459,31 @@ class NamingApplyTests(unittest.TestCase):
             text = text[:edit['start']] + edit['new'] + text[edit['end']:]
         self.assertEqual(text, 'inductive T where\n  | three («to» : Nat) (h : «to» = «to»)\ndef v := T.three («to» := 1) rfl\n')
 
+    def test_escaped_binder_spelling_replans(self):
+        # G0b: the renamed tree spells the binder `«to»`; a later plan over it
+        # must neither refuse the binder nor the named argument, and an inverse
+        # row restores the original spelling.
+        text = 'inductive T where\n  | three («to» : Nat) (h : «to» = «to»)\ndef v := T.three («to» := 1) rfl\n'
+        index = index_for(text, [('three', 'Pilot.T.three', 0, True), ('T.three', 'Pilot.T.three', 0, False)])
+        def lsp(i):
+            return [text.count('\n', 0, i), i - text.rfind('\n', 0, i) - 1]
+        binder = text.index('«to»')
+        uses = [text.index('«to»', binder + 1), text.index('«to» = «to»') + 7]
+        index['references'][json.dumps({'f': {'m': 'Pilot', 'i': '_uniq.r'}})] = dict(
+            definition=lsp(binder) + lsp(binder + 4), usages=[lsp(u) + lsp(u + 4) for u in uses])
+        named = text.index('(«to» := 1)') + 1
+        ctor = text.index('three')
+        self.syntax(text, index,
+                    named_arguments=[(named, named + 4, 'Pilot.T.three', 'to', None, None)],
+                    constructor_binders=[(ctor, ctor + 5, len(text[:binder].encode()),
+                                          len(text[:binder + 4].encode()), 'to')])  # syntax() converts only the first pair
+        self.assertEqual(M.plan_file(text, index, [entry('Pilot.other', 'Pilot.another')]), ([], []))
+        edits, problems = M.plan_file(text, index, [entry('Pilot.T.three.to', 'Pilot.T.three.receiver')])
+        self.assertEqual(problems, [])
+        for edit in reversed(edits):
+            text = text[:edit['start']] + edit['new'] + text[edit['end']:]
+        self.assertEqual(text, 'inductive T where\n  | three (receiver : Nat) (h : receiver = receiver)\ndef v := T.three (receiver := 1) rfl\n')
+
     def test_private_authored_declaration_in_derived_namespace_needs_its_row(self):
         # N4 rule D moves only generated constants with a derived namespace; an
         # authored private declaration there is still refused by the planner.
