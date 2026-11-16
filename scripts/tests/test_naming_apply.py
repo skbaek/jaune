@@ -485,6 +485,22 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn('name capture', problems[0]['reason'])
 
+    def test_quoted_dotted_spelling_without_resolution_is_reported(self):
+        # `c.R` with `c` a constant and `.R` a projection onto a renamed field:
+        # the whole spelling resolves to no constant, but it is not a local.
+        row = entry('F.Rel.R', 'F.Rel.relation')
+        renamer = M.MAP.Renamer([row])
+        text = 'namespace F\nmacro "m" : term => `(c.R)\nend F\n'
+        index = index_for(text, [])
+        q = text.index('c.R')
+        cmd = text.index('macro'), text.index('\nend F')
+        self.syntax(text, index, commands=[(*cmd, 'macro', 'F', [], [False] * 3)],
+                    quotation_identifiers=[(q, q + 3, 'c.R')])
+        edits, problems = M.plan_file(text, index, [row], renamer, M.Universe({'F.Rel.R', 'F.c'}, renamer))
+        self.assertEqual(edits, [])
+        self.assertEqual(len(problems), 1)
+        self.assertIn('projections', problems[0]['reason'])
+
     def test_quoted_projection_is_renamed_only_when_the_word_decides(self):
         # `(e).pres` in a quotation resolves through e's type; with every known
         # constant ending in `pres` renamed to `preservation`, the word decides.
