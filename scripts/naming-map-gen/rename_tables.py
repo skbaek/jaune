@@ -382,3 +382,12 @@ for old, new, why in [('net', 'network', 'the `--network` selection'), ('testIdx
 # Snake-case parts of theorem names built from renamed predicates.
 PART_RENAMES = {'nof': 'add_no_overflow', 'nofm': 'mul_no_overflow'}
 EXPLICIT_LEAVES = {old.split('.')[-1] for old in EXPLICIT}
+
+
+# Generated constants that downstream proofs spell (Blanc uses `Jaune.Acct.ext`), whose parent is
+# renamed: `@[ext]` lemmas follow their structure. Only spelled generated names get rows (N4
+# matches the rest by graph).
+GENERATED_ROWS = {
+    J('Acct.ext'): (J('Account.ext'), '7', 'follows `Acct` -> `Account` (the `@[ext]` lemma of the structure)', 'B'),
+    J('Acct.ext_iff'): (J('Account.ext_iff'), '7', 'follows `Acct` -> `Account` (the `@[ext]` lemma of the structure)', 'B'),
+}

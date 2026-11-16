@@ -312,6 +312,12 @@ def build(rows):
         entries.append(dict(old=old, new=new, kind=kind_of(c), layer=layer_of(c), rule=merge_rules(rules),
                             source=source, **({'notes': '; '.join(notes)} if notes else {}),
                             _mod=c['mod'], _line=c['line'], _fam=c['fam'].split()[0], _derived=True))
+    # generated constants spelled downstream (not in the authored/referenced universe)
+    for old, (new, rule, source, status) in T.GENERATED_ROWS.items():
+        if old not in seen_old:
+            entries.append(dict(old=old, new=new, kind='declaration', layer='execution', rule=rule,
+                                source=source + f' [{status}]', notes='generated constant spelled by Blanc',
+                                _mod='Jaune.Types', _line=0, _fam='K1', _derived=False))
     # constructor parameters (binders) that are not constants
     for old, (new, rule, source, status, notes) in T.EXPLICIT.items():
         if old not in seen_old:

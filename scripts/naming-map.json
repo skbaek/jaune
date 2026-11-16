@@ -22523,6 +22523,24 @@
       "rule": "7",
       "source": "follows `TxParseError` -> `TransactionParseError` (rule 7: descendants follow their definitions) [B]",
       "notes": "G0a map gap (jsn-u9): spelled qualified descendant of a renamed type"
+    },
+    {
+      "old": "Jaune.Acct.ext",
+      "new": "Jaune.Account.ext",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "7",
+      "source": "follows `Acct` -> `Account` (the `@[ext]` lemma of the structure) [B]",
+      "notes": "generated constant spelled by Blanc"
+    },
+    {
+      "old": "Jaune.Acct.ext_iff",
+      "new": "Jaune.Account.ext_iff",
+      "kind": "declaration",
+      "layer": "execution",
+      "rule": "7",
+      "source": "follows `Acct` -> `Account` (the `@[ext]` lemma of the structure) [B]",
+      "notes": "generated constant spelled by Blanc"
     }
   ]
 }
