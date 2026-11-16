@@ -117,7 +117,7 @@ class NamingApplyTests(unittest.TestCase):
         b = lambda i: len(text[:i].encode())
         index['naming_syntax'] = dict(version=2, literal_ranges=[], named_arguments=[], namespaces=[], imports=[],
                                       unresolved_syntax=[], eof_scope=[0, '[anonymous]', []],
-                                      commands=[[b(x), b(y), 'declaration', '[anonymous]', [], [False] * 3]
+                                      commands=[[b(x), b(y), 'declaration', 'Pilot', [], [False] * 3]
                                                 for x, y in commands])
         return index
 
@@ -127,7 +127,9 @@ class NamingApplyTests(unittest.TestCase):
         index = self.local_capture_index(text, [(0, len(text) - 1)],
                                          [('Gas', 'Pilot.S.Gas', 0, True), ('gCallStipend', 'Pilot.gCallStipend', 0, False)])
         stats = {}
-        edits, problems = M.plan_file(text, index, [entry('Pilot.gCallStipend', 'Pilot.Gas.callStipend')], stats=stats)
+        rows = [entry('Pilot.gCallStipend', 'Pilot.Gas.callStipend')]
+        universe = M.Universe({'Pilot.gCallStipend', 'Pilot.S.Gas', 'Pilot.S'}, M.MAP.Renamer(rows))
+        edits, problems = M.plan_file(text, index, rows, None, universe, stats)
         self.assertEqual(problems, [])
         self.assertEqual([e['new'] for e in edits], ['Pilot.Gas.callStipend'])
         self.assertEqual([s['new'] for s in stats['local_capture_sites']], ['Pilot.Gas.callStipend'])
@@ -138,7 +140,9 @@ class NamingApplyTests(unittest.TestCase):
         index = self.local_capture_index(text, [(0, first), (first + 1, len(text) - 1)],
                                          [('gCallStipend', 'Pilot.gCallStipend', 0, False)],
                                          fvars=[('Gas', 0, '_uniq.1')])
-        edits, problems = M.plan_file(text, index, [entry('Pilot.gCallStipend', 'Pilot.Gas.callStipend')])
+        rows = [entry('Pilot.gCallStipend', 'Pilot.Gas.callStipend')]
+        universe = M.Universe({'Pilot.gCallStipend', 'Pilot.f', 'Pilot.g'}, M.MAP.Renamer(rows))
+        edits, problems = M.plan_file(text, index, rows, None, universe)
         self.assertEqual(problems, [])
         self.assertEqual([e['new'] for e in edits], ['Gas.callStipend'])
         # The same binder in the site's own command does capture it.
@@ -146,7 +150,7 @@ class NamingApplyTests(unittest.TestCase):
         index = self.local_capture_index(text, [(0, len(text) - 1)],
                                          [('gCallStipend', 'Pilot.gCallStipend', 0, False)],
                                          fvars=[('Gas', 0, '_uniq.1')])
-        edits, _ = M.plan_file(text, index, [entry('Pilot.gCallStipend', 'Pilot.Gas.callStipend')])
+        edits, _ = M.plan_file(text, index, rows, None, universe)
         self.assertEqual([e['new'] for e in edits], ['Pilot.Gas.callStipend'])
 
     def test_unresolved_use_is_reported(self):
