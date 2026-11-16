@@ -679,6 +679,20 @@ does not run alone at the end. With `--reuse`, the snapshot records the priors
 (`reuse`) and per-module `provenance` (`elaborated` or `reused_from` for each
 of `imports` and `export`); comparison does not read these fields.
 
+Measured on WSL (2026-11-16, Jaune whole tree, 231 modules, `--jobs 5`):
+cold, the G0a capture took 2906 s wall, of which ~1200 s producer build and
+~1700 s headers, imports and exports. Against that capture, from another
+worktree, a candidate differing in six Gloas fact files re-elaborated 77
+`--imports` and 83 exports (36%: the transitive importers of those files,
+plus six exports that fell back before the Lean-escaping fix) in 1556 s from
+admission to release; one exporter (`Facts.Gloas.FinalizedNotAhead`, 1177 s)
+is the floor of any capture that reruns it. A one-line edit to the leaf
+`ConsensusMain.lean` re-elaborated one module (export 16 s) and finished
+462 s after admission, ~200 s of which was installing reused outputs before
+the exporter started (since removed: same-root reuse copies verbatim and
+exporters start first). An edit to `Jaune.Basic` reruns 207 of 231 modules
+(90%), `JauneConsensus.SSZ.Basic` 118 (51%), by the import graph.
+
 Snapshot schema 3 records the standalone roots and producer set explicitly.
 Schema 2 captures remain readable as all-producer captures. Fidelity is checked
 separately for each maximal selected root and its transitive local imports.
