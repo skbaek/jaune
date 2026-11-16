@@ -102,12 +102,12 @@ def Gloas.ExecutionPayload.balBytes (payload : Gloas.ExecutionPayload P) : Bytes
 (EIP-7843), which `payloadHeader` leaves `none`. -/
 def payloadHeaderG (payload : Gloas.ExecutionPayload P) (parentBeaconRoot : Root)
     (list : ExecutionRequestsList) : Header :=
-  { parentHash := payload.parent_hash
+  { parentHash := ⟨payload.parent_hash⟩
     ommersHash := emptyOmmerHash
     coinbase := payload.fee_recipient
-    stateRoot := payload.state_root
-    txsRoot := transactionsRootOf payload.txBytes
-    receiptRoot := payload.receipts_root
+    stateRoot := ⟨payload.state_root⟩
+    txsRoot := ⟨transactionsRootOf payload.txBytes⟩
+    receiptRoot := ⟨payload.receipts_root⟩
     bloom := payload.logs_bloom.toArray.toList
     difficulty := 0
     number := payload.block_number.toNat
@@ -118,12 +118,12 @@ def payloadHeaderG (payload : Gloas.ExecutionPayload P) (parentBeaconRoot : Root
     prevRandao := payload.prev_randao
     nonce := 0
     baseFeePerGas := some payload.base_fee_per_gas.toNat
-    withdrawalsRoot := some (withdrawalsRootOf payload.executionWithdrawals)
+    withdrawalsRoot := some ⟨withdrawalsRootOf payload.executionWithdrawals⟩
     blobGasUsed := some payload.blob_gas_used.toNat
     excessBlobGas := some payload.excess_blob_gas.toNat
-    parentBeaconBlockRoot := some parentBeaconRoot
+    parentBeaconBlockRoot := some ⟨parentBeaconRoot⟩
     requestsHash := some (computeRequestsHash list)
-    blockAccessListHash := some payload.balBytes.keccak
+    blockAccessListHash := some ⟨payload.balBytes.keccak⟩
     slotNumber := some payload.slot_number.toWord }
 
 /-- The execution block a Gloas `NewPayloadRequest` stands for: the header with the requests as
@@ -167,7 +167,7 @@ def engineVerdictG (cfg : ChainConfig) (exec : BlockChain) (req : Gloas.NewPaylo
   let payload := req.execution_payload
   let blk := payloadToBlockG req
   guardE (!payload.txBytes.any List.isEmpty) (.engine .emptyTransaction)
-  guardE (decide (blk.header.hash = payload.block_hash)) (.engine .blockHash)
+  guardE (decide (blk.header.hash.word = payload.block_hash)) (.engine .blockHash)
   let hashes ← (blobVersionedHashesOf payload.txBytes).mapError
     (fun e => .engine (.transactionDecode e))
   guardE (decide (hashes = req.versioned_hashes.toArray.toList)) (.engine .versionedHashes)

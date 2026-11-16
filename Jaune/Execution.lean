@@ -2735,12 +2735,12 @@ def BLT.toExHeader : BLT → Except DecodeError Header
       -- malformed one are different failures.
       let optionals ← decodeHeaderOptionals tail
       .ok {
-        parentHash := parentHash
-        ommersHash := ommersHash
+        parentHash := ⟨parentHash⟩
+        ommersHash := ⟨ommersHash⟩
         coinbase := coinbase
-        stateRoot := stateRoot
-        txsRoot := txsRoot
-        receiptRoot := receiptRoot
+        stateRoot := ⟨stateRoot⟩
+        txsRoot := ⟨txsRoot⟩
+        receiptRoot := ⟨receiptRoot⟩
         bloom := bloom
         difficulty := difficulty
         number := number
@@ -2751,12 +2751,12 @@ def BLT.toExHeader : BLT → Except DecodeError Header
         prevRandao := prevRandao
         nonce := nonce
         baseFeePerGas := optionals.baseFeePerGas
-        withdrawalsRoot := optionals.withdrawalsRoot
+        withdrawalsRoot := optionals.withdrawalsRoot.map Hash32.mk
         blobGasUsed := optionals.blobGasUsed
         excessBlobGas := optionals.excessBlobGas
-        parentBeaconBlockRoot := optionals.parentBeaconBlockRoot
-        requestsHash := optionals.requestsHash
-        blockAccessListHash := optionals.blockAccessListHash
+        parentBeaconBlockRoot := optionals.parentBeaconBlockRoot.map Hash32.mk
+        requestsHash := optionals.requestsHash.map Hash32.mk
+        blockAccessListHash := optionals.blockAccessListHash.map Hash32.mk
         slotNumber := optionals.slotNumber
       }
   | _ =>

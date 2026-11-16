@@ -102,12 +102,12 @@ private def hb (b : B256) : String := "0x" ++ b.toHex
 def headerFields (h : Header) : List (String × Want) :=
   let ob : Option B256 → Want := fun o => match o with | some b => .bytes (hb b) | none => .absent
   let on : Option Nat → Want := fun o => match o with | some n => .qty n | none => .absent
-  [("parentHash", .bytes (hb h.parentHash)),
-   ("sha3Uncles", .bytes (hb h.ommersHash)),
+  [("parentHash", .bytes (hb h.parentHash.word)),
+   ("sha3Uncles", .bytes (hb h.ommersHash.word)),
    ("miner", .bytes ("0x" ++ h.coinbase.toHex)),
-   ("stateRoot", .bytes (hb h.stateRoot)),
-   ("transactionsRoot", .bytes (hb h.txsRoot)),
-   ("receiptsRoot", .bytes (hb h.receiptRoot)),
+   ("stateRoot", .bytes (hb h.stateRoot.word)),
+   ("transactionsRoot", .bytes (hb h.txsRoot.word)),
+   ("receiptsRoot", .bytes (hb h.receiptRoot.word)),
    ("logsBloom", .bytes (hx h.bloom)),
    ("difficulty", .qty h.difficulty),
    ("number", .qty h.number),
@@ -118,12 +118,12 @@ def headerFields (h : Header) : List (String × Want) :=
    ("mixHash", .bytes (hb h.prevRandao)),
    ("nonce", .qty h.nonce.toNat),
    ("baseFeePerGas", on h.baseFeePerGas),
-   ("withdrawalsRoot", ob h.withdrawalsRoot),
+   ("withdrawalsRoot", ob (h.withdrawalsRoot.map Jaune.Hash32.word)),
    ("blobGasUsed", on h.blobGasUsed),
    ("excessBlobGas", on h.excessBlobGas),
-   ("parentBeaconBlockRoot", ob h.parentBeaconBlockRoot),
-   ("requestsHash", ob h.requestsHash),
-   ("blockAccessListHash", ob h.blockAccessListHash),
+   ("parentBeaconBlockRoot", ob (h.parentBeaconBlockRoot.map Jaune.Hash32.word)),
+   ("requestsHash", ob (h.requestsHash.map Jaune.Hash32.word)),
+   ("blockAccessListHash", ob (h.blockAccessListHash.map Jaune.Hash32.word)),
    ("slotNumber", on (h.slotNumber.map UInt64.toNat))]
 
 /-- The header fields that differ from the recorded block, each with both values. -/
@@ -226,16 +226,16 @@ def runPair (files : List (String × ByteArray)) (slot : Nat) : Except String (B
   -- the real request
   let req ← newPayloadRequest env env.execution_requests
   let hdr := (payloadToBlockG req).header
-  let hash := hdr.hash
+  let hash := hdr.hash.word
   let okBlockHash := hash == payload.block_hash && hb hash == recHash
-  let okReqs := (hdr.requestsHash.map hb) == some recReqs
-  let okBal := (hdr.blockAccessListHash.map hb) == some recBal
+  let okReqs := (hdr.requestsHash.map (hb ∘ Jaune.Hash32.word)) == some recReqs
+  let okBal := (hdr.blockAccessListHash.map (hb ∘ Jaune.Hash32.word)) == some recBal
   -- the control mutant
   let (mreqs, what) ← flipFirstBuilderRequest env.execution_requests
   let mreq ← newPayloadRequest env mreqs
   let mhdr := (payloadToBlockG mreq).header
-  let mutRejHash := !(mhdr.hash == payload.block_hash) && hb mhdr.hash != recHash
-  let mutRejReqs := (mhdr.requestsHash.map hb) != some recReqs
+  let mutRejHash := !(mhdr.hash.word == payload.block_hash) && hb mhdr.hash.word != recHash
+  let mutRejReqs := (mhdr.requestsHash.map (hb ∘ Jaune.Hash32.word)) != some recReqs
   let real := linkRoot && linkFull && reqsEq && has8282 && okBlockHash && okReqs && okBal
   let control := mutRejHash && mutRejReqs
   let label := s!"slot {slot} / envelope {slot - 1} / EL #{payload.block_number.toNat} \
@@ -243,7 +243,7 @@ def runPair (files : List (String × ByteArray)) (slot : Nat) : Except String (B
   let mut lines := [s!"{if real && control then "PASS" else "FAIL"} {label}",
     s!"  real: link={linkRoot && linkFull} parent_execution_requests==envelope.requests={reqsEq} \
       block_hash={okBlockHash} requests_hash={okReqs} block_access_list_hash={okBal} \
-      ({hb hash}, requests_hash {(hdr.requestsHash.map hb).getD "none"})",
+      ({hb hash}, requests_hash {(hdr.requestsHash.map (hb ∘ Jaune.Hash32.word)).getD "none"})",
     s!"  control ({what}): block_hash rejected={mutRejHash} requests_hash rejected={mutRejReqs}"]
   if let some n := note then lines := lines ++ [s!"  note (not gated): {n}"]
   if !(okBlockHash && okReqs && okBal) then

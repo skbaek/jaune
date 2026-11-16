@@ -314,19 +314,19 @@ structure Store : Type where
   private entries : Std.TreeMap B256 Entry compare
   private valid : ∃ g, GenesisAdmitted g ∧
     ∀ key entry, entries[key]? = some entry →
-      key = entry.chain.tipHash ∧ Origin g entry
+      key = entry.chain.tipHash.word ∧ Origin g entry
 
 namespace Store
 
 def find? (store : Store) (key : B256) : Option Entry := store.entries[key]?
 
 def init (genesis : CheckedBlockChain) (h : GenesisAdmitted genesis) : Store :=
-  ⟨(∅ : Std.TreeMap B256 Entry compare).insert genesis.tipHash (genesisEntry genesis), by
+  ⟨(∅ : Std.TreeMap B256 Entry compare).insert genesis.tipHash.word (genesisEntry genesis), by
     refine ⟨genesis, h, ?_⟩
     intro key entry he
     rw [Std.TreeMap.getElem?_insert] at he
     split at he
-    · have hk : genesis.tipHash = key := Std.compare_eq_iff_eq.mp ‹_›
+    · have hk : genesis.tipHash.word = key := Std.compare_eq_iff_eq.mp ‹_›
       cases Option.some.inj he
       exact ⟨hk.symm, .genesis h⟩
     · simp at he⟩
@@ -338,7 +338,7 @@ theorem find_origin (store : Store) (h : store.find? key = some entry) :
   exact ⟨g, hg, (hv key entry h).2⟩
 
 theorem find_key (store : Store) (h : store.find? key = some entry) :
-    key = entry.chain.tipHash := by
+    key = entry.chain.tipHash.word := by
   obtain ⟨g, hg, hv⟩ := store.valid
   exact (hv key entry h).1
 
@@ -354,13 +354,13 @@ private def insertAccepted (store : Store) {key : B256} {parent : Entry}
     (imported : addBlockToChainChecked (phaseFork parent.phase) parent.chain cb =
       .ok (.inl child)) : Store :=
   let entry := nextEntry parent (CheckedBlockChain.ofImport imported)
-  ⟨store.entries.insert entry.chain.tipHash entry, by
+  ⟨store.entries.insert entry.chain.tipHash.word entry, by
     obtain ⟨g, hg, hv⟩ := store.valid
     refine ⟨g, hg, ?_⟩
     intro hash value he
     rw [Std.TreeMap.getElem?_insert] at he
     split at he
-    · have hk : entry.chain.tipHash = hash := Std.compare_eq_iff_eq.mp ‹_›
+    · have hk : entry.chain.tipHash.word = hash := Std.compare_eq_iff_eq.mp ‹_›
       cases Option.some.inj he
       exact ⟨hk.symm, .step (hv key parent found).2 imported⟩
     · exact hv hash value he⟩
@@ -370,22 +370,22 @@ private theorem insertAccepted_lookup (store : Store) {key : B256} {parent : Ent
     (imported : addBlockToChainChecked (phaseFork parent.phase) parent.chain cb =
       .ok (.inl child)) (hash : B256) :
     (Store.insertAccepted store found imported).find? hash =
-      if (nextEntry parent (CheckedBlockChain.ofImport imported)).chain.tipHash = hash
+      if (nextEntry parent (CheckedBlockChain.ofImport imported)).chain.tipHash.word = hash
       then some (nextEntry parent (CheckedBlockChain.ofImport imported))
       else store.find? hash := by
   simp only [insertAccepted, find?, Std.TreeMap.getElem?_insert, Std.compare_eq_iff_eq]
 
 /-- The original branch anchor is stored with its actual difficulty. -/
 theorem init_entry (genesis : CheckedBlockChain) (h : GenesisAdmitted genesis) :
-    (init genesis h).find? genesis.tipHash = some (genesisEntry genesis) := by
+    (init genesis h).find? genesis.tipHash.word = some (genesisEntry genesis) := by
   simp [init, find?]
 
 /-- Installing the same complete entry twice changes no observable lookup.
 This deliberately says nothing about the balancing-tree representation. -/
 private theorem overwrite_lookup (entries : Std.TreeMap B256 Entry compare)
     (entry : Entry) (hash : B256) :
-    ((entries.insert entry.chain.tipHash entry).insert entry.chain.tipHash entry)[hash]? =
-      (entries.insert entry.chain.tipHash entry)[hash]? := by
+    ((entries.insert entry.chain.tipHash.word entry).insert entry.chain.tipHash.word entry)[hash]? =
+      (entries.insert entry.chain.tipHash.word entry)[hash]? := by
   simp only [Std.TreeMap.getElem?_insert]
   split <;> rfl
 
@@ -400,7 +400,7 @@ end Store
 existential anchor being chosen independently for each lookup. -/
 def Valid (genesis : CheckedBlockChain) (store : Store) : Prop :=
   GenesisAdmitted genesis ∧ ∀ key entry, store.find? key = some entry →
-    key = entry.chain.tipHash ∧ Origin genesis entry
+    key = entry.chain.tipHash.word ∧ Origin genesis entry
 
 theorem Store.valid_exists (store : Store) : ∃ genesis, Valid genesis store :=
   store.valid
@@ -410,10 +410,10 @@ theorem Store.init_valid (genesis : CheckedBlockChain) (h : GenesisAdmitted gene
   refine ⟨h, ?_⟩
   intro key entry he
   change ((∅ : Std.TreeMap B256 Entry compare).insert
-    genesis.tipHash (genesisEntry genesis))[key]? = some entry at he
+    genesis.tipHash.word (genesisEntry genesis))[key]? = some entry at he
   rw [Std.TreeMap.getElem?_insert] at he
   split at he
-  · have hk : genesis.tipHash = key := Std.compare_eq_iff_eq.mp ‹_›
+  · have hk : genesis.tipHash.word = key := Std.compare_eq_iff_eq.mp ‹_›
     cases Option.some.inj he
     exact ⟨hk.symm, .genesis h⟩
   · simp at he
@@ -429,7 +429,7 @@ inductive Faithful (store : Store) (raw : Bytes) : CheckedBlockChain → Store �
   | imported {header : Header} {parent : Entry} {rules : ForkRules}
       {block canon : Block} {hash canonHash : B256} {chain : BlockChain}
       (structural : StructuralHeader raw header)
-      (found : store.find? header.parentHash = some parent)
+      (found : store.find? header.parentHash.word = some parent)
       (selected : (phaseFork parent.phase).rules = .ok rules)
       (decoded : rlpToBlockEAt rules raw = .ok (block, hash))
       (sameHeader : block.header = header)
@@ -457,7 +457,7 @@ checks. Full structural equality guards fail closed if normalization could ever
 change the header that selected the parent; they never switch parent or fork. -/
 private def importBody (store : Store) (raw : Bytes) (header : Header)
     (parent : Entry) (structural : StructuralHeader raw header)
-    (found : store.find? header.parentHash = some parent) :
+    (found : store.find? header.parentHash.word = some parent) :
     Except ImportFailure (ImportOutcome (Accepted store raw)) :=
   letI := headerDecidableEq
   match selected : (phaseFork parent.phase).rules with
@@ -496,9 +496,9 @@ def evaluateObserved (store : Store) (raw : Bytes) :
     match decodedHeader : headerBlt.toExHeader with
     | .error reason => ⟨none, none, .ok (.inr (.decode reason))⟩
     | .ok header =>
-      match found : store.find? header.parentHash with
-      | none => ⟨some header.parentHash, none, .ok (.inr (missingParent header.parentHash))⟩
-      | some parent => ⟨some header.parentHash, some parent.chain,
+      match found : store.find? header.parentHash.word with
+      | none => ⟨some header.parentHash.word, none, .ok (.inr (missingParent header.parentHash.word))⟩
+      | some parent => ⟨some header.parentHash.word, some parent.chain,
           importBody store raw header parent ⟨headerBlt, tail, outer, decodedHeader⟩ found⟩
   | some _ => ⟨none, none, .ok (.inr (.decode (DecodeError.structure "block"
       "expected [header, transactions, ommers, withdrawals] lists")))⟩
@@ -519,8 +519,8 @@ theorem evaluateObserved_erases (store : Store) (raw : Bytes) :
       match decodedHeader : headerBlt.toExHeader with
       | .error reason => .ok (.inr (.decode reason))
       | .ok header =>
-        match found : store.find? header.parentHash with
-        | none => .ok (.inr (missingParent header.parentHash))
+        match found : store.find? header.parentHash.word with
+        | none => .ok (.inr (missingParent header.parentHash.word))
         | some parent => importBody store raw header parent
             ⟨headerBlt, tail, outer, decodedHeader⟩ found
     | some _ => .ok (.inr (.decode (DecodeError.structure "block"
@@ -542,7 +542,7 @@ theorem accepted_selected_decode_import {store : Store} {raw : Bytes}
       (normalized : rlpToBlock block.toBLT.toBytes = .ok (canon, canonHash))
       (accepted : addBlockToChainChecked (phaseFork parent.phase) parent.chain
         (CanonicalBlock.ofDecode normalized) = .ok (.inl chain)),
-      StructuralHeader raw header ∧ store.find? header.parentHash = some parent ∧
+      StructuralHeader raw header ∧ store.find? header.parentHash.word = some parent ∧
       (phaseFork parent.phase).rules = .ok rules ∧
       rlpToBlockEAt rules raw = .ok (block, hash) ∧
       block.header = header ∧ canon.header = header ∧
@@ -567,11 +567,11 @@ theorem accepted_preserves_valid {genesis : CheckedBlockChain} {store : Store}
     refine ⟨valid.1, ?_⟩
     intro key entry he
     change (store.entries.insert
-      (nextEntry parent (CheckedBlockChain.ofImport accepted)).chain.tipHash
+      (nextEntry parent (CheckedBlockChain.ofImport accepted)).chain.tipHash.word
       (nextEntry parent (CheckedBlockChain.ofImport accepted)))[key]? = some entry at he
     rw [Std.TreeMap.getElem?_insert] at he
     split at he
-    · have hk : (nextEntry parent (CheckedBlockChain.ofImport accepted)).chain.tipHash =
+    · have hk : (nextEntry parent (CheckedBlockChain.ofImport accepted)).chain.tipHash.word =
           key := Std.compare_eq_iff_eq.mp ‹_›
       cases Option.some.inj he
       exact ⟨hk.symm, .step (valid.2 _ _ found).2 accepted⟩
@@ -587,9 +587,9 @@ selected parent, preserves all other keys, and never adds difficulty after TTD. 
 theorem accepted_recurrence {store : Store} {raw : Bytes}
     (result : Accepted store raw) :
     ∃ parent : Entry,
-      store.find? result.child.tip.header.parentHash = some parent ∧
-      result.next.find? result.child.tipHash = some (nextEntry parent result.child) ∧
-      (∀ hash, hash ≠ result.child.tipHash →
+      store.find? result.child.tip.header.parentHash.word = some parent ∧
+      result.next.find? result.child.tipHash.word = some (nextEntry parent result.child) ∧
+      (∀ hash, hash ≠ result.child.tipHash.word →
         result.next.find? hash = store.find? hash) ∧
       (parent.phase = .preTerminal →
         (nextEntry parent result.child).td = parent.td + result.child.tip.header.difficulty ∧
@@ -603,7 +603,7 @@ theorem accepted_recurrence {store : Store} {raw : Bytes}
   | @imported header parent rules block canon hash canonHash chain structural found
       selected decoded sameHeader normalized sameNormalized accepted =>
     refine ⟨parent, ?_, ?_, ?_, nextEntry_pre parent _, nextEntry_post parent _⟩
-    · change store.find? canon.header.parentHash = some parent
+    · change store.find? canon.header.parentHash.word = some parent
       rw [sameNormalized, sameHeader]
       exact found
     · rw [Store.insertAccepted_lookup, nextEntry_chain]
@@ -616,9 +616,9 @@ theorem accepted_recurrence {store : Store} {raw : Bytes}
 It does not re-evaluate a candidate against a potentially changed parent. -/
 theorem accepted_overwrite_lookup {store : Store} {raw : Bytes}
     (result : Accepted store raw) (hash : B256) :
-    ∃ entry : Entry, result.next.find? result.child.tipHash = some entry ∧
+    ∃ entry : Entry, result.next.find? result.child.tipHash.word = some entry ∧
       entry.chain = result.child ∧
-      (result.next.entries.insert result.child.tipHash entry)[hash]? =
+      (result.next.entries.insert result.child.tipHash.word entry)[hash]? =
         result.next.find? hash := by
   obtain ⟨child, next, faithful⟩ := result
   cases faithful with
@@ -628,9 +628,9 @@ theorem accepted_overwrite_lookup {store : Store} {raw : Bytes}
     refine ⟨entry, ?_, nextEntry_chain _ _, ?_⟩
     · rw [Store.insertAccepted_lookup, nextEntry_chain]
       simp [entry]
-    · change ((store.entries.insert entry.chain.tipHash entry).insert
-        (CheckedBlockChain.ofImport accepted).tipHash entry)[hash]? =
-          (store.entries.insert entry.chain.tipHash entry)[hash]?
+    · change ((store.entries.insert entry.chain.tipHash.word entry).insert
+        (CheckedBlockChain.ofImport accepted).tipHash.word entry)[hash]? =
+          (store.entries.insert entry.chain.tipHash.word entry)[hash]?
       rw [← nextEntry_chain parent (CheckedBlockChain.ofImport accepted)]
       exact Store.overwrite_lookup store.entries entry hash
 
@@ -648,7 +648,7 @@ def init (genesis : CheckedBlockChain) : Except ImportFailure Store :=
 theorem init_valid {genesis : CheckedBlockChain} {store : Store}
     (initialized : init genesis = .ok store) :
     Valid genesis store ∧
-      store.find? genesis.tipHash = some (genesisEntry genesis) := by
+      store.find? genesis.tipHash.word = some (genesisEntry genesis) := by
   unfold init at initialized
   split at initialized
   · cases Except.ok.inj initialized

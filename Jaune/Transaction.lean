@@ -132,6 +132,9 @@ through the hex `ToString`, which is how every hash prints elsewhere. -/
 instance : Repr B256 where
   reprPrec h _ := .text (toString h)
 
+instance : Repr Hash32 where
+  reprPrec h _ := .text (toString h)
+
 /-- Why a header or a post-transition check rejects a block.
 
 One constructor per reason in the block-rejection vocabulary. A bare
@@ -180,7 +183,7 @@ inductive BlockValidationError : Type
   block carries only the hash. `computed` is the hash of the list this
   candidate built, carried as data so that the fixture runner's refinement
   below never reads a rendered message. -/
-  | blockAccessListHash (computed : B256) (detail : ErrorDetail)
+  | blockAccessListHash (computed : Hash32) (detail : ErrorDetail)
   /-- EIP-7928: the block-level access list a fixture publishes as its
   verification aid is not the computed one in content. Never produced by the
   block pipeline -- only the fixture runner, which alone has the published
@@ -1132,7 +1135,7 @@ def BlockAccessList.toBLT (l : BlockAccessList) : BLT := .list (l.map BalAccount
 def BlockAccessList.encode (l : BlockAccessList) : Bytes := l.toBLT.toBytes
 
 /-- `hash_block_access_list`. -/
-def BlockAccessList.hash (l : BlockAccessList) : B256 := l.encode.keccak
+def BlockAccessList.hash (l : BlockAccessList) : Hash32 := ⟨l.encode.keccak⟩
 
 /-- `validate_block_access_list_gas_limit`'s count: every address, plus every
 unique storage slot across its changes and reads (the reads already exclude
@@ -3288,9 +3291,9 @@ def getLast256BlockHashes (chain : BlockChain) : List B256 :=
   match chain.blocks.reverse.take 255 with
   | [] => []
   | block :: blocks =>
-    let hash : B256 := (Header.toBLT block.header).toBytes.keccak
+    let hash : B256 := ((Header.toBLT block.header).toBytes.keccak : B256)
     let hashes : List B256 :=
-      (block :: blocks).map <| fun x => x.header.parentHash
+      (block :: blocks).map <| fun x => x.header.parentHash.word
     (hash :: hashes).reverse
 
 --------------- RETAINED HISTORY ---------------
@@ -3340,7 +3343,7 @@ by the tip's own recomputed header hash. -/
 theorem getLast256BlockHashes_eq {chain : BlockChain} {b : Block} {bs : List Block}
     (hN : chain.blocks.reverse.take 255 = b :: bs) :
     getLast256BlockHashes chain
-      = chain.retained.map (fun x => x.header.parentHash) ++ [b.header.hash] := by
+      = chain.retained.map (fun x => x.header.parentHash.word) ++ [b.header.hash.word] := by
   unfold getLast256BlockHashes BlockChain.retained
   rw [hN]
   simp [Header.hash, List.map_reverse]
@@ -3350,7 +3353,7 @@ theorem getLast256BlockHashes_getD_lt {chain : BlockChain} {b : Block}
     {bs : List Block} (hN : chain.blocks.reverse.take 255 = b :: bs) {j : Nat}
     (hj : j < chain.retained.length) :
     (getLast256BlockHashes chain).getD j 0
-      = chain.retained[j].header.parentHash := by
+      = chain.retained[j].header.parentHash.word := by
   rw [getLast256BlockHashes_eq hN, List.getD,
     List.getElem?_append_left (by simpa using hj),
     List.getElem?_eq_getElem (by simpa using hj)]
@@ -3359,7 +3362,7 @@ theorem getLast256BlockHashes_getD_lt {chain : BlockChain} {b : Block}
 /-- The last entry is the tip's own recomputed header hash. -/
 theorem getLast256BlockHashes_getD_last {chain : BlockChain} {b : Block}
     {bs : List Block} (hN : chain.blocks.reverse.take 255 = b :: bs) :
-    (getLast256BlockHashes chain).getD chain.retained.length 0 = b.header.hash := by
+    (getLast256BlockHashes chain).getD chain.retained.length 0 = b.header.hash.word := by
   rw [getLast256BlockHashes_eq hN, List.getD,
     List.getElem?_append_right (by simp)]
   simp
@@ -3466,11 +3469,11 @@ theorem getLast256BlockHashes_window {chain : BlockChain}
     (∃ b ∈ chain.retained, b.header.number = blockNumber ∧
         (getLast256BlockHashes chain).getD
           ((getLast256BlockHashes chain).length - (number - blockNumber)) 0
-            = b.header.hash) ∨
+            = b.header.hash.word) ∨
       (∃ oldest ∈ chain.retained.head?, blockNumber + 1 = oldest.header.number ∧
         (getLast256BlockHashes chain).getD
           ((getLast256BlockHashes chain).length - (number - blockNumber)) 0
-            = oldest.header.parentHash) := by
+            = oldest.header.parentHash.word) := by
   obtain ⟨bs, hN⟩ := BlockChain.take_reverse_eq_cons htip
   have hEq := getLast256BlockHashes_eq hN
   have hRdef : chain.retained = (tip :: bs).reverse := by
@@ -3541,7 +3544,7 @@ theorem getLast256BlockHashes_of_mem_retained {chain : BlockChain}
     (hlo : b.header.number < number) (hhi : number ≤ b.header.number + 256) :
     (getLast256BlockHashes chain).getD
       ((getLast256BlockHashes chain).length - (number - b.header.number)) 0
-        = b.header.hash := by
+        = b.header.hash.word := by
   have hchain : chain.retained.IsChain Block.Links :=
     hv.1.suffix chain.retained_suffix
   rcases getLast256BlockHashes_window hv htip hnum hlo hhi with
@@ -3559,17 +3562,17 @@ theorem getLast256BlockHashes_of_mem_retained {chain : BlockChain}
     have := Block.isChain_number hchain hi h0
     omega
 
-def computeRequestsHash (requests : List Bytes) : B256 :=
+def computeRequestsHash (requests : List Bytes) : Hash32 :=
   -- EIP-7685 commits the SHA-256 digest of each type-prefixed request, then
   -- hashes their concatenation once more.  This is deliberately not the EVM
   -- Keccak primitive used by transaction and trie commitments.
   let hashes := requests.map (fun r => r.sha256.toBytes)
-  Bytes.sha256 <| List.flatten hashes
+  ⟨Bytes.sha256 <| List.flatten hashes⟩
 
-def State.root (w : State) : B256 :=
+def State.root (w : State) : Hash32 :=
   let keyVals := (List.map accountToKeyVal w.toList)
   let finalNTB : NTB := Std.TreeMap.ofList keyVals _
-  trie finalNTB
+  ⟨trie finalNTB⟩
 
 /-- The absolute upper bound on a block gas limit. A gas limit is a 63-bit
 quantity: `2 ^ 63` and above is out of range no matter what the parent's limit
@@ -3817,7 +3820,7 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
   -- "No parent block found" here; the arm is unobserved in every corpus.
   let parent ← chain.blocks.getLast?.toExcept
     (.internal (.invariant (.text "no parent block found")))
-  let blockParentHash := (Header.toBLT parent.header).toBytes.keccak
+  let blockParentHash : Hash32 := ⟨(Header.toBLT parent.header).toBytes.keccak⟩
   -- Parentage is settled first. Every check below reads the parent's header, so
   -- a block naming a parent this chain does not end with is not a block with a
   -- bad timestamp or a bad base fee -- it is a block that cannot be placed at
@@ -3825,7 +3828,7 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
   -- all-zero hash is called out separately because it names no block at all,
   -- rather than naming some block this chain has not got.
   if header.parentHash ≠ blockParentHash then do
-    if header.parentHash = 0 then
+    if header.parentHash = ⟨0⟩ then
       .error <| .block <| .unknownParentZero <| .text
         s!"parent hash is the all-zero hash, \
            which names no block"
@@ -3890,8 +3893,8 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
          {if rules.header.slotNumber then "require" else "do not define"} it"
 
 def stateTransitionChecks (bout : BlockOutput) (header : Header)
-    (transactionsRoot blockStateRoot receiptRoot : B256)
-    (blockLogsBloom : Bytes) (withdrawalsRoot : B256) (requestsHash : Option B256) :
+    (transactionsRoot blockStateRoot receiptRoot : Hash32)
+    (blockLogsBloom : Bytes) (withdrawalsRoot : Hash32) (requestsHash : Option Hash32) :
     Except BlockValidationError Unit := do
   let totalBlockGasUsed := max bout.blockGasUsed bout.blockStateGasUsed
   if totalBlockGasUsed ≠ header.gasUsed then
@@ -3918,7 +3921,7 @@ def stateTransitionChecks (bout : BlockOutput) (header : Header)
   if header.withdrawalsRoot.any (· != withdrawalsRoot) then
     .error <| .withdrawalsRoot <| .text
       s!"computed withdrawals root = {withdrawalsRoot} ≠ \
-         header withdrawals root = {header.withdrawalsRoot.getD 0}"
+         header withdrawals root = {header.withdrawalsRoot.getD ⟨0⟩}"
   if header.blobGasUsed.any (· != bout.blobGasUsed) then
     .error <| .blobGasUsed <| .text
       s!"computed blob gas used = {bout.blobGasUsed} ≠ \
@@ -3927,7 +3930,7 @@ def stateTransitionChecks (bout : BlockOutput) (header : Header)
   -- Prague), where the header must not carry one either.
   if requestsHash ≠ header.requestsHash then
     .error <| .requestsHash <| .text
-      s!"computed requests hash = {requestsHash.getD 0} ≠ \
+      s!"computed requests hash = {requestsHash.getD ⟨0⟩} ≠ \
          header requests hash = {header.requestsHash}"
 
 /-- EIP-7928: the header's `blockAccessListHash` against the computed list, the
@@ -3970,7 +3973,7 @@ def initBenvStat (fork : Fork) (chain : BlockChain) (header : Header) :
       | some _ => Nat.toB256 header.difficulty
       | none => header.prevRandao,
     excessBlobGas := header.excessBlobGas.getD 0,
-    parentBeaconBlockRoot := header.parentBeaconBlockRoot.getD 0,
+    parentBeaconBlockRoot := (header.parentBeaconBlockRoot.map Hash32.word).getD 0,
     -- EIP-7843: absent before Amsterdam, where nothing reads it.
     slotNumber := header.slotNumber.getD 0
   }
@@ -3982,7 +3985,7 @@ def initBenv (fork : Fork) (chain : BlockChain) (header : Header) : Benv :=
     stat := initBenvStat fork chain header
   }
 
-def getTransactionsRoot (bout : BlockOutput) : B256 :=
+def getTransactionsRoot (bout : BlockOutput) : Hash32 :=
   let aux (arg : Bytes × Tx) : (Bytes × Bytes) :=
     let txPrefix : Bytes :=
       match arg.snd.type with
@@ -3992,17 +3995,17 @@ def getTransactionsRoot (bout : BlockOutput) : B256 :=
       | .three _ _ _ _ _ _ _ => [0x03]
       | .four _ _ _ _ _ _ => [0x04]
     ⟨arg.fst.toNibbles, txPrefix ++ arg.snd.toBLT.toBytes⟩
-  trie <| Std.TreeMap.ofList (List.map aux bout.transactionsTrie.toList) _
+  ⟨trie <| Std.TreeMap.ofList (List.map aux bout.transactionsTrie.toList) _⟩
 
-def getReceiptRoot (bout : BlockOutput) : B256 :=
+def getReceiptRoot (bout : BlockOutput) : Hash32 :=
   let aux : (Bytes × Fin 5 × Receipt) → (Bytes × Bytes)
     | ⟨key, type, receipt⟩ => ⟨key.toNibbles, type.val.toBytes ++ receipt.toBLT.toBytes⟩
-  trie <| Std.TreeMap.ofList (List.map aux bout.receiptsTrie.toList) _
+  ⟨trie <| Std.TreeMap.ofList (List.map aux bout.receiptsTrie.toList) _⟩
 
-def getWithdrawalsRoot (bout : BlockOutput) : B256 :=
+def getWithdrawalsRoot (bout : BlockOutput) : Hash32 :=
   let aux (arg : Bytes × Withdrawal) : Bytes × Bytes :=
     ⟨arg.fst.toNibbles, arg.snd.toBLT.toBytes⟩
-  trie <| Std.TreeMap.ofList (List.map aux bout.withdrawalsTrie.toList) _
+  ⟨trie <| Std.TreeMap.ofList (List.map aux bout.withdrawalsTrie.toList) _⟩
 
 def stateTransitionOmmersCheck (ommers : List Header) :
     Except BlockValidationError Unit := do
@@ -4013,8 +4016,8 @@ def stateTransitionOmmersCheck (ommers : List Header) :
 
 /-- The hash a header's `ommersHash` commits to: the keccak of the RLP list
 of the ommer headers. `emptyOmmerHash` is its value on the empty list. -/
-def ommersListHash (ommers : List Header) : B256 :=
-  (BLT.list (ommers.map Header.toBLT)).toBytes.keccak
+def ommersListHash (ommers : List Header) : Hash32 :=
+  ⟨(BLT.list (ommers.map Header.toBLT)).toBytes.keccak⟩
 
 private def ommersFail (msg : String) : Except TransitionError Unit :=
   .error <| .block <| .invalidOmmers <| .text msg
@@ -4198,11 +4201,11 @@ def stateTransitionCoreE {ε : Type} (embed : TransitionError → ε)
   let benv : Benv := initBenv f ch block.header
   let ⟨st, bout⟩ ← Except.mapError embed
     (applyBody benv block.txs block.ommers block.wds)
-  let blockStateRoot : B256 := st.root
-  let transactionsRoot : B256 := getTransactionsRoot bout
-  let receiptRoot : B256 := getReceiptRoot bout
+  let blockStateRoot : Hash32 := st.root
+  let transactionsRoot : Hash32 := getTransactionsRoot bout
+  let receiptRoot : Hash32 := getReceiptRoot bout
   let blockLogsBloom : Bytes := logsBloom bout.blockLogs
-  let withdrawalsRoot : B256 := getWithdrawalsRoot bout
+  let withdrawalsRoot : Hash32 := getWithdrawalsRoot bout
   let requestsHash :=
     if rules.header.requestsHash then some (computeRequestsHash bout.requests) else none
   Except.mapError (embed ∘ TransitionError.block) <|
@@ -5134,7 +5137,7 @@ theorem CheckedBlockChain.check_val (cc : CheckedBlockChain) :
 /-- The snapshot's key: the hash of the tip header it is proved to end with.
 Total, because the tip is a field rather than a lookup -- which is what lets
 `ChainStore` derive every key instead of accepting one. -/
-def CheckedBlockChain.tipHash (cc : CheckedBlockChain) : B256 :=
+def CheckedBlockChain.tipHash (cc : CheckedBlockChain) : Hash32 :=
   cc.tip.header.hash
 
 /-- The snapshot's committed state root, read from the tip header rather than
@@ -5142,7 +5145,7 @@ rebuilt from the world -- the same trade `tipHash` makes, for the same reason:
 `tipStateRoot` is already the proof that the two agree, so recomputing
 `val.state.root` here would rebuild the whole trie to learn something the
 structure carries. -/
-def CheckedBlockChain.stateRoot (cc : CheckedBlockChain) : B256 :=
+def CheckedBlockChain.stateRoot (cc : CheckedBlockChain) : Hash32 :=
   cc.tip.header.stateRoot
 
 /-- The field read is the trie rebuild. This is `tipStateRoot` under the
@@ -5843,12 +5846,12 @@ private def guardEmptyChain : BlockChain :=
   { blocks := [], state := .empty, chainId := 1 }
 
 private def guardTestHeader : Header := {
-  parentHash := 0
+  parentHash := ⟨0⟩
   ommersHash := emptyOmmerHash
   coinbase := 0
-  stateRoot := 0
-  txsRoot := 0
-  receiptRoot := 0
+  stateRoot := ⟨0⟩
+  txsRoot := ⟨0⟩
+  receiptRoot := ⟨0⟩
   bloom := List.replicate 256 (0 : UInt8)
   difficulty := 0
   number := 1
@@ -5859,10 +5862,10 @@ private def guardTestHeader : Header := {
   prevRandao := 0
   nonce := 0
   baseFeePerGas := some 7
-  withdrawalsRoot := some 0
+  withdrawalsRoot := some ⟨0⟩
   blobGasUsed := some 0
   excessBlobGas := some 0
-  parentBeaconBlockRoot := some 0
+  parentBeaconBlockRoot := some ⟨0⟩
   requestsHash := none
   blockAccessListHash := none
   slotNumber := none
@@ -6025,7 +6028,7 @@ private def guardChildBlock (timestamp excessBlobGas : Nat) : Block :=
       number := guardParentHeader.number + 1
       timestamp := timestamp
       excessBlobGas := some excessBlobGas
-      parentHash := (Header.toBLT guardParentHeader).toBytes.keccak }
+      parentHash := ⟨(Header.toBLT guardParentHeader).toBytes.keccak⟩ }
     txs := []
     ommers := []
     wds := [] }
@@ -6039,8 +6042,8 @@ private def guardChildBlock (timestamp excessBlobGas : Nat) : Block :=
 -- rule data, so a caller-built record decides for itself and the rule is
 -- testable before `amsterdamRules` exists.
 
-private def guardBalHash : B256 := 0x1111111111111111111111111111111111111111111111111111111111111111
-private def guardRequestsHash : B256 := 0x2222222222222222222222222222222222222222222222222222222222222222
+private def guardBalHash : Hash32 := ⟨0x1111111111111111111111111111111111111111111111111111111111111111⟩
+private def guardRequestsHash : Hash32 := ⟨0x2222222222222222222222222222222222222222222222222222222222222222⟩
 
 /-- A header with all three optional fields, as an Amsterdam block carries it. -/
 private def guardHeader23 : Header :=
@@ -6113,8 +6116,8 @@ field encodes exactly as it did before any of those fields was optional.
 "no Prague, Osaka, BPO1 or BPO2 block's hash moved" a structural claim and not a
 test result. The right-hand side is the encoder's body as it stood before the
 Amsterdam fields existed. -/
-example (h : Header) (baseFee : Nat) (withdrawalsRoot : B256)
-    (blobGasUsed excessBlobGas : Nat) (parentBeaconBlockRoot : B256) :
+example (h : Header) (baseFee : Nat) (withdrawalsRoot : Hash32)
+    (blobGasUsed excessBlobGas : Nat) (parentBeaconBlockRoot : Hash32) :
     Header.toBLT { h with
         baseFeePerGas := some baseFee, withdrawalsRoot := some withdrawalsRoot
         blobGasUsed := some blobGasUsed, excessBlobGas := some excessBlobGas
@@ -6147,14 +6150,14 @@ example (h : Header) (baseFee : Nat) (withdrawalsRoot : B256)
           | some rh => [BLT.bytes rh.toBytes]) := rfl
 
 /-- Therefore the identity of every such header is unchanged. -/
-example (h : Header) (baseFee : Nat) (withdrawalsRoot : B256)
-    (blobGasUsed excessBlobGas : Nat) (parentBeaconBlockRoot : B256) :
+example (h : Header) (baseFee : Nat) (withdrawalsRoot : Hash32)
+    (blobGasUsed excessBlobGas : Nat) (parentBeaconBlockRoot : Hash32) :
     Header.hash { h with
         baseFeePerGas := some baseFee, withdrawalsRoot := some withdrawalsRoot
         blobGasUsed := some blobGasUsed, excessBlobGas := some excessBlobGas
         parentBeaconBlockRoot := some parentBeaconBlockRoot
         blockAccessListHash := none, slotNumber := none }
-      = (BLT.list ([
+      = ⟨(BLT.list ([
           BLT.bytes h.parentHash.toBytes, BLT.bytes h.ommersHash.toBytes,
           BLT.bytes h.coinbase.toBytes, BLT.bytes h.stateRoot.toBytes,
           BLT.bytes h.txsRoot.toBytes, BLT.bytes h.receiptRoot.toBytes,
@@ -6169,7 +6172,7 @@ example (h : Header) (baseFee : Nat) (withdrawalsRoot : B256)
         ] ++
           match h.requestsHash with
           | none => []
-          | some rh => [BLT.bytes rh.toBytes])).toBytes.keccak := rfl
+          | some rh => [BLT.bytes rh.toBytes])).toBytes.keccak⟩ := rfl
 
 -- The presence rule, both directions, on a real parent chain so that every
 -- other header check has already passed and the presence rule is what decides.
@@ -6298,7 +6301,7 @@ private def guardShapedIs16 (rules : ForkRules) : Bool :=
 
 /-- Shanghai: the withdrawals root. -/
 private def guardHeader17 : Header :=
-  { guardHeader16 with withdrawalsRoot := some 0 }
+  { guardHeader16 with withdrawalsRoot := some ⟨0⟩ }
 
 #guard bltFields (Header.toBLT guardHeader15) = 15
 #guard bltFields (Header.toBLT guardHeader16) = 16
@@ -6312,17 +6315,17 @@ private def guardHeader17 : Header :=
       && h.blobGasUsed.isNone && h.parentBeaconBlockRoot.isNone
   | .error _ => false)
 #guard (match (Header.toBLT guardHeader17).toExHeader with
-  | .ok h => h.withdrawalsRoot == some 0 && h.excessBlobGas.isNone
+  | .ok h => h.withdrawalsRoot == some ⟨0⟩ && h.excessBlobGas.isNone
   | .error _ => false)
 #guard (match (Header.toBLT guardTestHeader).toExHeader with
   | .ok h => h.blobGasUsed == some 0 && h.excessBlobGas == some 0
-      && h.parentBeaconBlockRoot == some 0 && h.requestsHash.isNone
+      && h.parentBeaconBlockRoot == some ⟨0⟩ && h.requestsHash.isNone
   | .error _ => false)
 
 -- The nesting makes an incoherent record encode as the longest coherent
 -- prefix it carries: a withdrawals root without a base fee is not emitted, and
 -- neither is half of Cancun's triple. No 18- or 19-field encoding exists.
-#guard bltFields (Header.toBLT { guardHeader15 with withdrawalsRoot := some 0 }) = 15
+#guard bltFields (Header.toBLT { guardHeader15 with withdrawalsRoot := some ⟨0⟩ }) = 15
 #guard bltFields (Header.toBLT { guardHeader17 with blobGasUsed := some 0 }) = 17
 #guard bltFields (Header.toBLT
   { guardHeader17 with blobGasUsed := some 0, excessBlobGas := some 0 }) = 17
@@ -6473,7 +6476,7 @@ private def guardByzantiumActivationParent : Header :=
   { guardHeader15 with
       timestamp := 1500000000
       difficulty := 3000000000000000
-      ommersHash := 0 }
+      ommersHash := ⟨0⟩ }
 
 #guard byzantiumRules.pow.map (fun pow => expectedDifficulty pow
     { guardHeader15 with number := 4370000, timestamp := 1500000013 }
@@ -6662,7 +6665,7 @@ private def guardHistoryChild : Block := guardChildBlock 1 1966080
 -- A broken parent-hash link, with the numbering left intact.
 #guard ¬ (guardHistoryChain [guardParentBlock,
   { guardHistoryChild with
-      header := { guardHistoryChild.header with parentHash := 0 } }]).RetainedHistoryValid
+      header := { guardHistoryChild.header with parentHash := ⟨0⟩ } }]).RetainedHistoryValid
 -- A broken number, with the hash link left intact.
 #guard ¬ (guardHistoryChain [guardParentBlock,
   { guardHistoryChild with
@@ -7572,7 +7575,7 @@ theorem validateHeader_links {rules : ForkRules} {chain : BlockChain}
     · simpa using h5
   · exfalso
     rw [ite_eq_left (by simpa [Header.hash] using hph)] at h
-    by_cases hz : header.parentHash = 0
+    by_cases hz : header.parentHash = ⟨0⟩
     · rw [ite_eq_left hz] at h
       obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
       exact absurd hb (by simp)
@@ -7607,8 +7610,8 @@ theorem validateHeader_firstFee_gasLimit {rules : ForkRules} {chain : BlockChain
 header's own -- which is exactly the tip/root agreement the resulting snapshot
 needs, already paid for. -/
 theorem stateTransitionChecks_stateRoot {bout : BlockOutput} {header : Header}
-    {transactionsRoot blockStateRoot receiptRoot : B256} {blockLogsBloom : Bytes}
-    {withdrawalsRoot : B256} {requestsHash : Option B256}
+    {transactionsRoot blockStateRoot receiptRoot : Hash32} {blockLogsBloom : Bytes}
+    {withdrawalsRoot : Hash32} {requestsHash : Option Hash32}
     (h : stateTransitionChecks bout header transactionsRoot blockStateRoot
       receiptRoot blockLogsBloom withdrawalsRoot requestsHash = .ok ()) :
     blockStateRoot = header.stateRoot := by

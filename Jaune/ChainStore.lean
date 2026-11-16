@@ -52,7 +52,7 @@ def BlockChain.tipHash? (chain : BlockChain) : Option B256 :=
 /-- Invariant 1, now structural: a checked snapshot's derived key is the
 keccak of the tip header it is proved to end with. -/
 theorem CheckedBlockChain.tipHash?_val (cc : CheckedBlockChain) :
-    cc.val.tipHash? = some cc.tipHash := by
+    cc.val.tipHash? = some cc.tipHash.word := by
   unfold BlockChain.tipHash? CheckedBlockChain.tipHash
   rw [cc.tip_is_last]
   rfl
@@ -70,7 +70,7 @@ P0.2 item 5: there is no caller-supplied key any more. The genesis snapshot is
 a `CheckedBlockChain`, so its tip -- and therefore its key -- is a field of the
 value being stored, and no verification is delegated to the caller. -/
 def init (genesis : CheckedBlockChain) : ChainStore :=
-  ⟨Std.TreeMap.empty.insert genesis.tipHash genesis⟩
+  ⟨Std.TreeMap.empty.insert genesis.tipHash.word genesis⟩
 
 /-- The snapshot stored under `hash`, if any. -/
 def find? (store : ChainStore) (hash : B256) : Option CheckedBlockChain :=
@@ -85,7 +85,7 @@ hash. Inserting the same hash twice replaces the snapshot, which is harmless:
 equal tip hashes mean equal tip headers, and a re-imported block reproduces the
 same snapshot. -/
 def insert (store : ChainStore) (chain : CheckedBlockChain) : ChainStore :=
-  ⟨store.snapshots.insert chain.tipHash chain⟩
+  ⟨store.snapshots.insert chain.tipHash.word chain⟩
 
 /-- The parent snapshot a decoded block must be evaluated against: the one
 stored under the block's own `header.parentHash`.
@@ -151,13 +151,13 @@ wire-representable header carries, and the state root is the root of the empty
 world these synthetic snapshots pair with. That is P0.2 item 7 -- the fixtures
 satisfy the checked predicate for real, rather than the production store
 gaining a bypass for them. -/
-private def synthHeader (parentHash : B256) (number : Nat) (tag : Bytes) : Header :=
+private def synthHeader (parentHash : Hash32) (number : Nat) (tag : Bytes) : Header :=
   { parentHash := parentHash
-    ommersHash := 0
+    ommersHash := ⟨0⟩
     coinbase := 0
     stateRoot := State.root (Std.TreeMap.empty : State)
-    txsRoot := 0
-    receiptRoot := 0
+    txsRoot := ⟨0⟩
+    receiptRoot := ⟨0⟩
     bloom := List.replicate 256 (0 : UInt8)
     difficulty := 0
     number := number
@@ -168,16 +168,16 @@ private def synthHeader (parentHash : B256) (number : Nat) (tag : Bytes) : Heade
     prevRandao := 0
     nonce := 0
     baseFeePerGas := some 0
-    withdrawalsRoot := some 0
+    withdrawalsRoot := some ⟨0⟩
     blobGasUsed := some 0
     excessBlobGas := some 0
-    parentBeaconBlockRoot := some 0
+    parentBeaconBlockRoot := some ⟨0⟩
     requestsHash := none
     blockAccessListHash := none
     slotNumber := none }
 
 private def synthBlock (parentHash : B256) (number : Nat) (tag : Bytes) : Block :=
-  { header := synthHeader parentHash number tag, txs := [], ommers := [], wds := [] }
+  { header := synthHeader ⟨parentHash⟩ number tag, txs := [], ommers := [], wds := [] }
 
 private def synthHash (b : Block) : B256 :=
   (Header.toBLT b.header).toBytes.keccak
@@ -280,7 +280,7 @@ private def rejectsAs (r : Except BlockValidationError CheckedBlockChain)
 -- The key invariant, now structural: every stored snapshot sits under the
 -- keccak of its own tip header, because that is the only key `insert` can use.
 #guard store2?.map (fun s => [gH, a1H, b1H, a2H, b2H].all fun h =>
-  ((s.find? h).map CheckedBlockChain.tipHash) == some h) == some true
+  ((s.find? h).map (·.tipHash.word)) == some h) == some true
 #guard store2?.map (fun s => [gH, a1H, b1H, a2H, b2H].all fun h =>
   ((s.find? h).bind (fun cc => cc.val.tipHash?)) == some h) == some true
 

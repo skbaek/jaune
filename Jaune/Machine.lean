@@ -88,13 +88,25 @@ structure Withdrawal : Type where
   (recipient : Adr)
   (amount : B256)
 
+/-- jsn-s6d digest experiment: a 32-byte digest or root, distinct from the number type. -/
+structure Hash32 : Type where
+  word : B256
+deriving DecidableEq, Inhabited
+
+/-- A digest's 32 bytes, big-endian: the wire form of every digest field. -/
+def Hash32.toBytes (h : Hash32) : Bytes := h.word.toBytes
+
+/-- A digest's hex rendering (error texts and output): the word's. -/
+def Hash32.toHex (h : Hash32) : String := h.word.toHex
+instance : ToString Hash32 := ⟨Hash32.toHex⟩
+
 structure Header : Type where
-  parentHash : B256
-  ommersHash : B256
+  parentHash : Hash32
+  ommersHash : Hash32
   coinbase : Adr
-  stateRoot : B256
-  txsRoot : B256
-  receiptRoot : B256
+  stateRoot : Hash32
+  txsRoot : Hash32
+  receiptRoot : Hash32
   bloom : Bytes
   difficulty : Nat
   number : Nat
@@ -110,21 +122,21 @@ structure Header : Type where
   such field", never "the field is zero". -/
   baseFeePerGas : Option Nat
   /-- EIP-4895 (Shanghai). -/
-  withdrawalsRoot : Option B256
+  withdrawalsRoot : Option Hash32
   /-- EIP-4844 (Cancun); present exactly when `excessBlobGas` is. -/
   blobGasUsed : Option Nat
   /-- EIP-4844 (Cancun). -/
   excessBlobGas : Option Nat
   /-- EIP-4788 (Cancun). -/
-  parentBeaconBlockRoot : Option B256
-  requestsHash : Option B256
+  parentBeaconBlockRoot : Option Hash32
+  requestsHash : Option Hash32
   /-- EIP-7928: the commitment to the block-level access list.
 
   Optional in the same sense `requestsHash` is: the field exists on the wire
   only at forks that define it, and `ForkRules.header.blockAccessListHash` is
   what says which those are. `none` is "this fork has no such field", never
   "the field is zero". -/
-  blockAccessListHash : Option B256
+  blockAccessListHash : Option Hash32
   /-- EIP-7843: the consensus slot number this block was produced for, which
   `SLOTNUM` pushes. Optional on the same terms. -/
   slotNumber : Option UInt64
@@ -203,8 +215,8 @@ This is the value a child block's `parentHash` names, the key a snapshot is
 stored under, and the value `BLOCKHASH` returns. It is written out inline at
 several older call sites; those keep their spelling, and this is the name the
 checked chain vocabulary states its results about. -/
-def Header.hash (header : Header) : B256 :=
-  (Header.toBLT header).toBytes.keccak
+def Header.hash (header : Header) : Hash32 :=
+  ⟨(Header.toBLT header).toBytes.keccak⟩
 
 structure Tx : Type where
   (nonce : UInt64)
@@ -628,7 +640,7 @@ def consolidationRequestType : Bytes := [2]
 def withdrawalRequestPredeployAddress : Adr := 0x00000961Ef480Eb55e80D19ad83579A64c007002
 def consolidationRequestPredeployAddress : Adr := 0x0000BBdDc7CE488642fb579F8B00f3a590007251
 def historyStorageAddress : Adr := 0x0000F90827F1C53a10cb7A02335B175320002935
-def emptyOmmerHash : B256 := (BLT.list []).toBytes.keccak
+def emptyOmmerHash : Hash32 := ⟨(BLT.list []).toBytes.keccak⟩
 def setCodeTxMagic : Bytes := [0x05]
 def beaconRootsAddress : Adr := 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02
 def systemAddress : Adr := 0xfffffffffffffffffffffffffffffffffffffffe

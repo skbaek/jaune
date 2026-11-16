@@ -96,12 +96,12 @@ proof-of-stake constants (`ommersHash` of no ommers, difficulty 0, nonce 0, `mix
 EIP-7685 commitment to `list`. -/
 def payloadHeader (payload : ExecutionPayload P) (parentBeaconRoot : Root)
     (list : ExecutionRequestsList) : Header :=
-  { parentHash := payload.parent_hash
+  { parentHash := ⟨payload.parent_hash⟩
     ommersHash := emptyOmmerHash
     coinbase := payload.fee_recipient
-    stateRoot := payload.state_root
-    txsRoot := transactionsRootOf payload.txBytes
-    receiptRoot := payload.receipts_root
+    stateRoot := ⟨payload.state_root⟩
+    txsRoot := ⟨transactionsRootOf payload.txBytes⟩
+    receiptRoot := ⟨payload.receipts_root⟩
     bloom := payload.logs_bloom.toArray.toList
     difficulty := 0
     number := payload.block_number.toNat
@@ -112,10 +112,10 @@ def payloadHeader (payload : ExecutionPayload P) (parentBeaconRoot : Root)
     prevRandao := payload.prev_randao
     nonce := 0
     baseFeePerGas := some payload.base_fee_per_gas.toNat
-    withdrawalsRoot := some (withdrawalsRootOf payload.executionWithdrawals)
+    withdrawalsRoot := some ⟨withdrawalsRootOf payload.executionWithdrawals⟩
     blobGasUsed := some payload.blob_gas_used.toNat
     excessBlobGas := some payload.excess_blob_gas.toNat
-    parentBeaconBlockRoot := some parentBeaconRoot
+    parentBeaconBlockRoot := some ⟨parentBeaconRoot⟩
     requestsHash := some (computeRequestsHash list)
     blockAccessListHash := none
     slotNumber := none }
@@ -210,7 +210,7 @@ def engineVerdict (cfg : ChainConfig) (cf : CFork) (exec : BlockChain)
   let payload := req.executionPayload
   if payload.txBytes.any List.isEmpty then throw .emptyTransaction
   let blk := payloadToBlock req
-  if blk.header.hash != payload.block_hash then throw .blockHash
+  if blk.header.hash.word != payload.block_hash then throw .blockHash
   let hashes ← (blobVersionedHashesOf payload.txBytes).mapError .transactionDecode
   if hashes != req.versionedHashes then throw .versionedHashes
   (cfg.checkChainId exec).mapError .chainContext

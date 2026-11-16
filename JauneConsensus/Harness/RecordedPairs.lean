@@ -235,10 +235,10 @@ private def runPairInner (dir : System.FilePath) (spec : PairSpec) (negative : B
   let reqs ← IO.ofExcept
     (((if negative then flipFirstWithdrawal reqs0 else .ok reqs0)).mapError IO.userError)
   let list := getExecutionRequestsList reqs
-  let computed := Header.hash (payloadHeader payload parentRoot list)
+  let computed := (Header.hash (payloadHeader payload parentRoot list)).word
   let a := computed == payload.block_hash
   let b := computed == execHash
-  let c := computeRequestsHash list == execReqHash
+  let c := (computeRequestsHash list).word == execReqHash
   if negative then
     if !a && !c then
       pure (true, s!"PASS {spec.label} (negative control failed as expected)")
@@ -250,7 +250,7 @@ private def runPairInner (dir : System.FilePath) (spec : PairSpec) (negative : B
     else
       pure (false, s!"FAIL {spec.label}: a={a} b={b} c={c} computed={fmtB computed} \
         payload.block_hash={fmtB payload.block_hash} exec.hash={fmtB execHash} \
-        requests={fmtB (computeRequestsHash list)} exec.requestsHash={fmtB execReqHash}")
+        requests={fmtB (computeRequestsHash list).word} exec.requestsHash={fmtB execReqHash}")
 
 private def runPair (dir : System.FilePath) (spec : PairSpec) (negative : Bool) :
     IO (Bool × String) := do

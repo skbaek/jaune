@@ -64,7 +64,7 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : CFork} {exec : BlockChain
     {req : NewPayloadRequest P} {post : BlockChain} :
     engineVerdict cfg cf exec req = .ok post ↔
       req.executionPayload.txBytes.any List.isEmpty = false ∧
-      (payloadToBlock req).header.hash = req.executionPayload.block_hash ∧
+      (payloadToBlock req).header.hash.word = req.executionPayload.block_hash ∧
       blobVersionedHashesOf req.executionPayload.txBytes = .ok req.versionedHashes ∧
       cfg.checkChainId exec = .ok () ∧
       ∃ f, cfg.forkAt (payloadToBlock req).header.number
@@ -86,12 +86,12 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : CFork} {exec : BlockChain
     · rw [ite_eq_right hc1] at h
       have he1 : req.executionPayload.txBytes.any List.isEmpty = false :=
         eq_false_of_not_true hc1
-      by_cases hc2 : ((payloadToBlock req).header.hash != req.executionPayload.block_hash) = true
+      by_cases hc2 : ((payloadToBlock req).header.hash.word != req.executionPayload.block_hash) = true
       · rw [ite_eq_left hc2] at h
         obtain ⟨a, ha, _⟩ := Except.bind_eq_ok h
         cases ha
       · rw [ite_eq_right hc2] at h
-        have he2 : (payloadToBlock req).header.hash = req.executionPayload.block_hash :=
+        have he2 : (payloadToBlock req).header.hash.word = req.executionPayload.block_hash :=
           bne_eq_false_eq.mp (eq_false_of_not_true hc2)
         obtain ⟨hashes, hhashes, h⟩ := Except.bind_eq_ok h
         have hhashes' : blobVersionedHashesOf req.executionPayload.txBytes = .ok hashes :=
@@ -155,7 +155,7 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : CFork} {exec : BlockChain
                     hs, st, bout, hbody, he5⟩
   · rintro ⟨hempty, hhash, hhashes, hchain, f, hfork, hpair, hsize, hst, st, bout, hbody, hreq⟩
     have n1 : ¬(req.executionPayload.txBytes.any List.isEmpty = true) := by simp [hempty]
-    have n2 : ¬(((payloadToBlock req).header.hash != req.executionPayload.block_hash) = true) := by
+    have n2 : ¬(((payloadToBlock req).header.hash.word != req.executionPayload.block_hash) = true) := by
       simp [hhash]
     have n3 : ¬((req.versionedHashes != req.versionedHashes) = true) := by simp
     have n4 : ¬((f.consensusFork? != some cf) = true) := by simp [hpair]

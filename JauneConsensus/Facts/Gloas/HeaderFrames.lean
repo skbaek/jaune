@@ -874,7 +874,7 @@ theorem engineVerdict_head {cfg : ChainConfig} {cf : CFork} {exec exec' : BlockC
     {g : CFork} (hg : g.atLeast .electra = true) {blk : BeaconBlock P g}
     {req : NewPayloadRequest P} (hreq : NewPayloadRequest.ofBlock blk = .ok req)
     (hv : engineVerdict cfg cf exec req = .ok exec') :
-    (payloadToBlock req).header.hash =
+    (payloadToBlock req).header.hash.word =
       (ExecutionPayload.toHeader blk.body.execution_payload).block_hash := by
   have h1 := (engineVerdict_ok_iff.mp hv).2.1
   rw [NewPayloadRequest.ofBlock_ok (h := hg)] at hreq
@@ -889,7 +889,7 @@ hash is `latest_execution_payload_header.block_hash`, whatever held before the s
 theorem jointStep_head {cfg : ChainConfig} {ccfg : Config} {bls : Bool} {s s' : JointState P}
     {b : AnySignedBlock P} (h : jointStep cfg ccfg bls s b = .ok s') :
     ∃ req : NewPayloadRequest P, engineVerdict cfg s'.fork s.exec req = .ok s'.exec ∧
-      (payloadToBlock req).header.hash = s'.beacon.latest_execution_payload_header.block_hash := by
+      (payloadToBlock req).header.hash.word = s'.beacon.latest_execution_payload_header.block_hash := by
   obtain ⟨sf, beacon, exec⟩ := s
   obtain ⟨g, sb⟩ := b
   cases sf <;> cases g

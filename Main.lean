@@ -231,12 +231,12 @@ def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
     (json.find? "blockAccessListHash" >>= Lean.Json.toB256?)
   let slotNumber := (json.find? "slotNumber" >>= Lean.Json.toB64?)
   .ok {
-    parentHash := parentHash
-    ommersHash := ommersHash
+    parentHash := ⟨parentHash⟩
+    ommersHash := ⟨ommersHash⟩
     coinbase := coinbase
-    stateRoot := stateRoot
-    txsRoot := txsRoot
-    receiptRoot := receiptRoot
+    stateRoot := ⟨stateRoot⟩
+    txsRoot := ⟨txsRoot⟩
+    receiptRoot := ⟨receiptRoot⟩
     bloom := bloom
     difficulty := difficulty
     number := number
@@ -247,12 +247,12 @@ def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
     prevRandao := prevRandao
     nonce := nonce
     baseFeePerGas := baseFeePerGas
-    withdrawalsRoot := withdrawalsRoot
+    withdrawalsRoot := withdrawalsRoot.map Hash32.mk
     blobGasUsed := blobGasUsed
     excessBlobGas := excessBlobGas
-    parentBeaconBlockRoot := parentBeaconBlockRoot
-    requestsHash := requestsHash
-    blockAccessListHash := blockAccessListHash
+    parentBeaconBlockRoot := parentBeaconBlockRoot.map Hash32.mk
+    requestsHash := requestsHash.map Hash32.mk
+    blockAccessListHash := blockAccessListHash.map Hash32.mk
     slotNumber := slotNumber
   }
 
@@ -590,7 +590,7 @@ A successfully converted postState wins; any conversion failure falls back. -/
 def getPostStateRootWithSource (json : Lean.Json) : IO (B256 × FixturePostSource) :=
   ( do let stateJson ← json.find "postState"
        let state ← stateJson.toWorld
-       .ok (state.root, .postState) ) <|>
+       .ok (state.root.word, .postState) ) <|>
   (do let root ← json.find "postStateHash" >>= Lean.Json.toIoB256
       pure (root, .postStateHash))
 
@@ -696,8 +696,8 @@ def evaluateFixtureBlockObserved (spec : NetworkSpec) (chainId : UInt64)
     | .error _ => ⟨none, none, .error (.internal (.assertion (.text
         "normalised fixture block does not strictly re-decode")))⟩
     | .ok ⟨canon, _⟩ =>
-      match store.findParent canon.header.parentHash with
-      | .error reason => ⟨some canon.header.parentHash, none, .ok (.inr (.block reason))⟩
+      match store.findParent canon.header.parentHash.word with
+      | .error reason => ⟨some canon.header.parentHash.word, none, .ok (.inr (.block reason))⟩
       | .ok parent =>
         let outcome :=
           match fixtureImportFork spec chainId parent canon.header with
@@ -716,7 +716,7 @@ def evaluateFixtureBlockObserved (spec : NetworkSpec) (chainId : UInt64)
               | .error failure => .error failure
               | .ok (.inr rejection) => .ok (.inr rejection)
               | .ok (.inl _) => .ok (.inl (CheckedBlockChain.ofScheduledImport him))
-        ⟨some canon.header.parentHash, some parent, outcome⟩
+        ⟨some canon.header.parentHash.word, some parent, outcome⟩
 
 /-- Strict and diagnostic policies project the same single checked evaluator. -/
 def evaluateFixtureBlock (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
@@ -744,7 +744,7 @@ theorem evaluateFixtureBlockObserved_erases (spec : NetworkSpec) (chainId : UInt
         .error (.internal (.assertion (.text
           "normalised fixture block does not strictly re-decode")))
       | .ok ⟨canon, _⟩ =>
-        match store.findParent canon.header.parentHash with
+        match store.findParent canon.header.parentHash.word with
         | .error reason => .ok (.inr (.block reason))
         | .ok parent =>
           match fixtureImportFork spec chainId parent canon.header with
@@ -1034,16 +1034,16 @@ private def verifyFixtureFinal (json : Lean.Json)
       observe { lastSnapshotFound := false, lastExpected := lastBlockHash }
       .throw failure.render
     | .ok chain => pure chain
-  let lastBlockHash' := chain.tipHash
+  let lastBlockHash' := chain.tipHash.word
   let observedFinal : FixtureFinalObservation :=
     { lastSnapshotFound := true, lastExpected := lastBlockHash,
-      lastComputed := some lastBlockHash', postComputed := some chain.stateRoot }
+      lastComputed := some lastBlockHash', postComputed := some chain.stateRoot.word }
   observe observedFinal
   .guard
     (lastBlockHash = lastBlockHash')
     s!"error : last block hash does not match\n  expected : {lastBlockHash}\n  computed : {lastBlockHash'}"
   let (postStateRoot, source) ← getPostStateRootWithSource json
-  let postStateRoot' := chain.stateRoot
+  let postStateRoot' := chain.stateRoot.word
   observe { observedFinal with
     postSourceKind := some source
     postExpected := some postStateRoot
@@ -1199,8 +1199,8 @@ private def closureCandidateJson (idx : Nat) (selected : FixtureExpectationSelec
     ("decoded_parent_hash", closureOptHash decodedParent),
     ("resolved_checked_parent", match parent with
       | none => .null
-      | some checked => .mkObj [("tip_hash", closureHash checked.tipHash),
-          ("state_root", closureHash checked.stateRoot)]),
+      | some checked => .mkObj [("tip_hash", closureHash checked.tipHash.word),
+          ("state_root", closureHash checked.stateRoot.word)]),
     ("actual_detail", detail)]
 
 private def closureOriginalRlp (blockJson : Lean.Json) : String :=

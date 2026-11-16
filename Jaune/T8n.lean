@@ -575,7 +575,7 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
           let parentUncleHash ←
             match field? j "parentUncleHash" with
             | none => pure emptyOmmerHash
-            | some v => readB256 "env.parentUncleHash" v
+            | some v => Hash32.mk <$> readB256 "env.parentUncleHash" v
           pure (calculateBlockDifficulty pow.bombDelay number timestamp
             parentTimestamp parentDifficulty (parentUncleHash != emptyOmmerHash))
   -- `DIFFICULTY` pushes it before the merge, as `GASLIMIT` pushes its field above;
@@ -600,14 +600,14 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
         requireBits "env.parentExcessBlobGas" 64 parentExcessBlobGas
       let parentBaseFee ← natOr j "parentBaseFee" 0
       let parentHeader : Header :=
-        { parentHash := 0, ommersHash := 0, coinbase := coinbase, stateRoot := 0,
-          txsRoot := 0, receiptRoot := 0, bloom := List.replicate 256 0,
+        { parentHash := ⟨0⟩, ommersHash := ⟨0⟩, coinbase := coinbase, stateRoot := ⟨0⟩,
+          txsRoot := ⟨0⟩, receiptRoot := ⟨0⟩, bloom := List.replicate 256 0,
           difficulty := 0, number := 0, gasLimit := 0, gasUsed := 0,
           timestamp := 0, extraData := [], prevRandao := 0, nonce := 0,
-          baseFeePerGas := some parentBaseFee, withdrawalsRoot := some 0,
+          baseFeePerGas := some parentBaseFee, withdrawalsRoot := some ⟨0⟩,
           blobGasUsed := some parentBlobGasUsed,
           excessBlobGas := some parentExcessBlobGas,
-          parentBeaconBlockRoot := some 0, requestsHash := none,
+          parentBeaconBlockRoot := some ⟨0⟩, requestsHash := none,
           blockAccessListHash := none, slotNumber := none }
       pure (calculateExcessBlobGas rules.blob parentHeader)
   -- A state test performs no system operations, so the parent beacon block
@@ -1389,9 +1389,9 @@ all. The key spellings are the ones goal B's first golden recorded. -/
 def resultJson (rules : ForkRules) (env : T8nEnv) (o : Outcome) : JOut :=
   let logsHash := (BLT.list (o.bout.blockLogs.map Log.toBLT)).toBytes.keccak
   let base : List (String × JOut) := [
-    ⟨"stateRoot", .str (hexB256 o.state.root)⟩,
-    ⟨"txRoot", .str (hexB256 (getTransactionsRoot o.bout))⟩,
-    ⟨"receiptsRoot", .str (hexB256 (getReceiptRoot o.bout))⟩,
+    ⟨"stateRoot", .str (hexB256 o.state.root.word)⟩,
+    ⟨"txRoot", .str (hexB256 (getTransactionsRoot o.bout).word)⟩,
+    ⟨"receiptsRoot", .str (hexB256 (getReceiptRoot o.bout).word)⟩,
     ⟨"logsHash", .str (hexB256 logsHash)⟩,
     ⟨"logsBloom", .str (hexBytes (logsBloom o.bout.blockLogs))⟩,
     ⟨"receipts", .arr (o.bout.receiptKeys.filterMap (receiptJson o.bout))⟩,
@@ -1403,12 +1403,12 @@ def resultJson (rules : ForkRules) (env : T8nEnv) (o : Outcome) : JOut :=
     ++ (if rules.header.baseFee then
       [⟨"currentBaseFee", .str (hexQuantity env.baseFeePerGas)⟩] else [])
     ++ (if rules.header.withdrawalsRoot then
-      [⟨"withdrawalsRoot", .str (hexB256 (getWithdrawalsRoot o.bout))⟩] else [])
+      [⟨"withdrawalsRoot", .str (hexB256 (getWithdrawalsRoot o.bout).word)⟩] else [])
     ++ (if rules.header.blobGas then
       [⟨"currentExcessBlobGas", .str (hexQuantity env.excessBlobGas)⟩,
        ⟨"blobGasUsed", .str (hexQuantity o.bout.blobGasUsed)⟩] else [])
     ++ (if rules.header.requestsHash then
-      [⟨"requestsHash", .str (hexB256 (computeRequestsHash o.bout.requests))⟩,
+      [⟨"requestsHash", .str (hexB256 (computeRequestsHash o.bout.requests).word)⟩,
        ⟨"requests", .arr (o.bout.requests.map fun r => .str (hexBytes r))⟩]
       else [])
 -- (U11a gated these same four groups; the `currentDifficulty` group above is
@@ -1418,7 +1418,7 @@ def resultJson (rules : ForkRules) (env : T8nEnv) (o : Outcome) : JOut :=
     | none => base
     | some _ => base ++ [
       ⟨"blockAccessList", .str (hexBytes o.bout.blockAccessList.encode)⟩,
-      ⟨"blockAccessListHash", .str (hexB256 o.bout.blockAccessList.hash)⟩ ]
+      ⟨"blockAccessListHash", .str (hexB256 o.bout.blockAccessList.hash.word)⟩ ]
   match o.blockException with
   | none => .obj base
   | some e => .obj (base ++ [⟨"blockException", .str (blockExceptionText e)⟩])

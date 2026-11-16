@@ -83,7 +83,7 @@ theorem engineVerdictG_ok_iff {cfg : ChainConfig} {exec : BlockChain}
     {req : Gloas.NewPayloadRequest P} {post : BlockChain} :
     engineVerdictG cfg exec req = .ok post ↔
       req.execution_payload.txBytes.any List.isEmpty = false ∧
-      (payloadToBlockG req).header.hash = req.execution_payload.block_hash ∧
+      (payloadToBlockG req).header.hash.word = req.execution_payload.block_hash ∧
       blobVersionedHashesOf req.execution_payload.txBytes =
         .ok req.versioned_hashes.toArray.toList ∧
       cfg.checkChainId exec = .ok () ∧

@@ -123,7 +123,7 @@ byte followed by the SSZ serialization of that type's list. -/
 abbrev ExecutionRequestsList : Type := List Bytes
 
 /-- The consensus request list feeds Jaune's EIP-7685 commitment with no conversion. -/
-def ExecutionRequestsList.requestsHash (l : ExecutionRequestsList) : B256 :=
+def ExecutionRequestsList.requestsHash (l : ExecutionRequestsList) : Hash32 :=
   computeRequestsHash l
 
 /-- What a resolved consensus fork carries for the cross-layer ties. -/

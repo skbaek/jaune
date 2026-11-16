@@ -112,7 +112,7 @@ private def rootSummary (cfg : Config) (frame : Frame) (result : Devm) :
   let some used := safeSub frame.inner.gas result.gasLeft
     | throw "settled gas exceeds root grant"
   return Json.mkObj [
-    ("stateRoot", .str (T8n.hexB256 result.state.root)),
+    ("stateRoot", .str (T8n.hexB256 result.state.root.word)),
     ("output", bytes result.output), ("gasUsed", quantity used),
     ("pass", .bool result.error.isNone)]
 

@@ -181,7 +181,7 @@ def run (inputPath outputPath : String) : IO Unit := do
         if output.returnData.length > cfg.maxDataBytes then
           throw (IO.userError "trace: output exceeds maxDataBytes")
         writeRow cfg trace (Json.mkObj [
-          ("stateRoot", Json.str (T8n.hexB256 postState.root)),
+          ("stateRoot", Json.str (T8n.hexB256 postState.root.word)),
           ("output", Json.str (T8n.hexBytes output.returnData)),
           ("gasUsed", Json.str (T8n.hexQuantity bout.cumulativeGasUsed)),
           ("pass", Json.bool output.error.isNone)])
