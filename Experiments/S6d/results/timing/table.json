@@ -1,0 +1,962 @@
+[
+ {
+  "group": "A",
+  "name": "toNat_lt",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_lt",
+   "lines": 4,
+   "ptoks": 19,
+   "conv": 2,
+   "helpers": 2,
+   "hlines": 8,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 9.02576,
+   "kernel_ms": 0.475303,
+   "khb": 79,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_lt",
+   "lines": 1,
+   "ptoks": 1,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 3.143156,
+   "kernel_ms": 0.277432,
+   "khb": 39,
+   "runs": 3
+  }
+ },
+ {
+  "group": "A",
+  "name": "toNat_inj",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_inj",
+   "lines": 2,
+   "ptoks": 13,
+   "conv": 2,
+   "helpers": 24,
+   "hlines": 103,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 1.66032,
+   "kernel_ms": 0.176081,
+   "khb": 21,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_inj",
+   "lines": 1,
+   "ptoks": 2,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "",
+   "total_ms": 0.987375,
+   "kernel_ms": 0.123743,
+   "khb": 10,
+   "runs": 3
+  }
+ },
+ {
+  "group": "A",
+  "name": "toNat_toB256",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_toB256",
+   "lines": 3,
+   "ptoks": 17,
+   "conv": 2,
+   "helpers": 13,
+   "hlines": 61,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 3.620193,
+   "kernel_ms": 0.328918,
+   "khb": 42,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_ofNat",
+   "lines": 1,
+   "ptoks": 3,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 3.669194,
+   "kernel_ms": 0.237246,
+   "khb": 48,
+   "runs": 3
+  }
+ },
+ {
+  "group": "A",
+  "name": "toNat_toB256_of_lt",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_toB256_of_lt",
+   "lines": 2,
+   "ptoks": 8,
+   "conv": 2,
+   "helpers": 15,
+   "hlines": 66,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 3.471082,
+   "kernel_ms": 0.199204,
+   "khb": 49,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_ofNat_of_lt",
+   "lines": 2,
+   "ptoks": 8,
+   "conv": 2,
+   "helpers": 1,
+   "hlines": 1,
+   "axioms": "propext",
+   "total_ms": 3.505567,
+   "kernel_ms": 0.203282,
+   "khb": 47,
+   "runs": 3
+  }
+ },
+ {
+  "group": "A",
+  "name": "toNat_mul",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_mul",
+   "lines": 2,
+   "ptoks": 2,
+   "conv": 1,
+   "helpers": 14,
+   "hlines": 64,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 2.222376,
+   "kernel_ms": 0.148399,
+   "khb": 28,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_mul",
+   "lines": 2,
+   "ptoks": 3,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 5.457846,
+   "kernel_ms": 0.279084,
+   "khb": 67,
+   "runs": 3
+  }
+ },
+ {
+  "group": "A",
+  "name": "toNat_mod",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_mod",
+   "lines": 6,
+   "ptoks": 32,
+   "conv": 2,
+   "helpers": 19,
+   "hlines": 80,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 5.087589,
+   "kernel_ms": 0.48443,
+   "khb": 60,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_mod",
+   "lines": 2,
+   "ptoks": 10,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 5.883735,
+   "kernel_ms": 0.291197,
+   "khb": 77,
+   "runs": 3
+  }
+ },
+ {
+  "group": "A",
+  "name": "toNat_add",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_add",
+   "lines": 10,
+   "ptoks": 73,
+   "conv": 6,
+   "helpers": 20,
+   "hlines": 132,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 27.611193,
+   "kernel_ms": 1.100868,
+   "khb": 367,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_add",
+   "lines": 2,
+   "ptoks": 3,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 5.337949,
+   "kernel_ms": 0.287179,
+   "khb": 69,
+   "runs": 3
+  }
+ },
+ {
+  "group": "A",
+  "name": "toNat_add_eq_of_nof",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_add_eq_of_nof",
+   "lines": 3,
+   "ptoks": 8,
+   "conv": 2,
+   "helpers": 22,
+   "hlines": 144,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 2.995469,
+   "kernel_ms": 0.219102,
+   "khb": 36,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_add_eq_of_nof",
+   "lines": 2,
+   "ptoks": 8,
+   "conv": 2,
+   "helpers": 1,
+   "hlines": 2,
+   "axioms": "propext",
+   "total_ms": 3.085077,
+   "kernel_ms": 0.246142,
+   "khb": 40,
+   "runs": 3
+  }
+ },
+ {
+  "group": "A",
+  "name": "toNat_sub_eq_of_le",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_sub_eq_of_le",
+   "lines": 5,
+   "ptoks": 16,
+   "conv": 4,
+   "helpers": 41,
+   "hlines": 260,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 3.615644,
+   "kernel_ms": 0.282431,
+   "khb": 48,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_sub_eq_of_le",
+   "lines": 6,
+   "ptoks": 51,
+   "conv": 5,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 42.383467,
+   "kernel_ms": 0.651985,
+   "khb": 512,
+   "runs": 3
+  }
+ },
+ {
+  "group": "A",
+  "name": "toNat_div",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_div",
+   "lines": 6,
+   "ptoks": 32,
+   "conv": 2,
+   "helpers": 19,
+   "hlines": 80,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 5.0876,
+   "kernel_ms": 0.484961,
+   "khb": 60,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_div",
+   "lines": 2,
+   "ptoks": 1,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 2.868409,
+   "kernel_ms": 0.196449,
+   "khb": 31,
+   "runs": 3
+  }
+ },
+ {
+  "group": "B",
+  "name": "toNat_lt_toNat",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_lt_toNat",
+   "lines": 8,
+   "ptoks": 60,
+   "conv": 5,
+   "helpers": 16,
+   "hlines": 82,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 7.33896,
+   "kernel_ms": 0.573497,
+   "khb": 91,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_lt_toNat",
+   "lines": 1,
+   "ptoks": 2,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "",
+   "total_ms": 1.522721,
+   "kernel_ms": 0.157987,
+   "khb": 17,
+   "runs": 3
+  }
+ },
+ {
+  "group": "B",
+  "name": "lt_iff_toNat_lt_toNat",
+  "B": {
+   "decl": "Jaune.B256.s6d_lt_iff_toNat_lt_toNat",
+   "lines": 4,
+   "ptoks": 8,
+   "conv": 1,
+   "helpers": 22,
+   "hlines": 115,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 1.500499,
+   "kernel_ms": 0.116139,
+   "khb": 19,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.lt_iff_toNat_lt_toNat",
+   "lines": 1,
+   "ptoks": 1,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "",
+   "total_ms": 1.330911,
+   "kernel_ms": 0.140664,
+   "khb": 15,
+   "runs": 3
+  }
+ },
+ {
+  "group": "B",
+  "name": "le_iff_toNat_le_toNat",
+  "B": {
+   "decl": "Jaune.B256.s6d_le_iff_toNat_le_toNat",
+   "lines": 2,
+   "ptoks": 12,
+   "conv": 1,
+   "helpers": 29,
+   "hlines": 138,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 2.109784,
+   "kernel_ms": 0.221196,
+   "khb": 28,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.le_iff_toNat_le_toNat",
+   "lines": 1,
+   "ptoks": 1,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "",
+   "total_ms": 1.261951,
+   "kernel_ms": 0.136036,
+   "khb": 15,
+   "runs": 3
+  }
+ },
+ {
+  "group": "C",
+  "name": "one_ne_zero",
+  "B": {
+   "decl": "Jaune.B256.s6d_one_ne_zero",
+   "lines": 1,
+   "ptoks": 4,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "",
+   "total_ms": 1.808628,
+   "kernel_ms": 0.086984,
+   "khb": 17,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.one_ne_zero",
+   "lines": 1,
+   "ptoks": 2,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "",
+   "total_ms": 1.637226,
+   "kernel_ms": 0.240101,
+   "khb": 15,
+   "runs": 3
+  }
+ },
+ {
+  "group": "C",
+  "name": "eqCheck_ne_zero_iff",
+  "B": {
+   "decl": "Jaune.B256.s6d_eqCheck_ne_zero_iff",
+   "lines": 3,
+   "ptoks": 18,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 5.514732,
+   "kernel_ms": 0.328107,
+   "khb": 63,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.eqCheck_ne_zero_iff",
+   "lines": 3,
+   "ptoks": 16,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 9.367503,
+   "kernel_ms": 0.518154,
+   "khb": 93,
+   "runs": 3
+  }
+ },
+ {
+  "group": "C",
+  "name": "ltCheck_ne_zero_iff",
+  "B": {
+   "decl": "Jaune.B256.s6d_ltCheck_ne_zero_iff",
+   "lines": 3,
+   "ptoks": 18,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 5.329434,
+   "kernel_ms": 0.307197,
+   "khb": 68,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.ltCheck_ne_zero_iff",
+   "lines": 3,
+   "ptoks": 16,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 8.46202,
+   "kernel_ms": 0.51119,
+   "khb": 101,
+   "runs": 3
+  }
+ },
+ {
+  "group": "C",
+  "name": "gtCheck_eq_zero_iff",
+  "B": {
+   "decl": "Jaune.B256.s6d_gtCheck_eq_zero_iff",
+   "lines": 3,
+   "ptoks": 18,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 5.584613,
+   "kernel_ms": 0.341933,
+   "khb": 71,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.gtCheck_eq_zero_iff",
+   "lines": 3,
+   "ptoks": 16,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 8.533594,
+   "kernel_ms": 0.539674,
+   "khb": 104,
+   "runs": 3
+  }
+ },
+ {
+  "group": "C",
+  "name": "ltCheck_eq_zero_of_toNat_le",
+  "B": {
+   "decl": "Jaune.B256.s6d_ltCheck_eq_zero_of_toNat_le",
+   "lines": 5,
+   "ptoks": 12,
+   "conv": 1,
+   "helpers": 18,
+   "hlines": 93,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 5.622354,
+   "kernel_ms": 0.159099,
+   "khb": 56,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.ltCheck_eq_zero_of_toNat_le",
+   "lines": 2,
+   "ptoks": 9,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 11.789822,
+   "kernel_ms": 0.549573,
+   "khb": 128,
+   "runs": 3
+  }
+ },
+ {
+  "group": "C",
+  "name": "gtCheck_ne_zero_of_toNat_lt",
+  "B": {
+   "decl": "Jaune.B256.s6d_gtCheck_ne_zero_of_toNat_lt",
+   "lines": 3,
+   "ptoks": 5,
+   "conv": 0,
+   "helpers": 23,
+   "hlines": 118,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 1.689445,
+   "kernel_ms": 0.135043,
+   "khb": 20,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.gtCheck_ne_zero_of_toNat_lt",
+   "lines": 2,
+   "ptoks": 9,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 8.551299,
+   "kernel_ms": 0.432493,
+   "khb": 94,
+   "runs": 3
+  }
+ },
+ {
+  "group": "D",
+  "name": "length_toBytes",
+  "B": {
+   "decl": "Jaune.B256.s6d_length_toBytes",
+   "lines": 1,
+   "ptoks": 1,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 25.484044,
+   "kernel_ms": 2.779773,
+   "khb": 416,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.length_toBytes",
+   "lines": 1,
+   "ptoks": 3,
+   "conv": 0,
+   "helpers": 1,
+   "hlines": 4,
+   "axioms": "propext",
+   "total_ms": 1.082474,
+   "kernel_ms": 0.128402,
+   "khb": 9,
+   "runs": 3
+  }
+ },
+ {
+  "group": "D",
+  "name": "toB256_toBytes",
+  "B": {
+   "decl": "Jaune.B256.s6d_toB256_toBytes",
+   "lines": 8,
+   "ptoks": 60,
+   "conv": 4,
+   "helpers": 36,
+   "hlines": 304,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 10.210336,
+   "kernel_ms": 0.573307,
+   "khb": 136,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toW_toBytes",
+   "lines": 4,
+   "ptoks": 30,
+   "conv": 6,
+   "helpers": 2,
+   "hlines": 11,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 7.79171,
+   "kernel_ms": 0.47891,
+   "khb": 85,
+   "runs": 3
+  }
+ },
+ {
+  "group": "D",
+  "name": "List.toB256_pair",
+  "B": {
+   "decl": "Jaune.List.s6d_toB256_pair",
+   "lines": 26,
+   "ptoks": 247,
+   "conv": 7,
+   "helpers": 35,
+   "hlines": 226,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 136.063461,
+   "kernel_ms": 7.13159,
+   "khb": 1782,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toW_pair",
+   "lines": 6,
+   "ptoks": 19,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 41.940015,
+   "kernel_ms": 1.549672,
+   "khb": 542,
+   "runs": 3
+  }
+ },
+ {
+  "group": "E",
+  "name": "toNat_shiftRight (new)",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_shiftRight",
+   "lines": 35,
+   "ptoks": 519,
+   "conv": 1,
+   "helpers": 13,
+   "hlines": 137,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 272.497849,
+   "kernel_ms": 2.440776,
+   "khb": 3543,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_shiftRight",
+   "lines": 2,
+   "ptoks": 7,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 4.182027,
+   "kernel_ms": 0.372851,
+   "khb": 47,
+   "runs": 3
+  }
+ },
+ {
+  "group": "E",
+  "name": "toNat_shiftLeft (new)",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_shiftLeft",
+   "lines": 56,
+   "ptoks": 801,
+   "conv": 1,
+   "helpers": 13,
+   "hlines": 137,
+   "axioms": "propext,Quot.sound",
+   "total_ms": 506.517086,
+   "kernel_ms": 4.286995,
+   "khb": 6265,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_shiftLeft",
+   "lines": 2,
+   "ptoks": 7,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 6.364439,
+   "kernel_ms": 0.410852,
+   "khb": 85,
+   "runs": 3
+  }
+ },
+ {
+  "group": "E",
+  "name": "sdiv_smin_negOne (new)",
+  "B": {
+   "decl": "Jaune.B256.s6d_sdiv_smin_negOne",
+   "lines": 2,
+   "ptoks": 4,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 1.877648,
+   "kernel_ms": 0.115126,
+   "khb": 14,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.sdiv_smin_negOne",
+   "lines": 3,
+   "ptoks": 23,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 5.134597,
+   "kernel_ms": 0.379594,
+   "khb": 47,
+   "runs": 3
+  }
+ },
+ {
+  "group": "E",
+  "name": "sdiv_of_nonneg (new)",
+  "B": {
+   "decl": "Jaune.B256.s6d_sdiv_of_nonneg",
+   "lines": 9,
+   "ptoks": 77,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 12.446616,
+   "kernel_ms": 1.248196,
+   "khb": 123,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.sdiv_of_nonneg",
+   "lines": 4,
+   "ptoks": 21,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 5.331557,
+   "kernel_ms": 0.352282,
+   "khb": 63,
+   "runs": 3
+  }
+ },
+ {
+  "group": "E",
+  "name": "arithShiftRight_of_nonneg (new)",
+  "B": {
+   "decl": "Jaune.B256.s6d_arithShiftRight_of_nonneg",
+   "lines": 3,
+   "ptoks": 7,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 4.789047,
+   "kernel_ms": 0.27672,
+   "khb": 55,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.sar_of_nonneg",
+   "lines": 2,
+   "ptoks": 2,
+   "conv": 0,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 1.502754,
+   "kernel_ms": 0.161834,
+   "khb": 16,
+   "runs": 3
+  }
+ },
+ {
+  "group": "F",
+  "name": "toNat_ne_zero",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_ne_zero",
+   "lines": 3,
+   "ptoks": 19,
+   "conv": 2,
+   "helpers": 26,
+   "hlines": 106,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 2.520155,
+   "kernel_ms": 0.192301,
+   "khb": 28,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_ne_zero",
+   "lines": 2,
+   "ptoks": 16,
+   "conv": 1,
+   "helpers": 0,
+   "hlines": 0,
+   "axioms": "propext",
+   "total_ms": 2.886143,
+   "kernel_ms": 0.275358,
+   "khb": 29,
+   "runs": 3
+  }
+ },
+ {
+  "group": "F",
+  "name": "nofm_iff_le_div",
+  "B": {
+   "decl": "Jaune.B256.s6d_nofm_iff_le_div",
+   "lines": 5,
+   "ptoks": 24,
+   "conv": 2,
+   "helpers": 28,
+   "hlines": 111,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 16.687376,
+   "kernel_ms": 0.513234,
+   "khb": 199,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.nofm_iff_le_div",
+   "lines": 4,
+   "ptoks": 15,
+   "conv": 1,
+   "helpers": 1,
+   "hlines": 2,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 12.648065,
+   "kernel_ms": 0.308259,
+   "khb": 143,
+   "runs": 3
+  }
+ },
+ {
+  "group": "F",
+  "name": "toNat_mul_eq_of_nofm",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_mul_eq_of_nofm",
+   "lines": 3,
+   "ptoks": 8,
+   "conv": 2,
+   "helpers": 16,
+   "hlines": 68,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 3.152954,
+   "kernel_ms": 0.252906,
+   "khb": 36,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_mul_eq_of_nofm",
+   "lines": 2,
+   "ptoks": 8,
+   "conv": 2,
+   "helpers": 1,
+   "hlines": 2,
+   "axioms": "propext",
+   "total_ms": 3.038109,
+   "kernel_ms": 0.249138,
+   "khb": 39,
+   "runs": 3
+  }
+ },
+ {
+  "group": "F",
+  "name": "toNat_mulmod",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_mulmod",
+   "lines": 5,
+   "ptoks": 25,
+   "conv": 3,
+   "helpers": 32,
+   "hlines": 122,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 4.543456,
+   "kernel_ms": 0.322747,
+   "khb": 58,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_mulmod",
+   "lines": 4,
+   "ptoks": 25,
+   "conv": 3,
+   "helpers": 3,
+   "hlines": 5,
+   "axioms": "propext",
+   "total_ms": 6.573861,
+   "kernel_ms": 0.411433,
+   "khb": 71,
+   "runs": 3
+  }
+ },
+ {
+  "group": "F",
+  "name": "toNat_addmod",
+  "B": {
+   "decl": "Jaune.B256.s6d_toNat_addmod",
+   "lines": 5,
+   "ptoks": 25,
+   "conv": 3,
+   "helpers": 32,
+   "hlines": 122,
+   "axioms": "propext,Classical.choice,Quot.sound",
+   "total_ms": 4.395389,
+   "kernel_ms": 0.317045,
+   "khb": 58,
+   "runs": 3
+  },
+  "V": {
+   "decl": "S6d.V.toNat_addmod",
+   "lines": 4,
+   "ptoks": 25,
+   "conv": 3,
+   "helpers": 3,
+   "hlines": 5,
+   "axioms": "propext",
+   "total_ms": 6.43915,
+   "kernel_ms": 0.390183,
+   "khb": 71,
+   "runs": 3
+  }
+ }
+]

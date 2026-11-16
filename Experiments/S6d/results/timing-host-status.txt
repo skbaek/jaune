@@ -1,0 +1,7 @@
+master: claude (live) client_pid=304601 pid=305096 held=13212s renewed=1209s ago lease=1800s identity=process process_witness=unavailable note='User directed: proceed as master and finish jaune-shape-and-names-v1'
+hard: jsn-s6d (live) pid=649851 need=4GiB contention=exclusive held=0s note='s6d timing: per-decl elaboration/kernel x3 and runtime bench x3'
+soft (S=0):
+  none
+waiting (W=0):
+  none
+ 09:05:37 up 17:44,  1 user,  load average: 1.49, 1.39, 1.78

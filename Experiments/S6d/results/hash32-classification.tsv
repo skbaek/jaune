@@ -1,0 +1,66 @@
+round	file:line	site	class	kind	fix
+01	Machine.lean:158-195 (9)	Header.toBLT: digest fields RLP-encoded via .toBytes	legitimate boundary	serialization (digest -> bytes)	one definition Hash32.toBytes (resolves all 9)
+03	Execution.lean:2738-2743 (5)	RLP header decoder builds Header from decoded 32-byte words	legitimate boundary	deserialization (bytes -> digest)	wrap ⟨_⟩ at construction
+03	Execution.lean:2754-2759 (4)	same, optional digest fields	legitimate boundary	deserialization	.map Hash32.mk
+04	Transaction.lean:1144	#guard BlockAccessList.hash [] = emptyOmmerHash (constant typed B256)	legitimate boundary	digest constant typed as word	retype emptyOmmerHash : Hash32 (Machine.lean:639)
+04	Transaction.lean:3293	getLast256BlockHashes: parent hashes into the BLOCKHASH window (List B256 -> BenvStat.blockHashes)	legitimate boundary	BLOCKHASH: digest becomes a stack word	.word at the window
+04	Transaction.lean:3343,3353,3362,3469,3473,3544 (6)	window theorems' statements equate window entries (words) with header digests	legitimate boundary	same BLOCKHASH boundary, in theorem statements	.word in statements
+04	Transaction.lean:3548	cases failure, cascade of 3469	cascade	-	-
+04	Transaction.lean:3768	parent.ommersHash != emptyOmmerHash	legitimate boundary	digest constant typed as word	resolved by the retype
+04	Transaction.lean:5847	guard test header ommersHash := emptyOmmerHash	legitimate boundary	digest constant typed as word	resolved by the retype
+04	Transaction.lean:5846,5849-5851,5862,5865 (6)	guard test header digest fields written as numeric literal 0 / some 0	legitimate boundary	numeric literal as digest placeholder (zero hash)	⟨0⟩
+04	Transaction.lean:6028	guard header parentHash := keccak(rlp parent) (inline Header.hash)	legitimate boundary	digest computed by Bytes.keccak (word-typed)	⟨_⟩ (or Header.hash)
+04	Transaction.lean:6042-6043,6048,6049,6054 (3 errors)	guard digest constants typed B256	legitimate boundary	digest constant typed as word	retype constants : Hash32
+04	Transaction.lean (30 others)	noncomputable / sorryAx / kernel-metavariable / maxErrors	cascade	-	-
+05	Transaction.lean:271	error payload .blockAccessListHash (computed : B256) given emptyOmmerHash	legitimate boundary	propagation: digest-carrying parameter typed as word	retype payload : Hash32 (Transaction.lean:183)
+05	Transaction.lean:3802,3803,3833 (3)	rejection texts interpolate digests (ToString)	legitimate boundary	rendering (digest -> hex text)	one instance ToString Hash32 := toHex (byte-identical to B256's)
+05	Transaction.lean:3827	header.parentHash ≠ blockParentHash (inline keccak of parent header)	legitimate boundary	digest computed by Bytes.keccak (word-typed)	⟨_⟩ (equivalently parent.header.hash)
+05	Transaction.lean:3828	header.parentHash = 0 (all-zero hash check)	legitimate boundary	zero-hash literal	⟨0⟩
+05	Transaction.lean:3901,3905,3909,3918 (4)	stateTransitionChecks compares computed roots (params typed B256) with header roots	legitimate boundary	propagation: digest-carrying parameter typed as word	retype params : Hash32
+05	Transaction.lean:3921	rendering withdrawalsRoot.getD 0	legitimate boundary	zero-hash literal (rendering default)	getD ⟨0⟩
+05	Transaction.lean:6157	example binders withdrawalsRoot/parentBeaconBlockRoot : B256	legitimate boundary	propagation (binder type)	retype binders
+05	Transaction.lean:6301,6315,6319,6325,6476 (5)	guard headers: digest fields as numeric literal 0	legitimate boundary	numeric literal as digest placeholder	⟨0⟩
+05	Transaction.lean (50 others)	noncomputable / sorryAx cascades	cascade	-	-
+06	Transaction.lean:201	deriving Repr on an error type carrying a digest	legitimate boundary	rendering (derived Repr)	instance Repr Hash32 via hex ToString, beside Repr B256 (Transaction.lean:132)
+06	Transaction.lean:3930	rendering requestsHash.getD 0	legitimate boundary	zero-hash literal (rendering default)	getD ⟨0⟩
+06	Transaction.lean:3973	BenvStat.parentBeaconBlockRoot : B256 filled from header (EIP-4788 system call stores the root in storage)	legitimate boundary	digest becomes a storage word (beacon-root system call)	map Hash32.word
+06	Transaction.lean:4201-4205,4210 (5)	locals typed B256 holding computed roots	legitimate boundary	propagation (local type annotation)	retype locals
+06	Transaction.lean:5138,5146,5152 (3)	CheckedBlockChain.tipHash/stateRoot typed B256	legitimate boundary	propagation (accessor return type; snapshot key)	retype : Hash32
+08	Transaction.lean:6160	example: Header.hash h' = keccak(rlp fields) (statement equates digest with word-typed keccak)	legitimate boundary	digest computed by Bytes.keccak (word-typed), in a statement	⟨_⟩ around the RHS
+08	Transaction.lean:6668	guard: broken parent link written parentHash := 0	legitimate boundary	numeric literal as digest placeholder	⟨0⟩
+08	Transaction.lean:7578	proof: by_cases header.parentHash = 0 (mirrors the zero-hash check)	legitimate boundary	zero-hash literal, in a proof	⟨0⟩
+08	Transaction.lean:7576,7579	cascade of 7578	cascade	-	-
+09	Transaction.lean:7615,7617 (2)	theorem binders for stateTransitionChecks' root params typed B256	legitimate boundary	propagation (binder type)	retype binders
+09	Transaction.lean:7622	cascade	cascade	-	-
+11	T8n.lean:578	t8n env.parentUncleHash read from JSON as a word	legitimate boundary	deserialization (JSON hex -> digest)	Hash32.mk <$> readB256
+11	T8n.lean:603,604,607,610 (7 errors)	t8n synthetic parent header: digest fields as literal 0	legitimate boundary	numeric literal as digest placeholder	⟨0⟩
+11	T8n.lean:1392,1421 (2)	t8n output renders stateRoot / blockAccessListHash via hexB256	legitimate boundary	rendering (digest -> hex output)	.word (output bytes unchanged)
+11	ChainStore.lean:88	snapshot map keyed by B256 (TreeMap needs Ord); insert under tipHash	legitimate boundary	ordered-map key (lookup order, not semantic comparison)	.word at the key (alternative: Ord Hash32 by word)
+11	ChainStore.lean:155	synthHeader parentHash param typed B256	legitimate boundary	propagation (parameter type)	retype : Hash32
+11	ChainStore.lean:156,159,160,171,174 (5)	synthetic headers: literal 0 digests	legitimate boundary	numeric literal as digest placeholder	⟨0⟩
+11	ChainStore.lean:283	guard compares map key with tipHash	legitimate boundary	ordered-map key	.word
+11	T8n/ChainStore (33 others)	cascades	cascade	-	-
+12	T8n.lean:1393,1394,1406,1411 (4)	t8n output renders computed roots via hexB256	legitimate boundary	rendering (digest -> hex output)	.word (output bytes unchanged)
+12	ChainStore.lean:55	theorem: tipHash? (word-typed inline keccak) = some tipHash	legitimate boundary	ordered-map key, in a statement	.word
+12	ChainStore.lean:73	genesis store insert under tipHash	legitimate boundary	ordered-map key	.word
+12	ChainStore.lean:180	synthetic fixtures chain parent links from B256 map keys	legitimate boundary	ordered-map key -> digest	⟨_⟩
+12	cascades (34)	cascade	cascade	-	-
+13	FixtureTransition.lean:316,321,324,341,500-523,545,569,590-593,606,619-633,651 (30 primary, of 39)	second digest-keyed store (Std.TreeMap B256 Entry) and its provenance theorems: keys are tip hashes, lookups by header.parentHash	legitimate boundary	ordered-map key (lookup order), in definitions and statements	.word at every key read (11 parentHash + 24 tipHash rewrites, by regex); alternative: Ord/LawfulEqCmp Hash32 by word
+14	Main.lean:234-239,250-255 (9)	fixture JSON header reader builds Header from words	legitimate boundary	deserialization (JSON hex -> digest)	⟨_⟩ / .map Hash32.mk
+14	Main.lean:593	post-state root compared with fixture's word-typed postStateHash	legitimate boundary	comparison with an externally read digest (word-typed reader)	.word
+14	Main.lean:1040,1043,1050,1052 (4)	final assertions compare lastblockhash / state root with fixture words; observation record typed B256	legitimate boundary	comparison with externally read digest; rendering	.word
+14	Main.lean:1202,1203 (2)	closure JSON renders tip hash / state root	legitimate boundary	rendering	.word
+14	Main.lean:699,700,719,747 (4)	store.findParent keyed by B256	legitimate boundary	ordered-map key	.word
+16	TraceJson.lean:115	trace JSON renders state root via hexB256	legitimate boundary	rendering	.word
+16	JauneConsensus/Fork.lean:127	consensus ExecutionRequestsList.requestsHash typed B256	legitimate boundary	propagation (return type; consensus side)	retype : Hash32
+17	TraceMain.lean:184	trace runner renders state root via hexB256	legitimate boundary	rendering	.word
+17	JauneConsensus/Engine.lean:99,102,103,104,115,118 (6)	consensus ExecutionPayload -> execution Header: consensus Hash32/Root are `abbrev ... := B256` (Containers.lean:40,42)	legitimate boundary	cross-layer conversion (consensus alias -> execution type)	⟨_⟩
+17	JauneConsensus/Engine.lean:213	blk.header.hash != payload.block_hash (consensus-typed word)	legitimate boundary	cross-layer comparison	.word
+17	JauneConsensus/Engine.lean (2 others)	cascade	cascade	-	-
+18	JauneConsensus/JointGloas.lean:105,108,109,110,121,124,126 (7)	Gloas payload -> execution Header (second copy of payloadHeader), incl. BAL hash via keccak	legitimate boundary	cross-layer conversion; digest computed by keccak	⟨_⟩
+18	JauneConsensus/JointGloas.lean:170	header hash = payload.block_hash	legitimate boundary	cross-layer comparison	.word
+20	JauneConsensus/Harness/RecordedPairsGloas.lean:124,125,126 (3; +5 sibling sites with no reported error fixed alongside)	recorded-pair harness renders header digests via hb : B256 -> String	legitimate boundary	rendering	.word / map Hash32.word
+20	JauneConsensus/Harness/RecordedPairsGloas.lean:230,231,232,237,238,246 (6 primary of 9)	harness compares header hash / requests hash with recorded consensus words	legitimate boundary	cross-layer comparison; rendering	.word
+21	JauneConsensus/Harness/RecordedPairs.lean:239,240,241,251,253 (5)	recorded-pair harness compares/renders computed header and requests hashes against recorded consensus words	legitimate boundary	cross-layer comparison; rendering	.word (2 binding sites + 1 render)
+22	JauneConsensus/Facts/Joint.lean:67,89,158 (3; +1 unsolved-goal cascade)	engine theorem statements/proofs equate execution header hash with payload.block_hash (consensus `Hash32 := B256`); error text shows `Hash32` vs `Jaune.Hash32`	legitimate boundary	cross-layer comparison, in statements	.word
+23	JauneConsensus/Facts/Gloas/HeaderFrames.lean:878,892; Facts/JointGloas.lean:86 (3)	consensus head-relation theorems equate execution header hash with consensus block_hash (alias B256)	legitimate boundary	cross-layer comparison, in statements	.word

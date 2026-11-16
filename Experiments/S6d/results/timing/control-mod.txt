@@ -1,0 +1,31 @@
+vectors: 21424 (reps 1)
+u256 B256   ns=15826226 per_vector_ns=738 oracle_failures=0
+u256 BitVec ns=10711769 per_vector_ns=499 oracle_failures=48
+op iszero n=26 B256_ns=4048 BitVec_ns=1373
+op not n=26 B256_ns=4909 BitVec_ns=9477
+op byte n=1066 B256_ns=645332 BitVec_ns=3498681
+op shl n=1066 B256_ns=264477 BitVec_ns=286568
+op shr n=1066 B256_ns=282751 BitVec_ns=147698
+op sar n=1066 B256_ns=305544 BitVec_ns=608874
+op signextend n=884 B256_ns=828276 BitVec_ns=415841
+op add n=676 B256_ns=135895 BitVec_ns=180519
+op sub n=676 B256_ns=136847 BitVec_ns=327004
+op mul n=676 B256_ns=743336 BitVec_ns=198824
+op div n=676 B256_ns=751922 BitVec_ns=78788
+op mod n=676 B256_ns=739339 BitVec_ns=94066
+op sdiv n=676 B256_ns=784183 BitVec_ns=297949
+op smod n=676 B256_ns=798229 BitVec_ns=260879
+op and n=676 B256_ns=138410 BitVec_ns=126508
+op or n=676 B256_ns=188785 BitVec_ns=97032
+op xor n=676 B256_ns=142688 BitVec_ns=115948
+op lt n=676 B256_ns=93807 BitVec_ns=89017
+op gt n=676 B256_ns=96591 BitVec_ns=91743
+op slt n=676 B256_ns=159570 BitVec_ns=313038
+op sgt n=676 B256_ns=155311 BitVec_ns=364134
+op eq n=676 B256_ns=112742 BitVec_ns=47279
+op exp n=676 B256_ns=1821922 BitVec_ns=1229930
+op addmod n=2704 B256_ns=2650429 BitVec_ns=686700
+op mulmod n=2704 B256_ns=2546483 BitVec_ns=698432
+loopB result aaf367ce4735c80b66848a03fef014049c36b4e90ae1d92b73ebc5c7ea060939 ffffffffffffffffffffffffffaaffffffffffffffffbbffffffffffffff0009 cf6a41cea87652d9024007e28a0ce63c8880cda7cf8e6880cad7418f1b900000 be2e814fa157825e07868c286ecd82b27ed9ca09563c821fd93ab750a92b0000
+loopW result aaf367ce4735c80b66848a03fef014049c36b4e90ae1d92b73ebc5c7ea060939 ffffffffffffffffffffffffffaaffffffffffffffffbbffffffffffffff0009 cf6a41cea87652d9024007e28a0ce63c8880cda7cf8e6880cad7418f1b900000 be2e814fa157825e07868c286ecd82b27ed9ca09563c821fd93ab750a92b0000
+loopMul-kernels n=10 B256_ns=131948 BitVec_ns=89287 agree=true
