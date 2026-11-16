@@ -205,7 +205,7 @@
    "line": 634,
    "column": 15,
    "token": "st",
-   "sha256": "1d9c577738dcfe8485df2cc78127014ad6f727e8ff8442fadaf46ca4041ba935",
+   "sha256": "a2e23e9b132d0de94c57c881e830d8ba20e1aae728436cbd39f1867f24e63d89",
    "decision": "unchanged",
    "reason": "local binder (pattern variable, intro/obtain/rcases name, fun or auto-bound implicit binder) for which the compiler index records no reference; it names no constant"
   },
@@ -214,7 +214,7 @@
    "line": 688,
    "column": 15,
    "token": "st",
-   "sha256": "1d9c577738dcfe8485df2cc78127014ad6f727e8ff8442fadaf46ca4041ba935",
+   "sha256": "a2e23e9b132d0de94c57c881e830d8ba20e1aae728436cbd39f1867f24e63d89",
    "decision": "unchanged",
    "reason": "local binder (pattern variable, intro/obtain/rcases name, fun or auto-bound implicit binder) for which the compiler index records no reference; it names no constant"
   },
@@ -223,7 +223,7 @@
    "line": 443,
    "column": 19,
    "token": "s3",
-   "sha256": "1e124886a58fed3f3c7ffb9e22f7c1b2b2fc80fa1bf1e83b3fc33a67b88bdfcf",
+   "sha256": "63ea386929f1f2bb7cd5cd10cfdd072f352b4991cfe178963675861f4db565d3",
    "decision": "unchanged",
    "reason": "local binder (pattern variable, intro/obtain/rcases name, fun or auto-bound implicit binder) for which the compiler index records no reference; it names no constant"
   },
@@ -232,7 +232,7 @@
    "line": 665,
    "column": 19,
    "token": "s3",
-   "sha256": "1e124886a58fed3f3c7ffb9e22f7c1b2b2fc80fa1bf1e83b3fc33a67b88bdfcf",
+   "sha256": "63ea386929f1f2bb7cd5cd10cfdd072f352b4991cfe178963675861f4db565d3",
    "decision": "unchanged",
    "reason": "local binder (pattern variable, intro/obtain/rcases name, fun or auto-bound implicit binder) for which the compiler index records no reference; it names no constant"
   },
@@ -241,7 +241,7 @@
    "line": 754,
    "column": 13,
    "token": "x7",
-   "sha256": "239462efa9101cb5723b77704ee08d29e5a481cf4109dc0afe277df5dff12d81",
+   "sha256": "6ea5d55bc5bf8c2914d5d916b829685cdbcf1ab546029377a65c2a9004ceb4d4",
    "decision": "unchanged",
    "reason": "local binder (pattern variable, intro/obtain/rcases name, fun or auto-bound implicit binder) for which the compiler index records no reference; it names no constant"
   },
@@ -250,7 +250,7 @@
    "line": 839,
    "column": 13,
    "token": "y",
-   "sha256": "239462efa9101cb5723b77704ee08d29e5a481cf4109dc0afe277df5dff12d81",
+   "sha256": "6ea5d55bc5bf8c2914d5d916b829685cdbcf1ab546029377a65c2a9004ceb4d4",
    "decision": "unchanged",
    "reason": "local binder (pattern variable, intro/obtain/rcases name, fun or auto-bound implicit binder) for which the compiler index records no reference; it names no constant"
   },
@@ -259,7 +259,7 @@
    "line": 844,
    "column": 13,
    "token": "y",
-   "sha256": "239462efa9101cb5723b77704ee08d29e5a481cf4109dc0afe277df5dff12d81",
+   "sha256": "6ea5d55bc5bf8c2914d5d916b829685cdbcf1ab546029377a65c2a9004ceb4d4",
    "decision": "unchanged",
    "reason": "local binder (pattern variable, intro/obtain/rcases name, fun or auto-bound implicit binder) for which the compiler index records no reference; it names no constant"
   },
@@ -268,7 +268,7 @@
    "line": 867,
    "column": 11,
    "token": "y",
-   "sha256": "239462efa9101cb5723b77704ee08d29e5a481cf4109dc0afe277df5dff12d81",
+   "sha256": "6ea5d55bc5bf8c2914d5d916b829685cdbcf1ab546029377a65c2a9004ceb4d4",
    "decision": "unchanged",
    "reason": "local binder (pattern variable, intro/obtain/rcases name, fun or auto-bound implicit binder) for which the compiler index records no reference; it names no constant"
   },

@@ -639,9 +639,9 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                 for name in universe.by_leaf(spelling):
                     new = renamer(name)
                     leaves.add(split_name(new)[-1] if renamer.renames(name) else spelling)
-            if len(leaves) == 1:
+            if len(leaves) <= 1:  # none known: nothing renamed can be denoted
                 add_cover(comps, ('projection', spelling))
-                if leaves != {spelling}:
+                if leaves and leaves != {spelling}:
                     add_edit(start, end, spelling, leaves.pop(), f'projection .{spelling}')
                 continue
             add_cover(comps, ('unresolved', 'projection inside a quotation whose field the word does not decide '
