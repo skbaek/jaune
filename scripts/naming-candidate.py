@@ -281,8 +281,12 @@ KEY_SCHEMA = 1
 
 
 def compact(value):
-    """The exporter's own serialization (Lean's `Json.compress`)."""
-    return json.dumps(value, separators=(',', ':'), ensure_ascii=False)
+    """The exporter's own serialization (Lean's `Json.compress`): Lean escapes
+    only quote, backslash, `\\n` and `\\r` by name and every other control
+    character as `\\u00xx`, where Python names `\\t`, `\\b` and `\\f`."""
+    text = json.dumps(value, separators=(',', ':'), ensure_ascii=False)
+    return re.sub(r'(?<!\\)((?:\\\\)*)\\([tbf])',
+                  lambda m: m.group(1) + '\\u00' + dict(t='09', b='08', f='0c')[m.group(2)], text)
 
 
 def reuse_key(module, row, exporter_hash, config, identities, export_schema):

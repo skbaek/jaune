@@ -613,6 +613,12 @@ class IncrementalCaptureTests(unittest.TestCase):
         self.assertEqual((reused['reused_from'], reused['seconds'], reused['cwd']),
                          (str(cold), receipt['seconds'], str(self.root.resolve())))
 
+    def test_compact_matches_lean_json_compress(self):
+        # Lean names only quote, backslash, newline and carriage return; every
+        # other control character is \u00xx (a G0a export string held a tab).
+        self.assertEqual(CHECK.compact({'s': 'a\tb\\t\\\tc\b\f\n\r"\x01\x7fé'}),
+                         '{"s":"a\\u0009b\\\\t\\\\\\u0009c\\u0008\\u000c\\n\\r\\"\\u0001\x7fé"}')
+
     def test_longest_prior_first_and_unknown_before_timed(self):
         with tempfile.TemporaryDirectory() as tmp:
             prior = Path(tmp)
