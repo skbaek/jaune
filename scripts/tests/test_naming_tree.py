@@ -244,6 +244,12 @@ class NamingTreeTests(unittest.TestCase):
         plan, reasons = self.reviewed('sites-nomatch', [(8, None), (21, None), (1, None)])
         self.assertTrue(any('matches no unresolved token' in r for r in reasons))
 
+    def test_root_spelled_declaration_is_not_compiler_named(self):
+        text = 'def _root_.Q.extraJ := 1\ninstance : Inhabited Nat := ⟨0⟩\n'
+        index = dict(decls={'Q.extraJ': [0, 4, 0, 19, 0, 4, 0, 19], 'instInhabitedNat': [1, 0, 1, 8, 1, 0, 1, 8]})
+        named = TREE.compiler_named({'M': dict(source=text, index=index)})
+        self.assertEqual(named, {'instInhabitedNat'})
+
     def test_lexed_imports_must_equal_compiler_headers(self):
         files = {'A.lean': 'def a := 1\n', 'B.lean': 'import A\ndef b := a\n', 'lakefile.lean': ''}
         fixture = TreeFixture(self.directory / 'headers', files, imports={'B': []})
