@@ -805,6 +805,51 @@ uninventoried or shadowed local imports fail. Optional artifact parts cannot
 appear or disappear unnoticed. The logical module path is retained before
 following file symlinks, matching Lean's loading of separately cached parts.
 
+#### Incremental capture
+
+`--reuse PRIOR_CAPTURE` (repeatable; the first matching prior wins) reuses a
+module's `--imports` and export outputs iff its content key is unchanged: the
+module's source bytes and candidate-relative path, the bytes of every import
+artifact part it was elaborated against (local and external, transitively, as
+bound above), the exporter binary, the toolchain and Lake configuration files,
+and the export schema. No absolute path is keyed, so a capture of the same
+content in another worktree is a valid prior; its recorded artifact paths under
+the prior root are relocated to this root, and a reused output must
+re-serialize byte-identically before relocation (so nothing else changes). A
+reused `--imports` output is accepted only if each import it names still
+resolves, by Lean's search-path rule over this candidate's `lake env`
+`LEAN_PATH`, to artifacts with the recorded bytes; an export is reused only if
+its key, computed from this capture's bound imports, equals the prior's key
+recomputed from the prior's recorded identities. Anything else is elaborated.
+Every binding check above runs on reused files as on fresh ones, and the build,
+header pass and artifact hashing always run. Editing a module therefore reruns
+it and every transitive importer (their import artifacts changed); a changed
+exporter, schema, toolchain or Lake configuration reruns all exports. A capture
+writes `reuse-index.json` once its imports are bound, so a capture that fails
+during export is itself a prior; a complete capture without that file is read
+from its snapshot.
+
+Every command receipt records its wall `seconds` (a reused receipt keeps the
+prior's, with `reused_from`). Fresh exporter jobs start longest prior time
+first, modules with no recorded time before all timed ones, so a large file
+does not run alone at the end. With `--reuse`, the snapshot records the priors
+(`reuse`) and per-module `provenance` (`elaborated` or `reused_from` for each
+of `imports` and `export`); comparison does not read these fields.
+
+Measured on WSL (2026-11-16, Jaune whole tree, 231 modules, `--jobs 5`):
+cold, the G0a capture took 2906 s wall, of which ~1200 s producer build and
+~1700 s headers, imports and exports. Against that capture, from another
+worktree, a candidate differing in six Gloas fact files re-elaborated 77
+`--imports` and 83 exports (36%: the transitive importers of those files,
+plus six exports that fell back before the Lean-escaping fix) in 1556 s from
+admission to release; one exporter (`Facts.Gloas.FinalizedNotAhead`, 1177 s)
+is the floor of any capture that reruns it. A one-line edit to the leaf
+`ConsensusMain.lean` re-elaborated one module (export 16 s) and finished
+462 s after admission, ~200 s of which was installing reused outputs before
+the exporter started (since removed: same-root reuse copies verbatim and
+exporters start first). An edit to `Jaune.Basic` reruns 207 of 231 modules
+(90%), `JauneConsensus.SSZ.Basic` 118 (51%), by the import graph.
+
 Snapshot schema 3 records the standalone roots and producer set explicitly.
 Schema 2 captures remain readable as all-producer captures. Fidelity is checked
 separately for each maximal selected root and its transitive local imports.

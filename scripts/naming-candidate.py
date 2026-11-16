@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 
 # Reuse the checked map, compiler comparator.
 import importlib.util
@@ -264,49 +265,178 @@ def artifact_identity(parts):
 
 
 def run(root, out, label, command):
+    start = time.monotonic()
     proc = subprocess.run(command, cwd=root, capture_output=True)
     (out / (label + '.log')).write_bytes(proc.stdout + proc.stderr)
     receipt = dict(argv=command, cwd=str(root), exit=proc.returncode,
-                   log_sha256=sha(proc.stdout + proc.stderr))
+                   log_sha256=sha(proc.stdout + proc.stderr), seconds=round(time.monotonic() - start, 3))
     save(out / (label + '.command.json'), receipt)
     if proc.returncode:
         raise ValueError(f'{label} exited {proc.returncode}; see {out / (label + ".log")}')
     return receipt
 
 
-def reuse_or_run(reuse, root, out, label, command, target):
-    """Resume after a later failure: copy a prior capture's output and receipt
-    for the identical command instead of rerunning it. Every binding check of
-    this capture still runs on the copied files."""
-    if reuse is not None:
-        prior = Path(reuse)
-        receipt = prior / (label + '.command.json')
-        if receipt.is_file() and (prior / target.name).is_file():
-            data = json.loads(receipt.read_bytes())
-            argv = data.get('argv') or []
-            if (argv[:-1] == command[:-1] and Path(argv[-1]).name == Path(command[-1]).name and
-                    data.get('exit') == 0):
-                import shutil
-                shutil.copyfile(prior / target.name, target)
-                shutil.copyfile(prior / (label + '.log'), out / (label + '.log'))
-                save(out / (label + '.command.json'), dict(data, reused_from=str(prior)))
-                return dict(data, reused_from=str(prior))
-    return run(root, out, label, command)
+# Incremental capture. A module's `--imports` and export outputs depend only on
+# its source bytes (at its candidate-relative path), the import artifacts it
+# was elaborated against, the exporter binary, the toolchain and Lake
+# configuration, and the export schema. The reuse key is the digest of exactly
+# those, by content: no absolute path enters it, so a prior capture of the same
+# content in another worktree is reusable; its recorded paths are relocated
+# and every binding check below still runs on the reused files.
+KEY_SCHEMA = 1
 
 
-def parallel(jobs, calls):
-    """Run independent exporter commands, at most `jobs` at once; every receipt
-    is kept and the first failure (in input order) is raised after all finish."""
+def compact(value):
+    """The exporter's own serialization (Lean's `Json.compress`): Lean escapes
+    only quote, backslash, `\\n` and `\\r` by name and every other control
+    character as `\\u00xx`, where Python names `\\t`, `\\b` and `\\f`."""
+    text = json.dumps(value, separators=(',', ':'), ensure_ascii=False)
+    return re.sub(r'(?<!\\)((?:\\\\)*)\\([tbf])',
+                  lambda m: m.group(1) + '\\u00' + dict(t='09', b='08', f='0c')[m.group(2)], text)
+
+
+def reuse_key(module, row, exporter_hash, config, identities, export_schema):
+    return sha(json.dumps(dict(key_schema=KEY_SCHEMA, export_schema=export_schema, module=module,
+                               path=row['path'], source_sha256=row['sha256'], exporter_sha256=exporter_hash,
+                               config=config, imports=identities), sort_keys=True).encode())
+
+
+def config_identity(files):
+    return {name: files.get(name) for name in CONFIG}
+
+
+def lean_resolve(search_path, name):
+    """Lean 4.35 `findWithExt`: the first search-path entry holding the root
+    package directory (or root `.olean`) decides the module's file."""
+    parts = name.split('.')
+    if not all(re.fullmatch(r'[A-Za-z_][A-Za-z0-9_\'!?]*', p) for p in parts):
+        return None  # escaped spellings: not resolved here, so not reused
+    for entry in search_path:
+        if (Path(entry) / parts[0]).is_dir() or (Path(entry) / (parts[0] + '.olean')).exists():
+            return str(Path(entry).joinpath(*parts).with_suffix('.olean'))
+    return None
+
+
+def prior_index(directory):
+    """What a prior capture recorded for reuse, or None. Current captures write
+    `reuse-index.json` once import artifacts are bound (so a capture that fails
+    during export is still a prior); a complete older capture is read from its
+    snapshot. Each module's key is recomputed from the recorded identities,
+    never trusted from the file."""
+    directory = Path(directory)
+    if (directory / 'reuse-index.json').is_file():
+        index = json.loads((directory / 'reuse-index.json').read_bytes())
+        if index.get('key_schema') != KEY_SCHEMA:
+            return None
+    elif (directory / 'snapshot.json').is_file() and (directory / 'headers.command.json').is_file():
+        data = json.loads((directory / 'snapshot.json').read_bytes())
+        if data.get('status') != 'OK':
+            return None
+        # One exporter binary wrote every export: its schema is any one's.
+        first = min(data['exports'].values(), key=lambda row: (directory / row['path']).stat().st_size)
+        index = dict(root=json.loads((directory / 'headers.command.json').read_bytes())['cwd'],
+                     export_schema=json.loads((directory / first['path']).read_bytes())['schema_version'],
+                     exporter_sha256=data['exporter_sha256'], config=config_identity(data['candidate']['files']),
+                     artifacts={name: artifact_identity(parts) for name, parts in data['artifacts'].items()},
+                     modules={m: dict(path=data['candidate']['modules'][m]['path'],
+                                      sha256=data['candidate']['modules'][m]['sha256'])
+                              for m in data['selected']})
+    else:
+        return None
+    index['directory'] = directory
+    for module, row in index['modules'].items():
+        row['key'] = None
+        imports = directory / (module + '.imports.json')
+        if imports.is_file():
+            names = json.loads(imports.read_bytes())['imports']
+            if all(name in index['artifacts'] for name in names):
+                row['key'] = reuse_key(module, row, index['exporter_sha256'], index['config'],
+                                       {name: index['artifacts'][name] for name in names}, index['export_schema'])
+    return index
+
+
+def prior_output(index, label, target, root, parse=True):
+    """The prior's output for `label` if its command succeeded. A prior from
+    another root must re-serialize byte-identically (so relocating its paths
+    changes nothing else); one from this root is copied verbatim, and is
+    parsed only when `parse` asks for its contents."""
+    directory = index['directory']
+    receipt, log, output = (directory / (label + '.command.json'), directory / (label + '.log'),
+                            directory / target.name)
+    if not (receipt.is_file() and log.is_file() and output.is_file()):
+        return None
+    receipt = json.loads(receipt.read_bytes())
+    if receipt.get('exit') != 0:
+        return None
+    same_root = Path(index['root']) == Path(root)
+    if same_root and not parse:
+        return receipt, None, log, output
+    raw = output.read_bytes()
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+    if not same_root and compact(data).encode() != raw.rstrip(b'\n'):
+        return None
+    return receipt, data, log, output
+
+
+def relocate_parts(parts, old_root, new_root):
+    def move(path):
+        if path is None or not Path(path).is_relative_to(old_root):
+            return path
+        return str(Path(new_root) / Path(path).relative_to(old_root))
+    return {part: move(path) for part, path in parts.items()}
+
+
+def install_reused(index, receipt, data, log, output, root, out, label, command, target):
+    import shutil
+    if Path(index['root']) == Path(root):
+        shutil.copyfile(output, target)
+    else:
+        data = dict(data, imports={name: relocate_parts(parts, index['root'], root)
+                                   for name, parts in data['imports'].items()})
+        target.write_text(compact(data))
+    (out / (label + '.log')).write_bytes(log.read_bytes())
+    new = dict(argv=command, cwd=str(root), exit=0, log_sha256=receipt['log_sha256'],
+               reused_from=str(index['directory']), seconds=receipt.get('seconds'))
+    save(out / (label + '.command.json'), new)
+    return new
+
+
+def prior_seconds(indexes, label):
+    for index in indexes:
+        path = index['directory'] / (label + '.command.json')
+        if path.is_file():
+            seconds = json.loads(path.read_bytes()).get('seconds')
+            if isinstance(seconds, (int, float)):
+                return seconds
+    return None
+
+
+def longest_first(calls, indexes):
+    """Start order: longest prior wall time first, modules with no recorded
+    time before all timed ones, so a large file never runs alone at the end."""
+    def weight(position):
+        seconds = prior_seconds(indexes, calls[position][2])
+        return (seconds is not None, -(seconds or 0), position)
+    return sorted(range(len(calls)), key=weight)
+
+
+def parallel(jobs, calls, indexes=()):
+    """Run independent exporter commands, at most `jobs` at once, started
+    longest first; every receipt is kept and the first failure (in input order)
+    is raised after all finish."""
     from concurrent.futures import ThreadPoolExecutor
     def attempt(call):
         try:
-            if len(call) == 6:
-                return reuse_or_run(*call), None
             return run(*call), None
         except ValueError as error:
             return None, error
     with ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
-        results = list(pool.map(attempt, calls))
+        futures = {position: pool.submit(attempt, calls[position])
+                   for position in longest_first(calls, indexes)}
+        results = [futures[position].result() for position in range(len(calls))]
     for _, error in results:
         if error is not None:
             raise error
@@ -351,12 +481,9 @@ def capture(args):
     finally:
         run(root, out, 'header-release', argv(args.release_command))
     initial = bind_headers(source_before, json.loads(header_output.read_bytes()))
-    if args.reuse is not None:
-        prior = json.loads((Path(args.reuse) / 'source-before.json').read_bytes())
-        def lean_inputs(files):  # Exports depend on Lean sources and configuration only.
-            return {p: h for p, h in files.items() if p.endswith('.lean') or p in CONFIG}
-        if lean_inputs(prior['files']) != lean_inputs(source_before['files']):
-            raise ValueError('reuse refused: the prior capture saw different Lean sources or configuration')
+    reuse = [args.reuse] if isinstance(args.reuse, (str, Path)) else list(args.reuse or [])
+    indexes = [index for index in map(prior_index, reuse) if index is not None]
+    config = config_identity(source_before['files'])
     if inventory(root, source_dirs) != source_before:
         raise ValueError('candidate changed during header discovery')
     selected = closure(initial['modules'], args.module)
@@ -385,14 +512,70 @@ def capture(args):
         tool_sources = {p: initial['files'].get(p) for p in tool_paths}
     else:
         tool_sources = {p: file_sha(tool_root / p) for p in tool_paths}
+    # Import resolution for reused `--imports` outputs: Lean's own search path.
+    search_path = None
+    if indexes:
+        printed = subprocess.run(['lake', 'env', 'printenv', 'LEAN_PATH'], cwd=root, capture_output=True)
+        if printed.returncode == 0:
+            search_path = [str(root / entry) for entry in printed.stdout.decode().strip().split(':') if entry]
+    hashes = {}
+    def identity(parts):
+        for path in parts.values():
+            if path is not None and path not in hashes:
+                hashes[path] = file_sha(path)
+        return {part: hashes[path] if path else None for part, path in parts.items()}
+    local_identity = {m: artifact_identity(parts) for m, parts in local_built.items()}
+    verdicts = {}
+
+    def reusable_imports(index, module):
+        """The prior's `--imports` output, relocated, iff every import it names
+        resolves here, by Lean's rule, to artifacts with the recorded bytes."""
+        row = index['modules'].get(module)
+        if (row is None or search_path is None or row['path'] != initial['modules'][module]['path'] or
+                row['sha256'] != initial['modules'][module]['sha256'] or
+                index['exporter_sha256'] != exporter_hash or index['config'] != config):
+            return None
+        found = prior_output(index, module + '-imports', out / (module + '.imports.json'), root)
+        if found is None or found[1].get('module') != module:
+            return None
+        for name, parts in found[1]['imports'].items():
+            # Modules share most imports: decide each recorded binding once.
+            memo = (id(index), name, tuple(sorted(parts.items())))
+            if memo not in verdicts:
+                verdicts[memo] = import_still_bound(index, name, parts)
+            if not verdicts[memo]:
+                return None
+        return found
+
+    def import_still_bound(index, name, parts):
+        if name not in index['artifacts'] or set(parts) != set(PARTS) or parts['olean'] is None:
+            return False
+        parts = relocate_parts(parts, index['root'], root)
+        if name in initial['modules']:
+            return (name in local_paths and parts == local_paths[name] and
+                    local_identity[name] == index['artifacts'][name])
+        return (lean_resolve(search_path, name) == parts['olean'] and artifact_parts(parts['olean']) == parts and
+                identity(parts) == index['artifacts'][name])
+
     run(root, out, 'admit', argv(args.admit_command))
     try:
-        imports, discovery, exports = {}, {}, {}
+        imports, discovery, exports, provenance = {}, {}, {}, {}
+        fresh = []
+        for module in selected:
+            label, target = module + '-imports', out / (module + '.imports.json')
+            command = ['lake', 'env', str(exporter), '--imports', initial['modules'][module]['path'],
+                       module, str(target)]
+            for index in indexes:
+                found = reusable_imports(index, module)
+                if found is not None:
+                    install_reused(index, *found, root, out, label, command, target)
+                    provenance[module] = dict(imports=dict(reused_from=str(index['directory'])))
+                    break
+            else:
+                provenance[module] = dict(imports='elaborated')
+                fresh.append((root, out, label, command))
         # Independent elaborations; the caller's admission covers `--jobs` of them.
-        parallel(args.jobs, [(args.reuse, root, out, module + '-imports',
-                              ['lake', 'env', str(exporter), '--imports', initial['modules'][module]['path'],
-                               module, str(out / (module + '.imports.json'))], out / (module + '.imports.json'))
-                             for module in selected])
+        parallel(args.jobs, fresh, indexes)
         for module in selected:
             target = out / (module + '.imports.json')
             data = json.loads(target.read_bytes())
@@ -413,10 +596,46 @@ def capture(args):
         for name in producers:
             if name in bound and bound[name] != local_built[name]:
                 raise ValueError(f'local artifact changed after build: {name}')
-        parallel(args.jobs, [(args.reuse, root, out, module + '-export',
-                              ['lake', 'env', str(exporter), initial['modules'][module]['path'], module,
-                               str(out / (module + '.export.json'))], out / (module + '.export.json'))
-                             for module in selected])
+        keys = {module: reuse_key(module, initial['modules'][module], exporter_hash, config,
+                                  {name: artifact_identity(bound[name]) for name in discovery[module]['imports']},
+                                  FIDELITY.CURRENT_SCHEMA)
+                for module in selected}
+        # Written before any export runs, so a capture failing during export
+        # is still a prior for the next one.
+        save(out / 'reuse-index.json', dict(
+            key_schema=KEY_SCHEMA, root=str(root), exporter_sha256=exporter_hash, config=config,
+            export_schema=FIDELITY.CURRENT_SCHEMA,
+            artifacts={name: artifact_identity(parts) for name, parts in bound.items()},
+            modules={m: dict(path=initial['modules'][m]['path'], sha256=initial['modules'][m]['sha256'],
+                             key=keys[m]) for m in selected}))
+        fresh, candidates = [], []
+        for module in selected:
+            label, target = module + '-export', out / (module + '.export.json')
+            command = ['lake', 'env', str(exporter), initial['modules'][module]['path'], module, str(target)]
+            matching = [index for index in indexes if (index['modules'].get(module) or {}).get('key') == keys[module]]
+            if matching:
+                candidates.append((module, label, target, command, matching))
+            else:
+                provenance[module]['export'] = 'elaborated'
+                fresh.append((root, out, label, command))
+        # Start the exporters first: installing reused outputs (reading and,
+        # across roots, re-serializing them) must not delay the long pole.
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=1) as background:
+            running = background.submit(parallel, args.jobs, fresh, indexes)
+            late = []
+            for module, label, target, command, matching in candidates:
+                for index in matching:
+                    found = prior_output(index, label, target, root, parse=False)
+                    if found is not None:
+                        install_reused(index, *found, root, out, label, command, target)
+                        provenance[module]['export'] = dict(reused_from=str(index['directory']))
+                        break
+                else:
+                    provenance[module]['export'] = 'elaborated'
+                    late.append((root, out, label, command))
+            running.result()
+        parallel(args.jobs, late, indexes)
         for module in selected:
             target = out / (module + '.export.json')
             data = json.loads(target.read_bytes())
@@ -440,7 +659,9 @@ def capture(args):
                       exporter_sha256=exporter_hash, tool_sources=tool_sources,
                       **({} if tool_root == root else dict(tool_root=str(tool_root))),
                       **(dict(purpose='plan') if args.plan_only else {}),
-                      artifacts=bound, local_built=local_built, exports=exports)
+                      artifacts=bound, local_built=local_built, exports=exports,
+                      **(dict(reuse=[str(index['directory']) for index in indexes], provenance=provenance)
+                         if reuse else {}))
         # Validate the assembled bundle before advertising success. A plan-only
         # capture (a consumer that is renamed but never fidelity-compared) skips
         # the kernel-graph reader, which refuses forms N4 does not support yet.
@@ -663,8 +884,9 @@ def main():
     cap.add_argument('--admit-command', required=True)
     cap.add_argument('--release-command', required=True)
     cap.add_argument('--output', type=Path, required=True)
-    cap.add_argument('--reuse', type=Path,
-                     help='prior capture directory whose identical exporter commands are reused (resume)')
+    cap.add_argument('--reuse', type=Path, action='append',
+                     help='prior capture directory (repeatable): reuse each module output whose content key '
+                          '(source, import artifact bytes, exporter, toolchain/configuration, schema) is unchanged')
     cap.add_argument('--tool-root', type=Path,
                      help='Jaune checkout that builds the exporter, for a candidate consuming Jaune as a package')
     cap.add_argument('--tool-build-prefix',
