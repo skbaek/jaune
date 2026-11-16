@@ -70,6 +70,16 @@ class NamingApplyTests(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual([(e['old'], e['new']) for e in edits], [('gas', 'gasOp')])
 
+    def test_generated_constructor_auxiliary_follows_its_constructor(self):
+        text = 'example := Op.gas.injEq\nexample := Op.gas.ext\n'
+        index = index_for(text, [('Op.gas.injEq', 'Pilot.Op.gas.injEq', 0, False),
+                                 ('Op.gas.ext', 'Pilot.Op.gas.ext', 0, False)])
+        edits, problems = M.plan_file(text, index, [entry('Pilot.Op.gas', 'Pilot.Op.gasOp')])
+        self.assertEqual([(e['old'], e['new']) for e in edits], [('Op.gas.injEq', 'Op.gasOp.injEq')])
+        # An authorable descendant (`ext`) still needs its own row.
+        self.assertEqual([p['reason'] for p in problems],
+                         ['descendant of renamed declaration needs its own map row'])
+
     def test_unresolved_use_is_reported(self):
         text = 'def a (x : Tx) := x.gas\n'
         _, problems = M.plan_file(text, index_for(text, []), [entry()])

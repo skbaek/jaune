@@ -369,6 +369,24 @@ def renamed_opens(opens, renamer):
     return result
 
 
+# Lean derives these from a constructor's own name; they follow its rename
+# (`Ninst.reg.injEq` becomes `<new Ninst.reg>.injEq`). Authorable names such as
+# `ext` are deliberately absent: they need their own rows.
+GENERATED_SUFFIXES = ('injEq', 'inj')
+
+
+def generated_rename(renamer, const):
+    """New name of a Lean-generated constructor auxiliary whose constructor is
+    renamed by an exact row, else None."""
+    if const is None or const.startswith('_private.') or '.' not in const:
+        return None
+    parent, _, last = const.rpartition('.')
+    if last not in GENERATED_SUFFIXES or const in renamer.exact or parent not in renamer.exact:
+        return None
+    new = renamer.exact[parent]
+    return None if new == parent else f'{new}.{last}'
+
+
 def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
     if index.get('version') != 5:
         raise ValueError('requires Lean ilean format 5')
@@ -437,7 +455,8 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                         f'declaration {const} inside renamed namespace {context} -> '
                         f'{renamer.scope(context)} needs a map row under the new namespace'})
                     continue
-        if const is None or not renamer.renames(const):
+        derived = generated_rename(renamer, const)
+        if derived is None and (const is None or not renamer.renames(const)):
             if const is not None and universe is not None and const in universe.compiler_named:
                 last = MAP.tokenize_identifier(split_name(const)[-1])
                 renamed_words = {t for w in candidates for t in [w] if MAP.tokenize_identifier(w)}
@@ -449,7 +468,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                         f'reference to compiler-named {const}, whose name Lean derives from '
                         f'renamed {hit!r}: name it explicitly or add its map row'})
             continue
-        new = renamer(const)
+        new = derived or renamer(const)
         if new == const:
             continue  # A relocation that keeps its name changes no spelling.
         try:
@@ -675,7 +694,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             continue
         for kind, const in resolved:
             if (kind == 'const' and const and renamer.explain(const)[1] != 'exact' and
-                    renamer.exact_ancestor(const)):
+                    renamer.exact_ancestor(const) and generated_rename(renamer, const) is None):
                 problems.append({'start': start, 'end': end,
                                  'reason': 'descendant of renamed declaration needs its own map row'})
                 break

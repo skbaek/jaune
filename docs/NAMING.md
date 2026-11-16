@@ -239,6 +239,10 @@ Version-2 syntax metadata (both exporters) adds compiler-derived rows:
   the capture model below in the quoting command's scope and renames it; one
   without a unique resolution (typically a quoted local binder) is reported.
 
+Lean-generated constructor auxiliaries `C.injEq` and `C.inj` follow an
+exact row for the constructor `C` without a row of their own; authorable
+descendants such as `ext` still need rows.
+
 A wildcard alternative `| _ => ...` that Lean expands into the constructors it
 covers carries their references, but spells no name; a constructor rename
 leaves it unchanged.
