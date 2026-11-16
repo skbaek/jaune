@@ -180,7 +180,7 @@ def read_environments(paths, modules, selected, bundles=None):
 def empty_environment():
     return dict(constants={}, roots=set(), guards=[], attributes=[], modules={}, receipts=[],
                 checks=[], version=None, coalesced_equations=[], owners={}, holders={},
-                item_modules={key: [] for key in FIDELITY.ITEMS}, schemas=set())
+                item_modules={key: [] for key in FIDELITY.ITEMS}, schemas=set(), derived={})
 
 
 def extend_items(merged, data):
@@ -193,6 +193,7 @@ def extend_items(merged, data):
         merged['item_modules'][field].extend(owners)
     merged['receipts'].extend(data['receipts'])
     merged['schemas'] |= set(data.get('schemas', ()))
+    merged.setdefault('derived', {}).update(data.get('derived', {}))
 
 
 def union_environment(bundles):
@@ -227,6 +228,8 @@ def union_environment(bundles):
             continue
         for module, constant, root in rows:
             key = f'{name}@{module}'
+            if name in merged['derived']:
+                merged['derived'][key] = merged['derived'][name]
             merged['constants'][key] = constant
             merged['owners'][key] = module
             merged['holders'][key] = {module}
