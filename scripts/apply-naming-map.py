@@ -313,6 +313,15 @@ class Universe:
                 if split:
                     self.private.setdefault((side, split[0]), {})[split[2]] = name
 
+    def by_leaf(self, leaf):
+        """Every known constant (user name) whose last component is `leaf`."""
+        if not hasattr(self, '_leaves'):
+            self._leaves = {}
+            for name in self.before:
+                user = MAP.split_private(name)[2] if name.startswith('_private.') else name
+                self._leaves.setdefault(split_name(user)[-1], set()).add(user)
+        return self._leaves.get(leaf, set())
+
     def lookup(self, side, module, renamer=None):
         names = self.before if side == 'before' else self.after
         target = module if side == 'before' or renamer is None else renamer.module(module)
@@ -620,6 +629,24 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         if universe is not None and i >= 0 and commands_q[i][0] <= start < commands_q[i][1]:
             found = resolve(universe.lookup('before', index_module), spelling, commands_q[i][2], commands_q[i][3])
         in_scope = universe is not None and i >= 0 and commands_q[i][0] <= start < commands_q[i][1]
+        if start > 0 and text[start - 1] == '.':
+            # A generalized field projection (`(e).pres`) inside a quotation resolves
+            # through the type of `e`, which a quotation does not record. Rename it
+            # only when the word decides alone: every constant of the universe whose
+            # last component it is gets the same new last component.
+            leaves = set()
+            if universe is not None and '.' not in spelling:
+                for name in universe.by_leaf(spelling):
+                    new = renamer(name)
+                    leaves.add(split_name(new)[-1] if renamer.renames(name) else spelling)
+            if len(leaves) == 1:
+                add_cover(comps, ('projection', spelling))
+                if leaves != {spelling}:
+                    add_edit(start, end, spelling, leaves.pop(), f'projection .{spelling}')
+                continue
+            add_cover(comps, ('unresolved', 'projection inside a quotation whose field the word does not decide '
+                                            '(constants ending in it rename differently or not at all)'))
+            continue
         if not found and in_scope:
             # No constant of the universe (every exported and referenced name,
             # so every renamed one) resolves from the quoting scope, before or

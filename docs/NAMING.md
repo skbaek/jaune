@@ -244,6 +244,10 @@ Version-2 syntax metadata (both exporters) adds compiler-derived rows:
   resolution the model cannot see (an alias, a term-level `open`) would change
   the quotation's pre-resolution, which N4 compares. An ambiguous spelling, one
   outside the modelled scope, or one a rename would make resolve is reported.
+  A quoted generalized field projection (`(e).pres`) resolves through the type
+  of `e`, which the quotation does not record: it is renamed only when every
+  constant of the universe whose last component is that word gets the same new
+  last component (or none is renamed), and is otherwise reported.
 
 Lean-generated constructor auxiliaries `C.injEq` and `C.inj` follow an
 exact row for the constructor `C` without a row of their own; authorable
