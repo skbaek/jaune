@@ -13,6 +13,11 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
+# Schema 7 keys explicit attributes per declaration and records elaboration
+# attributes beyond the first tracked set and instance order; the candidate
+# workflow requires it, the low-level comparator still reads archived exports.
+SCHEMAS = (3, 4, 5, 6, 7)
+CURRENT_SCHEMA = 7
 
 
 def load(filename):
@@ -85,14 +90,38 @@ def _preresolved(e):
     return None
 
 
+RAW_SUBSTRING = ('String.toRawSubstring', "String.toRawSubstring'")
+
+
+def _spelling(val):
+    """(components, wrapper) of a quotation's `val`: a name literal, possibly
+    under `Lean.addMacroScope mainModule NAME scopes`."""
+    head, args = _unwind(val)
+    if head == 'Lean.addMacroScope' and len(args) == 3:
+        parts = _name(args[1])
+        return (None, None) if parts is None else (parts, ['addMacroScope', quoted_identifiers(args[0]),
+                                                           quoted_identifiers(args[2])])
+    parts = _name(val)
+    return parts, None
+
+
+def plain_spelling(raw):
+    """A raw identifier spelling without `«»` escapes, as `getId` reports it."""
+    return '.'.join(part[1:-1] if part.startswith('«') and part.endswith('»') else part
+                    for part in APPLY.split_name(raw)) if raw else raw
+
+
 def quoted_identifiers(e):
     """Canonical form of identifiers inside elaborated syntax quotations.
 
-    `Lean.Syntax.ident info raw val preresolved`: when the quotation
-    pre-resolved global declarations, expansion uses them; the quoted spelling
-    (`raw`, `val`) is then only spelling, which a rename (or a capture
-    qualification) may change. The declarations are compared under the map;
-    without pre-resolution the spelling itself is compared.
+    `Lean.Syntax.ident info raw val preresolved`. Expansion uses the
+    pre-resolved global declarations, and a consumer can observe the spelling
+    (`Syntax.getId` returns `val`; reprinting uses `raw`). Both are kept: the
+    pre-resolved declarations are compared under the map, and the spelling
+    must be exactly the apply tool's names-only respelling of the old spelling
+    under the map (`Comparison.respell`). A capture qualification (`B256` ->
+    `Jaune.U256`) changes what `getId` returns, so it is a difference. Without
+    pre-resolved declarations the whole expression is compared literally.
     """
     if isinstance(e, dict):
         return {k: quoted_identifiers(v) for k, v in e.items()}
@@ -104,7 +133,15 @@ def quoted_identifiers(e):
             items = _list(args[3])
             decoded = None if items is None else [_preresolved(x) for x in items]
             if decoded and None not in decoded and any(d[0] == 'decl' for d in decoded):
-                return ['quotedIdentifier', decoded]
+                info, raw, val, _ = args
+                raw_head, raw_args = _unwind(raw)
+                raw_text = _lit(raw_args[0]) if raw_head in RAW_SUBSTRING and len(raw_args) == 1 else None
+                parts, wrapper = _spelling(val)
+                if raw_text is not None and parts is not None and all('.' not in p for p in parts):
+                    return ['quotedIdentifier', decoded, '.'.join(parts), raw_text,
+                            [raw_head, wrapper, quoted_identifiers(info)]]
+                # An unrecognized spelling shape keeps the literal expression
+                # (fails closed under any rename of the declaration it names).
     return [quoted_identifiers(x) for x in e]
 
 
@@ -147,16 +184,22 @@ def spelled_name(source, a, b, name):
     return parts[-len(spelled):] == spelled
 
 
+ITEMS = ('guards', 'attributes', 'checks')
+
+
 def read_exports(paths):
     constants, roots, guards, attributes, modules, receipts = {}, set(), [], [], {}, []
-    owners = {}
+    owners, holders = {}, {}
     checks = []
+    item_modules = {key: [] for key in ITEMS}
     coalesced = set()
     version = None
+    schemas = set()
     for path in paths:
         raw = Path(path).read_bytes()
         data = json.loads(raw)
-        if data['schema_version'] not in (3, 4, 5, 6) or data['index']['version'] != 5:
+        schemas.add(data['schema_version'])
+        if data['schema_version'] not in SCHEMAS or data['index']['version'] != 5:
             raise ValueError('unsupported fidelity/index schema')
         if version is not None and version != data['lean_version']:
             raise ValueError('mixed Lean versions')
@@ -212,6 +255,7 @@ def read_exports(paths):
         roots.update(names)
         for name in data['constants']:
             owners.setdefault(name, module)
+            holders.setdefault(name, set()).add(module)
 
         def syntax(value, literal_names=False):
             if not isinstance(value, list):
@@ -225,20 +269,33 @@ def read_exports(paths):
                 if len(found) > 1:
                     raise ValueError('ambiguous compiler reference in attribute command')
                 return ['name', next(iter(found))] if found else ['token', value[1]]
+            if len(value) == 3 and value[0] == 'declTarget':
+                # A declaration Lean names itself (an anonymous instance): its
+                # definition range is the keyword, resolved like any reference.
+                found = locations[value[1], value[2]] - failed_names
+                if len(found) != 1:
+                    raise ValueError(f'{module}: attribute target at bytes {value[1]}..{value[2]} '
+                                     f'resolves to {sorted(found)}')
+                return ['name', next(iter(found))]
             if value in (['atom', 'local'], ['atom', 'scoped']):
                 raise ValueError('local/scoped attribute commands require scope-history support')
             return [syntax(item, literal_names) for item in value]
 
-        checks.extend(syntax(row['syntax'], row['literal_names']) for row in command_checks)
-        guards.extend(data['guards'])
-        attributes.extend(syntax(item) for item in data['attribute_syntax'])
+        rows = dict(checks=[syntax(row['syntax'], row['literal_names']) for row in command_checks],
+                    guards=data['guards'], attributes=[syntax(item) for item in data['attribute_syntax']])
+        checks.extend(rows['checks'])
+        guards.extend(rows['guards'])
+        attributes.extend(rows['attributes'])
+        for key in ITEMS:
+            item_modules[key].extend([module] * len(rows[key]))
         receipts.append(dict(path=str(path), sha256=hashlib.sha256(raw).hexdigest(),
                              source_sha256=hashlib.sha256(data['source'].encode()).hexdigest(), module=module))
     if not modules:
         raise ValueError('no exported modules')
     return dict(constants=constants, roots=roots, guards=guards, attributes=attributes,
                 modules=modules, receipts=receipts, version=version, checks=checks,
-                coalesced_equations=sorted(coalesced), owners=owners)
+                coalesced_equations=sorted(coalesced), owners=owners, holders=holders,
+                item_modules=item_modules, schemas=schemas)
 
 
 class Comparison:
@@ -252,6 +309,54 @@ class Comparison:
         self.generated_left = self.left.keys() - before['roots']
         self.generated_right = self.right.keys() - after['roots']
         self.pairs, self.reverse, self.checked = {}, {}, set()
+        # Modules (after naming) that a relocation row links: a row moves its
+        # declaration, and checks or generated constants may move with it,
+        # between its two modules and nowhere else.
+        self.parent = {}
+        self.relocated_modules = set()
+        for source, target in mapping.relocations.values():
+            self.relocated_modules |= {mapping.module(source), target}
+            self.join(mapping.module(source), target)
+
+    def find(self, module):
+        while self.parent.get(module, module) != module:
+            module = self.parent[module]
+        return module
+
+    def join(self, a, b):
+        a, b = self.find(a), self.find(b)
+        if a != b:
+            self.parent[max(a, b)] = min(a, b)
+
+    def component(self, module, side):
+        if module is None:
+            return None
+        return self.find(self.mapping.module(module) if side == 'before' else module)
+
+    def respell(self, spelling, decl, path):
+        """The apply tool's names-only respelling of a quoted spelling of `decl`."""
+        new = self.name(decl)
+        if new == decl:
+            return spelling
+        try:
+            return APPLY.replacement(spelling, decl, new, self.mapping)
+        except ValueError as error:
+            raise Mismatch(f'{path}: quoted spelling {spelling!r} of {decl} has no names-only '
+                           f'respelling under the map: {error}') from error
+
+    def quoted(self, value, path):
+        """Expected after-side spelling and raw marker of a before-side quotation."""
+        decoded, spelling, raw = value[1], value[2], value[3]
+        decls = [d[1][1] for d in decoded if d[0] == 'decl']
+        expected = {self.respell(spelling, d, path) for d in decls}
+        if len(expected) != 1:
+            raise Mismatch(f'{path}: quoted spelling {spelling!r} respells ambiguously: {sorted(expected)}')
+        return next(iter(expected)), self.raw_marker(raw, spelling)
+
+    @staticmethod
+    def raw_marker(raw, spelling):
+        # The raw text is the spelling up to `«»` escapes, or else literal.
+        return ['rawSpelling'] if raw and plain_spelling(raw) == spelling else ['raw', raw]
 
     def name(self, name):
         if '@' in name:  # A per-module key for colliding independent roots.
@@ -270,6 +375,18 @@ class Comparison:
         return self.mapping.module(module)
 
     def compare(self, left, right, path):
+        if isinstance(left, list) and len(left) == 5 and left[0] == 'quotedIdentifier':
+            if not (isinstance(right, list) and len(right) == 5 and right[0] == 'quotedIdentifier'):
+                raise Mismatch(f'{path}: quoted identifier changed kind')
+            spelling, raw = self.quoted(left, path)
+            if right[2] != spelling:
+                raise Mismatch(f'{path}: quoted spelling {left[2]!r} became {right[2]!r}, '
+                               f'expected {spelling!r} (Syntax.getId observes it)')
+            if self.raw_marker(right[3], right[2]) != raw:
+                raise Mismatch(f'{path}: quoted raw text {left[3]!r} became {right[3]!r}')
+            self.compare(left[1], right[1], f'{path}.preresolved')
+            self.compare(left[4], right[4], f'{path}.syntax')
+            return
         if isinstance(left, list) and len(left) == 2 and left[0] == 'name':
             if not isinstance(right, list) or len(right) != 2 or right[0] != 'name':
                 raise Mismatch(f'{path}: name reference changed kind')
@@ -310,6 +427,11 @@ class Comparison:
             return {k: self.normalize(v, side, coarse) for k, v in value.items()}
         if not isinstance(value, list):
             return value
+        if len(value) == 5 and value[0] == 'quotedIdentifier':
+            spelling, raw = (self.quoted(value, 'normalize') if side == 'before'
+                             else (value[2], self.raw_marker(value[3], value[2])))
+            return ['quotedIdentifier', self.normalize(value[1], side, coarse), spelling, raw,
+                    self.normalize(value[4], side, coarse)]
         if len(value) == 2 and value[0] == 'name':
             name = value[1]
             generated = self.generated_left if side == 'before' else self.generated_right
@@ -318,6 +440,27 @@ class Comparison:
             return ['name', self.pairs[name] if side == 'before' and name in generated
                     else self.name(name) if side == 'before' else name]
         return [self.normalize(item, side, coarse) for item in value]
+
+    def compare_imports(self):
+        """Direct imports of every module that no relocation row touches are
+        unchanged under module rows. Imports of relocation modules may change
+        (a moved declaration brings its imports), elsewhere only by edges to
+        relocation modules (a user of the moved declaration imports its new
+        module)."""
+        touched = self.relocated_modules
+        after = self.after.get('modules') or {}
+        for module, imports in sorted((self.before.get('modules') or {}).items()):
+            target = self.mapping.module(module)
+            if target in touched:
+                continue
+            if target not in after:
+                raise Mismatch(f'module {module} (as {target}) is missing after renaming')
+            expected = [[self.mapping.module(entry[0])] + list(entry[1:]) for entry in imports
+                        if self.mapping.module(entry[0]) not in touched]
+            actual = [list(entry) for entry in after[target] if entry[0] not in touched]
+            if expected != actual:
+                raise Mismatch(f'module {module}: direct imports changed: expected '
+                               f'{[e[0] for e in expected]}, found {[e[0] for e in actual]}')
 
     def run(self):
         expected = {self.name(n) for n in self.before['roots']}
@@ -373,11 +516,36 @@ class Comparison:
                                (f'; same-name comparison: {same_error}' if same_error else ''))
         if self.right.keys() != self.reverse.keys():
             raise Mismatch('additional generated constants after renaming')
-        for key in ('guards', 'attributes', 'checks'):
-            left = Counter(encoded(self.normalize(item, 'before')) for item in self.before.get(key, []))
-            right = Counter(encoded(item) for item in self.after.get(key, []))
+        # Generated constants (equation lemmas, compiler-named instances) stay
+        # in the modules that hold them, up to module and relocation rows.
+        left_holders, right_holders = self.before.get('holders'), self.after.get('holders')
+        if left_holders is not None and right_holders is not None:
+            for a, b in sorted(self.pairs.items()):
+                if a not in self.generated_left or a not in left_holders or b not in right_holders:
+                    continue
+                was = {self.component(m, 'before') for m in left_holders[a]}
+                now = {self.component(m, 'after') for m in right_holders[b]}
+                if was != now:
+                    raise Mismatch(f'generated constant {a} (now {b}): modules {sorted(left_holders[a])} '
+                                   f'became {sorted(right_holders[b])}')
+        # Checks, guards and attribute commands stay in their (renamed) module,
+        # or move only between the two modules of a relocation row.
+        for key in ITEMS:
+            def tagged(snapshot, side):
+                items = snapshot.get(key, [])
+                owners = (snapshot.get('item_modules') or {}).get(key) or [None] * len(items)
+                if len(owners) != len(items):
+                    raise ValueError(f'{key}: module record does not match its items')
+                # The after side keeps its names; normalizing it only reduces a
+                # quoted identifier's raw text to its spelling marker.
+                return Counter(encoded([self.component(m, side), self.normalize(item, side)])
+                               for m, item in zip(owners, items))
+            left, right = tagged(self.before, 'before'), tagged(self.after, 'after')
             if left != right:
-                raise Mismatch(f'{key}: expression/command multiset changed (missing {sum((left-right).values())}, extra {sum((right-left).values())})')
+                where = sorted({json.loads(k)[0] or '<module unrecorded>' for k in (left - right) + (right - left)})
+                raise Mismatch(f'{key}: expression/command multiset changed (missing {sum((left-right).values())}, '
+                               f'extra {sum((right-left).values())}; modules {where})')
+        self.compare_imports()
         return dict(status='OK', scope='exported-modules',
                     authored_constants=len(self.before['roots']), generated_constants=len(self.generated_left),
                     guards=len(self.before['guards']), attribute_commands=len(self.before['attributes']),

@@ -152,8 +152,7 @@ def read_environments(paths, modules, selected, bundles=None):
     bundles = bundles if bundles is not None else read_bundles(paths)
     result = {}
     for root, members in environments(modules, selected).items():
-        merged = dict(constants={}, roots=set(), guards=[], attributes=[],
-                      modules={}, receipts=[], checks=[], version=None, coalesced_equations=[], owners={})
+        merged = empty_environment()
         for member in members:
             data = bundles[member]
             if merged['version'] is not None and merged['version'] != data['version']:
@@ -169,45 +168,70 @@ def read_environments(paths, modules, selected, bundles=None):
             merged['modules'].update(data['modules'])
             for name, owner in data.get('owners', {}).items():
                 merged['owners'].setdefault(name, owner)
-            for field in ('guards', 'attributes', 'receipts', 'checks'):
-                merged[field].extend(data[field])
+            for name, modules in data.get('holders', {}).items():
+                merged['holders'].setdefault(name, set()).update(modules)
+            extend_items(merged, data)
         result[root] = merged
     if not result:
         raise ValueError('no captured source environments')
     return result
 
 
+def empty_environment():
+    return dict(constants={}, roots=set(), guards=[], attributes=[], modules={}, receipts=[],
+                checks=[], version=None, coalesced_equations=[], owners={}, holders={},
+                item_modules={key: [] for key in FIDELITY.ITEMS}, schemas=set())
+
+
+def extend_items(merged, data):
+    """Append one module bundle's checks, keeping the module of each."""
+    for field in FIDELITY.ITEMS:
+        merged[field].extend(data[field])
+        owners = (data.get('item_modules') or {}).get(field)
+        if owners is None or len(owners) != len(data[field]):
+            raise ValueError(f'bundle without a module record for its {field}')
+        merged['item_modules'][field].extend(owners)
+    merged['receipts'].extend(data['receipts'])
+    merged['schemas'] |= set(data.get('schemas', ()))
+
+
 def union_environment(bundles):
     """All exported modules as one comparison scope, for relocations that move
-    declarations or checks between independent roots. A name defined in two
-    independent modules (each executable's `main`) is keyed per module."""
-    from collections import Counter
-    counts = Counter(name for data in bundles.values() for name in data['constants'])
-    merged = dict(constants={}, roots=set(), guards=[], attributes=[], modules={}, receipts=[],
-                  checks=[], version=None, coalesced_equations=[], owners={})
+    declarations or checks between independent roots. Checks keep their
+    module (the comparator tags them), so unrelated roots are not pooled.
+    Identical non-authored copies of one name coalesce as within an import
+    environment; any other name defined in two independent modules (each
+    executable's `main`) is keyed per module."""
+    merged = empty_environment()
+    occurrences = {}
     for module, data in sorted(bundles.items()):
         if merged['version'] is not None and merged['version'] != data['version']:
             raise ValueError('mixed Lean versions in capture')
         merged['version'] = data['version']
         for name, constant in data['constants'].items():
-            key = name
-            if counts[name] > 1:
-                existing = merged['constants'].get(name)
-                if not (existing is not None and constant.get('equation_origin') is not None and
-                        existing == constant and name not in data['roots']):
-                    key = f'{name}@{module}'
-            if key == name and name in merged['constants']:
-                merged['coalesced_equations'].append(name)
-            merged['constants'][key] = constant
-            merged['owners'].setdefault(key, module)
-            if name in data['roots']:
-                merged['roots'].add(key)
+            occurrences.setdefault(name, []).append((module, constant, name in data['roots']))
         merged['modules'].update(data['modules'])
-        for field in ('guards', 'attributes', 'receipts', 'checks'):
-            merged[field].extend(data[field])
-    for key in [k for k in merged['constants'] if '@' in k]:
-        if key.rsplit('@', 1)[0] in merged['constants']:
-            raise ValueError(f'colliding name also defined once without collision: {key}')
+        extend_items(merged, data)
+    for name, rows in sorted(occurrences.items()):
+        first = rows[0][1]
+        coalesce = len(rows) > 1 and not any(root for _, _, root in rows) and all(
+            constant == first for _, constant, _ in rows)
+        if len(rows) == 1 or coalesce:
+            merged['constants'][name] = first
+            merged['owners'][name] = rows[0][0]
+            merged['holders'][name] = {module for module, _, _ in rows}
+            if rows[0][2]:
+                merged['roots'].add(name)
+            if coalesce:
+                merged['coalesced_equations'].append(name)
+            continue
+        for module, constant, root in rows:
+            key = f'{name}@{module}'
+            merged['constants'][key] = constant
+            merged['owners'][key] = module
+            merged['holders'][key] = {module}
+            if root:
+                merged['roots'].add(key)
     return merged
 
 
@@ -374,7 +398,7 @@ def capture(args):
         for module in selected:
             target = out / (module + '.export.json')
             data = json.loads(target.read_bytes())
-            if (data['schema_version'] != 6 or data['imports'] != discovery[module]['imports'] or
+            if (data['schema_version'] != FIDELITY.CURRENT_SCHEMA or data['imports'] != discovery[module]['imports'] or
                 FIDELITY.APPLY.module_name(data['index']['module']) != module or
                 data['index']['directImports'] != discovery[module]['direct_imports'] or
                 data['lean_version'] != discovery[module]['lean_version'] or
@@ -434,7 +458,13 @@ def read_snapshot(path, fidelity=True):
         if not export.resolve().is_relative_to(path.parent.resolve()) or file_sha(export) != record['sha256']:
             raise ValueError('export missing, outside snapshot, or digest changed')
         raw = json.loads(export.read_bytes())
-        if (raw['schema_version'] not in (4, 5, 6) or FIDELITY.APPLY.module_name(raw['index']['module']) != module or
+        if fidelity and raw['schema_version'] != FIDELITY.CURRENT_SCHEMA:
+            # Per-declaration attributes, elaboration attributes and instance
+            # order exist only in the current exporter's bundles; planning
+            # reads only sources and references.
+            raise ValueError(f'export {module} has schema {raw["schema_version"]}; recapture with the '
+                             f'current exporter (schema {FIDELITY.CURRENT_SCHEMA})')
+        if (raw['schema_version'] not in (4, 5, 6, 7) or FIDELITY.APPLY.module_name(raw['index']['module']) != module or
             sha(raw['source'].encode()) != candidate['modules'][module]['sha256'] or
             [entry[0] for entry in raw['index']['directImports']] != candidate['modules'][module]['imports']):
             raise ValueError('export source does not match candidate inventory')
@@ -511,15 +541,20 @@ def compare(before, after, mapping, inventory=None):
         raise ValueError('external import artifact boundary changed')
     if before.get('source_only', []) != after.get('source_only', []):
         raise ValueError('source-only root classification changed between candidates')
-    if before['fidelity'].keys() != after['fidelity'].keys():
+    renamer = FIDELITY.MAP.Renamer(mapping['entries'])
+    roots = {renamer.module(root): root for root in before['fidelity']}
+    if roots.keys() != after['fidelity'].keys():
         if not any(row['kind'] in ('module', 'relocation') for row in mapping['entries']):
             raise ValueError('capture environment roots changed without module/relocation rows')
-        # Relocation may move declarations and checks between independent
-        # roots: compare the union of all exported modules, still per module key.
+        # Relocation may move declarations between independent roots: compare
+        # all exported modules as one scope. Constants of independent roots
+        # stay keyed per module, and every check, guard and attribute command
+        # keeps its module, so unrelated roots are not pooled.
         results = {'<union>': FIDELITY.check(union_environment(before['module_bundles']),
                                              union_environment(after['module_bundles']), mapping)}
     else:
-        results = {root: FIDELITY.check(env, after['fidelity'][root], mapping)
+        # Module rows rename roots; each environment is compared with its image.
+        results = {root: FIDELITY.check(env, after['fidelity'][renamer.module(root)], mapping)
                    for root, env in before['fidelity'].items()}
     result = dict(status='OK', environments=results)
     result.update(scope='candidate-affected-local-closure',
