@@ -104,6 +104,51 @@ class NamingApplyTests(unittest.TestCase):
         # Unrenamed, the same compiler-named skip is silent as before.
         self.assertEqual(M.plan_file(text, index, [entry('Pilot.Op.other', 'Pilot.Op.more')]), ([], []))
 
+    def local_capture_index(self, text, commands, locations, fvars=()):
+        index = index_for(text, locations)
+        for name, occurrence, uniq in fvars:
+            start = -1
+            for _ in range(occurrence + 1):
+                start = text.index(name, start + 1)
+            line = text.count('\n', 0, start)
+            col = start - (text.rfind('\n', 0, start) + 1)
+            index['references'][json.dumps({'f': {'i': uniq, 'm': 'Pilot'}})] = {
+                'definition': [line, col, line, col + len(name)], 'usages': []}
+        b = lambda i: len(text[:i].encode())
+        index['naming_syntax'] = dict(version=2, literal_ranges=[], named_arguments=[], namespaces=[], imports=[],
+                                      unresolved_syntax=[], eof_scope=[0, '[anonymous]', []],
+                                      commands=[[b(x), b(y), 'declaration', '[anonymous]', [], [False] * 3]
+                                                for x, y in commands])
+        return index
+
+    def test_structure_field_binder_capture_is_qualified(self):
+        # Later fields see the field `Gas` as a local: `Gas.callStipend` would project it.
+        text = 'structure S where\n  Gas : Nat\n  ok : gCallStipend < Gas\n'
+        index = self.local_capture_index(text, [(0, len(text) - 1)],
+                                         [('Gas', 'Pilot.S.Gas', 0, True), ('gCallStipend', 'Pilot.gCallStipend', 0, False)])
+        stats = {}
+        edits, problems = M.plan_file(text, index, [entry('Pilot.gCallStipend', 'Pilot.Gas.callStipend')], stats=stats)
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['Pilot.Gas.callStipend'])
+        self.assertEqual([s['new'] for s in stats['local_capture_sites']], ['Pilot.Gas.callStipend'])
+
+    def test_local_binder_out_of_scope_does_not_qualify(self):
+        text = 'def f (Gas : Nat) := Gas\ndef g := gCallStipend\n'
+        first = text.index('\n')
+        index = self.local_capture_index(text, [(0, first), (first + 1, len(text) - 1)],
+                                         [('gCallStipend', 'Pilot.gCallStipend', 0, False)],
+                                         fvars=[('Gas', 0, '_uniq.1')])
+        edits, problems = M.plan_file(text, index, [entry('Pilot.gCallStipend', 'Pilot.Gas.callStipend')])
+        self.assertEqual(problems, [])
+        self.assertEqual([e['new'] for e in edits], ['Gas.callStipend'])
+        # The same binder in the site's own command does capture it.
+        text = 'def f (Gas : Nat) := gCallStipend + Gas\n'
+        index = self.local_capture_index(text, [(0, len(text) - 1)],
+                                         [('gCallStipend', 'Pilot.gCallStipend', 0, False)],
+                                         fvars=[('Gas', 0, '_uniq.1')])
+        edits, _ = M.plan_file(text, index, [entry('Pilot.gCallStipend', 'Pilot.Gas.callStipend')])
+        self.assertEqual([e['new'] for e in edits], ['Pilot.Gas.callStipend'])
+
     def test_unresolved_use_is_reported(self):
         text = 'def a (x : Tx) := x.gas\n'
         _, problems = M.plan_file(text, index_for(text, []), [entry()])

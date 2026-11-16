@@ -153,7 +153,7 @@ def plan_sources(root, candidate, bundles, mapping, consumer=False, extra_names=
             raise ValueError('unsupported naming inventory')
         excluded = {row['path']: row for row in inventory['excluded_sources']}
     capture = dict(capture_checked=0, capture_unverifiable=0, capture_requalified=0,
-                   capture_unverifiable_edited=0, quotation_no_global=0)
+                   capture_unverifiable_edited=0, quotation_no_global=0, local_capture_qualified=[])
     for relative in sorted(candidate['files']):
         if not relative.endswith('.lean'):
             continue
@@ -182,7 +182,11 @@ def plan_sources(root, candidate, bundles, mapping, consumer=False, extra_names=
             edits, problems = APPLY.plan_file(text, bundle['index'], mapping['entries'], renamer,
                                               universe, stats)
             for key, value in stats.items():
-                capture[key] += value
+                if key == 'local_capture_sites':
+                    capture.setdefault('local_capture_qualified', []).extend(
+                        dict(path=relative, **site) for site in value)
+                else:
+                    capture[key] += value
         else:
             edits = []
             problems = [dict(start=a, end=b, reason=f'affected token {word!r} has no compiler export')
