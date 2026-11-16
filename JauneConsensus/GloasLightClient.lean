@@ -23,7 +23,7 @@ called, not copied.
 -/
 
 namespace JauneConsensus.Gloas
-open Jaune (Bytes B256)
+open Jaune (Bytes U256)
 open JauneConsensus
 
 variable {P : Preset}
@@ -48,10 +48,10 @@ def EXECUTION_BLOCK_HASH_GINDEX_GLOAS : Nat := 2856
 
 /-- `get_generalized_index(deneb.ExecutionPayloadHeader, "block_hash")`: field 12 of 17 (padded
 to 32). -/
-def BLOCK_HASH_GINDEX_DENEB : Nat := 32 + 12
+def blockHashGindexDeneb : Nat := 32 + 12
 /-- `get_generalized_index(capella.ExecutionPayloadHeader, "block_hash")`: field 12 of 15 (padded
 to 16). -/
-def BLOCK_HASH_GINDEX_CAPELLA : Nat := 16 + 12
+def blockHashGindexCapella : Nat := 16 + 12
 
 -- The branch lengths of `ContainersGloas.lean` are `floorlog2` of these indices.
 #guard floorlog2 CURRENT_SYNC_COMMITTEE_GINDEX_GLOAS == syncCommitteeBranchDepth &&
@@ -68,13 +68,13 @@ def BLOCK_HASH_GINDEX_CAPELLA : Nat := 16 + 12
 def defaultLightClientHeader : LightClientHeader :=
   { beacon := { slot := U64.zero, proposer_index := U64.zero, parent_root := zeroRoot,
                 state_root := zeroRoot, body_root := zeroRoot },
-    execution_block_hash := zeroRoot, execution_branch := zeroRootVec _ }
+    execution_block_hash := zeroRoot, execution_branch := zeroRootVector _ }
 
 /-! ## Fork version and digest -/
 
 /-- `compute_fork_digest` (`specs/fulu/beacon-chain.md`, unchanged in Gloas) with Gloas's
 `compute_fork_version`. -/
-def computeForkDigest (cfg : Config) (gvr : Root) (epoch : Epoch) : M Bytes := do
+def computeForkDigest (cfg : Config) (gvr : Root) (epoch : Epoch) : Fallible Bytes := do
   let version ← Gossip.computeForkVersion cfg epoch
   let base := computeForkDataRoot version gvr
   if epoch.toNat < cfg.FULU_FORK_EPOCH then return base.toBytes.take 4
@@ -84,7 +84,7 @@ def computeForkDigest (cfg : Config) (gvr : Root) (epoch : Epoch) : M Bytes := d
 
 /-- The fork digests a Gloas object can carry: the digest at `GLOAS_FORK_EPOCH` and at every
 later `BLOB_SCHEDULE` epoch. -/
-def forkDigests (cfg : Config) (gvr : Root) : M (List Bytes) := do
+def forkDigests (cfg : Config) (gvr : Root) : Fallible (List Bytes) := do
   let start := cfg.GLOAS_FORK_EPOCH
   let epochs := start :: (cfg.BLOB_SCHEDULE.map (·.EPOCH)).filter (· ≥ start)
   epochs.mapM fun e => do computeForkDigest cfg gvr (← U64.ofNat? e "fork digest epoch")
@@ -96,7 +96,7 @@ private def sliceFrom {α : Type} (xs : List α) (a : Int) : List α :=
   if a < 0 then xs.drop (xs.length - a.natAbs) else xs.drop a.toNat
 
 /-- `get_lc_execution_root` (Gloas). -/
-def getLcExecutionRoot (cfg : Config) (P : Preset) (header : LightClientHeader) : M Root := do
+def getLcExecutionRoot (cfg : Config) (P : Preset) (header : LightClientHeader) : Fallible Root := do
   let epoch := (← computeEpochAtSlot P header.beacon.slot).toNat
   -- [New in Gloas:EIP7732]
   if epoch ≥ cfg.GLOAS_FORK_EPOCH then return header.execution_block_hash
@@ -104,7 +104,7 @@ def getLcExecutionRoot (cfg : Config) (P : Preset) (header : LightClientHeader) 
     if epoch ≥ cfg.DENEB_FORK_EPOCH then do
       if header.beacon.slot == GENESIS_SLOT then
         return hashTreeRoot (defaultExecutionPayloadHeader (P := P))
-      pure BLOCK_HASH_GINDEX_DENEB
+      pure blockHashGindexDeneb
     else if epoch ≥ cfg.CAPELLA_FORK_EPOCH then do
       if header.beacon.slot == GENESIS_SLOT then
         let e : ExecutionPayloadHeader P := defaultExecutionPayloadHeader
@@ -117,7 +117,7 @@ def getLcExecutionRoot (cfg : Config) (P : Preset) (header : LightClientHeader) 
             base_fee_per_gas := e.base_fee_per_gas, block_hash := e.block_hash,
             transactions_root := e.transactions_root, withdrawals_root := e.withdrawals_root }
         return hashTreeRoot c
-      pure BLOCK_HASH_GINDEX_CAPELLA
+      pure blockHashGindexCapella
     else return zeroRoot
   -- [Modified in Gloas:EIP7732]
   let branch := header.execution_branch.toArray.toList
@@ -128,32 +128,32 @@ def getLcExecutionRoot (cfg : Config) (P : Preset) (header : LightClientHeader) 
     (← getSubtreeIndex blockHashGindex).toNat
 
 /-- `is_valid_light_client_header` (Gloas). -/
-def isValidLightClientHeader (cfg : Config) (P : Preset) (header : LightClientHeader) : M Bool := do
+def isValidLightClientHeader (cfg : Config) (P : Preset) (header : LightClientHeader) : Fallible Bool := do
   let epoch := (← computeEpochAtSlot P header.beacon.slot).toNat
   let branch := header.execution_branch.toArray.toList
-  let check (gindex : Nat) : M Bool :=
+  let check (gindex : Nat) : Fallible Bool :=
     isValidNormalizedMerkleBranch header.execution_block_hash branch gindex header.beacon.body_root
   if epoch ≥ cfg.GLOAS_FORK_EPOCH then return ← check EXECUTION_BLOCK_HASH_GINDEX_GLOAS
   if epoch ≥ cfg.DENEB_FORK_EPOCH then return ← check EXECUTION_BLOCK_HASH_GINDEX_DENEB
   if epoch ≥ cfg.CAPELLA_FORK_EPOCH then return ← check EXECUTION_BLOCK_HASH_GINDEX
-  pure (header.execution_block_hash == zeroRoot && header.execution_branch == zeroRootVec _)
+  pure (header.execution_block_hash == zeroRoot && header.execution_branch == zeroRootVector _)
 
 /-- `finalized_root_gindex_at_slot` (Gloas). -/
-def finalizedRootGindexAtSlot (cfg : Config) (P : Preset) (slot : Slot) : M Nat := do
+def finalizedRootGindexAtSlot (cfg : Config) (P : Preset) (slot : Slot) : Fallible Nat := do
   let epoch := (← computeEpochAtSlot P slot).toNat
   if epoch ≥ cfg.GLOAS_FORK_EPOCH then return FINALIZED_ROOT_GINDEX_GLOAS
   if epoch ≥ cfg.ELECTRA_FORK_EPOCH then return FINALIZED_ROOT_GINDEX_ELECTRA
   pure FINALIZED_ROOT_GINDEX
 
 /-- `current_sync_committee_gindex_at_slot` (Gloas). -/
-def currentSyncCommitteeGindexAtSlot (cfg : Config) (P : Preset) (slot : Slot) : M Nat := do
+def currentSyncCommitteeGindexAtSlot (cfg : Config) (P : Preset) (slot : Slot) : Fallible Nat := do
   let epoch := (← computeEpochAtSlot P slot).toNat
   if epoch ≥ cfg.GLOAS_FORK_EPOCH then return CURRENT_SYNC_COMMITTEE_GINDEX_GLOAS
   if epoch ≥ cfg.ELECTRA_FORK_EPOCH then return CURRENT_SYNC_COMMITTEE_GINDEX_ELECTRA
   pure CURRENT_SYNC_COMMITTEE_GINDEX
 
 /-- `next_sync_committee_gindex_at_slot` (Gloas). -/
-def nextSyncCommitteeGindexAtSlot (cfg : Config) (P : Preset) (slot : Slot) : M Nat := do
+def nextSyncCommitteeGindexAtSlot (cfg : Config) (P : Preset) (slot : Slot) : Fallible Nat := do
   let epoch := (← computeEpochAtSlot P slot).toNat
   if epoch ≥ cfg.GLOAS_FORK_EPOCH then return NEXT_SYNC_COMMITTEE_GINDEX_GLOAS
   if epoch ≥ cfg.ELECTRA_FORK_EPOCH then return NEXT_SYNC_COMMITTEE_GINDEX_ELECTRA
@@ -173,25 +173,25 @@ structure LightClientStore (P : Preset) where
 
 /-- `is_sync_committee_update`. -/
 def isSyncCommitteeUpdate (u : LightClientUpdate P) : Bool :=
-  !(u.next_sync_committee_branch == zeroRootVec _)
+  !(u.next_sync_committee_branch == zeroRootVector _)
 
 /-- `is_finality_update`. -/
 def isFinalityUpdate (u : LightClientUpdate P) : Bool :=
-  !(u.finality_branch == zeroRootVec _)
+  !(u.finality_branch == zeroRootVector _)
 
 /-- `is_next_sync_committee_known`. -/
 def isNextSyncCommitteeKnown (s : LightClientStore P) : Bool :=
   !(s.next_sync_committee == defaultSyncCommittee)
 
 /-- `get_safety_threshold`. -/
-def getSafetyThreshold (s : LightClientStore P) : M U64 := do
+def getSafetyThreshold (s : LightClientStore P) : Fallible U64 := do
   let m := if s.previous_max_active_participants < s.current_max_active_participants then
     s.current_max_active_participants else s.previous_max_active_participants
-  U64.div? m (← c64 2) "get_safety_threshold"
+  U64.div? m (← u64Checked 2) "get_safety_threshold"
 
 /-- `initialize_light_client_store` (Altair). -/
 def initializeLightClientStore (cfg : Config) (trustedBlockRoot : Root)
-    (bootstrap : LightClientBootstrap P) : M (LightClientStore P) := do
+    (bootstrap : LightClientBootstrap P) : Fallible (LightClientStore P) := do
   require (← isValidLightClientHeader cfg P bootstrap.header)
     "initialize_light_client_store: header"
   require (hashTreeRoot bootstrap.header.beacon == trustedBlockRoot)
@@ -208,8 +208,8 @@ def initializeLightClientStore (cfg : Config) (trustedBlockRoot : Root)
 
 /-- `validate_light_client_update` (Altair). -/
 def validateLightClientUpdate (ctx : Ctx) (store : LightClientStore P) (update : LightClientUpdate P)
-    (currentSlot : Slot) (genesisValidatorsRoot : Root) : M Unit := do
-  let cfg := ctx.cfg
+    (currentSlot : Slot) (genesisValidatorsRoot : Root) : Fallible Unit := do
+  let cfg := ctx.config
   let site := "validate_light_client_update"
   let sa := update.sync_aggregate
   require (bitCount sa.sync_committee_bits ≥ P.MIN_SYNC_COMMITTEE_PARTICIPANTS) s!"{site}: participants"
@@ -271,7 +271,7 @@ def validateLightClientUpdate (ctx : Ctx) (store : LightClientStore P) (update :
 
 /-- `apply_light_client_update` (Altair). -/
 def applyLightClientUpdate (store : LightClientStore P) (update : LightClientUpdate P) :
-    M (LightClientStore P) := do
+    Fallible (LightClientStore P) := do
   let site := "apply_light_client_update"
   let storePeriod ← computeSyncCommitteePeriodAtSlot P store.finalized_header.beacon.slot
   let finalizedPeriod ← computeSyncCommitteePeriodAtSlot P update.finalized_header.beacon.slot
@@ -295,8 +295,8 @@ def applyLightClientUpdate (store : LightClientStore P) (update : LightClientUpd
 
 /-- `process_light_client_store_force_update` (Altair). -/
 def processLightClientStoreForceUpdate (store : LightClientStore P) (currentSlot : Slot) :
-    M (LightClientStore P) := do
-  let timeout ← U64.add? store.finalized_header.beacon.slot (← c64 P.UPDATE_TIMEOUT)
+    Fallible (LightClientStore P) := do
+  let timeout ← U64.add? store.finalized_header.beacon.slot (← u64Checked P.UPDATE_TIMEOUT)
     "process_light_client_store_force_update"
   match store.best_valid_update with
   | some best =>
@@ -309,7 +309,7 @@ def processLightClientStoreForceUpdate (store : LightClientStore P) (currentSlot
   | none => pure store
 
 /-- `is_better_update` (Altair). -/
-def isBetterUpdate (P : Preset) (newU oldU : LightClientUpdate P) : M Bool := do
+def isBetterUpdate (P : Preset) (newU oldU : LightClientUpdate P) : Fallible Bool := do
   let maxActive := newU.sync_aggregate.sync_committee_bits.bits.size
   let newN := bitCount newU.sync_aggregate.sync_committee_bits
   let oldN := bitCount oldU.sync_aggregate.sync_committee_bits
@@ -342,7 +342,7 @@ def isBetterUpdate (P : Preset) (newU oldU : LightClientUpdate P) : M Bool := do
 
 /-- `process_light_client_update` (Altair). -/
 def processLightClientUpdate (ctx : Ctx) (store : LightClientStore P) (update : LightClientUpdate P)
-    (currentSlot : Slot) (genesisValidatorsRoot : Root) : M (LightClientStore P) := do
+    (currentSlot : Slot) (genesisValidatorsRoot : Root) : Fallible (LightClientStore P) := do
   validateLightClientUpdate ctx store update currentSlot genesisValidatorsRoot
   let bits := update.sync_aggregate.sync_committee_bits
   let n := bitCount bits
@@ -374,11 +374,11 @@ def processLightClientUpdate (ctx : Ctx) (store : LightClientStore P) (update : 
 /-- `process_light_client_finality_update` (Altair). -/
 def processLightClientFinalityUpdate (ctx : Ctx) (store : LightClientStore P)
     (finalityUpdate : LightClientFinalityUpdate P) (currentSlot : Slot)
-    (genesisValidatorsRoot : Root) : M (LightClientStore P) := do
+    (genesisValidatorsRoot : Root) : Fallible (LightClientStore P) := do
   let update : LightClientUpdate P :=
     { attested_header := finalityUpdate.attested_header,
       next_sync_committee := defaultSyncCommittee,
-      next_sync_committee_branch := zeroRootVec _,
+      next_sync_committee_branch := zeroRootVector _,
       finalized_header := finalityUpdate.finalized_header,
       finality_branch := finalityUpdate.finality_branch,
       sync_aggregate := finalityUpdate.sync_aggregate,
@@ -388,13 +388,13 @@ def processLightClientFinalityUpdate (ctx : Ctx) (store : LightClientStore P)
 /-- `process_light_client_optimistic_update` (Altair). -/
 def processLightClientOptimisticUpdate (ctx : Ctx) (store : LightClientStore P)
     (optimisticUpdate : LightClientOptimisticUpdate P) (currentSlot : Slot)
-    (genesisValidatorsRoot : Root) : M (LightClientStore P) := do
+    (genesisValidatorsRoot : Root) : Fallible (LightClientStore P) := do
   let update : LightClientUpdate P :=
     { attested_header := optimisticUpdate.attested_header,
       next_sync_committee := defaultSyncCommittee,
-      next_sync_committee_branch := zeroRootVec _,
+      next_sync_committee_branch := zeroRootVector _,
       finalized_header := defaultLightClientHeader,
-      finality_branch := zeroRootVec _,
+      finality_branch := zeroRootVector _,
       sync_aggregate := optimisticUpdate.sync_aggregate,
       signature_slot := optimisticUpdate.signature_slot }
   processLightClientUpdate ctx store update currentSlot genesisValidatorsRoot

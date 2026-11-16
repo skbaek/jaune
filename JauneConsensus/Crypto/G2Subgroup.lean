@@ -22,25 +22,25 @@ namespace JauneConsensus
 open Jaune
 
 /-- `xi = 1 + u`, the twisting element (`E'`: `y^2 = x^3 + 4 xi`). -/
-def blsXi : BLSF2 := BLSF2.mk 1 1
+def blsXi : Bls12Fp2 := Bls12Fp2.mk 1 1
 
 /-- The Frobenius `x ↦ x^p` on `Fp2`: `c0 + c1 u ↦ c0 - c1 u`. -/
-def f2Frob (x : BLSF2) : BLSF2 :=
-  let cs := List.takeRightV 2 x.val (0 : BLSF)
-  BLSF2.mk cs[1].val (blsPrime - cs[0].val)
+def fp2Frobenius (x : Bls12Fp2) : Bls12Fp2 :=
+  let cs := List.takeRightV 2 x.val (0 : Bls12Fp)
+  Bls12Fp2.mk cs[1].val (blsPrime - cs[0].val)
 
 /-- `psi`'s coefficients `xi^(-(p-1)/3)` and `xi^(-(p-1)/2)`: Jaune's twist divides by
 `w^2` and `w^3` with `w^6 = xi`, so untwisting, applying Frobenius and twisting back
 multiplies `x^p` by `w^(2 - 2p)` and `y^p` by `w^(3 - 3p)`. -/
-def psiCx : BLSF2 := (blsXi ^ ((blsPrime - 1) / 3))⁻¹
-def psiCy : BLSF2 := (blsXi ^ ((blsPrime - 1) / 2))⁻¹
+def psiCoefficientX : Bls12Fp2 := (blsXi ^ ((blsPrime - 1) / 3))⁻¹
+def psiCoefficientY : Bls12Fp2 := (blsXi ^ ((blsPrime - 1) / 2))⁻¹
 
 /-- The endomorphism `psi` on `E'`. -/
-def g2Psi (p : BLSP2) : BLSP2 :=
-  if p = ⟨0, 0⟩ then p else ⟨f2Frob p.x * psiCx, f2Frob p.y * psiCy⟩
+def g2Psi (p : Bls12G2) : Bls12G2 :=
+  if p = ⟨0, 0⟩ then p else ⟨fp2Frobenius p.x * psiCoefficientX, fp2Frobenius p.y * psiCoefficientY⟩
 
 /-- G2 membership for a point of `E'`: `psi(P) = [t] P` with `t = -blsAteLoopCount`. -/
-def g2SubgroupCheckFast (p : BLSP2) : Bool :=
+def g2SubgroupCheckFast (p : Bls12G2) : Bool :=
   g2Psi p = -(p.mulBy blsAteLoopCount)
 
 end JauneConsensus

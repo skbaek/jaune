@@ -41,44 +41,44 @@ withdrawal conversion, `JauneConsensus/Engine.lean`). A projection: no arithmeti
 theorem toNat_lt (x : U64) : x.toNat < 2 ^ 64 := x.u64.toNat_lt
 
 /-- `uint64(n)`: rejects with `Reject.overflow` when `n ≥ 2^64`. -/
-@[inline] def ofNat? (n : Nat) (site : String := "uint64") : M U64 :=
+@[inline] def ofNat? (n : Nat) (site : String := "uint64") : Fallible U64 :=
   if n < 2 ^ 64 then pure ⟨n.toUInt64⟩ else throw (.overflow site)
 
 /-- A value known to fit. -/
 @[inline] def ofNatLt (n : Nat) (_h : n < 2 ^ 64) : U64 := ⟨n.toUInt64⟩
 
 /-- A literal known to fit; the bound is checked by the kernel at the use site. -/
-@[inline] def lit (n : Nat) (_h : n < 2 ^ 64 := by decide) : U64 := ⟨n.toUInt64⟩
+@[inline] def literal (n : Nat) (_h : n < 2 ^ 64 := by decide) : U64 := ⟨n.toUInt64⟩
 
 def zero : U64 := ⟨0⟩
 def one : U64 := ⟨1⟩
 def max : U64 := ⟨0xFFFFFFFFFFFFFFFF⟩
 
 /-- `a + b` on `uint64`; rejects when the sum is at least `2^64`. -/
-@[inline] def add? (a b : U64) (site : String := "uint64 add") : M U64 :=
+@[inline] def add? (a b : U64) (site : String := "uint64 add") : Fallible U64 :=
   ofNat? (a.toNat + b.toNat) site
 
 /-- `a - b` on `uint64`; rejects when `b > a`. -/
-@[inline] def sub? (a b : U64) (site : String := "uint64 sub") : M U64 :=
+@[inline] def sub? (a b : U64) (site : String := "uint64 sub") : Fallible U64 :=
   if b.toNat ≤ a.toNat then pure ⟨(a.toNat - b.toNat).toUInt64⟩ else throw (.underflow site)
 
 /-- `a * b` on `uint64`; rejects when the product is at least `2^64`. -/
-@[inline] def mul? (a b : U64) (site : String := "uint64 mul") : M U64 :=
+@[inline] def mul? (a b : U64) (site : String := "uint64 mul") : Fallible U64 :=
   ofNat? (a.toNat * b.toNat) site
 
 /-- `a // b` on `uint64`; rejects when `b = 0`. -/
-@[inline] def div? (a b : U64) (site : String := "uint64 div") : M U64 :=
+@[inline] def div? (a b : U64) (site : String := "uint64 div") : Fallible U64 :=
   if b.toNat = 0 then throw (.divByZero site) else pure ⟨(a.toNat / b.toNat).toUInt64⟩
 
 /-- `a % b` on `uint64`; rejects when `b = 0`. -/
-@[inline] def mod? (a b : U64) (site : String := "uint64 mod") : M U64 :=
+@[inline] def mod? (a b : U64) (site : String := "uint64 mod") : Fallible U64 :=
   if b.toNat = 0 then throw (.divByZero site) else pure ⟨(a.toNat % b.toNat).toUInt64⟩
 
 /-- `a >> k` on `uint64` (never fails). -/
 @[inline] def shiftRight (a : U64) (k : Nat) : U64 := ⟨(a.toNat >>> k).toUInt64⟩
 
 /-- `a << k` on `uint64`; remerkleable raises when bits leave the type. -/
-@[inline] def shiftLeft? (a : U64) (k : Nat) (site : String := "uint64 shl") : M U64 :=
+@[inline] def shiftLeft? (a : U64) (k : Nat) (site : String := "uint64 shl") : Fallible U64 :=
   ofNat? (a.toNat <<< k) site
 
 /-- Bitwise `&`, `|`, `^` on `uint64` (never fail). -/
@@ -141,7 +141,7 @@ instance : Repr (UIntN n) := ⟨fun x _ => repr x.toNat⟩
 instance : ToString (UIntN n) := ⟨fun x => toString x.toNat⟩
 
 /-- `uintN(v)`: rejects with `Reject.overflow` when `v ≥ 2^(8n)`. -/
-@[inline] def ofNat? (v : Nat) (site : String := "uintN") : M (UIntN n) :=
+@[inline] def ofNat? (v : Nat) (site : String := "uintN") : Fallible (UIntN n) :=
   if h : v < 2 ^ (8 * n) then pure ⟨v, h⟩ else throw (.overflow site)
 
 def zero : UIntN n := ⟨0, Nat.two_pow_pos _⟩
@@ -151,21 +151,21 @@ instance : Inhabited (UIntN n) := ⟨zero⟩
 /-- The largest value, `2^(8n) - 1` (for example pyspec `UINT256_MAX`). -/
 def max : UIntN n := ⟨2 ^ (8 * n) - 1, Nat.sub_lt (Nat.two_pow_pos _) (by decide)⟩
 
-@[inline] def add? (a b : UIntN n) (site : String := "uintN add") : M (UIntN n) :=
+@[inline] def add? (a b : UIntN n) (site : String := "uintN add") : Fallible (UIntN n) :=
   ofNat? (a.toNat + b.toNat) site
 
-@[inline] def sub? (a b : UIntN n) (site : String := "uintN sub") : M (UIntN n) :=
+@[inline] def sub? (a b : UIntN n) (site : String := "uintN sub") : Fallible (UIntN n) :=
   if b.toNat ≤ a.toNat then pure ⟨a.toNat - b.toNat, Nat.lt_of_le_of_lt (Nat.sub_le _ _) a.isLt⟩
   else throw (.underflow site)
 
-@[inline] def mul? (a b : UIntN n) (site : String := "uintN mul") : M (UIntN n) :=
+@[inline] def mul? (a b : UIntN n) (site : String := "uintN mul") : Fallible (UIntN n) :=
   ofNat? (a.toNat * b.toNat) site
 
-@[inline] def div? (a b : UIntN n) (site : String := "uintN div") : M (UIntN n) :=
+@[inline] def div? (a b : UIntN n) (site : String := "uintN div") : Fallible (UIntN n) :=
   if b.toNat = 0 then throw (.divByZero site)
   else pure ⟨a.toNat / b.toNat, Nat.lt_of_le_of_lt (Nat.div_le_self _ _) a.isLt⟩
 
-@[inline] def mod? (a b : UIntN n) (site : String := "uintN mod") : M (UIntN n) :=
+@[inline] def mod? (a b : UIntN n) (site : String := "uintN mod") : Fallible (UIntN n) :=
   if b.toNat = 0 then throw (.divByZero site)
   else pure ⟨a.toNat % b.toNat, Nat.lt_of_le_of_lt (Nat.mod_le _ _) a.isLt⟩
 
@@ -196,25 +196,25 @@ so it lives here, beside the other raw-word code. -/
 open Jaune
 
 /-- `Bytes.toB256.go` over the bytes `[i, i + n)` of a scope, read by index (no list). -/
-def b256GoAt (bs : Array UInt8) : Nat → Nat → UInt64 → UInt64 → UInt64 → UInt64 → B256
+def u256GoAt (bs : Array UInt8) : Nat → Nat → UInt64 → UInt64 → UInt64 → UInt64 → Jaune.U256
   | 0, _, l3, l2, l1, l0 => ⟨⟨l3, l2⟩, ⟨l1, l0⟩⟩
   | n + 1, i, l3, l2, l1, l0 =>
     match bs[i]? with
-    | some b => b256GoAt bs n (i + 1) ((l3 <<< 8) ||| (l2 >>> 56)) ((l2 <<< 8) ||| (l1 >>> 56))
+    | some b => u256GoAt bs n (i + 1) ((l3 <<< 8) ||| (l2 >>> 56)) ((l2 <<< 8) ||| (l1 >>> 56))
         ((l1 <<< 8) ||| (l0 >>> 56)) ((l0 <<< 8) ||| b.toUInt64)
     | none => ⟨⟨l3, l2⟩, ⟨l1, l0⟩⟩
 
-theorem b256GoAt_eq (bs : Array UInt8) : ∀ (n i : Nat) (l3 l2 l1 l0 : UInt64),
-    b256GoAt bs n i l3 l2 l1 l0 = Bytes.toB256.go l3 l2 l1 l0 ((bs.toList.drop i).take n)
-  | 0, _, _, _, _, _ => by simp [b256GoAt, Bytes.toB256.go]; rfl
+theorem u256GoAt_eq (bs : Array UInt8) : ∀ (n i : Nat) (l3 l2 l1 l0 : UInt64),
+    u256GoAt bs n i l3 l2 l1 l0 = Bytes.toU256.go l3 l2 l1 l0 ((bs.toList.drop i).take n)
+  | 0, _, _, _, _, _ => by simp [u256GoAt, Bytes.toU256.go]; rfl
   | n + 1, i, l3, l2, l1, l0 => by
-    unfold b256GoAt
+    unfold u256GoAt
     by_cases h : i < bs.size
     · rw [Array.getElem?_eq_getElem h, List.drop_eq_getElem_cons (by simpa using h)]
-      simp only [List.take_succ_cons, Bytes.toB256.go, Array.getElem_toList]
-      exact b256GoAt_eq bs n (i + 1) _ _ _ _
+      simp only [List.take_succ_cons, Bytes.toU256.go, Array.getElem_toList]
+      exact u256GoAt_eq bs n (i + 1) _ _ _ _
     · rw [Array.getElem?_eq_none (by omega), List.drop_eq_nil_of_le (by simpa using h)]
-      simp [Bytes.toB256.go]; rfl
+      simp [Bytes.toU256.go]; rfl
 
 /-! ## W2a bridging lemmas
 
@@ -460,13 +460,13 @@ theorem u64_toBytes_ofBytes (a b c d e f g h : UInt8) :
   rfl
 
 /-- `toBytes ∘ toB256` is the identity on 32-byte lists. -/
-theorem b256_toBytes_toB256 (l : Jaune.Bytes) (hl : l.length = 32) :
-    (Jaune.Bytes.toB256 l).toBytes = l := by
+theorem bytes_toU256_toBytes (l : Jaune.Bytes) (hl : l.length = 32) :
+    (Jaune.Bytes.toU256 l).toBytes = l := by
   match l, hl with
   | [a0, a1, a2, a3, a4, a5, a6, a7, b0, b1, b2, b3, b4, b5, b6, b7,
      c0, c1, c2, c3, c4, c5, c6, c7, d0, d1, d2, d3, d4, d5, d6, d7], _ =>
-    simp only [Jaune.Bytes.toB256, Jaune.Bytes.toB256_go_eight_cons]
-    simp only [Jaune.Bytes.toB256.go, Jaune.B256.toBytes, Jaune.B128.toBytes, u64_toBytes_ofBytes]
+    simp only [Jaune.Bytes.toU256, Jaune.Bytes.toU256_go_eight_cons]
+    simp only [Jaune.Bytes.toU256.go, Jaune.U256.toBytes, Jaune.U128.toBytes, u64_toBytes_ofBytes]
     rfl
 
 end JauneConsensus

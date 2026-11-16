@@ -23,7 +23,7 @@ def randomChallengeKzgCellBatchDomain : Bytes := "RCKZGCBATCH__V1_".toUTF8.toLis
 
 /-- `cell_to_coset_evals(cell)`. -/
 def cellToCosetEvals (cell : Bytes) : Except String (Array Fr) :=
-  ((chunks bytesPerFieldElement cell).take fieldElementsPerCell).toArray.mapM bytesToBlsFieldK
+  ((chunks bytesPerFieldElement cell).take fieldElementsPerCell).toArray.mapM bytesToBlsFieldKernel
 
 /-- `coset_evals_to_cell(coset_evals)`. -/
 def cosetEvalsToCell (cosetEvals : Array Fr) : Bytes :=
@@ -61,7 +61,7 @@ def fftField (vals roots : Array Fr) (inv : Bool := false) : Array Fr :=
     fftFieldAux vals.size vals roots
 
 /-- `shift_vals(vals, factor)`: `[vals[i] * factor^i]`. -/
-def shiftVals (vals : Array Fr) (factor : Fr) : Array Fr :=
+def shiftValues (vals : Array Fr) (factor : Fr) : Array Fr :=
   ((vals.foldl (fun (acc : Array Fr × Fr) v => (acc.1.push (v * acc.2), acc.2 * factor))
     (#[], 1))).1
 
@@ -70,9 +70,9 @@ def cosetFftField (vals roots : Array Fr) (inv : Bool := false) : Array Fr :=
   -- This is the coset generator.
   let shiftFactor : Fr := FinField.ofNat primitiveRootOfUnity
   if inv then
-    shiftVals (fftField vals roots inv) shiftFactor⁻¹
+    shiftValues (fftField vals roots inv) shiftFactor⁻¹
   else
-    fftField (shiftVals vals shiftFactor) roots inv
+    fftField (shiftValues vals shiftFactor) roots inv
 
 /-- `compute_verify_cell_kzg_proof_batch_challenge(...)`. -/
 def computeVerifyCellKzgProofBatchChallenge (commitments : Array Bytes)
@@ -86,11 +86,11 @@ def computeVerifyCellKzgProofBatchChallenge (commitments : Array Bytes)
   for commitment in commitments do
     hashinput := hashinput ++ commitment
   for k in [0:cosetsEvals.size] do
-    hashinput := hashinput ++ i2osp (← idx commitmentIndices k "commitment_indices") 8
-    hashinput := hashinput ++ i2osp (← idx cellIndices k "cell_indices") 8
-    for cosetEval in ← idx cosetsEvals k "cosets_evals" do
+    hashinput := hashinput ++ i2osp (← index commitmentIndices k "commitment_indices") 8
+    hashinput := hashinput ++ i2osp (← index cellIndices k "cell_indices") 8
+    for cosetEval in ← index cosetsEvals k "cosets_evals" do
       hashinput := hashinput ++ blsFieldToBytes cosetEval
-    hashinput := hashinput ++ (← idx proofs k "proofs")
+    hashinput := hashinput ++ (← index proofs k "proofs")
   return hashToBlsField hashinput
 
 /-! ### Polynomials in coefficient form -/
@@ -102,7 +102,7 @@ def rootsOfUnityBlob : Except String (Array Fr) := computeRootsOfUnity fieldElem
 def rootsOfUnityExtended : Except String (Array Fr) := computeRootsOfUnity fieldElementsPerExtBlob
 
 /-- Its bit-reversal permutation, computed once. -/
-def rootsOfUnityExtendedBrp : Except String (Array Fr) := do
+def rootsOfUnityExtendedBitReversal : Except String (Array Fr) := do
   bitReversalPermutation (← rootsOfUnityExtended)
 
 /-- `polynomial_eval_to_coeff(polynomial)`. -/
@@ -123,7 +123,7 @@ def multiplyPolynomialcoeffSpec (a b : Array Fr) : Except String (Array Fr) := d
   kzgAssert (a.size + b.size ≤ fieldElementsPerExtBlob) "multiply_polynomialcoeff: degree"
   let mut r : Array Fr := #[0]
   for power in [0:a.size] do
-    let coef ← idx a power "a"
+    let coef ← index a power "a"
     let summand := Array.replicate power 0 ++ b.map (coef * ·)
     r := addPolynomialcoeff r summand
   return r
@@ -139,9 +139,9 @@ def multiplyPolynomialcoeff (a b : Array Fr) : Except String (Array Fr) := do
   if a.size = 0 then return #[0]
   let mut r : Array Fr := Array.replicate (max 1 (a.size - 1 + b.size)) 0
   for i in [0:a.size] do
-    let ai ← idx a i "a"
+    let ai ← index a i "a"
     for j in [0:b.size] do
-      let bj ← idx b j "b"
+      let bj ← index b j "b"
       r := r.modify (i + j) (· + ai * bj)
   return r
 
@@ -150,17 +150,17 @@ def dividePolynomialcoeff (a b : Array Fr) : Except String (Array Fr) := do
   let mut a := a
   let mut o : Array Fr := #[]   -- quotient coefficients, highest first
   let bpos := b.size - 1
-  let bLead ← idx b bpos "b[bpos]"
+  let bLead ← index b bpos "b[bpos]"
   -- diff runs from len(a) - 1 - bpos down to 0 (none if len(a) <= bpos)
   if b.size ≤ a.size then
     for step in [0:a.size - bpos] do
       let apos := a.size - 1 - step
       let diff := apos - bpos
-      let quot := (← idx a apos "a[apos]") / bLead
+      let quot := (← index a apos "a[apos]") / bLead
       o := o.push quot
       for j in [0:bpos + 1] do
         let i := bpos - j
-        let bi ← idx b i "b[i]"
+        let bi ← index b i "b[i]"
         a := a.modify (diff + i) fun x => x - bi * quot
   return o.reverse
 
@@ -178,12 +178,12 @@ def interpolatePolynomialcoeffSpec (xs ys : Array Fr) : Except String (Array Fr)
   kzgAssert (xs.size = ys.size) "interpolate_polynomialcoeff: lengths"
   let mut r : Array Fr := #[0]
   for i in [0:xs.size] do
-    let mut summand : Array Fr := #[← idx ys i "ys"]
+    let mut summand : Array Fr := #[← index ys i "ys"]
     for j in [0:ys.size] do
       if j ≠ i then
-        let weightAdjustment := ((← idx xs i "xs") - (← idx xs j "xs"))⁻¹
+        let weightAdjustment := ((← index xs i "xs") - (← index xs j "xs"))⁻¹
         summand ← multiplyPolynomialcoeff summand
-          #[-weightAdjustment * (← idx xs j "xs"), weightAdjustment]
+          #[-weightAdjustment * (← index xs j "xs"), weightAdjustment]
     r := addPolynomialcoeff r summand
   return r
 
@@ -199,25 +199,25 @@ def interpolatePolynomialcoeff (xs ys : Array Fr) : Except String (Array Fr) := 
   let z ← vanishingPolynomialcoeff xs          -- length n + 1, monic
   -- denominators prod_{j != i} (xs[i] - xs[j]), inverted together
   let dens ← (List.range n).toArray.mapM fun i => do
-    let xi ← idx xs i "xs"
+    let xi ← index xs i "xs"
     let mut den : Fr := 1
     for j in [0:n] do
-      if j ≠ i then den := den * (xi - (← idx xs j "xs"))
+      if j ≠ i then den := den * (xi - (← index xs j "xs"))
     return den
   let denInv := batchInverse dens
   let mut r : Array Fr := Array.replicate (max 1 n) 0
   for i in [0:n] do
-    let xi ← idx xs i "xs"
+    let xi ← index xs i "xs"
     -- q = Z / (X - xi): q[n-1] = Z[n], q[k-1] = Z[k] + xi * q[k]
     let mut q : Array Fr := Array.replicate n 0
     let mut carry : Fr := 0
     for t in [0:n] do
       let k := n - t
-      carry := (← idx z k "Z") + xi * carry
+      carry := (← index z k "Z") + xi * carry
       q := q.modify (k - 1) fun _ => carry
-    let w := (← idx ys i "ys") * (← idx denInv i "den⁻¹")
+    let w := (← index ys i "ys") * (← index denInv i "den⁻¹")
     for t in [0:n] do
-      let qt ← idx q t "q"
+      let qt ← index q t "q"
       r := r.modify t (· + w * qt)
   return r
 
@@ -228,7 +228,7 @@ def evaluatePolynomialcoeff (polynomialCoeff : Array Fr) (z : Fr) : Fr :=
 /-! ### KZG multiproofs -/
 
 /-- `compute_kzg_proof_multi_impl(polynomial_coeff, zs)`. -/
-def computeKzgProofMultiImpl (polynomialCoeff zs : Array Fr) : Except String (BLSP × Array Fr) := do
+def computeKzgProofMultiImpl (polynomialCoeff zs : Array Fr) : Except String (Bls12G1 × Array Fr) := do
   -- For all points, compute the evaluation of those points
   let ys := zs.map (evaluatePolynomialcoeff polynomialCoeff)
   -- Compute Z(X)
@@ -243,18 +243,18 @@ def computeKzgProofMultiImpl (polynomialCoeff zs : Array Fr) : Except String (BL
 /-- `coset_shift_for_cell(cell_index)`. -/
 def cosetShiftForCell (cellIndex : Nat) : Except String Fr := do
   kzgAssert (cellIndex < cellsPerExtBlob) "coset_shift_for_cell: index"
-  idx (← rootsOfUnityExtendedBrp) (fieldElementsPerCell * cellIndex) "coset_shift_for_cell"
+  index (← rootsOfUnityExtendedBitReversal) (fieldElementsPerCell * cellIndex) "coset_shift_for_cell"
 
 /-- `coset_for_cell(cell_index)`. -/
 def cosetForCell (cellIndex : Nat) : Except String (Array Fr) := do
   kzgAssert (cellIndex < cellsPerExtBlob) "coset_for_cell: index"
-  return (← rootsOfUnityExtendedBrp).extract (fieldElementsPerCell * cellIndex)
+  return (← rootsOfUnityExtendedBitReversal).extract (fieldElementsPerCell * cellIndex)
     (fieldElementsPerCell * (cellIndex + 1))
 
 /-- `verify_cell_kzg_proof_batch_impl(...)`; commitments and proofs as validated
 bytes with their points. -/
-def verifyCellKzgProofBatchImpl (commitments : Array (Bytes × BLSP)) (commitmentIndices cellIndices : Array Nat)
-    (cosetsEvals : Array (Array Fr)) (proofs : Array (Bytes × BLSP)) : Except String Bool := do
+def verifyCellKzgProofBatchImpl (commitments : Array (Bytes × Bls12G1)) (commitmentIndices cellIndices : Array Nat)
+    (cosetsEvals : Array (Array Fr)) (proofs : Array (Bytes × Bls12G1)) : Except String Bool := do
   kzgAssert (commitmentIndices.size = cellIndices.size && cellIndices.size = cosetsEvals.size
     && cosetsEvals.size = proofs.size) "verify_cell_kzg_proof_batch_impl: lengths"
   kzgAssert ((commitments.map (·.1)).toList.eraseDups.length = commitments.size)
@@ -273,37 +273,37 @@ def verifyCellKzgProofBatchImpl (commitments : Array (Bytes × BLSP)) (commitmen
   let ll ← g1Lincomb (proofs.map (·.2)) rPowers
   -- Step 3: Compute LR = [s^n]
   let g2Setup ← kzgSetupG2Monomial
-  let lr ← idx g2Setup n "KZG_SETUP_G2_MONOMIAL[n]"
+  let lr ← index g2Setup n "KZG_SETUP_G2_MONOMIAL[n]"
   -- Step 4.1a: weights[i] = sum of r^k over cells k of commitment i
   let mut weights : Array Fr := Array.replicate numCommitments 0
   for k in [0:numCells] do
-    let i ← idx commitmentIndices k "commitment_indices"
-    let rk ← idx rPowers k "r_powers"
+    let i ← index commitmentIndices k "commitment_indices"
+    let rk ← index rPowers k "r_powers"
     weights := weights.modify i (· + rk)
   -- Step 4.1b: RLC = sum_i weights[i] commitments[i]
   let rlc ← g1Lincomb (commitments.map (·.2)) weights
   -- Step 4.2: RLI = [sum_k r^k interpolation_poly_k(s)]
   let mut sumInterpPolysCoeff : Array Fr := Array.replicate n 0
   for k in [0:numCells] do
-    let interpPolyCoeff ← interpolatePolynomialcoeff (← cosetForCell (← idx cellIndices k "cell_indices"))
-      (← idx cosetsEvals k "cosets_evals")
-    let interpPolyScaledCoeff ← multiplyPolynomialcoeff #[← idx rPowers k "r_powers"] interpPolyCoeff
+    let interpPolyCoeff ← interpolatePolynomialcoeff (← cosetForCell (← index cellIndices k "cell_indices"))
+      (← index cosetsEvals k "cosets_evals")
+    let interpPolyScaledCoeff ← multiplyPolynomialcoeff #[← index rPowers k "r_powers"] interpPolyCoeff
     sumInterpPolysCoeff := addPolynomialcoeff sumInterpPolysCoeff interpPolyScaledCoeff
   let monomial ← kzgSetupG1Monomial
   let rli ← g1Lincomb (monomial.extract 0 n) sumInterpPolysCoeff
   -- Step 4.3: RLP = sum_k (r^k * h_k^n) proofs[k]
   let mut weightedRPowers : Array Fr := #[]
   for k in [0:numCells] do
-    let hK ← cosetShiftForCell (← idx cellIndices k "cell_indices")
+    let hK ← cosetShiftForCell (← index cellIndices k "cell_indices")
     let hKPow := hK ^ n
-    let wrp := (← idx rPowers k "r_powers") * hKPow
+    let wrp := (← index rPowers k "r_powers") * hKPow
     weightedRPowers := weightedRPowers.push wrp
   let rlp ← g1Lincomb (proofs.map (·.2)) weightedRPowers
   -- Step 4.4: RL = RLC - RLI + RLP
   let rl := rlc + -rli
   let rl := rl + rlp
   -- Step 5: Check pairing (LL, LR) = pairing (RL, [1])
-  let g2Setup0 ← idx g2Setup 0 "KZG_SETUP_G2_MONOMIAL[0]"
+  let g2Setup0 ← index g2Setup 0 "KZG_SETUP_G2_MONOMIAL[0]"
   return pairingCheck [(ll, lr), (rl, -g2Setup0)]
 
 /-! ### Cells -/
@@ -372,7 +372,7 @@ def computeCells (blob : Bytes) : Except String (Array Bytes) := do
   return (← cellsFromCoeff polynomialCoeff).map cosetEvalsToCell
 
 /-- The FK20 points `H_0, ..., H_62` of a 4,096-coefficient polynomial. -/
-def fk20H (polynomialCoeff : Array Fr) : Except String (Array BLSP) := do
+def fk20Points (polynomialCoeff : Array Fr) : Except String (Array Bls12G1) := do
   let monomial ← kzgSetupG1Monomial
   let n := fieldElementsPerBlob
   let l := fieldElementsPerCell
@@ -382,7 +382,7 @@ def fk20H (polynomialCoeff : Array Fr) : Except String (Array BLSP) := do
 
 /-- `_fft_field` over G1: the same recursion as `fftFieldAux`, with point addition
 and scalar multiplication by the roots (skipped when the root is 1). -/
-def fftG1Aux : Nat → Array BLSP → Array Fr → Array BLSP
+def fftG1Aux : Nat → Array Bls12G1 → Array Fr → Array Bls12G1
   | 0, vals, _ => vals
   | fuel + 1, vals, roots =>
     if vals.size ≤ 1 then vals else
@@ -400,34 +400,34 @@ def fk20Size : Nat := 2 * (fieldElementsPerBlob / fieldElementsPerCell)
 /-- FK20 setup table, computed once on first use. Write `S_k = [s^k]` and, for each
 residue `r < 64`, `s'_r[t] = S_{64 (62 - t) + r}` (`t < 63`, zero-padded to 128).
 Entry `j` holds the 64 points `FFT_G1(s'_r)[j]`, `r < 64`. -/
-def fk20Table : Thunk (Except String (Array (Array BLSP))) := Thunk.mk fun _ => do
+def fk20Table : Thunk (Except String (Array (Array Bls12G1))) := Thunk.mk fun _ => do
   let monomial ← kzgSetupG1Monomial
   let roots ← computeRootsOfUnity fk20Size
   let blocks := fieldElementsPerBlob / fieldElementsPerCell        -- 64
   let perR ← (List.range fieldElementsPerCell).toArray.mapM fun r => do
     let sPrime ← (List.range (blocks - 1)).toArray.mapM fun t =>
-      idx monomial (fieldElementsPerCell * (blocks - 2 - t) + r) "KZG_SETUP_G1_MONOMIAL"
+      index monomial (fieldElementsPerCell * (blocks - 2 - t) + r) "KZG_SETUP_G1_MONOMIAL"
     let padded := sPrime ++ Array.replicate (fk20Size - sPrime.size) g1Identity
     return fftG1Aux fk20Size padded roots
-  (List.range fk20Size).toArray.mapM fun j => perR.mapM fun pr => idx pr j "fk20 table"
+  (List.range fk20Size).toArray.mapM fun j => perR.mapM fun pr => index pr j "fk20 table"
 
 /-- The FK20 points `H_0, ..., H_62` by Toeplitz products in the frequency domain:
 with `a_r[m] = c_{64 m + r}`, `H_i = sum_r (a_r * s'_r)[63 + i]` (a linear
 convolution of lengths 64 and 63, so the size-128 cyclic one does not wrap), and
 `sum_r FFT(a_r) ⊙ FFT_G1(s'_r)` is 128 MSMs of 64 points followed by one inverse G1
 FFT. `fk20H` (direct MSMs) is the reference. -/
-def fk20HFft (polynomialCoeff : Array Fr) : Except String (Array BLSP) := do
+def fk20PointsFft (polynomialCoeff : Array Fr) : Except String (Array Bls12G1) := do
   let table ← fk20Table.get
   let roots ← computeRootsOfUnity fk20Size
   let blocks := fieldElementsPerBlob / fieldElementsPerCell
   let invSize : Fr := (FinField.ofNat fk20Size : Fr)⁻¹
   let aHat ← (List.range fieldElementsPerCell).toArray.mapM fun r => do
     let ar ← (List.range blocks).toArray.mapM fun m =>
-      idx polynomialCoeff (fieldElementsPerCell * m + r) "polynomial_coeff"
+      index polynomialCoeff (fieldElementsPerCell * m + r) "polynomial_coeff"
     return fftField (ar ++ Array.replicate (fk20Size - blocks) 0) roots
   let u ← (List.range fk20Size).toArray.mapM fun j => do
-    let scalars ← aHat.mapM fun ah => do return (← idx ah j "aHat") * invSize
-    g1Lincomb (← idx table j "fk20 table") scalars
+    let scalars ← aHat.mapM fun ah => do return (← index ah j "aHat") * invSize
+    g1Lincomb (← index table j "fk20 table") scalars
   let rootsInv := (roots.extract 0 1) ++ (roots.extract 1 roots.size).reverse
   let conv := fftG1Aux fk20Size u rootsInv
   return conv.extract (blocks - 1) (2 * blocks - 2)
@@ -440,7 +440,7 @@ def computeCellsAndKzgProofsPolynomialcoeff (polynomialCoeff : Array Fr) :
   if polynomialCoeff.size ≠ fieldElementsPerBlob then
     return ← computeCellsAndKzgProofsPolynomialcoeffSpec polynomialCoeff
   let cells := (← cellsFromCoeff polynomialCoeff).map cosetEvalsToCell
-  let hs ← fk20HFft polynomialCoeff
+  let hs ← fk20PointsFft polynomialCoeff
   -- proof for cell c is sum_i a_c^i H_i with a_c = h_c^64 = omega_128^(rev7(c)):
   -- the bit-reversed G1 FFT of (H_0, ..., H_62, 0, ...).
   let roots ← computeRootsOfUnity fk20Size
@@ -490,7 +490,7 @@ def constructVanishingPolynomial (missingCellIndices : Array Nat) : Except Strin
   let rootsOfUnityReduced ← computeRootsOfUnity cellsPerExtBlob
   -- Compute polynomial that vanishes at all the missing cells (over the small domain)
   let shortZeroPoly ← vanishingPolynomialcoeff (← missingCellIndices.mapM fun m => do
-    idx rootsOfUnityReduced (← reverseBits m cellsPerExtBlob) "roots_of_unity_reduced")
+    index rootsOfUnityReduced (← reverseBits m cellsPerExtBlob) "roots_of_unity_reduced")
   -- Extend vanishing polynomial to full domain
   let mut zeroPolyCoeff : Array Fr := Array.replicate fieldElementsPerExtBlob 0
   for (coeff, i) in shortZeroPoly.toList.zipIdx do

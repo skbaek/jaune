@@ -36,15 +36,15 @@ open Jaune
 
 variable {P : Preset}
 
-private theorem fulu_atLeast_electra : CFork.fulu.atLeast .electra = true := by decide
-private theorem fulu_atLeast_fulu : CFork.fulu.atLeast .fulu = true := by decide
+private theorem fulu_atLeast_electra : ConsensusFork.fulu.atLeast .electra = true := by decide
+private theorem fulu_atLeast_fulu : ConsensusFork.fulu.atLeast .fulu = true := by decide
 
 /-! ## `initialize_ptc_window` -/
 
 /-- `initialize_ptc_window(state)` (fork.md:37): `SLOTS_PER_EPOCH` zero committees for the
 previous epoch, then `compute_ptc` for every slot of the current epoch and the
 `MIN_SEED_LOOKAHEAD` epochs after it. -/
-def initializePtcWindow (state : BeaconState P) : M (PayloadTimelinessCommitteeWindow P) := do
+def initializePtcWindow (state : BeaconState P) : Fallible (PayloadTimelinessCommitteeWindow P) := do
   let site := "initialize_ptc_window"
   let zeroCommittee : PayloadTimelinessCommittee P :=
     ⟨Array.replicate P.PTC_SIZE U64.zero, by simp⟩
@@ -63,7 +63,7 @@ def initializePtcWindow (state : BeaconState P) : M (PayloadTimelinessCommitteeW
 /-- `is_pending_validator(pending_deposits, pubkey)` (beacon-chain.md:1119): some deposit in
 `pendingDeposits` for `pubkey` has a valid deposit signature. -/
 def isPendingValidator (ctx : Ctx) (pendingDeposits : Array PendingDeposit) (pubkey : BLSPubkey) :
-    M Bool := do
+    Fallible Bool := do
   for pendingDeposit in pendingDeposits do
     if pendingDeposit.pubkey != pubkey then continue
     if ← isValidDepositSignature ctx pendingDeposit.pubkey pendingDeposit.withdrawal_credentials
@@ -85,7 +85,7 @@ loop. The branches, in the spec's order:
 3. a builder pubkey: `state.builders[builder_index].balance += deposit.amount`. -/
 def onboardBuilderDeposit (ctx : Ctx) (validatorPubkeys : Array BLSPubkey)
     (acc : BeaconState P × Array PendingDeposit) (deposit : PendingDeposit) :
-    M (BeaconState P × Array PendingDeposit) := do
+    Fallible (BeaconState P × Array PendingDeposit) := do
   let site := "onboard_builders_from_pending_deposits"
   let (state, pendingDeposits) := acc
   -- Deposits for existing validators stay in the pending queue
@@ -117,11 +117,11 @@ def onboardBuilderDeposit (ctx : Ctx) (validatorPubkeys : Array BLSPubkey)
 `onboardBuilderDeposit` over `state.pending_deposits` from an empty accumulator, which becomes
 the new `pending_deposits`. -/
 def onboardBuildersFromPendingDeposits (ctx : Ctx) (state : BeaconState P) :
-    M (BeaconState P) := do
+    Fallible (BeaconState P) := do
   let validatorPubkeys := state.validators.toArray.map (·.pubkey)
   let (state, pendingDeposits) ← state.pending_deposits.toArray.foldlM
     (onboardBuilderDeposit ctx validatorPubkeys) (state, #[])
-  pure { state with pending_deposits := ProgressiveListS.ofArray pendingDeposits }
+  pure { state with pending_deposits := ProgressiveListOnSpine.ofArray pendingDeposits }
 
 /-! ## `upgrade_to_gloas` -/
 
@@ -143,7 +143,7 @@ def defaultPtcWindow : PayloadTimelinessCommitteeWindow P :=
 /-- The `BeaconState(...)` constructor call of `upgrade_to_gloas` (fork.md:138-224): the Fulu
 fields copied (the EIP-7688 lists re-typed as progressive lists), `latest_execution_payload_header`
 replaced by `latest_block_hash`, and the new EIP-7732 fields at their initial values. -/
-def upgradedState (cfg : Config) (pre : JauneConsensus.BeaconState P .fulu) : M (BeaconState P) := do
+def upgradedState (cfg : Config) (pre : JauneConsensus.BeaconState P .fulu) : Fallible (BeaconState P) := do
   let epoch ← JauneConsensus.getCurrentEpoch pre
   let header := pre.latest_execution_payload_header
   pure {
@@ -163,17 +163,17 @@ def upgradedState (cfg : Config) (pre : JauneConsensus.BeaconState P .fulu) : M 
     eth1_data_votes := pre.eth1_data_votes
     eth1_deposit_index := pre.eth1_deposit_index
     -- [Modified in Gloas:EIP7688]
-    validators := ProgressiveListS.ofArray pre.validators.toArray
-    balances := ProgressiveListS.ofArray pre.balances.toArray
+    validators := ProgressiveListOnSpine.ofArray pre.validators.toArray
+    balances := ProgressiveListOnSpine.ofArray pre.balances.toArray
     randao_mixes := pre.randao_mixes
     slashings := pre.slashings
-    previous_epoch_participation := ProgressiveListS.ofArray pre.previous_epoch_participation.toArray
-    current_epoch_participation := ProgressiveListS.ofArray pre.current_epoch_participation.toArray
+    previous_epoch_participation := ProgressiveListOnSpine.ofArray pre.previous_epoch_participation.toArray
+    current_epoch_participation := ProgressiveListOnSpine.ofArray pre.current_epoch_participation.toArray
     justification_bits := pre.justification_bits
     previous_justified_checkpoint := pre.previous_justified_checkpoint
     current_justified_checkpoint := pre.current_justified_checkpoint
     finalized_checkpoint := pre.finalized_checkpoint
-    inactivity_scores := ProgressiveListS.ofArray pre.inactivity_scores.toArray
+    inactivity_scores := ProgressiveListOnSpine.ofArray pre.inactivity_scores.toArray
     current_sync_committee := pre.current_sync_committee
     next_sync_committee := pre.next_sync_committee
     -- [New in Gloas:EIP7732] (`latest_execution_payload_header` removed)
@@ -181,27 +181,27 @@ def upgradedState (cfg : Config) (pre : JauneConsensus.BeaconState P .fulu) : M 
     next_withdrawal_index := pre.next_withdrawal_index
     next_withdrawal_validator_index := pre.next_withdrawal_validator_index
     historical_summaries := pre.historical_summaries
-    deposit_requests_start_index := Gated.get fulu_atLeast_electra pre.deposit_requests_start_index
-    deposit_balance_to_consume := Gated.get fulu_atLeast_electra pre.deposit_balance_to_consume
-    exit_balance_to_consume := Gated.get fulu_atLeast_electra pre.exit_balance_to_consume
-    earliest_exit_epoch := Gated.get fulu_atLeast_electra pre.earliest_exit_epoch
+    deposit_requests_start_index := ForkField.get fulu_atLeast_electra pre.deposit_requests_start_index
+    deposit_balance_to_consume := ForkField.get fulu_atLeast_electra pre.deposit_balance_to_consume
+    exit_balance_to_consume := ForkField.get fulu_atLeast_electra pre.exit_balance_to_consume
+    earliest_exit_epoch := ForkField.get fulu_atLeast_electra pre.earliest_exit_epoch
     consolidation_balance_to_consume :=
-      Gated.get fulu_atLeast_electra pre.consolidation_balance_to_consume
-    earliest_consolidation_epoch := Gated.get fulu_atLeast_electra pre.earliest_consolidation_epoch
+      ForkField.get fulu_atLeast_electra pre.consolidation_balance_to_consume
+    earliest_consolidation_epoch := ForkField.get fulu_atLeast_electra pre.earliest_consolidation_epoch
     -- [Modified in Gloas:EIP7688]
     pending_deposits :=
-      ProgressiveListS.ofArray (Gated.get fulu_atLeast_electra pre.pending_deposits).toArray
+      ProgressiveListOnSpine.ofArray (ForkField.get fulu_atLeast_electra pre.pending_deposits).toArray
     pending_partial_withdrawals :=
-      ProgressiveListS.ofArray (Gated.get fulu_atLeast_electra pre.pending_partial_withdrawals).toArray
+      ProgressiveListOnSpine.ofArray (ForkField.get fulu_atLeast_electra pre.pending_partial_withdrawals).toArray
     pending_consolidations :=
-      ProgressiveListS.ofArray (Gated.get fulu_atLeast_electra pre.pending_consolidations).toArray
-    proposer_lookahead := Gated.get fulu_atLeast_fulu pre.proposer_lookahead
+      ProgressiveListOnSpine.ofArray (ForkField.get fulu_atLeast_electra pre.pending_consolidations).toArray
+    proposer_lookahead := ForkField.get fulu_atLeast_fulu pre.proposer_lookahead
     -- [New in Gloas:EIP7732]
-    builders := ProgressiveListS.empty
+    builders := ProgressiveListOnSpine.empty
     next_withdrawal_builder_index := U64.zero
     execution_payload_availability := allAvailable
     builder_pending_payments := emptyBuilderPendingPayments
-    builder_pending_withdrawals := ProgressiveListS.empty
+    builder_pending_withdrawals := ProgressiveListOnSpine.empty
     latest_execution_payload_bid := {
       parent_block_hash := header.parent_hash
       parent_block_root := pre.latest_block_header.parent_root
@@ -213,16 +213,16 @@ def upgradedState (cfg : Config) (pre : JauneConsensus.BeaconState P .fulu) : M 
       slot := pre.latest_block_header.slot
       value := U64.zero
       execution_payment := U64.zero
-      blob_kzg_commitments := ProgressiveListS.empty
+      blob_kzg_commitments := ProgressiveListOnSpine.empty
       execution_requests_root := Ssz.hashTreeRoot ExecutionRequests.empty }
-    payload_expected_withdrawals := ProgressiveListS.empty
+    payload_expected_withdrawals := ProgressiveListOnSpine.empty
     ptc_window := defaultPtcWindow }
 
 /-- `upgrade_to_gloas(pre)` (fork.md:135): the upgraded state, then
 `post.ptc_window = initialize_ptc_window(post)`, then
 `onboard_builders_from_pending_deposits(post)`. The window is computed before onboarding. -/
-def upgradeToGloas (ctx : Ctx) (pre : JauneConsensus.BeaconState P .fulu) : M (BeaconState P) := do
-  let post ← upgradedState ctx.cfg pre
+def upgradeToGloas (ctx : Ctx) (pre : JauneConsensus.BeaconState P .fulu) : Fallible (BeaconState P) := do
+  let post ← upgradedState ctx.config pre
   -- [New in Gloas:EIP7732]
   let post := { post with ptc_window := ← initializePtcWindow post }
   -- [New in Gloas:EIP7732]
@@ -232,15 +232,15 @@ def upgradeToGloas (ctx : Ctx) (pre : JauneConsensus.BeaconState P .fulu) : M (B
 
 /-- `upgrade_attestation_to_gloas(pre)`. -/
 def upgradeAttestationToGloas (pre : JauneConsensus.Attestation P .fulu) : Attestation P :=
-  { aggregation_bits := ProgressiveBitlistS.ofArray pre.aggregation_bits.bits
+  { aggregation_bits := ProgressiveBitlistOnSpine.ofArray pre.aggregation_bits.bits
     data := pre.data
     signature := pre.signature
-    committee_bits := Gated.get fulu_atLeast_electra pre.committee_bits }
+    committee_bits := ForkField.get fulu_atLeast_electra pre.committee_bits }
 
 /-- `upgrade_indexed_attestation_to_gloas(pre)`. -/
 def upgradeIndexedAttestationToGloas (pre : JauneConsensus.IndexedAttestation P .fulu) :
     IndexedAttestation :=
-  { attesting_indices := ProgressiveListS.ofArray pre.attesting_indices.toArray
+  { attesting_indices := ProgressiveListOnSpine.ofArray pre.attesting_indices.toArray
     data := pre.data
     signature := pre.signature }
 

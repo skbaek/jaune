@@ -24,49 +24,49 @@ open Jaune
 abbrev code (a b : UInt8) : ByteArray := ⟨#[0x60, a, 0x60, b, 0x01, 0x00]⟩
 
 theorem first (a b : UInt8) :
-    Jaune.Ninst.At (code a b) 0 (.push [a] (by simp)) := by
-  simp [Jaune.Ninst.At, code, ByteArray.getInst,
+    Jaune.NextOp.At (code a b) 0 (.push [a] (by simp)) := by
+  simp [Jaune.NextOp.At, code, ByteArray.getOp,
     ← ByteArray.size_data, ByteArray.getElem_eq_getElem_data,
-    UInt8.toInstType, UInt8.highs, UInt8.lows, ByteArray.sliceD, UInt8.toLinst]
+    UInt8.toOpClass, UInt8.highs, UInt8.lows, ByteArray.sliceD, UInt8.toHaltOp]
   rfl
 
 theorem second (a b : UInt8) :
-    Jaune.Ninst.At (code a b) 2 (.push [b] (by simp)) := by
-  simp [Jaune.Ninst.At, code, ByteArray.getInst,
+    Jaune.NextOp.At (code a b) 2 (.push [b] (by simp)) := by
+  simp [Jaune.NextOp.At, code, ByteArray.getOp,
     ← ByteArray.size_data, ByteArray.getElem_eq_getElem_data,
-    UInt8.toInstType, UInt8.highs, UInt8.lows, ByteArray.sliceD, UInt8.toLinst]
+    UInt8.toOpClass, UInt8.highs, UInt8.lows, ByteArray.sliceD, UInt8.toHaltOp]
   rfl
 
 theorem third (a b : UInt8) :
-    Jaune.Rinst.At (code a b) 4 (SymbolicArith.Op.add.rinst) := by
-  simp [Jaune.Rinst.At, SymbolicArith.Op.rinst, code, ByteArray.getInst,
+    Jaune.PlainOp.At (code a b) 4 (SymbolicArith.Op.add.rinst) := by
+  simp [Jaune.PlainOp.At, SymbolicArith.Op.rinst, code, ByteArray.getOp,
     ← ByteArray.size_data, ByteArray.getElem_eq_getElem_data,
-    UInt8.toInstType, UInt8.highs, UInt8.lows, UInt8.toLinst]
+    UInt8.toOpClass, UInt8.highs, UInt8.lows, UInt8.toHaltOp]
   rfl
 
-theorem last (a b : UInt8) : Jaune.Linst.At (code a b) 5 .stop := by
-  simp [Jaune.Linst.At, code, ByteArray.getInst,
+theorem last (a b : UInt8) : Jaune.HaltOp.At (code a b) 5 .stop := by
+  simp [Jaune.HaltOp.At, code, ByteArray.getOp,
     ← ByteArray.size_data, ByteArray.getElem_eq_getElem_data,
-    UInt8.toInstType, UInt8.highs, UInt8.lows, UInt8.toLinst]
+    UInt8.toOpClass, UInt8.highs, UInt8.lows, UInt8.toHaltOp]
   rfl
 
 /-- Start with gas `g` and incoming stack `s`; everything else comes from `base`. -/
-def initial (base : Devm) (g : Nat) (s : List B256) : Devm :=
+def initial (base : Devm) (g : Nat) (s : List U256) : Devm :=
   base.setMach { base.mach with stack := s, gasLeft := g }
 
-def afterFirst (base : Devm) (a : UInt8) (g : Nat) (s : List B256) : Devm :=
+def afterFirst (base : Devm) (a : UInt8) (g : Nat) (s : List U256) : Devm :=
   SymbolicPush.post [a] (initial base g s)
 
-def afterSecond (base : Devm) (a b : UInt8) (g : Nat) (s : List B256) : Devm :=
+def afterSecond (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) : Devm :=
   SymbolicPush.post [b] (afterFirst base a g s)
 
-def finalState (base : Devm) (a b : UInt8) (g : Nat) (s : List B256) : Devm :=
-  SymbolicArith.post .add (Bytes.toB256 [b]) (Bytes.toB256 [a]) s
+def finalState (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) : Devm :=
+  SymbolicArith.post .add (Bytes.toU256 [b]) (Bytes.toU256 [a]) s
     (afterSecond base a b g s)
 
 section Steps
 
-variable (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List B256)
+variable (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
 
 /-- The environment running this code. -/
 abbrev sevm : Sevm := { env with code := code a b }
@@ -75,7 +75,7 @@ theorem step0 (gas : 9 ≤ g) (room : s.length < 1023) :
     Evm.step ⟨0, sevm env a b, initial base g s⟩ = .cont 2 (afterFirst base a g s) :=
   (Evm.step_next (first a b)).trans <|
     SymbolicPush.step_success _ [a] (by simp)
-      (by simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, gVerylow]; omega)
+      (by simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]; omega)
       (by simp [initial, Devm.stack, Devm.setMach]; omega)
       (Or.inl (by simp))
 
@@ -85,7 +85,7 @@ theorem step2 (gas : 9 ≤ g) (room : s.length < 1023) :
   (Evm.step_next (second a b)).trans <|
     SymbolicPush.step_success _ [b] (by simp)
       (by simp [SymbolicPush.cost, SymbolicPush.post, afterFirst, initial, Devm.gasLeft,
-            Devm.setMach, gVerylow]; omega)
+            Devm.setMach, Gas.veryLow]; omega)
       (by simp [SymbolicPush.post, afterFirst, initial, Devm.stack, Devm.setMach]; omega)
       (Or.inl (by simp))
 
@@ -93,10 +93,10 @@ theorem step4 (gas : 9 ≤ g) (room : s.length < 1023) :
     Evm.step ⟨4, sevm env a b, afterSecond base a b g s⟩ =
       .cont 5 (finalState base a b g s) :=
   (Evm.step_next (pc := 4) (sevm := sevm env a b)
-    (n := .reg SymbolicArith.Op.add.rinst) (third a b)).trans <|
+    (n := .plain SymbolicArith.Op.add.rinst) (third a b)).trans <|
     SymbolicArith.step_success _ .add _ _ s rfl
       (by simp [SymbolicArith.Op.cost, SymbolicPush.cost, SymbolicPush.post, afterSecond,
-            afterFirst, initial, Devm.gasLeft, Devm.setMach, gVerylow]; omega)
+            afterFirst, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]; omega)
       (by omega)
 
 theorem step5 :
@@ -107,7 +107,7 @@ theorem step5 :
 end Steps
 
 /-- One derivation, from the canonical constructors. -/
-def execution (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List B256)
+def execution (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) :
     Exec 0 (sevm env a b) (initial base g s) (.ok (finalState base a b g s)) :=
   .cont (step0 env base a b g s gas room) <|
@@ -130,7 +130,7 @@ def next {pc pc' : Nat} {sevm : Sevm} {devm devm' : Devm} {out : Execution}
 
 /-- Every derivation from this start state ends in `finalState`: the outcome is
 forced by inverting the three continuing steps and the final `STOP`. -/
-theorem result (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List B256)
+theorem result (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) {out : Execution}
     (d : Exec 0 (sevm env a b) (initial base g s) out) :
     out = .ok (finalState base a b g s) :=
@@ -140,37 +140,37 @@ theorem result (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List B256
   d5.halt_inv (step5 env base a b g s)
 
 /-- Adequacy connects the derivation to the total interpreter. -/
-theorem interpreter (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List B256)
+theorem interpreter (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) :
     exec ⟨0, sevm env a b, initial base g s⟩ = .ok (finalState base a b g s) :=
   (exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b g s gas room⟩
 
-theorem final_stack (base : Devm) (a b : UInt8) (g : Nat) (s : List B256) :
-    (finalState base a b g s).stack = (Bytes.toB256 [b] + Bytes.toB256 [a]) :: s := rfl
+theorem final_stack (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) :
+    (finalState base a b g s).stack = (Bytes.toU256 [b] + Bytes.toU256 [a]) :: s := rfl
 
-theorem toNat_single (x : UInt8) : (Bytes.toB256 [x]).toNat = x.toNat := by
-  simp [Bytes.toB256, Bytes.toB256.go, B256.toNat, B128.toNat]
+theorem toNat_single (x : UInt8) : (Bytes.toU256 [x]).toNat = x.toNat := by
+  simp [Bytes.toU256, Bytes.toU256.go, U256.toNat, U128.toNat]
 
 /-- The pushed word is the sum of the two bytes; `ADD` wraps modulo `2 ^ 256`,
 and two bytes never reach that bound. -/
 theorem final_sum (a b : UInt8) :
-    (Bytes.toB256 [b] + Bytes.toB256 [a]).toNat = a.toNat + b.toNat := by
+    (Bytes.toU256 [b] + Bytes.toU256 [a]).toNat = a.toNat + b.toNat := by
   have ha := UInt8.toNat_lt a
   have hb := UInt8.toNat_lt b
-  rw [B256.toNat_add, toNat_single, toNat_single, Nat.lo_eq_of_lt (by omega)]
+  rw [U256.toNat_add, toNat_single, toNat_single, Nat.lo_eq_of_lt (by omega)]
   omega
 
 /-- The exact gas figure: three static charges of 3. -/
-theorem final_gas (base : Devm) (a b : UInt8) (g : Nat) (s : List B256) :
+theorem final_gas (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) :
     (finalState base a b g s).gasLeft = g - 9 := by
   simp [finalState, afterSecond, afterFirst, initial, SymbolicArith.post, SymbolicPush.post,
-    SymbolicArith.Op.cost, SymbolicPush.cost, Devm.gasLeft, Devm.setMach, gVerylow]
+    SymbolicArith.Op.cost, SymbolicPush.cost, Devm.gasLeft, Devm.setMach, Gas.veryLow]
   omega
 
-theorem final_world (base : Devm) (a b : UInt8) (g : Nat) (s : List B256) :
+theorem final_world (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) :
     (finalState base a b g s).world = base.world := rfl
 
-theorem final_meta (base : Devm) (a b : UInt8) (g : Nat) (s : List B256) :
+theorem final_meta (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) :
     (finalState base a b g s).meta = base.meta := rfl
 
 /-- The premises are satisfiable: exactly nine gas and an empty stack. -/
@@ -208,10 +208,10 @@ but is expected to have type
     Step.cont (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
 -/
 #guard_msgs in
-example (evm : Evm) (x y : B256) (rest : List B256)
+example (evm : Evm) (x y : U256) (rest : List U256)
     (stack : evm.dyna.stack = x :: y :: rest)
     (gas : SymbolicArith.Op.cost .add ≤ evm.dyna.gasLeft) (room : rest.length < 1024) :
-    Ninst.step evm (.reg .div) =
+    NextOp.step evm (.plain .div) =
       .cont (evm.pc + 1) (SymbolicArith.post .add x y rest evm.dyna) :=
   SymbolicArith.step_success evm .add x y rest stack gas room
 

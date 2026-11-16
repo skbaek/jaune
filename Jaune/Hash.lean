@@ -266,7 +266,7 @@ def consumeChunk (h : Vector UInt32 8) (p : (Array UInt8)) : Vector UInt32 8 :=
     h[7] + h'[7]
   ]
 
-def run (data : Bytes) : B256 :=
+def run (data : Bytes) : U256 :=
   -- `data` is a list, so its length is an O(n) walk: take it once.
   let len : Nat := data.length
   let xss : List (Array UInt8) :=
@@ -279,11 +279,11 @@ def run (data : Bytes) : B256 :=
   -- the earlier "wrong number of 32-bit words" fallback is now unreachable by
   -- construction and has been removed rather than masked by a trace.
   let hash : Vector UInt32 8 := List.foldl consumeChunk initChunk xss
-  B32s.toB256 hash[0] hash[1] hash[2] hash[3] hash[4] hash[5] hash[6] hash[7]
+  UInt32s.toU256 hash[0] hash[1] hash[2] hash[3] hash[4] hash[5] hash[6] hash[7]
 
 end SHA256
 
-def Bytes.sha256 : Bytes → B256 := SHA256.run
+def Bytes.sha256 : Bytes → U256 := SHA256.run
 
 
 
@@ -802,7 +802,7 @@ theorem f1600_eq (ws : Vector UInt64 25) :
   rw [show State1600.toVec ⟨ws[0], ws[1], ws[2], ws[3], ws[4], ws[5], ws[6], ws[7], ws[8], ws[9], ws[10], ws[11], ws[12], ws[13], ws[14], ws[15], ws[16], ws[17], ws[18], ws[19], ws[20], ws[21], ws[22], ws[23], ws[24]⟩ = ws from (vec_eta ws).symm]
 -- END GENERATED
 
-def Bytes.run : Fin 17 → Bytes → Vector UInt64 25 → B256
+def Bytes.run : Fin 17 → Bytes → Vector UInt64 25 → U256
   | wc, b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: bs, ws =>
     let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
     let ws' := xorLane ws wc.val (by omega) t
@@ -827,7 +827,7 @@ number of bytes still to absorb, so `n ≤ bnd ≤ bs.size` is the invariant tha
 makes every byte read total; both bounds travel with the recursion instead of
 being asserted at the call site. -/
 def ByteArray.run (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
-    (n : Nat) → n ≤ bnd → Fin 17 → Vector UInt64 25 → B256 :=
+    (n : Nat) → n ≤ bnd → Fin 17 → Vector UInt64 25 → U256 :=
   fun n hn wc ws =>
   if h7 : 7 < n then
     let b0 : UInt8 := bs[(bnd - n)]'(by omega)
@@ -870,7 +870,7 @@ def ByteArray.run (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
 
 end KECCAK
 
-def Bytes.keccak (bs : Bytes) : B256 :=
+def Bytes.keccak (bs : Bytes) : U256 :=
   KECCAK.Bytes.run (0 : Fin 17) bs <| .replicate 25 0
 
 /-- keccak over the `sz` bytes of `bs` starting at `loc`.
@@ -881,7 +881,7 @@ absorbed as zero, and the zero extension is materialised once, up front, so the
 in-range path — the only one any in-tree caller takes, since all three pass
 `loc = 0` and `sz = bs.size` — carries its bound as a proof and tests nothing
 per byte. -/
-def ByteArray.keccak (loc sz : Nat) (bs : ByteArray) : B256 :=
+def ByteArray.keccak (loc sz : Nat) (bs : ByteArray) : U256 :=
   if h : loc + sz ≤ bs.size then
     KECCAK.ByteArray.run (loc + sz) bs h sz (by omega) (0 : Fin 17) <|
       .replicate 25 0
@@ -896,6 +896,6 @@ def ByteArray.keccak (loc sz : Nat) (bs : ByteArray) : B256 :=
         omega)
       sz (by omega) (0 : Fin 17) <| .replicate 25 0
 
-def B256.keccak (x : B256) : B256 := Bytes.keccak <| x.toBytes
+def U256.keccak (x : U256) : U256 := Bytes.keccak <| x.toBytes
 
 end Jaune

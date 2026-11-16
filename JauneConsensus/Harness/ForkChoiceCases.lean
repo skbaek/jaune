@@ -54,55 +54,55 @@ on or off; the handler verifies signatures unless `JAUNE_CONSENSUS_FC_BLS=0`; `b
 
 namespace JauneConsensus.Harness
 
-open Jaune (Bytes B256)
+open Jaune (Bytes U256)
 open Yaml
 
-private abbrev H := ExceptT String IO
+private abbrev Action := ExceptT String IO
 
-private def liftE {α : Type} (x : Except String α) : H α := ExceptT.mk (pure x)
+private def liftExcept {α : Type} (x : Except String α) : Action α := ExceptT.mk (pure x)
 
-private def yamlE {α : Type} (what : String) (x : Except YamlError α) : H α :=
-  liftE (x.mapError (fun e => s!"{what}: {e}"))
+private def yamlExcept {α : Type} (what : String) (x : Except YamlError α) : Action α :=
+  liftExcept (x.mapError (fun e => s!"{what}: {e}"))
 
-private def readSszFile (c : Case) (file : String) : H Bytes := do
-  match Snappy.decompress (← IO.FS.readBinFile (c.dir / file)) with
+private def readSszFile (c : Case) (file : String) : Action Bytes := do
+  match Snappy.decompress (← IO.FS.readBinFile (c.directory / file)) with
   | .ok b => pure b.toList
   | .error e => throw s!"{file}: snappy: {e}"
 
-private def decodeFile {α : Type} [Ssz α] (c : Case) (file : String) : H α := do
+private def decodeFile {α : Type} [Ssz α] (c : Case) (file : String) : Action α := do
   let bytes ← readSszFile c file
-  match (Ssz.deserialize bytes : M α) with
+  match (Ssz.deserialize bytes : Fallible α) with
   | .ok v => pure v
   | .error r => throw s!"{file}: decode rejected: {repr r}"
 
-private def rootOf (what : String) (v : YVal) : H Root := do
-  let bs ← yamlE what v.asHex
+private def rootOf (what : String) (v : YamlValue) : Action Root := do
+  let bs ← yamlExcept what v.asHex
   if bs.length != 32 then throw s!"{what}: not 32 bytes"
-  pure (B256.ofBytes bs)
+  pure (Bytes32.ofBytes bs)
 
-private def u64Of (what : String) (v : YVal) : H U64 := do
-  let n ← yamlE what v.asNat
+private def u64Of (what : String) (v : YamlValue) : Action U64 := do
+  let n ← yamlExcept what v.asNat
   match U64.ofNat? n what with
   | .ok x => pure x
   | .error _ => throw s!"{what}: out of uint64 range"
 
-private def stepValid (s : YVal) : H Bool :=
+private def stepValid (s : YamlValue) : Action Bool :=
   match s.get? "valid" with
   | none => pure true
-  | some v => yamlE "valid" v.asBool
+  | some v => yamlExcept "valid" v.asBool
 
-private def checkpointOf (what : String) (v : YVal) : H Checkpoint := do
-  yamlE what (v.expectKeys ["epoch", "root"])
-  pure { epoch := ← u64Of what (← yamlE what (v.field "epoch")),
-         root := ← rootOf what (← yamlE what (v.field "root")) }
+private def checkpointOf (what : String) (v : YamlValue) : Action Checkpoint := do
+  yamlExcept what (v.expectKeys ["epoch", "root"])
+  pure { epoch := ← u64Of what (← yamlExcept what (v.field "epoch")),
+         root := ← rootOf what (← yamlExcept what (v.field "root")) }
 
-private def rejectE {α : Type} (what : String) (x : M α) : H α :=
+private def rejectExcept {α : Type} (what : String) (x : Fallible α) : Action α :=
   match x with
   | .ok v => pure v
   | .error r => throw s!"{what}: rejected: {repr r}"
 
-private def payloadStatusOf (v : YVal) : H PayloadStatusV1 := do
-  let kind ← match (← yamlE "status" (v.field "status")) with
+private def payloadStatusOf (v : YamlValue) : Action PayloadStatusV1 := do
+  let kind ← match (← yamlExcept "status" (v.field "status")) with
     | .scalar "VALID" _ => pure PayloadStatusKind.valid
     | .scalar "INVALID" _ => pure .invalid
     | .scalar "SYNCING" _ => pure .syncing
@@ -115,20 +115,20 @@ private def payloadStatusOf (v : YVal) : H PayloadStatusV1 := do
   pure { status := kind, latestValidHash := lvh }
 
 /-- Which runner of the family a case belongs to. -/
-inductive FcMode
+inductive ForkChoiceMode
   | forkChoice | sync | fastConfirmation | compliance
   deriving BEq
 
 /-- The harness's state across steps: the fork-choice store, the optimistic store and the mocked
 engine's responses by payload hash (`sync` only), and the fast-confirmation store. -/
-private structure Run (P : Preset) (f : CFork) where
+private structure Run (P : Preset) (f : ConsensusFork) where
   store : Store P f
-  opt : OptimisticStore P f
+  optimisticStore : OptimisticStore P f
   statuses : Std.TreeMap Hash32 PayloadStatusV1 compare
-  fcr : FastConfirmationStore P f
+  fastConfirmation : FastConfirmationStore P f
 
 /-- The fast-confirmation check keys. -/
-private def fcrKeys : List String :=
+private def fastConfirmationKeys : List String :=
   ["previous_epoch_observed_justified_checkpoint", "current_epoch_observed_justified_checkpoint",
    "previous_epoch_greatest_unrealized_checkpoint", "previous_slot_head", "current_slot_head",
    "confirmed_root", "safe_execution_block_hash"]
@@ -141,7 +141,7 @@ private def isAssertionLike : Reject → Bool
 /-- `get_viable_for_head_checks(spec, store)` (`tests/core/pyspec/.../helpers/fork_choice.py`):
 the leaves of the filtered node tree reached from the justified root, each with its
 `get_weight`. -/
-private def viableForHead (cfg : Config) (store : Store P f) : M (List (Root × Gwei)) := do
+private def viableForHead (cfg : Config) (store : Store P f) : Fallible (List (Root × Gwei)) := do
   let nodes ← getFilteredNodeTree cfg store
   let mut pending : List ForkChoiceNode := [{ root := store.justified_checkpoint.root }]
   let mut leaves : Array ForkChoiceNode := #[]
@@ -157,30 +157,30 @@ private def viableForHead (cfg : Config) (store : Store P f) : M (List (Root × 
   leaves.toList.mapM fun n => do pure (n.root, ← getWeight cfg store n)
 
 /-- Run the steps of one case at preset `P`, fork `f`. -/
-private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcMode) :
-    H Unit := do
-  let cfg := ctx.cfg
+private def runSteps (P : Preset) (f : ConsensusFork) (c : Case) (ctx : Ctx) (mode : ForkChoiceMode) :
+    Action Unit := do
+  let cfg := ctx.config
   let sync := mode == .sync
   let compliance := mode == .compliance
   let anchorState : BeaconState P f ← decodeFile c "anchor_state.ssz_snappy"
   let anchorBlock : BeaconBlock P f ← decodeFile c "anchor_block.ssz_snappy"
-  let steps ← yamlE "steps.yaml" ((parse (← IO.FS.readBinFile (c.dir / "steps.yaml"))).bind YVal.asSeq)
-  let store ← rejectE "get_forkchoice_store" (getForkchoiceStore cfg anchorState anchorBlock)
-  let opt ← rejectE "get_optimistic_store" (getOptimisticStore anchorState anchorBlock)
-  let mut run : Run P f := { store, opt, statuses := ∅, fcr := getFastConfirmationStore store }
+  let steps ← yamlExcept "steps.yaml" ((parse (← IO.FS.readBinFile (c.directory / "steps.yaml"))).bind YamlValue.asSequence)
+  let store ← rejectExcept "get_forkchoice_store" (getForkchoiceStore cfg anchorState anchorBlock)
+  let opt ← rejectExcept "get_optimistic_store" (getOptimisticStore anchorState anchorBlock)
+  let mut run : Run P f := { store, optimisticStore := opt, statuses := ∅, fastConfirmation := getFastConfirmationStore store }
   let mut i := 0
   for s in steps do
     let here := s!"step {i}"
     i := i + 1
     let keys := s.keys
     -- A `valid: false` step must reject; in the comptests with an assertion or index error.
-    let expectReject (what : String) (r : Reject) : H Unit :=
+    let expectReject (what : String) (r : Reject) : Action Unit :=
       if compliance && !isAssertionLike r then
         throw s!"{here}: {what} rejected with {repr r}, expected an assertion error"
       else pure ()
     if keys.contains "tick" then
       if !(keys.all (· ∈ ["tick", "valid"])) then throw s!"{here}: keys {keys}"
-      let t ← u64Of "tick" (← yamlE here (s.field "tick"))
+      let t ← u64Of "tick" (← yamlExcept here (s.field "tick"))
       let valid ← stepValid s
       match (do onTick cfg run.store (← secondsToMilliseconds t)), valid with
       | .ok st, true => run := { run with store := st }
@@ -205,16 +205,16 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcM
       let proofs : List KZGProof ← match s.get? "proofs" with
         | none => pure []
         | some v => do
-          let xs ← yamlE "proofs" v.asSeq
+          let xs ← yamlExcept "proofs" v.asSequence
           xs.mapM fun x => do
-            let bs ← yamlE "proof" x.asHex
+            let bs ← yamlExcept "proof" x.asHex
             if h : bs.toArray.size = 48 then pure (⟨bs.toArray, h⟩ : KZGProof)
             else throw s!"{here}: proof not 48 bytes"
       -- `retrieve_column_sidecars`
       let columns : Option (List (DataColumnSidecar P)) ← match s.get? "columns" with
         | none => pure (some [])
         | some v => do
-          let names ← yamlE "columns" v.asSeq
+          let names ← yamlExcept "columns" v.asSequence
           if names.isEmpty then pure none
           else some <$> names.mapM fun n => match n with
             | .scalar nm _ => decodeFile c s!"{nm}.ssz_snappy"
@@ -224,21 +224,21 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcM
         retrieveColumnSidecars := fun _ => match columns with
           | some cs => pure cs
           | none => throw (.assert "retrieve_column_sidecars: not all required columns sampled") }
-      let applied : M (Store P f × OptimisticStore P f × Bool) :=
+      let applied : Fallible (Store P f × OptimisticStore P f × Bool) :=
         if sync then
           match run.statuses.get? signed.message.body.execution_payload.block_hash with
-          | some st => onBlockOptimistic ctx oracle run.store run.opt st signed
+          | some st => onBlockOptimistic ctx oracle run.store run.optimisticStore st signed
           | none => throw (.assert "harness: no payload status for the block's payload")
         else
           match onBlock ctx oracle run.store signed with
-          | .ok st => pure (st, run.opt, true)
+          | .ok st => pure (st, run.optimisticStore, true)
           | .error r => throw r
       match applied with
       | .error r =>
         if valid then throw s!"{here}: on_block {name} rejected: {repr r}"
         else expectReject s!"on_block {name}" r
       | .ok (st, opt, imported) =>
-        run := { run with opt }
+        run := { run with optimisticStore := opt }
         if imported != valid then
           throw s!"{here}: on_block {name} imported={imported}, expected valid={valid}"
         if imported then
@@ -284,64 +284,64 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcM
       | .error r, false => expectReject "on_attester_slashing" r
     else if keys.contains "block_hash" then
       if !sync then throw s!"{here}: payload status outside a sync case"
-      yamlE here (s.expectKeys ["block_hash", "payload_status"])
-      let h ← rootOf "block_hash" (← yamlE here (s.field "block_hash"))
-      let st ← payloadStatusOf (← yamlE here (s.field "payload_status"))
+      yamlExcept here (s.expectKeys ["block_hash", "payload_status"])
+      let h ← rootOf "block_hash" (← yamlExcept here (s.field "block_hash"))
+      let st ← payloadStatusOf (← yamlExcept here (s.field "payload_status"))
       run := { run with statuses := run.statuses.insert h st }
     else if keys == ["checks"] then
-      let checks ← yamlE here (s.field "checks")
+      let checks ← yamlExcept here (s.field "checks")
       -- `on_fast_confirmation` precedes the checks step that reports it
-      let present := fcrKeys.filter (checks.keys.contains ·)
+      let present := fastConfirmationKeys.filter (checks.keys.contains ·)
       if !present.isEmpty then
         if mode != .fastConfirmation then throw s!"{here}: fast-confirmation checks outside fast_confirmation"
-        if present.length != fcrKeys.length then
-          throw s!"{here}: fast-confirmation checks {present}, expected all of {fcrKeys}"
-        let fcr ← rejectE s!"{here}: on_fast_confirmation"
-          (onFastConfirmation ctx (fun _ => true) { run.fcr with store := run.store })
-        run := { run with fcr }
+        if present.length != fastConfirmationKeys.length then
+          throw s!"{here}: fast-confirmation checks {present}, expected all of {fastConfirmationKeys}"
+        let fcr ← rejectExcept s!"{here}: on_fast_confirmation"
+          (onFastConfirmation ctx (fun _ => true) { run.fastConfirmation with store := run.store })
+        run := { run with fastConfirmation := fcr }
       let store := run.store
-      let fcr := run.fcr
-      let checkCheckpoint (k : String) (v : YVal) (got : Checkpoint) : H Unit := do
+      let fcr := run.fastConfirmation
+      let checkCheckpoint (k : String) (v : YamlValue) (got : Checkpoint) : Action Unit := do
         let want ← checkpointOf k v
         if got != want then
           throw s!"{here}: {k} epoch {got.epoch} root {got.root.toHex}, expected epoch {want.epoch} root {want.root.toHex}"
-      let checkRoot (k : String) (v : YVal) (got : Root) : H Unit := do
+      let checkRoot (k : String) (v : YamlValue) (got : Root) : Action Unit := do
         let want ← rootOf k v
         if got != want then throw s!"{here}: {k} {got.toHex}, expected {want.toHex}"
       for k in checks.keys do
-        let v ← yamlE here (checks.field k)
+        let v ← yamlExcept here (checks.field k)
         match k with
         | "head" =>
-          yamlE here (v.expectKeys ["slot", "root"])
-          let head ← rejectE s!"{here}: get_head"
-            (if sync then getOptimisticHead cfg store run.opt else getHead cfg store)
-          let block ← rejectE s!"{here}: head block" (lookup store.blocks head.root "head")
-          let wantRoot ← rootOf "head.root" (← yamlE here (v.field "root"))
-          let wantSlot ← u64Of "head.slot" (← yamlE here (v.field "slot"))
+          yamlExcept here (v.expectKeys ["slot", "root"])
+          let head ← rejectExcept s!"{here}: get_head"
+            (if sync then getOptimisticHead cfg store run.optimisticStore else getHead cfg store)
+          let block ← rejectExcept s!"{here}: head block" (lookup store.blocks head.root "head")
+          let wantRoot ← rootOf "head.root" (← yamlExcept here (v.field "root"))
+          let wantSlot ← u64Of "head.slot" (← yamlExcept here (v.field "slot"))
           if head.root != wantRoot || block.slot != wantSlot then
             throw s!"{here}: head is {head.root.toHex} at slot {block.slot}, expected {wantRoot.toHex} at {wantSlot}"
         | "time" =>
           let want ← u64Of "time" v
-          let got ← rejectE here (millisecondsToSeconds store.time_ms)
+          let got ← rejectExcept here (millisecondsToSeconds store.time_ms)
           if got != want then throw s!"{here}: time {got}, expected {want}"
         | "genesis_time" =>
           let want ← u64Of "genesis_time" v
-          let got ← rejectE here (millisecondsToSeconds store.genesis_time_ms)
+          let got ← rejectExcept here (millisecondsToSeconds store.genesis_time_ms)
           if got != want then throw s!"{here}: genesis_time {got}, expected {want}"
         | "justified_checkpoint" => checkCheckpoint k v store.justified_checkpoint
         | "finalized_checkpoint" => checkCheckpoint k v store.finalized_checkpoint
         | "proposer_boost_root" => checkRoot k v store.proposer_boost_root
         | "get_proposer_head" =>
-          let got ← rejectE s!"{here}: get_proposer_head" (do
+          let got ← rejectExcept s!"{here}: get_proposer_head" (do
             getProposerHead cfg store (← getHead cfg store) (← getCurrentSlot cfg store))
           checkRoot k v got.root
         | "viable_for_head_roots_and_weights" =>
-          let xs ← yamlE k v.asSeq
+          let xs ← yamlExcept k v.asSequence
           let want ← xs.mapM fun x => do
-            yamlE k (x.expectKeys ["root", "weight"])
-            pure ((← rootOf "root" (← yamlE k (x.field "root"))).toHex,
-              (← u64Of "weight" (← yamlE k (x.field "weight"))).toNat)
-          let got ← rejectE s!"{here}: viable_for_head" (viableForHead cfg store)
+            yamlExcept k (x.expectKeys ["root", "weight"])
+            pure ((← rootOf "root" (← yamlExcept k (x.field "root"))).toHex,
+              (← u64Of "weight" (← yamlExcept k (x.field "weight"))).toNat)
+          let got ← rejectExcept s!"{here}: viable_for_head" (viableForHead cfg store)
           let got := got.map fun (r, w) => (r.toHex, w.toNat)
           let norm (l : List (String × Nat)) :=
             (l.mergeSort (fun a b => a.1 < b.1 || (a.1 == b.1 && a.2 ≤ b.2))).eraseDups
@@ -357,7 +357,7 @@ private def runSteps (P : Preset) (f : CFork) (c : Case) (ctx : Ctx) (mode : FcM
         | "current_slot_head" => checkRoot k v fcr.current_slot_head
         | "confirmed_root" => checkRoot k v fcr.confirmed_root
         | "safe_execution_block_hash" =>
-          checkRoot k v (← rejectE s!"{here}: get_safe_execution_block_hash" (getSafeExecutionBlockHash fcr))
+          checkRoot k v (← rejectExcept s!"{here}: get_safe_execution_block_hash" (getSafeExecutionBlockHash fcr))
         | other => throw s!"{here}: unknown check {other}"
     else throw s!"{here}: unknown step keys {keys}"
 
@@ -381,14 +381,14 @@ cases run in their own step loop, with the Gloas steps of `tests/formats/fork_ch
 
 The Gloas comptests run under `GLOAS_FORK_EPOCH = 0`, as the reference runner overrides it. -/
 
-private structure GRun (P : Preset) where
+private structure GloasRun (P : Preset) where
   store : Gloas.Store P
-  fcr : Gloas.FastConfirmationStore P
+  fastConfirmation : Gloas.FastConfirmationStore P
 
 /-- `get_viable_for_head_checks(spec, store)` (Gloas): the leaves of the filtered node tree, each
 with its `get_weight` and `payload_status`. -/
 private def viableForHeadGloas (cfg : Config) (store : Gloas.Store P) :
-    M (List (Root × Gwei × Nat)) := do
+    Fallible (List (Root × Gwei × Nat)) := do
   let nodes ← Gloas.getFilteredNodeTree cfg store
   let mut pending : List Gloas.ForkChoiceNode :=
     [{ root := store.justified_checkpoint.root, payload_status := .pending }]
@@ -411,7 +411,7 @@ private def gloasOracle : Gloas.DataOracle P :=
 /-- The messages of a block-carried payload attestation (the format's "Condition"): one per set
 bit of `get_ptc(state, slot)`, in PTC order, with an empty signature. -/
 private def payloadAttestationMessages (cfg : Config) (state : Gloas.BeaconState P)
-    (pa : Gloas.PayloadAttestation P) : M (List Gloas.PayloadAttestationMessage) := do
+    (pa : Gloas.PayloadAttestation P) : Fallible (List Gloas.PayloadAttestationMessage) := do
   let ptc ← Gloas.getPtc cfg state pa.data.slot
   let bits := pa.aggregation_bits.bits
   let mut out : Array Gloas.PayloadAttestationMessage := #[]
@@ -423,33 +423,33 @@ private def payloadAttestationMessages (cfg : Config) (state : Gloas.BeaconState
   pure out.toList
 
 /-- A YAML vote (`true`, `false` or `null`). -/
-private def voteOf (v : YVal) : H (Option Bool) :=
-  if v.isNull then pure none else some <$> yamlE "vote" v.asBool
+private def voteOf (v : YamlValue) : Action (Option Bool) :=
+  if v.isNull then pure none else some <$> yamlExcept "vote" v.asBool
 
 /-- Run the steps of one Gloas case at preset `P`. -/
-private def runStepsGloas (P : Preset) (c : Case) (ctx : Ctx) (mode : FcMode) : H Unit := do
-  let cfg := ctx.cfg
+private def runStepsGloas (P : Preset) (c : Case) (ctx : Ctx) (mode : ForkChoiceMode) : Action Unit := do
+  let cfg := ctx.config
   let compliance := mode == .compliance
   let tr : Gloas.Transition P := gloasTransition
   let anchorState : Gloas.BeaconState P ← decodeFile c "anchor_state.ssz_snappy"
   let anchorBlock : Gloas.BeaconBlock P ← decodeFile c "anchor_block.ssz_snappy"
-  let steps ← yamlE "steps.yaml" ((parse (← IO.FS.readBinFile (c.dir / "steps.yaml"))).bind YVal.asSeq)
-  let store ← rejectE "get_forkchoice_store" (Gloas.getForkchoiceStore cfg anchorState anchorBlock)
-  let mut run : GRun P := { store, fcr := Gloas.getFastConfirmationStore store }
+  let steps ← yamlExcept "steps.yaml" ((parse (← IO.FS.readBinFile (c.directory / "steps.yaml"))).bind YamlValue.asSequence)
+  let store ← rejectExcept "get_forkchoice_store" (Gloas.getForkchoiceStore cfg anchorState anchorBlock)
+  let mut run : GloasRun P := { store := store, fastConfirmation := Gloas.getFastConfirmationStore store }
   let mut i := 0
   for s in steps do
     let here := s!"step {i}"
     i := i + 1
     let keys := s.keys
-    let expectReject (what : String) (r : Reject) : H Unit :=
+    let expectReject (what : String) (r : Reject) : Action Unit :=
       if compliance && !isAssertionLike r then
         throw s!"{here}: {what} rejected with {repr r}, expected an assertion error"
       else pure ()
-    let nameOf (k : String) : H String := match s.get? k with
+    let nameOf (k : String) : Action String := match s.get? k with
       | some (.scalar n _) => pure n
       | _ => throw s!"{here}: {k} name"
     -- one handler step: apply, or require a rejection when `valid: false`
-    let handle (what : String) (x : M (Gloas.Store P)) : H (Gloas.Store P) := do
+    let handle (what : String) (x : Fallible (Gloas.Store P)) : Action (Gloas.Store P) := do
       match x, ← stepValid s with
       | .ok st, true => pure st
       | .error r, true => throw s!"{here}: {what} rejected: {repr r}"
@@ -457,7 +457,7 @@ private def runStepsGloas (P : Preset) (c : Case) (ctx : Ctx) (mode : FcMode) : 
       | .error r, false => do expectReject what r; pure run.store
     if keys.contains "tick" then
       if !(keys.all (· ∈ ["tick", "valid"])) then throw s!"{here}: keys {keys}"
-      let t ← u64Of "tick" (← yamlE here (s.field "tick"))
+      let t ← u64Of "tick" (← yamlExcept here (s.field "tick"))
       let st ← handle "on_tick" (do Gloas.onTick cfg run.store (← secondsToMilliseconds t))
       run := { run with store := st }
     else if keys.contains "block" then
@@ -486,10 +486,10 @@ private def runStepsGloas (P : Preset) (c : Case) (ctx : Ctx) (mode : FcMode) : 
             if !tolerated r then
               throw s!"{here}: on_attester_slashing (from block) rejected: {repr r}"
         let blockRoot : Root := Ssz.hashTreeRoot signed.message
-        let postState ← rejectE s!"{here}: store.block_states[block]"
+        let postState ← rejectExcept s!"{here}: store.block_states[block]"
           (lookup st.block_states blockRoot "block_states")
         for pa in signed.message.body.payload_attestations.toArray do
-          let msgs ← rejectE s!"{here}: payload attestation messages"
+          let msgs ← rejectExcept s!"{here}: payload attestation messages"
             (payloadAttestationMessages cfg postState pa)
           for m in msgs do
             match Gloas.onPayloadAttestationMessage ctx st m true with
@@ -529,67 +529,67 @@ private def runStepsGloas (P : Preset) (c : Case) (ctx : Ctx) (mode : FcMode) : 
         (Gloas.onPayloadAttestationMessage ctx run.store m false)
       run := { run with store := st }
     else if keys == ["checks"] then
-      let checks ← yamlE here (s.field "checks")
+      let checks ← yamlExcept here (s.field "checks")
       -- `on_fast_confirmation` precedes the checks step that reports it
-      let present := fcrKeys.filter (checks.keys.contains ·)
+      let present := fastConfirmationKeys.filter (checks.keys.contains ·)
       if !present.isEmpty then
         if mode != .fastConfirmation then throw s!"{here}: fast-confirmation checks outside fast_confirmation"
-        if present.length != fcrKeys.length then
-          throw s!"{here}: fast-confirmation checks {present}, expected all of {fcrKeys}"
-        let fcr ← rejectE s!"{here}: on_fast_confirmation"
-          (Gloas.onFastConfirmation tr ctx (fun _ => true) { run.fcr with store := run.store })
-        run := { run with fcr }
+        if present.length != fastConfirmationKeys.length then
+          throw s!"{here}: fast-confirmation checks {present}, expected all of {fastConfirmationKeys}"
+        let fcr ← rejectExcept s!"{here}: on_fast_confirmation"
+          (Gloas.onFastConfirmation tr ctx (fun _ => true) { run.fastConfirmation with store := run.store })
+        run := { run with fastConfirmation := fcr }
       let store := run.store
-      let fcr := run.fcr
-      let checkCheckpoint (k : String) (v : YVal) (got : Checkpoint) : H Unit := do
+      let fcr := run.fastConfirmation
+      let checkCheckpoint (k : String) (v : YamlValue) (got : Checkpoint) : Action Unit := do
         let want ← checkpointOf k v
         if got != want then
           throw s!"{here}: {k} epoch {got.epoch} root {got.root.toHex}, expected epoch {want.epoch} root {want.root.toHex}"
-      let checkRoot (k : String) (v : YVal) (got : Root) : H Unit := do
+      let checkRoot (k : String) (v : YamlValue) (got : Root) : Action Unit := do
         let want ← rootOf k v
         if got != want then throw s!"{here}: {k} {got.toHex}, expected {want.toHex}"
-      let checkVotes (k : String) (v : YVal) (m : RootMap (Array (Option Bool))) : H Unit := do
-        yamlE here (v.expectKeys ["block_root", "votes"])
-        let root ← rootOf s!"{k}.block_root" (← yamlE here (v.field "block_root"))
-        let want ← (← yamlE k ((← yamlE here (v.field "votes")).asSeq)).mapM voteOf
-        let got ← rejectE s!"{here}: store.{k}" (lookup m root k)
+      let checkVotes (k : String) (v : YamlValue) (m : RootMap (Array (Option Bool))) : Action Unit := do
+        yamlExcept here (v.expectKeys ["block_root", "votes"])
+        let root ← rootOf s!"{k}.block_root" (← yamlExcept here (v.field "block_root"))
+        let want ← (← yamlExcept k ((← yamlExcept here (v.field "votes")).asSequence)).mapM voteOf
+        let got ← rejectExcept s!"{here}: store.{k}" (lookup m root k)
         if got.toList != want then throw s!"{here}: {k} {repr got.toList}, expected {repr want}"
       for k in checks.keys do
-        let v ← yamlE here (checks.field k)
+        let v ← yamlExcept here (checks.field k)
         match k with
         | "head" =>
-          yamlE here (v.expectKeys ["slot", "root", "payload_status"])
-          let head ← rejectE s!"{here}: get_head" (Gloas.getHead cfg store)
-          let block ← rejectE s!"{here}: head block" (lookup store.blocks head.root "head")
-          let wantRoot ← rootOf "head.root" (← yamlE here (v.field "root"))
-          let wantSlot ← u64Of "head.slot" (← yamlE here (v.field "slot"))
-          let wantStatus ← yamlE "head.payload_status" ((← yamlE here (v.field "payload_status")).asNat)
+          yamlExcept here (v.expectKeys ["slot", "root", "payload_status"])
+          let head ← rejectExcept s!"{here}: get_head" (Gloas.getHead cfg store)
+          let block ← rejectExcept s!"{here}: head block" (lookup store.blocks head.root "head")
+          let wantRoot ← rootOf "head.root" (← yamlExcept here (v.field "root"))
+          let wantSlot ← u64Of "head.slot" (← yamlExcept here (v.field "slot"))
+          let wantStatus ← yamlExcept "head.payload_status" ((← yamlExcept here (v.field "payload_status")).asNat)
           if head.root != wantRoot || block.slot != wantSlot || head.payload_status.toNat != wantStatus then
             throw s!"{here}: head is {head.root.toHex} at slot {block.slot} status {head.payload_status.toNat}, expected {wantRoot.toHex} at {wantSlot} status {wantStatus}"
         | "time" =>
           let want ← u64Of "time" v
-          let got ← rejectE here (millisecondsToSeconds store.time_ms)
+          let got ← rejectExcept here (millisecondsToSeconds store.time_ms)
           if got != want then throw s!"{here}: time {got}, expected {want}"
         | "genesis_time" =>
           let want ← u64Of "genesis_time" v
-          let got ← rejectE here (millisecondsToSeconds store.genesis_time_ms)
+          let got ← rejectExcept here (millisecondsToSeconds store.genesis_time_ms)
           if got != want then throw s!"{here}: genesis_time {got}, expected {want}"
         | "justified_checkpoint" => checkCheckpoint k v store.justified_checkpoint
         | "finalized_checkpoint" => checkCheckpoint k v store.finalized_checkpoint
         | "proposer_boost_root" => checkRoot k v store.proposer_boost_root
         | "get_proposer_head" =>
-          let got ← rejectE s!"{here}: get_proposer_head" (do
+          let got ← rejectExcept s!"{here}: get_proposer_head" (do
             Gloas.getProposerHead cfg store (← Gloas.getHead cfg store)
               (← Gloas.getCurrentSlot cfg store))
           checkRoot k v got.root
         | "viable_for_head_roots_and_weights" =>
-          let xs ← yamlE k v.asSeq
+          let xs ← yamlExcept k v.asSequence
           let want ← xs.mapM fun x => do
-            yamlE k (x.expectKeys ["root", "weight", "payload_status"])
-            pure ((← rootOf "root" (← yamlE k (x.field "root"))).toHex,
-              (← u64Of "weight" (← yamlE k (x.field "weight"))).toNat,
-              ← yamlE k ((← yamlE k (x.field "payload_status")).asNat))
-          let got ← rejectE s!"{here}: viable_for_head" (viableForHeadGloas cfg store)
+            yamlExcept k (x.expectKeys ["root", "weight", "payload_status"])
+            pure ((← rootOf "root" (← yamlExcept k (x.field "root"))).toHex,
+              (← u64Of "weight" (← yamlExcept k (x.field "weight"))).toNat,
+              ← yamlExcept k ((← yamlExcept k (x.field "payload_status")).asNat))
+          let got ← rejectExcept s!"{here}: viable_for_head" (viableForHeadGloas cfg store)
           let got := got.map fun (r, w, ps) => (r.toHex, w.toNat, ps)
           let lt (a b : String × Nat × Nat) : Bool :=
             a.1 < b.1 || (a.1 == b.1 && (a.2.1 < b.2.1 || (a.2.1 == b.2.1 && a.2.2 ≤ b.2.2)))
@@ -608,14 +608,14 @@ private def runStepsGloas (P : Preset) (c : Case) (ctx : Ctx) (mode : FcMode) : 
         | "current_slot_head" => checkRoot k v fcr.current_slot_head
         | "confirmed_root" => checkRoot k v fcr.confirmed_root
         | "safe_execution_block_hash" =>
-          checkRoot k v (← rejectE s!"{here}: get_safe_execution_block_hash"
+          checkRoot k v (← rejectExcept s!"{here}: get_safe_execution_block_hash"
             (Gloas.getSafeExecutionBlockHash fcr))
         | other => throw s!"{here}: unknown check {other}"
     else throw s!"{here}: unknown step keys {keys}"
 
 /-- `fork_choice/<handler>`, `sync/optimistic`, `fast_confirmation/<handler>` and
 `fork_choice_compliance/<handler>`. `config` gives the case's configuration. -/
-def forkChoiceCase (config : Case → IO (Except ConfigError Config)) (mode : FcMode) (c : Case) :
+def forkChoiceCase (config : Case → IO (Except ConfigError Config)) (mode : ForkChoiceMode) (c : Case) :
     IO (Except String Unit) := do
   let some P := Preset.ofName? c.preset | return .error s!"no preset {c.preset}"
   let gloas := c.key.fork == "gloas"
@@ -632,11 +632,11 @@ def forkChoiceCase (config : Case → IO (Except ConfigError Config)) (mode : Fc
     | "1" => pure true
     | "2" => pure false
     | s => return .error s!"bls_setting {s}"
-  let ctx : Ctx := { cfg, blsActive := bls }
+  let ctx : Ctx := { config := cfg, blsActive := bls }
   if gloas then
     if mode == .sync then return .error "sync: no Gloas suite"
     return ← ExceptT.run (runStepsGloas P c ctx mode)
-  let some f := CFork.ofName? c.key.fork | return .error s!"no fork {c.key.fork}"
+  let some f := ConsensusFork.ofName? c.key.fork | return .error s!"no fork {c.key.fork}"
   ExceptT.run (runSteps P f c ctx mode)
 
 end JauneConsensus.Harness

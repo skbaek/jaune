@@ -44,39 +44,39 @@ private def isLeadingZeros : DecodeError → Bool
 -- 64-bit scalars: accepted widths convert exactly, nine bytes is an overflow
 -- rather than a truncation, and a leading zero is a distinct reason from an
 -- overflow. This is the withdrawal-index case.
-#guard (Bytes.toRlpB64 "index" []).toOption.map UInt64.toNat = some 0
-#guard (Bytes.toRlpB64 "index" (List.replicate 8 (0xFF : UInt8))).toOption.map UInt64.toNat
+#guard (Bytes.toRlpUInt64 "index" []).toOption.map UInt64.toNat = some 0
+#guard (Bytes.toRlpUInt64 "index" (List.replicate 8 (0xFF : UInt8))).toOption.map UInt64.toNat
   = some (2 ^ 64 - 1)
 #guard failsAs isOverflow64
-  (Bytes.toRlpB64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
-#guard failsAs isLeadingZeros (Bytes.toRlpB64 "index" [0x00, 0x01])
-#guard ¬ failsAs isOverflow64 (Bytes.toRlpB64 "index" [0x00, 0x01])
+  (Bytes.toRlpUInt64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
+#guard failsAs isLeadingZeros (Bytes.toRlpUInt64 "index" [0x00, 0x01])
+#guard ¬ failsAs isOverflow64 (Bytes.toRlpUInt64 "index" [0x00, 0x01])
 #guard ¬ failsAs isLeadingZeros
-  (Bytes.toRlpB64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
+  (Bytes.toRlpUInt64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
 
 -- 256-bit scalars: same reasons, one width up, under the 256-bit overflow
 -- constructor.
-#guard (Bytes.toRlpB256 "amount" (List.replicate 32 (0xFF : UInt8))).toOption.map B256.toNat
+#guard (Bytes.toRlpU256 "amount" (List.replicate 32 (0xFF : UInt8))).toOption.map U256.toNat
   = some (2 ^ 256 - 1)
 #guard failsAs isOverflow256
-  (Bytes.toRlpB256 "amount" (List.replicate 33 (0x01 : UInt8)))
-#guard failsAs isLeadingZeros (Bytes.toRlpB256 "amount" [0x00, 0x01])
+  (Bytes.toRlpU256 "amount" (List.replicate 33 (0x01 : UInt8)))
+#guard failsAs isLeadingZeros (Bytes.toRlpU256 "amount" [0x00, 0x01])
 #guard (Bytes.toRlpNat "value" 32 (List.replicate 32 (0xFF : UInt8))).toOption
   = some (2 ^ 256 - 1)
 #guard failsAs isOverflow256 (Bytes.toRlpNat "value" 32 (List.replicate 33 (0x01 : UInt8)))
 -- The renderer templates for both scalar families and the canonicality rule.
-#guard (Bytes.toRlpB64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
+#guard (Bytes.toRlpUInt64 "index" (0x01 :: List.replicate 8 (0x00 : UInt8)))
   = .error (.fieldOverflow64
       (.text "index scalar is 9 bytes, exceeding its 8-byte width"))
-#guard (Bytes.toRlpB64 "index" [0x00, 0x01])
+#guard (Bytes.toRlpUInt64 "index" [0x00, 0x01])
   = .error (.leadingZeros
       (.text "index scalar 0x0001 is not canonically encoded (leading zero byte)"))
 
 -- Addresses and optional receivers: a width error, never a silent creation.
-#guard (Bytes.toRlpAdr "recipient" (List.replicate 20 (0x11 : UInt8))).toOption.isSome
-#guard failsAs isFixedWidth (Bytes.toRlpAdr "recipient" (List.replicate 19 (0x11 : UInt8)))
-#guard failsAs isFixedWidth (Bytes.toRlpAdr "recipient" (List.replicate 21 (0x11 : UInt8)))
-#guard failsAs isFixedWidth (Bytes.toRlpAdr "recipient" [])
+#guard (Bytes.toRlpAddress "recipient" (List.replicate 20 (0x11 : UInt8))).toOption.isSome
+#guard failsAs isFixedWidth (Bytes.toRlpAddress "recipient" (List.replicate 19 (0x11 : UInt8)))
+#guard failsAs isFixedWidth (Bytes.toRlpAddress "recipient" (List.replicate 21 (0x11 : UInt8)))
+#guard failsAs isFixedWidth (Bytes.toRlpAddress "recipient" [])
 #guard (Bytes.toRlpReceiver "receiver" []).toOption = some none
 #guard (Bytes.toRlpReceiver "receiver" (List.replicate 20 (0x11 : UInt8))).toOption.isSome
 #guard failsAs isFixedWidth (Bytes.toRlpReceiver "receiver" (List.replicate 21 (0x11 : UInt8)))
@@ -88,19 +88,19 @@ private def isLeadingZeros : DecodeError → Bool
 #guard (DecodeError.structure "block" "expected a 4-item list").render
   = "RlpStructureError : block : expected a 4-item list"
 
-def Inst.toOpString : Inst → String
+def Op.toOpString : Op → String
   | .next n => n.toOpString
   | .jump j => j.toString
-  | .last l => l.toString
+  | .halt l => l.toString
 
-def Inst.toString : Inst → String
+def Op.toString : Op → String
   | .next n => n.toString
   | .jump j => j.toString
-  | .last l => l.toString
+  | .halt l => l.toString
 
-def State.getStor (w : State) (a : Adr) : Stor := (w.get a).stor
-def State.getNonce (w : State) (a : Adr) : UInt64 := (w.get a).nonce
-def State.getCode (w : State) (a : Adr) : ByteArray := (w.get a).code
+def State.getStor (w : State) (a : Address) : Storage := (w.get a).storage
+def State.getNonce (w : State) (a : Address) : UInt64 := (w.get a).nonce
+def State.getCode (w : State) (a : Address) : ByteArray := (w.get a).code
 
 def isValidDelegation (code: ByteArray) : Prop :=
   code.size = eoaDelegatedCodeLength ∧
@@ -108,17 +108,17 @@ def isValidDelegation (code: ByteArray) : Prop :=
 
 instance {code} : Decidable (isValidDelegation code) := instDecidableAnd
 
-def getDelegatedCodeAddress (code : ByteArray) : Option Adr :=
+def getDelegatedCodeAddress (code : ByteArray) : Option Address :=
   if isValidDelegation code
   then
     let adrBytes := code.sliceD eoaDelegationMarker.length 20 (0 : UInt8)
-    adrBytes.toAdr?
+    adrBytes.toAddress?
   else none
 
-instance : Inhabited Adr := ⟨0⟩
+instance : Inhabited Address := ⟨0⟩
 
-def accessDelegation (devm : Devm) (adr : Adr) :
-  Bool × Adr × ByteArray × Nat × Devm :=
+def accessDelegation (devm : Devm) (adr : Address) :
+  Bool × Address × ByteArray × Nat × Devm :=
   let state := devm.state
   let code := state.getCode adr
   -- P0.6 item 3: the delegated address is extracted by the total match below,
@@ -136,8 +136,8 @@ def accessDelegation (devm : Devm) (adr : Adr) :
 /-- `calculate_delegation_cost` with the schedule's cold access. `accessDelegation`
 above keeps its name and arity -- Blanc names it in 25 files -- and the
 Amsterdam arms read this sibling through `rules.gas`. -/
-def GasSchedule.accessDelegation (gas : GasSchedule) (devm : Devm) (adr : Adr) :
-  Bool × Adr × ByteArray × Nat × Devm :=
+def GasSchedule.accessDelegation (gas : GasSchedule) (devm : Devm) (adr : Address) :
+  Bool × Address × ByteArray × Nat × Devm :=
   let state := devm.state
   let code := state.getCode adr
   match getDelegatedCodeAddress code with
@@ -150,15 +150,15 @@ def GasSchedule.accessDelegation (gas : GasSchedule) (devm : Devm) (adr : Adr) :
 
 /-- Under the Prague schedule the schedule-reading delegation access is the
 original one. -/
-theorem accessDelegation_eq (devm : Devm) (adr : Adr) :
+theorem accessDelegation_eq (devm : Devm) (adr : Address) :
     pragueGasSchedule.accessDelegation devm adr = accessDelegation devm adr := rfl
 
 /-- `eoa_delegation.py.calculate_delegation_cost` at the Amsterdam pin.
 This reads the direct account's designation and prices the delegated address,
 but deliberately neither warms that address nor reads its code. Amsterdam
 callers perform their second affordability check before those effects. -/
-def GasSchedule.delegationCost (gas : GasSchedule) (devm : Devm) (adr : Adr) :
-    Bool × Adr × Nat :=
+def GasSchedule.delegationCost (gas : GasSchedule) (devm : Devm) (adr : Address) :
+    Bool × Address × Nat :=
   let code := devm.state.getCode adr
   match getDelegatedCodeAddress code with
   | some delegated =>
@@ -166,17 +166,17 @@ def GasSchedule.delegationCost (gas : GasSchedule) (devm : Devm) (adr : Adr) :
   | none => ⟨false, adr, 0⟩
 
 /-- The effective code-designation lookup under the selected fork rules. -/
-def ForkRules.delegatedCodeAddress (rules : ForkRules) (code : ByteArray) : Option Adr :=
+def ForkRules.delegatedCodeAddress (rules : ForkRules) (code : ByteArray) : Option Address :=
   if rules.delegationEnabled then getDelegatedCodeAddress code else none
 
 /-- Fork-aware nested code access. Disabled delegation leaves the machine unchanged. -/
-def ForkRules.accessDelegation (rules : ForkRules) (devm : Devm) (adr : Adr) :
-    Bool × Adr × ByteArray × Nat × Devm :=
+def ForkRules.accessDelegation (rules : ForkRules) (devm : Devm) (adr : Address) :
+    Bool × Address × ByteArray × Nat × Devm :=
   if rules.delegationEnabled then rules.gas.accessDelegation devm adr
   else ⟨false, adr, devm.state.getCode adr, 0, devm⟩
 
 /-- Fork-aware price discovery; warming and code access remain separate. -/
-def ForkRules.delegationCost (rules : ForkRules) (devm : Devm) (adr : Adr) : Bool × Adr × Nat :=
+def ForkRules.delegationCost (rules : ForkRules) (devm : Devm) (adr : Address) : Bool × Address × Nat :=
   if rules.delegationEnabled then rules.gas.delegationCost devm adr else ⟨false, adr, 0⟩
 
 theorem ForkRules.delegatedCodeAddress_enabled {rules : ForkRules}
@@ -190,28 +190,28 @@ theorem ForkRules.delegatedCodeAddress_disabled {rules : ForkRules}
   simp only [ForkRules.delegatedCodeAddress, h, Bool.false_eq_true, ↓reduceIte]
 
 theorem ForkRules.accessDelegation_enabled {rules : ForkRules}
-    (h : rules.delegationEnabled = true) (devm : Devm) (adr : Adr) :
+    (h : rules.delegationEnabled = true) (devm : Devm) (adr : Address) :
     rules.accessDelegation devm adr = rules.gas.accessDelegation devm adr := by
   simp only [ForkRules.accessDelegation, h, ↓reduceIte]
 
 theorem ForkRules.accessDelegation_disabled {rules : ForkRules}
-    (h : rules.delegationEnabled = false) (devm : Devm) (adr : Adr) :
+    (h : rules.delegationEnabled = false) (devm : Devm) (adr : Address) :
     rules.accessDelegation devm adr = ⟨false, adr, devm.state.getCode adr, 0, devm⟩ := by
   simp only [ForkRules.accessDelegation, h, Bool.false_eq_true, ↓reduceIte]
 
 theorem ForkRules.delegationCost_enabled {rules : ForkRules}
-    (h : rules.delegationEnabled = true) (devm : Devm) (adr : Adr) :
+    (h : rules.delegationEnabled = true) (devm : Devm) (adr : Address) :
     rules.delegationCost devm adr = rules.gas.delegationCost devm adr := by
   simp only [ForkRules.delegationCost, h, ↓reduceIte]
 
 theorem ForkRules.delegationCost_disabled {rules : ForkRules}
-    (h : rules.delegationEnabled = false) (devm : Devm) (adr : Adr) :
+    (h : rules.delegationEnabled = false) (devm : Devm) (adr : Address) :
     rules.delegationCost devm adr = ⟨false, adr, 0⟩ := by
   simp only [ForkRules.delegationCost, h, Bool.false_eq_true, ↓reduceIte]
 
 /-- The state-access half of delegation resolution, called only after the
 delegated access price has passed its affordability check. -/
-def completeDelegationAccess (devm : Devm) (delegated : Bool) (adr : Adr) :
+def completeDelegationAccess (devm : Devm) (delegated : Bool) (adr : Address) :
     ByteArray × Devm :=
   let devm := if delegated then addAccessedAddress devm adr else devm
   ⟨devm.state.getCode adr, devm⟩
@@ -232,7 +232,7 @@ def processCreateMessage.chargeCodeGas (rules : ForkRules) (devm : Devm) :
   let contractCode := devm.output
   match rules.stateGas with
   | none =>
-    let contractCodeGas := contractCode.length * gasCodeDeposit
+    let contractCodeGas := contractCode.length * Gas.codeDeposit
     -- EIP-3541 (London): deposited code may not start with 0xEF. Before that
     -- the prefix deposits like any other code. At Prague the gate is on, so
     -- the taken arm is the old body verbatim.
@@ -260,18 +260,18 @@ def processCreateMessage.chargeCodeGas (rules : ForkRules) (devm : Devm) :
       if rules.code.maxCodeSize < contractCode.length
       then .error ⟨.halt (.outOfGas .none), devm⟩
       else do
-        let devm ← chargeGas (gasKeccak256Word * ceilDiv contractCode.length 32) devm
+        let devm ← chargeGas (Gas.keccak256Word * ceilDiv contractCode.length 32) devm
         chargeStateGas (contractCode.length * state.costPerStateByte) devm
 
 def processCreateMessage.exceptionalHalt
-    (devm : Devm) (reason : ExceptionalHalt) (st : State) (tra : Tra) : Devm :=
+    (devm : Devm) (reason : ExceptionalHalt) (st : State) (tra : TransientStorage) : Devm :=
   let devm := (devm.rollback st tra).withGasLeft 0
   devm.setMeta {devm.meta with output := [], error := .some (.halt reason)}
 
 /-- `process_create`'s halt settlement under `rules.stateGas = some _`: the
 state gas is refilled to the baseline before the execution gas is forfeited. -/
 def processCreateMessage.exceptionalHaltAmsterdam
-    (devm : Devm) (reason : ExceptionalHalt) (st : State) (tra : Tra) : Devm :=
+    (devm : Devm) (reason : ExceptionalHalt) (st : State) (tra : TransientStorage) : Devm :=
   let devm := (devm.rollback st tra).restoreStateGas.forfeitRemainingGas
   devm.setMeta {devm.meta with output := [], error := .some (.halt reason)}
 
@@ -384,7 +384,7 @@ def initEvm (msg : Msg) : Evm :=
   }
 
 def Msg.benvAfterTransfer (msg : Msg) :
-    Except (EvmError × State × AdrSet × Tra) Benv :=
+    Except (EvmError × State × AdrSet × TransientStorage) Benv :=
   if msg.shouldTransferValue ∧ msg.value ≠ 0 then do
     let benv ←
       (msg.benv.subBal msg.caller msg.value).toExcept
@@ -400,7 +400,7 @@ def Msg.benvAfterTransfer (msg : Msg) :
   simp [Msg.benvAfterTransfer, hzero]
 
 def executeCode.handleError :
-    Execution → Except (EvmError × State × AdrSet × Tra) Devm
+    Execution → Except (EvmError × State × AdrSet × TransientStorage) Devm
   | .ok evm => .ok evm
   | .error ⟨.halt reason, evm⟩ =>
     let evm := evm.withGasLeft 0
@@ -416,7 +416,7 @@ refills its state gas to the baseline and forfeits its execution gas; a
 reverted frame refills only. After either, the meter states exactly what the
 frame gives back, so a parent absorbs it unconditionally. -/
 def executeCode.handleErrorAmsterdam :
-    Execution → Except (EvmError × State × AdrSet × Tra) Devm
+    Execution → Except (EvmError × State × AdrSet × TransientStorage) Devm
   | .ok evm => .ok evm
   | .error ⟨.halt reason, evm⟩ =>
     let evm := evm.restoreStateGas.forfeitRemainingGas
@@ -430,7 +430,7 @@ def executeCode.handleErrorAmsterdam :
 /-- The settlement a frame's rules select. Under `none` this is
 `executeCode.handleError`, textually. -/
 def executeCode.handleErrorWith (stateGas : Option StateGasRules) (raw : Execution) :
-    Except (EvmError × State × AdrSet × Tra) Devm :=
+    Except (EvmError × State × AdrSet × TransientStorage) Devm :=
   match stateGas with
   | none => executeCode.handleError raw
   | some _ => executeCode.handleErrorAmsterdam raw
@@ -440,9 +440,9 @@ def Execution.withPc (pc : Nat) (exn : Execution) :
   let devm ← exn
   .ok ⟨pc, devm⟩
 
-def Ninst.size : Ninst → Nat
-  | reg _ => 1
-  | exec _ => 1
+def NextOp.size : NextOp → Nat
+  | plain _ => 1
+  | message _ => 1
   | push xs _ => xs.length + 1
   -- EIP-8024: one immediate byte, so `pc += 2` -- for an accepted immediate.
   -- A forbidden one halts before the counter moves, so its size is never read.
@@ -456,10 +456,10 @@ def callMsg
     (sevm: Sevm)
     (evm1: Devm)
     (gas: Nat)
-    (value: B256)
-    (caller: Adr)
-    (target: Adr)
-    (codeAddress: Adr)
+    (value: U256)
+    (caller: Address)
+    (target: Address)
+    (codeAddress: Address)
     (shouldTransferValue: Bool)
     (isStaticcall: Bool)
     (calldata: Bytes)
@@ -487,7 +487,7 @@ def callMsg
     accessedStorageKeys := evm1.accessedStorageKeys
     disablePrecompiles := disablePrecompiles
     inheritedDeletions :=
-      if sevm.benvStat.rules.settle.selfdestructRefund = 0 then .emptyWithCapacity
+      if sevm.benvStat.rules.settlement.selfdestructRefund = 0 then .emptyWithCapacity
       else evm1.accountsToDelete
   }
 
@@ -499,8 +499,8 @@ non-recursive and fuel-free; `execFueled` is the single fueled driver.
 /-- The message passed to a CREATE/CREATE2 child.  This named barrier is the
 CREATE-family counterpart of `callMsg`. -/
 def createMsg
-    (sevm : Sevm) (devm : Devm) (createGas : Nat) (endowment : B256)
-    (newAddress : Adr) (calldata : Bytes) : Msg :=
+    (sevm : Sevm) (devm : Devm) (createGas : Nat) (endowment : U256)
+    (newAddress : Address) (calldata : Bytes) : Msg :=
   {
     benv := Benv.mk devm.state devm.createdAccounts sevm.benvStat devm.world.storageWrites
     tenv := {transientStorage := devm.transientStorage, stat := sevm.tenvStat}
@@ -519,7 +519,7 @@ def createMsg
     accessedStorageKeys := devm.accessedStorageKeys
     disablePrecompiles := false
     inheritedDeletions :=
-      if sevm.benvStat.rules.settle.selfdestructRefund = 0 then .emptyWithCapacity
+      if sevm.benvStat.rules.settlement.selfdestructRefund = 0 then .emptyWithCapacity
       else devm.accountsToDelete
   }
 
@@ -565,8 +565,8 @@ dropped by `incorporateChildOnError`, and a failed transaction's by
 (`processCreateMessage.msg`), so it is never empty and EELS's omission of the
 top-level creation target is immaterial. -/
 def processMessage.settle (msg : Msg)
-    (r : Except (EvmError × State × AdrSet × Tra) Devm) :
-    Except (EvmError × State × AdrSet × Tra) Devm := do
+    (r : Except (EvmError × State × AdrSet × TransientStorage) Devm) :
+    Except (EvmError × State × AdrSet × TransientStorage) Devm := do
   let evm ← r
   if evm.error.isSome then
     .ok (((evm.rollback msg.benv.state msg.tenv.transientStorage).withStorageWrites
@@ -576,8 +576,8 @@ def processMessage.settle (msg : Msg)
     .ok (evm.recordTouch msg.benv.stat.rules true msg.currentTarget)
 
 def processCreateMessage.settle (msg : Msg)
-    (r : Except (EvmError × State × AdrSet × Tra) Devm) :
-    Except (EvmError × State × AdrSet × Tra) Devm := do
+    (r : Except (EvmError × State × AdrSet × TransientStorage) Devm) :
+    Except (EvmError × State × AdrSet × TransientStorage) Devm := do
   let evm ← r
   if evm.error.isNone then
     match processCreateMessage.chargeCodeGas msg.benv.stat.rules evm with
@@ -603,13 +603,13 @@ def processCreateMessage.settle (msg : Msg)
       msg.benv.storageWrites)
 
 def Frame.settleMsg (f : Frame)
-    (r : Except (EvmError × State × AdrSet × Tra) Devm) :
-    Except (EvmError × State × AdrSet × Tra) Devm :=
+    (r : Except (EvmError × State × AdrSet × TransientStorage) Devm) :
+    Except (EvmError × State × AdrSet × TransientStorage) Devm :=
   let r := processMessage.settle f.inner r
   if f.isCreate then processCreateMessage.settle f.outer r else r
 
 def Frame.settle (f : Frame) (raw : Execution) :
-    Except (EvmError × State × AdrSet × Tra) Devm :=
+    Except (EvmError × State × AdrSet × TransientStorage) Devm :=
   f.settleMsg (executeCode.handleErrorWith f.inner.benv.stat.rules.stateGas raw)
 
 def executeCode.enter (msg : Msg) : Evm ⊕ Execution :=
@@ -617,13 +617,13 @@ def executeCode.enter (msg : Msg) : Evm ⊕ Execution :=
   match msg.codeAddress with
   | .none => .inl evm
   | .some adr =>
-    if !msg.disablePrecompiles && msg.benv.stat.rules.isPrecomp adr then
-      .inr (executePrecomp evm adr)
+    if !msg.disablePrecompiles && msg.benv.stat.rules.isPrecompile adr then
+      .inr (executePrecompile evm adr)
     else
       .inl evm
 
 inductive FrameEntry : Type
-  | done (r : Except (EvmError × State × AdrSet × Tra) Devm)
+  | done (r : Except (EvmError × State × AdrSet × TransientStorage) Devm)
   | run (evm : Evm)
 
 def Frame.enter (f : Frame) : FrameEntry :=
@@ -641,23 +641,23 @@ def Frame.enter (f : Frame) : FrameEntry :=
     | .inr raw => .done (f.settle raw)
 
 inductive Resume : Type
-  | create (parent : Devm) (newAddress : Adr)
+  | create (parent : Devm) (newAddress : Address)
   | call (parent : Devm) (outputIndex outputSize : Nat)
   /-- The Amsterdam siblings carry the state-gas record the merge reads and
   whether the spawn charged `NEW_ACCOUNT`, which a failed child refills. -/
-  | createAmsterdam (state : StateGasRules) (parent : Devm) (newAddress : Adr)
+  | createAmsterdam (state : StateGasRules) (parent : Devm) (newAddress : Address)
       (newAccountCharged : Bool)
   | callAmsterdam (state : StateGasRules) (parent : Devm)
       (outputIndex outputSize : Nat) (newAccountCharged : Bool)
 
 def Resume.run :
-    Resume → Except (EvmError × State × AdrSet × Tra) Devm → Execution
+    Resume → Except (EvmError × State × AdrSet × TransientStorage) Devm → Execution
   | .create parent newAddress, r => do
     let child ← liftToExecution parent r
     if child.error.isSome then
       (incorporateChildOnError parent child child.output).push 0
     else
-      (incorporateChildOnSuccess parent child []).push newAddress.toB256
+      (incorporateChildOnSuccess parent child []).push newAddress.toU256
   | .call parent outputIndex outputSize, r => do
     let child ← liftToExecution parent r
     let actualOutput := child.output.take outputSize
@@ -684,7 +684,7 @@ def Resume.run :
       Except.assert child.AmsterdamChildUncommitted
         ⟨.internal (.invariant (.text "Amsterdam child has committed state-gas spill")),
           child⟩
-      (incorporateChildAmsterdamOnSuccess parent child []).push newAddress.toB256
+      (incorporateChildAmsterdamOnSuccess parent child []).push newAddress.toU256
   | .callAmsterdam state parent outputIndex outputSize newAccountCharged, r => do
     let child ← liftToExecution parent r
     let actualOutput := child.output.take outputSize
@@ -735,7 +735,7 @@ private def resumeGuardIsInvariantError : Execution → Bool
   | .error ⟨.internal (.invariant _), _⟩ => true
   | _ => false
 
-private def resumeGuardStack : Execution → Option (List B256)
+private def resumeGuardStack : Execution → Option (List U256)
   | .ok devm => some devm.stack
   | .error _ => none
 
@@ -790,8 +790,8 @@ def XStep.toStep (pc : Nat) : XStep → Step
   | .spawn frame rsm => .spawn frame rsm pc
 
 def genericCreate.step
-    (sevm : Sevm) (devm : Devm) (endowment : B256)
-    (newAddress : Adr) (memoryIndex memorySize : Nat) : XStep :=
+    (sevm : Sevm) (devm : Devm) (endowment : U256)
+    (newAddress : Address) (memoryIndex memorySize : Nat) : XStep :=
   XStep.ofExcept do
     let calldata := devm.memory.data.sliceD memoryIndex memorySize 0
     -- EIP-3860 (Shanghai): the initcode bound applies only once
@@ -805,7 +805,7 @@ def genericCreate.step
     assertDynamic sevm devm
     let devm := devm.withReturnData []
     let sender := devm.state.get sevm.currentTarget
-    if sender.bal < endowment ∨ sender.nonce = UInt64.max ∨ sevm.depth = 0 then
+    if sender.balance < endowment ∨ sender.nonce = UInt64.max ∨ sevm.depth = 0 then
       let devm ← (devm.withGasLeft (devm.gasLeft + createGas)).push 0
       return .done (.ok devm)
     let devm := devm.incrNonce sevm.currentTarget
@@ -821,8 +821,8 @@ def genericCreate.step
     return .spawn (Frame.ofCreate childMsg) (.create devm newAddress)
 
 def genericCall.step
-    (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
-    (caller target codeAddress : Adr)
+    (sevm : Sevm) (devm : Devm) (gas : Nat) (value : U256)
+    (caller target codeAddress : Address)
     (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool) : XStep :=
@@ -845,8 +845,8 @@ return untouched and a charged creation refills -- or the spawn, whose child
 starts with the reservoir as its state-gas grant. -/
 def genericCallAmsterdam.step
     (sevm : Sevm) (state : StateGasRules) (devm : Devm)
-    (gas reservoir : Nat) (value : B256)
-    (caller target codeAddress : Adr)
+    (gas reservoir : Nat) (value : U256)
+    (caller target codeAddress : Address)
     (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray)
@@ -875,8 +875,8 @@ aborts with nothing charged or withheld, the destination access with its
 creation charge decided by existence alone, the withheld execution grant, the
 collision that consumes it, and the spawn with the whole reservoir. -/
 def genericCreateAmsterdam.step
-    (sevm : Sevm) (state : StateGasRules) (devm : Devm) (endowment : B256)
-    (newAddress : Adr) (memoryIndex memorySize : Nat) : XStep :=
+    (sevm : Sevm) (state : StateGasRules) (devm : Devm) (endowment : U256)
+    (newAddress : Address) (memoryIndex memorySize : Nat) : XStep :=
   XStep.ofExcept do
     let calldata := devm.memory.data.sliceD memoryIndex memorySize 0
     let devm := devm.withReturnData []
@@ -884,14 +884,14 @@ def genericCreateAmsterdam.step
     -- `get_account(sender_address)` is a read (EIP-7928).
     let devm := devm.balReadAccount sevm.benvStat.rules sevm.currentTarget
     let sender := devm.state.get sevm.currentTarget
-    if sender.bal < endowment ∨ sender.nonce = UInt64.max ∨ sevm.depth = 0 then
+    if sender.balance < endowment ∨ sender.nonce = UInt64.max ∨ sevm.depth = 0 then
       let devm ← devm.push 0
       return .done (.ok devm)
     -- DESTINATION ACCESS: the creation charge, by existence alone;
     -- `is_account_alive(contract_address)` reads the destination (EIP-7928).
     let devm := addAccessedAddress devm newAddress
     let devm := devm.balReadAccount sevm.benvStat.rules newAddress
-    let newAccountCharged := (devm.getAcct newAddress).Empty
+    let newAccountCharged := (devm.getAcct newAddress).isEmpty
     let devm ←
       if newAccountCharged then chargeStateGas state.newAccount devm else .ok devm
     -- CHILD GRANT: all but one 64th of the execution gas.
@@ -966,8 +966,8 @@ private theorem CalldataCache.get_fst
     · rfl
 
 private def genericCall.stepCached
-    (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
-    (caller target codeAddress : Adr)
+    (sevm : Sevm) (devm : Devm) (gas : Nat) (value : U256)
+    (caller target codeAddress : Address)
     (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool)
@@ -986,8 +986,8 @@ private def genericCall.stepCached
     (.spawn (Frame.ofCall childMsg) (.call evm1 outputIndex outputSize), cache)
 
 private theorem genericCall.stepCached_fst
-    (sevm : Sevm) (devm : Devm) (gas : Nat) (value : B256)
-    (caller target codeAddress : Adr)
+    (sevm : Sevm) (devm : Devm) (gas : Nat) (value : U256)
+    (caller target codeAddress : Address)
     (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool)
@@ -1004,7 +1004,7 @@ private theorem genericCall.stepCached_fst
   · rfl
   · simp only [CalldataCache.get_fst]
 
-def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
+def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
   | .create =>
     match sevm.benvStat.rules.stateGas with
     | none =>
@@ -1017,7 +1017,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         -- `creation.initCodeLimit` activates; before that a creation pays no
         -- initcode words.
         let initCodeCost := if sevm.benvStat.rules.creation.initCodeLimit then
-          gasInitCodeWordCost * ceilDiv memorySize 32 else 0
+          Gas.initcodeWordCost * ceilDiv memorySize 32 else 0
         let devm ←
           chargeGas (sevm.benvStat.rules.gas.createAccess + extendCost + initCodeCost) devm
         let devm := devm.memExtends [⟨memoryIndex, memorySize⟩]
@@ -1035,7 +1035,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let ⟨memoryIndex, devm⟩ ← devm.popToNat
         let ⟨memorySize, devm⟩ ← devm.popToNat
         let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
-        let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
+        let initCodeCost := Gas.initcodeWordCost * ceilDiv memorySize 32
         let devm ←
           chargeGas (sevm.benvStat.rules.gas.createAccess + extendCost + initCodeCost)
             devm
@@ -1052,7 +1052,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
   -- `Rinst.runCore`: without the fork the byte is an undefined instruction
   -- whatever the stack holds. The two metering shapes below are untouched.
   | .create2 =>
-    if sevm.benvStat.rules.op.create2 then
+    if sevm.benvStat.rules.opcodes.create2 then
       match sevm.benvStat.rules.stateGas with
       | none =>
         XStep.ofExcept do
@@ -1061,12 +1061,12 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           let ⟨memorySize, devm⟩ ← devm.popToNat
           let ⟨salt, devm⟩ ← devm.pop
           let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
-          let initCodeHashCost := gasKeccak256Word * ceilDiv memorySize 32
+          let initCodeHashCost := Gas.keccak256Word * ceilDiv memorySize 32
           -- EIP-3860 (Shanghai): initcode is metered per word only once
           -- `creation.initCodeLimit` activates; before that a creation pays no
           -- initcode words. The hashing words above are EIP-1014 and stay.
           let initCodeCost := if sevm.benvStat.rules.creation.initCodeLimit then
-            gasInitCodeWordCost * ceilDiv memorySize 32 else 0
+            Gas.initcodeWordCost * ceilDiv memorySize 32 else 0
           let devm ←
             chargeGas
               (sevm.benvStat.rules.gas.createAccess + initCodeHashCost + extendCost
@@ -1088,8 +1088,8 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           let ⟨memorySize, devm⟩ ← devm.popToNat
           let ⟨salt, devm⟩ ← devm.pop
           let extendCost := devm.extCost [⟨memoryIndex, memorySize⟩]
-          let initCodeHashCost := gasKeccak256Word * ceilDiv memorySize 32
-          let initCodeCost := gasInitCodeWordCost * ceilDiv memorySize 32
+          let initCodeHashCost := Gas.keccak256Word * ceilDiv memorySize 32
+          let initCodeCost := Gas.initcodeWordCost * ceilDiv memorySize 32
           let devm ←
             chargeGas
               (sevm.benvStat.rules.gas.createAccess + initCodeHashCost + extendCost
@@ -1134,7 +1134,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
           sevm.benvStat.rules.accessDelegation devm callee
         let accessCost := preAccessCost + delegatedAccessGasCost
         let createCost :=
-          if (¬ (devm.getAcct callee).Empty) ∨ value = 0 then 0 else gNewAccount
+          if (¬ (devm.getAcct callee).isEmpty) ∨ value = 0 then 0 else Gas.newAccount
         let transferCost := if value = 0 then 0 else gasRules.callValue
         let ⟨msgCallCost, msgCallStipend⟩ :=
           calculateMsgCallGas value.toNat gas.toNat devm.gasLeft extendCost
@@ -1144,7 +1144,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let devm :=
           devm.memExtends
             [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-        let senderBal := (devm.getAcct sevm.currentTarget).bal
+        let senderBal := (devm.getAcct sevm.currentTarget).balance
         if senderBal < value then
           let devm ← devm.push 0
           return .done
@@ -1192,7 +1192,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let ⟨code, devm⟩ :=
           completeDelegationAccess devm disablePrecompiles newCodeAddress
         let devm ← chargeGas (extraGas + extendCost) devm
-        let newAccountCharged := value ≠ 0 ∧ (devm.getAcct callee).Empty
+        let newAccountCharged := value ≠ 0 ∧ (devm.getAcct callee).isEmpty
         let devm ←
           if newAccountCharged then chargeStateGas state.newAccount devm
           else .ok devm
@@ -1202,7 +1202,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let ⟨reservoir, devm⟩ := devm.drainStateGasReservoir
         let devm :=
           devm.memExtends [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-        let senderBal := (devm.getAcct sevm.currentTarget).bal
+        let senderBal := (devm.getAcct sevm.currentTarget).balance
         return genericCallAmsterdam.step
           sevm state devm msgCallStipend reservoir value sevm.currentTarget callee
           newCodeAddress true false inputIndex inputSize outputIndex outputSize
@@ -1241,7 +1241,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let devm :=
           devm.memExtends
             [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-        let senderBal := (devm.getAcct sevm.currentTarget).bal
+        let senderBal := (devm.getAcct sevm.currentTarget).balance
         if senderBal < value then
           let devm ← devm.push 0
           return .done
@@ -1264,7 +1264,7 @@ def Xinst.step (sevm : Sevm) (devm : Devm) : Xinst → XStep
         let ⟨inputSize, devm⟩ ← devm.popToNat
         let ⟨outputIndex, devm⟩ ← devm.popToNat
         let ⟨outputSize, devm⟩ ← devm.popToNat
-        let senderBal := (devm.getAcct sevm.currentTarget).bal
+        let senderBal := (devm.getAcct sevm.currentTarget).balance
         let gasRules := sevm.benvStat.rules.gas
         let extendCost :=
           devm.extCost [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
@@ -1493,12 +1493,12 @@ legacy arms are reproduced here verbatim from `Xinst.step` with
 `genericCall.stepCached` in place of `genericCall.step` and the cache threaded
 through the early returns. The Amsterdam (`stateGas = some _`) arms are not
 specialized: they reach `genericCallAmsterdam.step`, a separate definition. -/
-private def Xinst.stepCached
+private def MessageOp.stepCached
     (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) :
-    Xinst → XStep × Option CalldataCache
+    MessageOp → XStep × Option CalldataCache
   | .call =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (Xinst.step sevm devm .call, cache)
+    | some _ => (MessageOp.step sevm devm .call, cache)
     | none =>
     XStep.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -1524,7 +1524,7 @@ private def Xinst.stepCached
         sevm.benvStat.rules.accessDelegation devm callee
       let accessCost := preAccessCost + delegatedAccessGasCost
       let createCost :=
-        if (¬ (devm.getAcct callee).Empty) ∨ value = 0 then 0 else gNewAccount
+        if (¬ (devm.getAcct callee).isEmpty) ∨ value = 0 then 0 else Gas.newAccount
       let transferCost := if value = 0 then 0 else gasRules.callValue
       let ⟨msgCallCost, msgCallStipend⟩ :=
         calculateMsgCallGas value.toNat gas.toNat devm.gasLeft extendCost
@@ -1534,7 +1534,7 @@ private def Xinst.stepCached
       let devm :=
         devm.memExtends
           [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let senderBal := (devm.getAcct sevm.currentTarget).bal
+      let senderBal := (devm.getAcct sevm.currentTarget).balance
       if senderBal < value then
         let devm ← devm.push 0
         return (.done
@@ -1549,7 +1549,7 @@ private def Xinst.stepCached
       Except (EvmError × Devm) (XStep × Option CalldataCache))
   | .callcode =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (Xinst.step sevm devm .callcode, cache)
+    | some _ => (MessageOp.step sevm devm .callcode, cache)
     | none =>
     XStep.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -1582,7 +1582,7 @@ private def Xinst.stepCached
       let devm :=
         devm.memExtends
           [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-      let senderBal := (devm.getAcct sevm.currentTarget).bal
+      let senderBal := (devm.getAcct sevm.currentTarget).balance
       if senderBal < value then
         let devm ← devm.push 0
         return (.done
@@ -1598,7 +1598,7 @@ private def Xinst.stepCached
       Except (EvmError × Devm) (XStep × Option CalldataCache))
   | .delegatecall =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (Xinst.step sevm devm .delegatecall, cache)
+    | some _ => (MessageOp.step sevm devm .delegatecall, cache)
     | none =>
     XStep.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -1636,7 +1636,7 @@ private def Xinst.stepCached
       Except (EvmError × Devm) (XStep × Option CalldataCache))
   | .staticcall =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (Xinst.step sevm devm .staticcall, cache)
+    | some _ => (MessageOp.step sevm devm .staticcall, cache)
     | none =>
     XStep.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -1671,12 +1671,12 @@ private def Xinst.stepCached
         true true inputIndex inputSize outputIndex outputSize code
         disablePrecompiles cache :
       Except (EvmError × Devm) (XStep × Option CalldataCache))
-  | x => (Xinst.step sevm devm x, cache)
+  | x => (MessageOp.step sevm devm x, cache)
 
-private theorem Xinst.stepCached_fst
-    (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) (x : Xinst) :
-    (Xinst.stepCached sevm devm cache x).1 = Xinst.step sevm devm x := by
-  cases x <;> simp only [Xinst.stepCached, Xinst.step]
+private theorem MessageOp.stepCached_fst
+    (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) (x : MessageOp) :
+    (MessageOp.stepCached sevm devm cache x).1 = MessageOp.step sevm devm x := by
+  cases x <;> simp only [MessageOp.stepCached, MessageOp.step]
   case call =>
     rcases hs : sevm.benvStat.rules.stateGas with _ | state
     · refine XStep.ofExceptCached_fst cache ?_
@@ -1704,22 +1704,22 @@ private theorem Xinst.stepCached_fst
         genericCall.stepCached_fst]
     · rfl
 
-def Ninst.step (evm : Evm) (n : Ninst) : Step :=
+def NextOp.step (evm : Evm) (n : NextOp) : Step :=
   let pc := evm.pc + n.size
   match n with
   -- S8 (EIP-3855): `PUSH0` is the empty push. Without the fork the byte is an
   -- undefined instruction whatever the stack and gas hold, exactly as for
   -- `CLZ` in `Rinst.runCore`; a nonzero push is untouched.
   | .push xs _ =>
-    if xs = [] && !evm.sta.benvStat.rules.op.push0 then
+    if xs = [] && !evm.sta.benvStat.rules.opcodes.push0 then
       Step.ofExecution pc (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
     else
-      let cost := if xs = [] then gBase else gVerylow
+      let cost := if xs = [] then Gas.base else Gas.veryLow
       Step.ofExecution pc <| do
         let devm ← chargeGas cost evm.dyna
-        devm.push xs.toB256
-  | .reg r => Step.ofExecution pc (r.run evm)
-  | .exec x => XStep.toStep pc (Xinst.step evm.sta evm.dyna x)
+        devm.push xs.toU256
+  | .plain r => Step.ofExecution pc (r.run evm)
+  | .message x => XStep.toStep pc (MessageOp.step evm.sta evm.dyna x)
   -- EIP-8024 (`vm/instructions/stack.py` `dupn`/`swapn`/`exchange`): the
   -- availability check first, as for every fork-gated opcode; then
   -- `charge_gas(VERY_LOW)` *before* the immediate is decoded, so an
@@ -1731,8 +1731,8 @@ def Ninst.step (evm : Evm) (n : Ninst) : Step :=
   -- `EXCHANGE n m` swaps positions `n + 1` and `m + 1` (indices `n`, `m`).
   | .dupn imm =>
     Step.ofExecution pc <| do
-      if evm.sta.benvStat.rules.op.stackAccess then
-        let devm ← chargeGas gVerylow evm.dyna
+      if evm.sta.benvStat.rules.opcodes.stackAccess then
+        let devm ← chargeGas Gas.veryLow evm.dyna
         match decodeSingle imm with
         | none => .error ⟨.halt (.invalidOpcode .none), devm⟩
         | some n =>
@@ -1743,8 +1743,8 @@ def Ninst.step (evm : Evm) (n : Ninst) : Step :=
         .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩
   | .swapn imm =>
     Step.ofExecution pc <| do
-      if evm.sta.benvStat.rules.op.stackAccess then
-        let devm ← chargeGas gVerylow evm.dyna
+      if evm.sta.benvStat.rules.opcodes.stackAccess then
+        let devm ← chargeGas Gas.veryLow evm.dyna
         match decodeSingle imm with
         | none => .error ⟨.halt (.invalidOpcode .none), devm⟩
         | some n =>
@@ -1755,8 +1755,8 @@ def Ninst.step (evm : Evm) (n : Ninst) : Step :=
         .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩
   | .exchange imm =>
     Step.ofExecution pc <| do
-      if evm.sta.benvStat.rules.op.stackAccess then
-        let devm ← chargeGas gVerylow evm.dyna
+      if evm.sta.benvStat.rules.opcodes.stackAccess then
+        let devm ← chargeGas Gas.veryLow evm.dyna
         match decodePair imm with
         | none => .error ⟨.halt (.invalidOpcode .none), devm⟩
         | some (n, m) =>
@@ -1769,9 +1769,9 @@ def Ninst.step (evm : Evm) (n : Ninst) : Step :=
 def Evm.step (evm : Evm) : Step :=
   match evm.getInst with
   | .none => .halt (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
-  | .some (.next n) => Ninst.step evm n
+  | .some (.next n) => NextOp.step evm n
   | .some (.jump j) => Step.ofJump (j.run evm)
-  | .some (.last l) => .halt (l.run evm.sta evm.dyna)
+  | .some (.halt l) => .halt (l.run evm.sta evm.dyna)
 
 -- EIP-8024 `DUPN`/`SWAPN`/`EXCHANGE` (goal C, G4), stepped from real code
 -- through `getInst`, so that the immediate's sizing, the zero fill past the
@@ -1779,7 +1779,7 @@ def Evm.step (evm : Evm) : Step :=
 -- the stack effect are all observed together. The summary is
 -- `(status, gasLeft, stack as Nats, pc)`; `"ok"` is a continued frame.
 private def stackAccessGuardEvm (fork : Fork) (code : ByteArray)
-    (gasLeft : Nat) (stack : List B256) : Evm :=
+    (gasLeft : Nat) (stack : List U256) : Evm :=
   { pc := 0,
     sta := { (default : Sevm) with
       code := code,
@@ -1789,10 +1789,10 @@ private def stackAccessGuardEvm (fork : Fork) (code : ByteArray)
 private def stackAccessGuard (fork : Fork) (code : List UInt8)
     (gasLeft : Nat) (stack : List Nat) : String × Nat × List Nat × Nat :=
   match Evm.step (stackAccessGuardEvm fork ⟨code.toArray⟩ gasLeft
-      (stack.map Nat.toB256)) with
-  | .cont pc d => ("ok", d.gasLeft, d.stack.map B256.toNat, pc)
-  | .halt (.error ⟨e, d⟩) => (e.render, d.gasLeft, d.stack.map B256.toNat, 0)
-  | .halt (.ok d) => ("halt-ok", d.gasLeft, d.stack.map B256.toNat, 0)
+      (stack.map Nat.toU256)) with
+  | .cont pc d => ("ok", d.gasLeft, d.stack.map U256.toNat, pc)
+  | .halt (.error ⟨e, d⟩) => (e.render, d.gasLeft, d.stack.map U256.toNat, 0)
+  | .halt (.ok d) => ("halt-ok", d.gasLeft, d.stack.map U256.toNat, 0)
   | .spawn _ _ _ => ("spawn", 0, [], 0)
 
 private def guardStackOf (n : Nat) : List Nat := List.range n
@@ -1800,12 +1800,12 @@ private def guardStackOf (n : Nat) : List Nat := List.range n
 -- Sizing: an accepted immediate advances the counter by two (`pc += 2`).
 -- `DUPN 0x80` decodes to 17 and duplicates position 17 (index 16).
 #guard stackAccessGuard .amsterdam [0xE6, 0x80] 100 (guardStackOf 17)
-  = ("ok", 100 - gVerylow, 16 :: guardStackOf 17, 2)
-#guard gVerylow = 3
+  = ("ok", 100 - Gas.veryLow, 16 :: guardStackOf 17, 2)
+#guard Gas.veryLow = 3
 -- One item short is a stack underflow -- after the charge, as in the pinned
 -- `dupn`, whose `charge_gas` precedes the length test.
 #guard stackAccessGuard .amsterdam [0xE6, 0x80] 100 (guardStackOf 16)
-  = ("StackUnderflowError", 100 - gVerylow, guardStackOf 16, 0)
+  = ("StackUnderflowError", 100 - Gas.veryLow, guardStackOf 16, 0)
 -- `DUPN 0x00` decodes to 145: 145 items suffice, 144 do not.
 #guard (stackAccessGuard .amsterdam [0xE6, 0x00] 100 (guardStackOf 145)).1 = "ok"
 #guard (stackAccessGuard .amsterdam [0xE6, 0x00] 100 (guardStackOf 144)).1
@@ -1819,7 +1819,7 @@ private def guardStackOf (n : Nat) : List Nat := List.range n
 -- A forbidden immediate is an invalid instruction -- after the charge, since
 -- the pinned `charge_gas` precedes the decode -- whatever the stack holds.
 #guard stackAccessGuard .amsterdam [0xE6, 0x5B] 100 (guardStackOf 200)
-  = ("InvalidOpcode", 100 - gVerylow, guardStackOf 200, 0)
+  = ("InvalidOpcode", 100 - Gas.veryLow, guardStackOf 200, 0)
 #guard (stackAccessGuard .amsterdam [0xE6, 0x7F] 100 (guardStackOf 200)).1 = "InvalidOpcode"
 #guard (stackAccessGuard .amsterdam [0xE7, 0x5B] 100 (guardStackOf 200)).1 = "InvalidOpcode"
 #guard (stackAccessGuard .amsterdam [0xE8, 0x52] 100 (guardStackOf 200)).1 = "InvalidOpcode"
@@ -1830,18 +1830,18 @@ private def guardStackOf (n : Nat) : List Nat := List.range n
 -- `SWAPN 0x80` decodes to 17: swaps the top with position 18 (index 17); 18
 -- items suffice, 17 do not.
 #guard stackAccessGuard .amsterdam [0xE7, 0x80] 100 (guardStackOf 18)
-  = ("ok", 100 - gVerylow, ((guardStackOf 18).set 0 17).set 17 0, 2)
+  = ("ok", 100 - Gas.veryLow, ((guardStackOf 18).set 0 17).set 17 0, 2)
 #guard (stackAccessGuard .amsterdam [0xE7, 0x80] 100 (guardStackOf 17)).1
   = "StackUnderflowError"
 -- `EXCHANGE 0x00` decodes to `(9, 16)`: swaps positions 10 and 17 (indices 9
 -- and 16); 17 items suffice, 16 do not.
 #guard stackAccessGuard .amsterdam [0xE8, 0x00] 100 (guardStackOf 17)
-  = ("ok", 100 - gVerylow, ((guardStackOf 17).set 9 16).set 16 9, 2)
+  = ("ok", 100 - Gas.veryLow, ((guardStackOf 17).set 9 16).set 16 9, 2)
 #guard (stackAccessGuard .amsterdam [0xE8, 0x00] 100 (guardStackOf 16)).1
   = "StackUnderflowError"
 -- `EXCHANGE 0xFF` decodes to `(1, 22)`: indices 1 and 22, 23 items needed.
 #guard stackAccessGuard .amsterdam [0xE8, 0xFF] 100 (guardStackOf 23)
-  = ("ok", 100 - gVerylow, ((guardStackOf 23).set 1 22).set 22 1, 2)
+  = ("ok", 100 - Gas.veryLow, ((guardStackOf 23).set 1 22).set 22 1, 2)
 -- Under BPO2 the three bytes are unassigned: an invalid instruction whatever
 -- the stack and gas hold, and no gas is charged.
 #guard stackAccessGuard .bpo2 [0xE6, 0x80] 100 (guardStackOf 17)
@@ -1850,14 +1850,14 @@ private def guardStackOf (n : Nat) : List Nat := List.range n
 #guard (stackAccessGuard .bpo2 [0xE8, 0x00] 0 []).1 = "InvalidOpcode"
 #guard (stackAccessGuard .prague [0xE6, 0x80] 100 (guardStackOf 17)).1 = "InvalidOpcode"
 -- And `SLOTNUM` from code, for the same fixture: `BASE`, the push, `pc += 1`.
-#guard stackAccessGuard .amsterdam [0x4B] 100 [] = ("ok", 100 - gBase, [0], 1)
+#guard stackAccessGuard .amsterdam [0x4B] 100 [] = ("ok", 100 - Gas.base, [0], 1)
 #guard (stackAccessGuard .bpo2 [0x4B] 100 []).1 = "InvalidOpcode"
 
 -- S8 (EIP-1014) `CREATE2` availability (unit U5): without the fork the byte is
 -- an undefined instruction whatever the stack holds; with it an empty stack
 -- reaches the first pop instead (the gate passed, the stack failed).
 private def guardCreate2 (fork : Fork) : XStep :=
-  Xinst.step
+  MessageOp.step
     { (default : Sevm) with
       benvStat := { (default : BenvStat) with fork := fork } }
     default .create2
@@ -1871,25 +1871,25 @@ private def guardCreate2 (fork : Fork) : XStep :=
 
 -- S8 (EIP-3855) `PUSH0` availability (unit U5): where defined it pushes zero
 -- for `BASE`; without the fork the byte is undefined and charges nothing.
-#guard stackAccessGuard .shanghai [0x5F] 100 [] = ("ok", 100 - gBase, [0], 1)
+#guard stackAccessGuard .shanghai [0x5F] 100 [] = ("ok", 100 - Gas.base, [0], 1)
 #guard stackAccessGuard .istanbul [0x5F] 100 [] = ("InvalidOpcode", 100, [], 0)
 #guard (stackAccessGuard .istanbul [0x5F] 0 []).1 = "InvalidOpcode"
 
-private def Ninst.stepCached
-    (evm : Evm) (cache : Option CalldataCache) (n : Ninst) :
+private def NextOp.stepCached
+    (evm : Evm) (cache : Option CalldataCache) (n : NextOp) :
     Step × Option CalldataCache :=
   let pc := evm.pc + n.size
   match n with
-  | .exec x =>
-    let result := Xinst.stepCached evm.sta evm.dyna cache x
+  | .message x =>
+    let result := MessageOp.stepCached evm.sta evm.dyna cache x
     (XStep.toStep pc result.1, result.2)
-  | _ => (Ninst.step evm n, cache)
+  | _ => (NextOp.step evm n, cache)
 
-private theorem Ninst.stepCached_fst
-    (evm : Evm) (cache : Option CalldataCache) (n : Ninst) :
-    (Ninst.stepCached evm cache n).1 = Ninst.step evm n := by
+private theorem NextOp.stepCached_fst
+    (evm : Evm) (cache : Option CalldataCache) (n : NextOp) :
+    (NextOp.stepCached evm cache n).1 = NextOp.step evm n := by
   cases n <;>
-    simp [Ninst.stepCached, Ninst.step, Xinst.stepCached_fst]
+    simp [NextOp.stepCached, NextOp.step, MessageOp.stepCached_fst]
 
 private def Evm.stepCached
     (evm : Evm) (cache : Option CalldataCache) :
@@ -1897,9 +1897,9 @@ private def Evm.stepCached
   match evm.getInst with
   | .none =>
     (.halt (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩), cache)
-  | .some (.next n) => Ninst.stepCached evm cache n
+  | .some (.next n) => NextOp.stepCached evm cache n
   | .some (.jump j) => (Step.ofJump (j.run evm), cache)
-  | .some (.last l) => (.halt (l.run evm.sta evm.dyna), cache)
+  | .some (.halt l) => (.halt (l.run evm.sta evm.dyna), cache)
 
 private theorem Evm.stepCached_fst
     (evm : Evm) (cache : Option CalldataCache) :
@@ -1909,9 +1909,9 @@ private theorem Evm.stepCached_fst
   | none => rfl
   | some inst =>
     cases inst with
-    | next n => exact Ninst.stepCached_fst evm cache n
+    | next n => exact NextOp.stepCached_fst evm cache n
     | jump j => rfl
-    | last l => rfl
+    | halt l => rfl
 
 /-- The single recursive interpreter driver, structurally recursive on its fuel
 parameter and therefore obliged to report exhaustion as an outcome.
@@ -2047,10 +2047,10 @@ private def flattenGuardArithmeticLoop : Bool :=
 
 -- CREATE collision: code and nonce each short-circuit with stack word 0.
 private def flattenGuardCreateCollision (code : Bool) : Bool :=
-  let target : Adr := 0x40
+  let target : Address := 0x40
   let state :=
     if code then State.setCode .empty target (flattenGuardCode [0x00])
-    else State.set .empty target {nonce := 1, bal := 0, stor := .empty, code := .empty}
+    else State.set .empty target {nonce := 1, balance := 0, storage := .empty, code := .empty}
   let msg : Msg :=
     {
       (flattenGuardMsg [] 100000 8) with
@@ -2066,10 +2066,10 @@ private def flattenGuardCreateCollision (code : Bool) : Bool :=
 #guard flattenGuardCreateCollision false
 
 private def flattenGuardCreateAmsterdamCollision (code : Bool) : Bool :=
-  let target : Adr := 0x43
+  let target : Address := 0x43
   let state :=
     if code then State.setCode .empty target (flattenGuardCode [0x00])
-    else State.set .empty target {nonce := 1, bal := 0, stor := .empty, code := .empty}
+    else State.set .empty target {nonce := 1, balance := 0, storage := .empty, code := .empty}
   let base : Benv := default
   let msg : Msg :=
     {(flattenGuardMsg [] 100000 8) with
@@ -2086,7 +2086,7 @@ private def flattenGuardCreateAmsterdamCollision (code : Bool) : Bool :=
 -- Storage alone admits a child in both shared CREATE helpers. CREATE2
 -- reaches these same helpers through `Xinst.step`; child entry wipes storage.
 private def flattenGuardCreateStorageOnly : Bool :=
-  let target : Adr := 0x41
+  let target : Address := 0x41
   let state := State.setStorVal .empty target 1 1
   let msg : Msg :=
     {(flattenGuardMsg [] 100000 8) with benv := {(default : Benv) with state := state}}
@@ -2095,7 +2095,7 @@ private def flattenGuardCreateStorageOnly : Bool :=
   | _ => false
 
 private def flattenGuardCreateAmsterdamStorageOnly : Bool :=
-  let target : Adr := 0x42
+  let target : Address := 0x42
   let state := State.setStorVal .empty target 1 1
   let base : Benv := default
   let msg : Msg :=
@@ -2139,7 +2139,7 @@ private def flattenGuardDepthZero : Bool :=
 #guard flattenGuardDepthZero
 
 private def flattenGuardCallData
-    (codeBytes : Bytes) (codeAddress : Adr) (disablePrecompiles : Bool) : Option Bytes :=
+    (codeBytes : Bytes) (codeAddress : Address) (disablePrecompiles : Bool) : Option Bytes :=
   let msg := flattenGuardMsg [] 100 8
   let devm := (initDevm msg).withMemory ⟨#[0xAA], 1⟩
   match
@@ -2172,9 +2172,9 @@ state component similarly adds the parent and child reservoirs. -/
 
 private def meteringGuardGas : Nat := 1_000_000
 private def meteringGuardStateGas : Nat := 1_000_000
-private def meteringGuardCaller : Adr := 0x1000
-private def meteringGuardCallee : Adr := 0x2000
-private def meteringGuardDelegate : Adr := 0x3000
+private def meteringGuardCaller : Address := 0x1000
+private def meteringGuardCallee : Address := 0x2000
+private def meteringGuardDelegate : Address := 0x3000
 
 /-- A valid legacy-shaped schedule whose three inherited instruction-site
 numbers deliberately differ from Prague's. These values make the charge guards
@@ -2257,7 +2257,7 @@ private def meteringGuardMsg (fork : Fork) (stateGasGrant : Nat) : Msg :=
   }
 
 private def meteringGuardDevm
-    (fork : Fork) (stateGasGrant : Nat) (stack : List B256) : Devm :=
+    (fork : Fork) (stateGasGrant : Nat) (stack : List U256) : Devm :=
   (initDevm (meteringGuardMsg fork stateGasGrant)).withStack stack
 
 private def meteringGuardDelegatedMsg (fork : Fork) : Msg :=
@@ -2265,7 +2265,7 @@ private def meteringGuardDelegatedMsg (fork : Fork) : Msg :=
   (meteringGuardMsg fork 0).setCode meteringGuardCallee code
 
 private def meteringGuardDelegatedDevm
-    (fork : Fork) (stack : List B256) : Devm :=
+    (fork : Fork) (stack : List U256) : Devm :=
   (initDevm (meteringGuardDelegatedMsg fork)).withStack stack
 
 private def meteringGuardResumeParent : Resume → Devm
@@ -2275,10 +2275,10 @@ private def meteringGuardResumeParent : Resume → Devm
   | .callAmsterdam _ parent _ _ _ => parent
 
 private def meteringGuardCreateCharges
-    (fork : Fork) (stateGasGrant : Nat) (x : Xinst)
-    (stack : List B256) : Option (Nat × Nat) :=
+    (fork : Fork) (stateGasGrant : Nat) (x : MessageOp)
+    (stack : List U256) : Option (Nat × Nat) :=
   let msg := meteringGuardMsg fork stateGasGrant
-  match Xinst.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
+  match MessageOp.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
   | .spawn frame resume =>
     let parent := meteringGuardResumeParent resume
     some
@@ -2321,10 +2321,10 @@ private def codeLimitGuardDeposit (fork : Fork) (stateGasGrant : Nat)
 #guard (meteringGuardCreateCharges .bpo2 0 .create2 [0, 0, 0xC000 + 1, 0]).isNone
 
 private def meteringGuardCallCharges
-    (fork : Fork) (stateGasGrant : Nat) (x : Xinst)
-    (stack : List B256) : Option (Nat × Nat) :=
+    (fork : Fork) (stateGasGrant : Nat) (x : MessageOp)
+    (stack : List U256) : Option (Nat × Nat) :=
   let msg := meteringGuardMsg fork stateGasGrant
-  match Xinst.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
+  match MessageOp.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
   | .spawn frame resume =>
     let parent := meteringGuardResumeParent resume
     some
@@ -2335,8 +2335,8 @@ private def meteringGuardCallCharges
 private def meteringGuardSelfdestructCharges
     (fork : Fork) (stateGasGrant : Nat) : Option (Nat × Nat × Nat) :=
   let msg := meteringGuardMsg fork stateGasGrant
-  let devm := meteringGuardDevm fork stateGasGrant [meteringGuardCallee.toB256]
-  match Linst.run (initSevm msg) devm .selfdestruct with
+  let devm := meteringGuardDevm fork stateGasGrant [meteringGuardCallee.toU256]
+  match HaltOp.run (initSevm msg) devm .selfdestruct with
   | .ok d =>
     some
       (meteringGuardGas - d.gasLeft,
@@ -2360,16 +2360,16 @@ private def meteringGuardSelfdestructCharges
 -- pays the legacy 25,000 execution surcharge; Amsterdam pays NEW_ACCOUNT in
 -- the state dimension instead. CALLCODE never creates an account.
 #guard meteringGuardCallCharges .prague 0 .call
-    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+    [0, meteringGuardCallee.toU256, 1, 0, 0, 0, 0]
   = some (36600, 0)
 #guard meteringGuardCallCharges .amsterdam meteringGuardStateGas .call
-    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+    [0, meteringGuardCallee.toU256, 1, 0, 0, 0, 0]
   = some (14300, 183600)
 #guard meteringGuardCallCharges .prague 0 .callcode
-    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+    [0, meteringGuardCallee.toU256, 1, 0, 0, 0, 0]
   = some (11600, 0)
 #guard meteringGuardCallCharges .amsterdam meteringGuardStateGas
-    .callcode [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+    .callcode [0, meteringGuardCallee.toU256, 1, 0, 0, 0, 0]
   = some (14300, 0)
 
 -- A delegation designator makes both the opcode target and delegated code
@@ -2393,7 +2393,7 @@ private def meteringGuardDelegationDevm : Devm :=
 delegated target, priced by an explicit schedule: the target's own cold access,
 then the delegated address's, then the value surcharge -- in the order and with
 the warming the arms perform. -/
-private def meteringGuardDelegatedCharge (gas : GasSchedule) (value : B256) : Nat :=
+private def meteringGuardDelegatedCharge (gas : GasSchedule) (value : U256) : Nat :=
   let devm := meteringGuardDelegationDevm
   let pre := gas.accessCost meteringGuardCallee devm.accessedAddresses
   let devm := addAccessedAddress devm meteringGuardCallee
@@ -2413,16 +2413,16 @@ private def meteringGuardDelegatedCharge (gas : GasSchedule) (value : B256) : Na
 
 -- The no-value call variants pay only the cold account access at this input.
 #guard meteringGuardCallCharges .prague 0 .delegatecall
-    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+    [0, meteringGuardCallee.toU256, 0, 0, 0, 0]
   = some (2600, 0)
 #guard meteringGuardCallCharges .amsterdam meteringGuardStateGas
-    .delegatecall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+    .delegatecall [0, meteringGuardCallee.toU256, 0, 0, 0, 0]
   = some (3000, 0)
 #guard meteringGuardCallCharges .prague 0 .staticcall
-    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+    [0, meteringGuardCallee.toU256, 0, 0, 0, 0]
   = some (2600, 0)
 #guard meteringGuardCallCharges .amsterdam meteringGuardStateGas
-    .staticcall [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+    .staticcall [0, meteringGuardCallee.toU256, 0, 0, 0, 0]
   = some (3000, 0)
 
 -- Design S1: under the flat (pre-EIP-2929) schedule the four legacy arms charge
@@ -2431,16 +2431,16 @@ private def meteringGuardDelegatedCharge (gas : GasSchedule) (value : B256) : Na
 -- CALL to an empty account still pays the 25,000 surcharge and the 9,000 value
 -- charge.
 #guard meteringGuardCallCharges .byzantium 0 .call
-    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+    [0, meteringGuardCallee.toU256, 1, 0, 0, 0, 0]
   = some (34700, 0)
 #guard meteringGuardCallCharges .byzantium 0 .callcode
-    [0, meteringGuardCallee.toB256, 1, 0, 0, 0, 0]
+    [0, meteringGuardCallee.toU256, 1, 0, 0, 0, 0]
   = some (9700, 0)
 #guard meteringGuardCallCharges .byzantium 0 .delegatecall
-    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+    [0, meteringGuardCallee.toU256, 0, 0, 0, 0]
   = some (700, 0)
 #guard meteringGuardCallCharges .byzantium 0 .staticcall
-    [0, meteringGuardCallee.toB256, 0, 0, 0, 0]
+    [0, meteringGuardCallee.toU256, 0, 0, 0, 0]
   = some (700, 0)
 
 -- A cold sweep to a new beneficiary: Amsterdam replaces the legacy 25,000
@@ -2487,13 +2487,13 @@ private def flattenGuardJumpiOob : Bool :=
 
 #guard flattenGuardJumpiOob
 
-instance {w a} : Decidable (Dead w a) := by
-  simp [Dead]
+instance {w a} : Decidable (State.isDead w a) := by
+  simp [State.isDead]
   cases w[a]?
   · simp; apply instDecidableTrue
-  · simp [Acct.Empty]; apply instDecidableAnd
+  · simp [Account.isEmpty]; apply instDecidableAnd
 
-def State.code (w : State) (a : Adr) : ByteArray :=
+def State.code (w : State) (a : Address) : ByteArray :=
   match w[a]? with
   | none => ByteArray.mk #[]
   | some x => x.code
@@ -2501,16 +2501,16 @@ def State.code (w : State) (a : Adr) : ByteArray :=
 -- P0.6 item 3: the leading byte of the fixed 32-byte hash is read through the
 -- total `head?`, never a partial index; an (unrepresentable) empty byte list
 -- would simply fail the predicate.
-def correctBlobHashVersion (h : B256) : Prop :=
+def correctBlobHashVersion (h : U256) : Prop :=
   h.toBytes.head? = some 0x01
 
 instance : DecidablePred correctBlobHashVersion := by
   intro h; simp [correctBlobHashVersion]; infer_instance
 
-def Log.toBLT (l : Log) : BLT :=
+def Log.toRlpItem (l : Log) : Rlp.Item :=
   .list [
     .bytes l.address.toBytes,
-    .list (l.topics.map B256.toBLT),
+    .list (l.topics.map U256.toRlpItem),
     .bytes l.data
   ]
 
@@ -2522,7 +2522,7 @@ def List.putIndex {ξ : Type u} (xs : List ξ) : List (Nat × ξ) :=
 
 inductive ExpectedWorldState : Type
   | wor : State → ExpectedWorldState
-  | root : B256 → ExpectedWorldState
+  | root : U256 → ExpectedWorldState
 
 structure Test where
   (name : String)
@@ -2543,9 +2543,9 @@ def nibbleKey (pr : Bytes × Bytes) : Bytes × Bytes :=
   let ac := pr.snd
   ⟨Bytes.toNibbles ad, ac⟩
 
-def receiptRoot (w : List (Bytes × Bytes)) : B256 :=
+def receiptsRoot (w : List (Bytes × Bytes)) : U256 :=
   let keyVals : List (Bytes × Bytes) := (List.map nibbleKey w)
-  let finalNTB : NTB := Std.TreeMap.ofList keyVals _
+  let finalNTB : TrieBuilder := Std.TreeMap.ofList keyVals _
   trie finalNTB
 
 def addIndexToBloom (hash : Bytes) (index : Nat) (bloom : Bytes) : Bytes :=
@@ -2565,7 +2565,7 @@ def addEntryToBloom (bloom : Bytes) (entry : Bytes) : Bytes :=
 
 def addLogToBloom (bloom : Bytes) (log : Log) : Bytes :=
   let bloom' := addEntryToBloom bloom log.address.toBytes
-  List.foldl addEntryToBloom bloom' (log.topics.map B256.toBytes)
+  List.foldl addEntryToBloom bloom' (log.topics.map U256.toBytes)
 
 def logsBloom (l : List Log) : Bytes :=
   List.foldl addLogToBloom (List.replicate 256 0x00) l
@@ -2574,12 +2574,12 @@ def logsBloom (l : List Log) : Bytes :=
 produces them. -/
 private structure HeaderOptionals : Type where
   baseFeePerGas : Option Nat := none
-  withdrawalsRoot : Option B256 := none
+  withdrawalsRoot : Option U256 := none
   blobGasUsed : Option Nat := none
   excessBlobGas : Option Nat := none
-  parentBeaconBlockRoot : Option B256 := none
-  requestsHash : Option B256 := none
-  blockAccessListHash : Option B256 := none
+  parentBeaconBlockRoot : Option U256 := none
+  requestsHash : Option U256 := none
+  blockAccessListHash : Option U256 := none
   slotNumber : Option UInt64 := none
 
 /-- The representation facts the trailing fields carry: the base fee is a
@@ -2614,7 +2614,7 @@ hash but no slot number, or half of Cancun's triple, is not a header of any
 fork, and accepting it would mean guessing which field the sender omitted.
 Which shape a given fork requires is `validateHeader`'s rule, not this one's. -/
 private def decodeHeaderOptionals :
-    List BLT → Except DecodeError HeaderOptionals
+    List Rlp.Item → Except DecodeError HeaderOptionals
   | [] => .ok {}
   | [.bytes baseFee] => do
     let baseFee ← baseFee.toRlpNat "header baseFeePerGas" 32
@@ -2627,8 +2627,8 @@ private def decodeHeaderOptionals :
       .bytes excessBlobGas :: .bytes parentBeaconBlockRoot :: tail => do
     let baseFee ← baseFee.toRlpNat "header baseFeePerGas" 32
     let withdrawalsRoot ← withdrawalsRoot.toRlpHash "header withdrawalsRoot"
-    let blobGasUsed ← blobGasUsed.toRlpB64 "header blobGasUsed"
-    let excessBlobGas ← excessBlobGas.toRlpB64 "header excessBlobGas"
+    let blobGasUsed ← blobGasUsed.toRlpUInt64 "header blobGasUsed"
+    let excessBlobGas ← excessBlobGas.toRlpUInt64 "header excessBlobGas"
     let parentBeaconBlockRoot ←
       parentBeaconBlockRoot.toRlpHash "header parentBeaconBlockRoot"
     let cancun : HeaderOptionals :=
@@ -2644,7 +2644,7 @@ private def decodeHeaderOptionals :
     | [.bytes requestsHash, .bytes balHash, .bytes slotNumber] => do
       let requestsHash ← requestsHash.toRlpHash "header requestsHash"
       let balHash ← balHash.toRlpHash "header blockAccessListHash"
-      let slotNumber ← slotNumber.toRlpB64 "header slotNumber"
+      let slotNumber ← slotNumber.toRlpUInt64 "header slotNumber"
       .ok { cancun with
         requestsHash := some requestsHash
         blockAccessListHash := some balHash
@@ -2655,7 +2655,7 @@ private def decodeHeaderOptionals :
     .error <| headerWidthError (15 + tail.length)
 
 /-- Every tail `decodeHeaderOptionals` accepts carries its fields' widths. -/
-private theorem decodeHeaderOptionals_bounded {tail : List BLT}
+private theorem decodeHeaderOptionals_bounded {tail : List Rlp.Item}
     {o : HeaderOptionals} (h : decodeHeaderOptionals tail = .ok o) :
     o.Bounded := by
   unfold decodeHeaderOptionals at h
@@ -2690,7 +2690,7 @@ private theorem decodeHeaderOptionals_bounded {tail : List BLT}
     · exact absurd hm (by simp)
   · exact absurd h (by simp)
 
-def BLT.toExHeader : BLT → Except DecodeError Header
+def Rlp.Item.toExceptHeader : Rlp.Item → Except DecodeError Header
   | .list (
       .bytes parentHash ::
       .bytes ommersHash ::
@@ -2719,7 +2719,7 @@ def BLT.toExHeader : BLT → Except DecodeError Header
       -- place a header field carries the 64-bit overflow identity.
       let parentHash ← parentHash.toRlpHash "header parentHash"
       let ommersHash ← ommersHash.toRlpHash "header ommersHash"
-      let coinbase ← coinbase.toRlpAdr "header coinbase"
+      let coinbase ← coinbase.toRlpAddress "header coinbase"
       let stateRoot ← stateRoot.toRlpHash "header stateRoot"
       let txsRoot ← txsRoot.toRlpHash "header transactionsRoot"
       let receiptRoot ← receiptRoot.toRlpHash "header receiptRoot"
@@ -2730,7 +2730,7 @@ def BLT.toExHeader : BLT → Except DecodeError Header
       let gasUsed ← gasUsed.toRlpNat "header gasUsed" 32
       let timestamp ← timestamp.toRlpNat "header timestamp" 32
       let prevRandao ← prevRandao.toRlpHash "header prevRandao"
-      let nonce ← nonce.toRlpFixedB64 "header nonce"
+      let nonce ← nonce.toRlpFixedUInt64 "header nonce"
       -- Shape-optional, but exactly typed when present: an absent field and a
       -- malformed one are different failures.
       let optionals ← decodeHeaderOptionals tail
@@ -2739,9 +2739,9 @@ def BLT.toExHeader : BLT → Except DecodeError Header
         ommersHash := ommersHash
         coinbase := coinbase
         stateRoot := stateRoot
-        txsRoot := txsRoot
-        receiptRoot := receiptRoot
-        bloom := bloom
+        transactionsRoot := txsRoot
+        receiptsRoot := receiptRoot
+        logsBloom := bloom
         difficulty := difficulty
         number := number
         gasLimit := gasLimit
@@ -2767,9 +2767,9 @@ def BLT.toExHeader : BLT → Except DecodeError Header
 produces satisfies `Header.WireWellFormed`, which is what makes that predicate
 a *lift* of the decoder rather than an independently invented policy: it holds
 of exactly the values the wire can deliver. -/
-theorem BLT.toExHeader_wireWellFormed {blt : BLT} {hdr : Header}
-    (h : blt.toExHeader = .ok hdr) : hdr.WireWellFormed := by
-  unfold BLT.toExHeader at h
+theorem Rlp.Item.toExceptHeader_wireWellFormed {blt : Rlp.Item} {hdr : Header}
+    (h : blt.toExceptHeader = .ok hdr) : hdr.WireWellFormed := by
+  unfold Rlp.Item.toExceptHeader at h
   split at h
   · simp only [Except.bind_eq_ok_iff] at h
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, hbl, _, hdf, _, hnb,
@@ -2798,7 +2798,7 @@ parent actually carried. The downstream `checkHeaderShape_blobGas` theorem
 in `Jaune.Transaction` ties both parent fields' presence to its rules;
 `ChainConfig.ShapeCoherent` supplies that condition at configured chain heads,
 so a pre-Cancun parent contributes zero through the absent fields below. -/
-def calculateExcessBlobGas (blob : BlobSchedule) (parentHeader : Header) : Nat :=
+def calcExcessBlobGas (blob : BlobSchedule) (parentHeader : Header) : Nat :=
   -- Cancun's first block: a parent header without the blob fields counts them
   -- as zero. EELS keys this on the parent header's class
   -- (`cancun/vm/gas.py`, `isinstance(parent_header, Header)`), which is this
@@ -2815,8 +2815,8 @@ def calculateExcessBlobGas (blob : BlobSchedule) (parentHeader : Header) : Nat :
       parentBlobGas - blob.target
     | some reserveBaseCost =>
       let targetBlobGasPrice :=
-        gasPerBlob *
-          calculateBlobGasPrice blob parentExcessBlobGas
+        Gas.perBlob *
+          getBaseFeePerBlobGas blob parentExcessBlobGas
       let baseBlobTxPrice :=
         reserveBaseCost * parentHeader.baseFeePerGas.getD 0
       if baseBlobTxPrice > targetBlobGasPrice then
@@ -2855,26 +2855,26 @@ def Except.bimap
   | .error e => .error <| f e
   | .ok x => .ok <| g x
 
-def accountHasCodeOrNonce (state : State) (adr : Adr) : Bool :=
+def accountHasCodeOrNonce (state : State) (adr : Address) : Bool :=
   state.getNonce adr > 0 || !(state.getCode adr).isEmpty
 
-def accountHasStorage (state : State) (adr : Adr) : Bool :=
+def accountHasStorage (state : State) (adr : Address) : Bool :=
   !(state.getStor adr).isEmpty
 
-def Tx.signingHash (tx : Tx) : Option B256 :=
+def Transaction.signingHash (tx : Transaction) : Option U256 :=
   match tx.type with
-  | .zero gasPrice receiver =>
+  | .legacy gasPrice receiver =>
     if tx.v = 27 || tx.v = 28
     then
       -- signing_hash_pre155
       some <|
         Bytes.keccak <|
-          BLT.toBytes <|
+          Rlp.Item.toBytes <|
             .list [
               .bytes tx.nonce.toBytes.sig,
               .bytes gasPrice.toBytes,
-              .bytes tx.gas.toBytes,
-              .bytes ((receiver <&> Adr.toBytes).getD []),
+              .bytes tx.gasLimit.toBytes,
+              .bytes ((receiver <&> Address.toBytes).getD []),
               .bytes tx.value.toBytes,
               .bytes tx.data
             ]
@@ -2883,12 +2883,12 @@ def Tx.signingHash (tx : Tx) : Option B256 :=
       let chainId : Nat := (tx.v - 35) / 2
       some <|
         Bytes.keccak <|
-          BLT.toBytes <|
+          Rlp.Item.toBytes <|
             .list [
               .bytes tx.nonce.toBytes.sig,
               .bytes gasPrice.toBytes,
-              .bytes tx.gas.toBytes,
-              .bytes ((receiver <&> Adr.toBytes).getD []),
+              .bytes tx.gasLimit.toBytes,
+              .bytes ((receiver <&> Address.toBytes).getD []),
               .bytes tx.value.toBytes,
               .bytes tx.data,
               .bytes chainId.toBytes,
@@ -2896,83 +2896,83 @@ def Tx.signingHash (tx : Tx) : Option B256 :=
               .bytes []
             ]
   -- def signing_hash2930
-  | .one chainId gasPrice receiver accessList =>
+  | .eip2930 chainId gasPrice receiver accessList =>
     Bytes.keccak <|
       .cons (0x01 : UInt8) <|
-        BLT.toBytes <|
+        Rlp.Item.toBytes <|
           .list [
             .bytes chainId.toBytes.sig,
             .bytes tx.nonce.toBytes.sig,
             .bytes gasPrice.toBytes,
-            .bytes tx.gas.toBytes,
-            .bytes ((receiver <&> Adr.toBytes).getD []),
+            .bytes tx.gasLimit.toBytes,
+            .bytes ((receiver <&> Address.toBytes).getD []),
             .bytes tx.value.toBytes,
             .bytes tx.data,
-            accessList.toBLT
+            accessList.toRlpItem
           ]
   -- signing_hash1559
-  | .two chainId maxPriorityFee maxFee receiver accessList =>
+  | .eip1559 chainId maxPriorityFee maxFee receiver accessList =>
     Bytes.keccak <|
       .cons (0x02 : UInt8) <|
-        BLT.toBytes <|
+        Rlp.Item.toBytes <|
           .list [
             .bytes chainId.toBytes.sig,
             .bytes tx.nonce.toBytes.sig,
             .bytes maxPriorityFee.toBytes,
             .bytes maxFee.toBytes,
-            .bytes tx.gas.toBytes,
-            .bytes ((receiver <&> Adr.toBytes).getD []),
+            .bytes tx.gasLimit.toBytes,
+            .bytes ((receiver <&> Address.toBytes).getD []),
             .bytes tx.value.toBytes,
             .bytes tx.data,
-            accessList.toBLT
+            accessList.toRlpItem
           ]
   -- def signing_hash4844
-  | .three chainId maxPriorityFee maxFee receiver accessList maxBlobFee blobHashes =>
+  | .eip4844 chainId maxPriorityFee maxFee receiver accessList maxBlobFee blobHashes =>
     Bytes.keccak <|
       .cons (0x03 : UInt8) <|
-        BLT.toBytes <|
+        Rlp.Item.toBytes <|
           .list [
             .bytes chainId.toBytes.sig,
             .bytes tx.nonce.toBytes.sig,
             .bytes maxPriorityFee.toBytes,
             .bytes maxFee.toBytes,
-            .bytes tx.gas.toBytes,
+            .bytes tx.gasLimit.toBytes,
             .bytes receiver.toBytes,
             .bytes tx.value.toBytes,
             .bytes tx.data,
-            accessList.toBLT,
+            accessList.toRlpItem,
             .bytes maxBlobFee.toBytes,
-            .list <| blobHashes.map <| .bytes ∘ B256.toBytes
+            .list <| blobHashes.map <| .bytes ∘ U256.toBytes
           ]
-  | .four chainId maxPriorityFee maxFee receiver accessList auths =>
+  | .eip7702 chainId maxPriorityFee maxFee receiver accessList auths =>
     Bytes.keccak <|
       .cons (0x04 : UInt8) <|
-        BLT.toBytes <|
+        Rlp.Item.toBytes <|
           .list [
             .bytes chainId.toBytes.sig,
             .bytes tx.nonce.toBytes.sig,
             .bytes maxPriorityFee.toBytes,
             .bytes maxFee.toBytes,
-            .bytes tx.gas.toBytes,
+            .bytes tx.gasLimit.toBytes,
             .bytes receiver.toBytes,
             .bytes tx.value.toBytes,
             .bytes tx.data,
-            accessList.toBLT,
-            .list <| auths.map Auth.toBLT
+            accessList.toRlpItem,
+            .list <| auths.map Authorization.toRlpItem
           ]
 
-def recoverSender (chain_id: UInt64) (tx: Tx) : Except CryptoError Adr := do
-  let r := tx.r.toB256
-  let s := tx.s.toB256
-  if (r = 0 ∨ secp256k1.curveOrder.toB256 ≤ r) then
+def recoverSender (chain_id: UInt64) (tx: Transaction) : Except CryptoError Address := do
+  let r := tx.r.toU256
+  let s := tx.s.toU256
+  if (r = 0 ∨ secp256k1.curveOrder.toU256 ≤ r) then
     .error (.invalidSignature (.text "bad r"))
-  if (s = 0 ∨ secp256k1.curveOrder.toB256 / 2 < s) then
+  if (s = 0 ∨ secp256k1.curveOrder.toU256 / 2 < s) then
     .error (.invalidSignature (.text "bad s"))
   let v := tx.v
   let signingHash ←
     tx.signingHash.toExcept (.invalidSignature (.text "signing hash is None"))
   match tx.type with
-  | .zero _ _ =>
+  | .legacy _ _ =>
     if v = 27 ∨ v = 28
     then
       (secp256k1.recover signingHash (v - 27).toBool r s).toExcept
@@ -2988,20 +2988,20 @@ def recoverSender (chain_id: UInt64) (tx: Tx) : Except CryptoError Adr := do
     (secp256k1.recover signingHash v.toBool r s).toExcept
       (.invalidSignature (.text "sender recovery failed"))
 
-def recoverAuthority (auth : Auth) : Except CryptoError Adr := do
+def recoverAuthority (auth : Authorization) : Except CryptoError Address := do
   let yParity := auth.yParity
   let r := auth.r
   let s := auth.s
   if (
     1 < yParity ∨
-    r = 0 ∨  secp256k1.curveOrder.toB256 ≤ r ∨
-    s = 0 ∨ (secp256k1.curveOrder.toB256 / 2) < s
+    r = 0 ∨  secp256k1.curveOrder.toU256 ≤ r ∨
+    s = 0 ∨ (secp256k1.curveOrder.toU256 / 2) < s
   ) then
     .error (.invalidSignature .none)
-  let signingHash : B256 :=
+  let signingHash : U256 :=
     Bytes.keccak <|
-      List.append setCodeTxMagic <|
-        BLT.toBytes <| .list [
+      List.append setCodeTransactionMagic <|
+        Rlp.Item.toBytes <| .list [
           .bytes auth.chainId.toBytes.sig,
           .bytes auth.address.toBytes,
           .bytes auth.nonce.toBytes.sig
@@ -3012,9 +3012,9 @@ def recoverAuthority (auth : Auth) : Except CryptoError Adr := do
   (secp256k1.recover signingHash yParity.toBool r s ).toExcept (.invalidSignature .none)
 
 def setDelegationStep
-    (auth : Auth) (msg : Msg) (refundCounter : B256) :
-    Except EvmError (Msg × B256) := do
-  if auth.chainId != msg.benv.stat.chainId.toB256 && auth.chainId != 0 then
+    (auth : Authorization) (msg : Msg) (refundCounter : U256) :
+    Except EvmError (Msg × U256) := do
+  if auth.chainId != msg.benv.stat.chainId.toU256 && auth.chainId != 0 then
     .ok ⟨msg, refundCounter⟩
   else if auth.nonce = UInt64.max then
     .ok ⟨msg, refundCounter⟩
@@ -3027,7 +3027,7 @@ def setDelegationStep
     | .error err => .error (.crypto err)
     | .ok authority =>
       let msg := {msg with accessedAddresses := msg.accessedAddresses.insert authority}
-      let authorityAccount : Acct :=
+      let authorityAccount : Account :=
         msg.benv.state.get authority
       let authorityCode : ByteArray := authorityAccount.code
       if ¬ (authorityCode.isEmpty ∨ isValidDelegation authorityCode) then
@@ -3038,7 +3038,7 @@ def setDelegationStep
         let refundCounter :=
           if AccountExists msg.benv.state authority then
             refundCounter +
-              (msg.benv.stat.rules.gas.perAuthIntrinsic - perAuthBaseCost).toB256
+              (msg.benv.stat.rules.gas.perAuthorizationIntrinsic - Gas.perAuthBaseCost).toU256
           else
             refundCounter
         let codeToSet : ByteArray :=
@@ -3050,13 +3050,13 @@ def setDelegationStep
         let msg := msg.incrNonce authority
         .ok ⟨msg, refundCounter⟩
 
-def setDelegationLoop : List Auth → Msg → B256 → Except EvmError (Msg × B256)
+def setDelegationLoop : List Authorization → Msg → U256 → Except EvmError (Msg × U256)
   | [], msg, refundCounter => .ok ⟨msg, refundCounter⟩
   | auth :: auths, msg, refundCounter => do
     let ⟨msg, refundCounter⟩ ← setDelegationStep auth msg refundCounter
     setDelegationLoop auths msg refundCounter
 
-def setDelegation (msg : Msg) : Except EvmError (Msg × B256) := do
+def setDelegation (msg : Msg) : Except EvmError (Msg × U256) := do
   let ⟨msg, refundCounter⟩ ← setDelegationLoop msg.tenv.stat.auths msg 0
   let msg ←
     match msg.codeAddress with
@@ -3084,7 +3084,7 @@ def setDelegation (msg : Msg) : Except EvmError (Msg × B256) := do
 /-- Delegation access touches only the accessed-address set. Stated over the
 projection because callers consume the result through an irrefutable `let`. -/
 theorem accessDelegation_canonical {devm : Devm} (h : devm.Canonical)
-    (adr : Adr) : (accessDelegation devm adr).2.2.2.2.Canonical := by
+    (adr : Address) : (accessDelegation devm adr).2.2.2.2.Canonical := by
   unfold accessDelegation
   dsimp only
   split
@@ -3092,15 +3092,15 @@ theorem accessDelegation_canonical {devm : Devm} (h : devm.Canonical)
   · exact h
 
 /-- The eq-conditioned form, for walks that destructure the tuple. -/
-theorem accessDelegation_eq_canonical {devm d' : Devm} {adr : Adr} {b : Bool}
-    {a2 : Adr} {code : ByteArray} {n : Nat} (h : devm.Canonical)
+theorem accessDelegation_eq_canonical {devm d' : Devm} {adr : Address} {b : Bool}
+    {a2 : Address} {code : ByteArray} {n : Nat} (h : devm.Canonical)
     (heq : accessDelegation devm adr = (b, a2, code, n, d')) : d'.Canonical := by
   have hc := accessDelegation_canonical h adr
   rw [heq] at hc
   exact hc
 
 theorem GasSchedule.accessDelegation_canonical {gas : GasSchedule} {devm : Devm}
-    (h : devm.Canonical) (adr : Adr) :
+    (h : devm.Canonical) (adr : Address) :
     (gas.accessDelegation devm adr).2.2.2.2.Canonical := by
   unfold GasSchedule.accessDelegation
   dsimp only
@@ -3109,7 +3109,7 @@ theorem GasSchedule.accessDelegation_canonical {gas : GasSchedule} {devm : Devm}
   · exact h
 
 theorem ForkRules.accessDelegation_canonical {rules : ForkRules} {devm : Devm}
-    (h : devm.Canonical) (adr : Adr) :
+    (h : devm.Canonical) (adr : Address) :
     (rules.accessDelegation devm adr).2.2.2.2.Canonical := by
   unfold ForkRules.accessDelegation
   split
@@ -3117,7 +3117,7 @@ theorem ForkRules.accessDelegation_canonical {rules : ForkRules} {devm : Devm}
   · exact h
 
 theorem completeDelegationAccess_canonical {devm : Devm}
-    (h : devm.Canonical) (delegated : Bool) (adr : Adr) :
+    (h : devm.Canonical) (delegated : Bool) (adr : Address) :
     (completeDelegationAccess devm delegated adr).2.Canonical := by
   unfold completeDelegationAccess
   dsimp only
@@ -3132,7 +3132,7 @@ theorem processCreateMessage.msg_canonical {msg : Msg} (h : msg.Canonical) :
   Msg.Canonical.withBenv h
     (Benv.Canonical.incrNonce
       (Benv.Canonical.addCreatedAccount
-        (Benv.Canonical.setStor h.1 _ Stor.canonical_empty) _) _)
+        (Benv.Canonical.setStor h.1 _ Storage.canonical_empty) _) _)
 
 theorem processCreateMessage.chargeCodeGas_canonical {rules : ForkRules}
     {devm : Devm} (h : devm.Canonical) :
@@ -3161,16 +3161,16 @@ theorem processCreateMessage.chargeCodeGas_canonical {rules : ForkRules}
 /-- The Amsterdam exceptional halt restores the same saved world; both meter
 updates and the error marker are world-neutral. -/
 theorem processCreateMessage.exceptionalHaltAmsterdam_canonical {devm : Devm}
-    (reason : ExceptionalHalt) {st : State} {tra : Tra}
-    (hst : State.Canonical st) (htra : Tra.Canonical tra) :
+    (reason : ExceptionalHalt) {st : State} {tra : TransientStorage}
+    (hst : State.Canonical st) (htra : TransientStorage.Canonical tra) :
     (processCreateMessage.exceptionalHaltAmsterdam devm reason st tra).Canonical :=
   Devm.Canonical.of_world_eq (Devm.canonical_rollback (devm := devm) hst htra) rfl
 
 /-- An exceptional create halt restores the saved pair; the failing machine
 contributes nothing to the world. -/
 theorem processCreateMessage.exceptionalHalt_canonical {devm : Devm}
-    (reason : ExceptionalHalt) {st : State} {tra : Tra}
-    (hst : State.Canonical st) (htra : Tra.Canonical tra) :
+    (reason : ExceptionalHalt) {st : State} {tra : TransientStorage}
+    (hst : State.Canonical st) (htra : TransientStorage.Canonical tra) :
     (processCreateMessage.exceptionalHalt devm reason st tra).Canonical :=
   Devm.Canonical.of_world_eq (Devm.canonical_rollback (devm := devm) hst htra) rfl
 
@@ -3179,13 +3179,13 @@ theorem initSevm_canonical {msg : Msg} (h : msg.Canonical) :
 
 theorem initDevm_canonical {msg : Msg} (h : msg.Canonical) :
     (initDevm msg).Canonical := by
-  change State.Canonical msg.benv.state ∧ Tra.Canonical msg.tenv.transientStorage
+  change State.Canonical msg.benv.state ∧ TransientStorage.Canonical msg.tenv.transientStorage
   exact ⟨h.1.1, h.2⟩
 
 theorem initEvm_canonical {msg : Msg} (h : msg.Canonical) :
     (initEvm msg).Canonical := by
   change Sevm.Canonical (initSevm msg) ∧
-    State.Canonical msg.benv.state ∧ Tra.Canonical msg.tenv.transientStorage
+    State.Canonical msg.benv.state ∧ TransientStorage.Canonical msg.tenv.transientStorage
   exact ⟨h.1.2, h.1.1, h.2⟩
 
 /-- A successful pre-execution value transfer moves balances through
@@ -3210,7 +3210,7 @@ theorem Msg.benvAfterTransfer_ok_canonical {msg : Msg} (h : msg.Canonical)
 pair, which the invariant already covers. -/
 theorem Msg.benvAfterTransfer_error_canonical {msg : Msg} (h : msg.Canonical)
     {e} (he : msg.benvAfterTransfer = .error e) :
-    State.Canonical e.2.1 ∧ Tra.Canonical e.2.2.2 := by
+    State.Canonical e.2.1 ∧ TransientStorage.Canonical e.2.2.2 := by
   unfold Msg.benvAfterTransfer at he
   split at he
   · cases hsb : msg.benv.subBal msg.caller msg.value with
@@ -3323,7 +3323,7 @@ theorem executeCode.enter_canonical {msg : Msg} (h : msg.Canonical) :
   split
   · exact initEvm_canonical h
   · split
-    · exact executePrecomp_canonical (initDevm_canonical h) _
+    · exact executePrecompile_canonical (initDevm_canonical h) _
     · exact initEvm_canonical h
 
 /-- What a frame entry must preserve: a finished settlement carries canonical
@@ -3453,7 +3453,7 @@ theorem XStep.toStep_canonical (pc : Nat) {s : XStep} (hs : s.Canonical) :
 and the frame's original state. -/
 theorem callMsg_canonical {sevm : Sevm} {evm1 : Devm}
     (hs : sevm.Canonical) (hd : evm1.Canonical)
-    (gas : Nat) (value : B256) (caller target codeAddress : Adr)
+    (gas : Nat) (value : U256) (caller target codeAddress : Address)
     (shouldTransferValue isStaticcall : Bool) (calldata : Bytes)
     (code : ByteArray) (disablePrecompiles : Bool) :
     (callMsg sevm evm1 gas value caller target codeAddress
@@ -3463,7 +3463,7 @@ theorem callMsg_canonical {sevm : Sevm} {evm1 : Devm}
 
 theorem createMsg_canonical {sevm : Sevm} {devm : Devm}
     (hs : sevm.Canonical) (hd : devm.Canonical)
-    (createGas : Nat) (endowment : B256) (newAddress : Adr)
+    (createGas : Nat) (endowment : U256) (newAddress : Address)
     (calldata : Bytes) :
     (createMsg sevm devm createGas endowment newAddress calldata).Canonical :=
   ⟨⟨hd.1, hs⟩, hd.2⟩
@@ -3472,7 +3472,7 @@ theorem createMsg_canonical {sevm : Sevm} {devm : Devm}
 success channel: every arm returns the message unchanged up to bookkeeping
 fields outside the invariant, or applies `setCode`/`incrNonce`. The error
 channel carries no state. -/
-theorem setDelegationStep_canonical {auth : Auth} {msg : Msg} {rc : B256}
+theorem setDelegationStep_canonical {auth : Authorization} {msg : Msg} {rc : U256}
     (h : msg.Canonical) {p} (hp : setDelegationStep auth msg rc = .ok p) :
     p.1.Canonical := by
   unfold setDelegationStep at hp
@@ -3492,7 +3492,7 @@ theorem setDelegationStep_canonical {auth : Auth} {msg : Msg} {rc : B256}
             exact Msg.Canonical.incrNonce (Msg.Canonical.setCode h _ _) _
 
 theorem setDelegationLoop_canonical :
-    ∀ (auths : List Auth) {msg : Msg} {rc : B256}, msg.Canonical →
+    ∀ (auths : List Authorization) {msg : Msg} {rc : U256}, msg.Canonical →
       ∀ {p}, setDelegationLoop auths msg rc = .ok p → p.1.Canonical
   | [], _, _, h, _, hp => by cases hp; exact h
   | auth :: auths, msg, rc, h, p, hp => by
@@ -3521,8 +3521,8 @@ theorem setDelegation_canonical {msg : Msg} (h : msg.Canonical)
 sender nonce increment, through its named mutator; the child frame is built
 over the parent's world and the frame's original state. -/
 theorem genericCreate.step_canonical {sevm : Sevm} {devm : Devm}
-    (hs : sevm.Canonical) (hd : devm.Canonical) (endowment : B256)
-    (newAddress : Adr) (memoryIndex memorySize : Nat) :
+    (hs : sevm.Canonical) (hd : devm.Canonical) (endowment : U256)
+    (newAddress : Address) (memoryIndex memorySize : Nat) :
     (genericCreate.step sevm devm endowment newAddress memoryIndex
       memorySize).Canonical := by
   unfold genericCreate.step
@@ -3550,8 +3550,8 @@ theorem genericCreate.step_canonical {sevm : Sevm} {devm : Devm}
 /-- The CALL-family step never changes the parent world: it either refunds
 the stipend at depth zero or spawns the child frame. -/
 theorem genericCall.step_canonical {sevm : Sevm} {devm : Devm}
-    (hs : sevm.Canonical) (hd : devm.Canonical) (gas : Nat) (value : B256)
-    (caller target codeAddress : Adr) (shouldTransferValue isStaticcall : Bool)
+    (hs : sevm.Canonical) (hd : devm.Canonical) (gas : Nat) (value : U256)
+    (caller target codeAddress : Address) (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool) :
     (genericCall.step sevm devm gas value caller target codeAddress
@@ -3569,7 +3569,7 @@ theorem genericCall.step_canonical {sevm : Sevm} {devm : Devm}
 
 theorem genericCallAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules}
     {devm : Devm} (hs : sevm.Canonical) (hd : devm.Canonical)
-    (gas reservoir : Nat) (value : B256) (caller target codeAddress : Adr)
+    (gas reservoir : Nat) (value : U256) (caller target codeAddress : Address)
     (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat) (code : ByteArray)
     (disablePrecompiles newAccountCharged insufficientBalance : Bool) :
@@ -3603,7 +3603,7 @@ theorem genericCallAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules
 
 theorem genericCreateAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules}
     {devm : Devm} (hs : sevm.Canonical) (hd : devm.Canonical)
-    (endowment : B256) (newAddress : Adr) (memoryIndex memorySize : Nat) :
+    (endowment : U256) (newAddress : Address) (memoryIndex memorySize : Nat) :
     (genericCreateAmsterdam.step sevm state devm endowment newAddress memoryIndex
       memorySize).Canonical := by
   unfold genericCreateAmsterdam.step
@@ -3643,10 +3643,10 @@ theorem genericCreateAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRul
             d.withholdCreateGas.1 endowment newAddress
             (devm.memory.data.sliceD memoryIndex memorySize 0)
 
-theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
-    (hs : sevm.Canonical) (hd : devm.Canonical) (x : Xinst) :
-    (Xinst.step sevm devm x).Canonical := by
-  cases x <;> simp only [Xinst.step]
+theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
+    (hs : sevm.Canonical) (hd : devm.Canonical) (x : MessageOp) :
+    (MessageOp.step sevm devm x).Canonical := by
+  cases x <;> simp only [MessageOp.step]
   case create =>
     split
     · refine XStep.ofExcept_canonical ?_
@@ -3905,11 +3905,11 @@ theorem Xinst.step_canonical {sevm : Sevm} {devm : Devm}
       · exact hs
       · exact Devm.Canonical.of_world_eq hd2 rfl
 
-theorem Ninst.step_canonical {evm : Evm} (h : evm.Canonical) (n : Ninst) :
-    (Ninst.step evm n).Canonical := by
+theorem NextOp.step_canonical {evm : Evm} (h : evm.Canonical) (n : NextOp) :
+    (NextOp.step evm n).Canonical := by
   cases n with
   | push xs prf =>
-    simp only [Ninst.step]
+    simp only [NextOp.step]
     split
     · -- Gate off: the undefined-opcode error keeps the machine.
       refine Step.ofExecution_canonical _ ?_
@@ -3917,8 +3917,8 @@ theorem Ninst.step_canonical {evm : Evm} (h : evm.Canonical) (n : Ninst) :
     · refine Step.ofExecution_canonical _ ?_
       exact Except.CanonicalOn.bind (liftMachExecution_canonical h.2)
         fun d hd => liftMachExecution_canonical hd
-  | reg r => exact Step.ofExecution_canonical _ (Rinst.run_canonical h.2 r)
-  | exec x => exact XStep.toStep_canonical _ (Xinst.step_canonical h.1 h.2 x)
+  | plain r => exact Step.ofExecution_canonical _ (PlainOp.run_canonical h.2 r)
+  | message x => exact XStep.toStep_canonical _ (MessageOp.step_canonical h.1 h.2 x)
   | dupn imm =>
     refine Step.ofExecution_canonical _ ?_
     split
@@ -3957,9 +3957,9 @@ theorem Evm.step_canonical {evm : Evm} (h : evm.Canonical) :
   unfold Evm.step
   split
   · exact h.2
-  · exact Ninst.step_canonical h _
-  · exact Step.ofJump_canonical (Jinst.run_canonicalOn h.2 _)
-  · exact Linst.run_canonical h.2 _
+  · exact NextOp.step_canonical h _
+  · exact Step.ofJump_canonical (JumpOp.run_canonicalOn h.2 _)
+  · exact HaltOp.run_canonical h.2 _
 
 /-- **Canonicality through the fueled interpreter.** Any result the driver
 reaches from a canonical frame is canonical, on both channels. The induction
@@ -4021,7 +4021,7 @@ fueled driver.  Amsterdam-only resume constructors are deliberately excluded:
 under `rules.stateGas = none` they are unreachable. -/
 
 def Except.SettlementStateGasZero :
-    Except (EvmError × State × AdrSet × Tra) Devm → Prop
+    Except (EvmError × State × AdrSet × TransientStorage) Devm → Prop
   | .error _ => True
   | .ok devm => devm.StateGasZero
 
@@ -4102,10 +4102,10 @@ theorem initEvm_stateGasZero {msg : Msg}
     (initEvm msg).StateGasZero :=
   ⟨hrules, initDevm_stateGasZero hgrant⟩
 
-theorem executePrecomp_stateGasZero {evm : Evm}
-    (h : evm.dyna.StateGasZero) (adr : Adr) :
-    (executePrecomp evm adr).StateGasZero := by
-  unfold executePrecomp applyPrecompResult
+theorem executePrecompile_stateGasZero {evm : Evm}
+    (h : evm.dyna.StateGasZero) (adr : Address) :
+    (executePrecompile evm adr).StateGasZero := by
+  unfold executePrecompile applyPrecompileResult
   split <;> exact h
 
 theorem executeCode.enter_stateGasZero {msg : Msg}
@@ -4117,7 +4117,7 @@ theorem executeCode.enter_stateGasZero {msg : Msg}
   split
   · exact initEvm_stateGasZero hrules hgrant
   · split
-    · exact executePrecomp_stateGasZero (initDevm_stateGasZero hgrant) _
+    · exact executePrecompile_stateGasZero (initDevm_stateGasZero hgrant) _
     · exact initEvm_stateGasZero hrules hgrant
 
 theorem Msg.benvAfterTransfer_ok_stateGas {msg : Msg} {benv : Benv}
@@ -4162,7 +4162,7 @@ theorem executeCode.handleErrorWith_stateGasZero {raw : Execution}
   executeCode.handleError_stateGasZero h
 
 theorem processMessage.settle_stateGasZero {msg : Msg}
-    {r : Except (EvmError × State × AdrSet × Tra) Devm}
+    {r : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     (h : Except.SettlementStateGasZero r) :
     Except.SettlementStateGasZero (processMessage.settle msg r) := by
   cases r with
@@ -4187,12 +4187,12 @@ theorem processCreateMessage.chargeCodeGas_stateGasZero
     split <;> exact hd
 
 theorem processCreateMessage.exceptionalHalt_stateGasZero {devm : Devm}
-    (h : devm.StateGasZero) (reason : ExceptionalHalt) (st : State) (tra : Tra) :
+    (h : devm.StateGasZero) (reason : ExceptionalHalt) (st : State) (tra : TransientStorage) :
     (processCreateMessage.exceptionalHalt devm reason st tra).StateGasZero := h
 
 theorem processCreateMessage.settle_stateGasZero {msg : Msg}
     (hrules : msg.benv.stat.rules.stateGas = none)
-    {r : Except (EvmError × State × AdrSet × Tra) Devm}
+    {r : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     (h : Except.SettlementStateGasZero r) :
     Except.SettlementStateGasZero (processCreateMessage.settle msg r) := by
   refine Except.SettlementStateGasZero.bind h fun devm hd => ?_
@@ -4220,7 +4220,7 @@ theorem processCreateMessage.settle_stateGasZero {msg : Msg}
 
 theorem Frame.settleMsg_stateGasZero {frame : Frame}
     (hf : frame.StateGasZero)
-    {r : Except (EvmError × State × AdrSet × Tra) Devm}
+    {r : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     (h : Except.SettlementStateGasZero r) :
     Except.SettlementStateGasZero (frame.settleMsg r) := by
   unfold Frame.settleMsg
@@ -4258,7 +4258,7 @@ theorem Frame.enter_stateGasZero {frame : Frame} (hf : frame.StateGasZero) :
 theorem genericCall.step_stateGasZero {sevm : Sevm} {devm : Devm}
     (hrules : sevm.benvStat.rules.stateGas = none)
     (h : devm.StateGasZero)
-    (gas : Nat) (value : B256) (caller target codeAddress : Adr)
+    (gas : Nat) (value : U256) (caller target codeAddress : Address)
     (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool) :
@@ -4277,7 +4277,7 @@ theorem genericCall.step_stateGasZero {sevm : Sevm} {devm : Devm}
 
 theorem genericCreate.step_stateGasZero {sevm : Sevm} {devm : Devm}
     (hrules : sevm.benvStat.rules.stateGas = none)
-    (h : devm.StateGasZero) (endowment : B256) (newAddress : Adr)
+    (h : devm.StateGasZero) (endowment : U256) (newAddress : Address)
     (memoryIndex memorySize : Nat) :
     (genericCreate.step sevm devm endowment newAddress memoryIndex memorySize).StateGasZero := by
   unfold genericCreate.step
@@ -4303,21 +4303,21 @@ theorem genericCreate.step_stateGasZero {sevm : Sevm} {devm : Devm}
           Devm.stateGasZero_withGasLeft h⟩
 
 theorem accessDelegation_stateGasZero {devm : Devm}
-    (h : devm.StateGasZero) (adr : Adr) :
+    (h : devm.StateGasZero) (adr : Address) :
     (accessDelegation devm adr).2.2.2.2.StateGasZero := by
   unfold accessDelegation
   dsimp only
   split <;> exact h
 
 theorem GasSchedule.accessDelegation_stateGasZero {gas : GasSchedule}
-    {devm : Devm} (h : devm.StateGasZero) (adr : Adr) :
+    {devm : Devm} (h : devm.StateGasZero) (adr : Address) :
     (gas.accessDelegation devm adr).2.2.2.2.StateGasZero := by
   unfold GasSchedule.accessDelegation
   dsimp only
   split <;> exact h
 
 theorem ForkRules.accessDelegation_stateGasZero {rules : ForkRules}
-    {devm : Devm} (h : devm.StateGasZero) (adr : Adr) :
+    {devm : Devm} (h : devm.StateGasZero) (adr : Address) :
     (rules.accessDelegation devm adr).2.2.2.2.StateGasZero := by
   unfold ForkRules.accessDelegation
   split
@@ -4325,17 +4325,17 @@ theorem ForkRules.accessDelegation_stateGasZero {rules : ForkRules}
   · exact h
 
 theorem completeDelegationAccess_stateGasZero {devm : Devm}
-    (h : devm.StateGasZero) (delegated : Bool) (adr : Adr) :
+    (h : devm.StateGasZero) (delegated : Bool) (adr : Address) :
     (completeDelegationAccess devm delegated adr).2.StateGasZero := by
   unfold completeDelegationAccess
   dsimp only
   split <;> exact h
 
-theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
+theorem MessageOp.step_stateGasZero {sevm : Sevm} {devm : Devm}
     (hrules : sevm.benvStat.rules.stateGas = none)
-    (h : devm.StateGasZero) (x : Xinst) :
-    (Xinst.step sevm devm x).StateGasZero := by
-  cases x <;> simp only [Xinst.step, hrules]
+    (h : devm.StateGasZero) (x : MessageOp) :
+    (MessageOp.step sevm devm x).StateGasZero := by
+  cases x <;> simp only [MessageOp.step, hrules]
   case create =>
     refine XStep.ofExcept_stateGasZero ?_
     refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
@@ -4435,11 +4435,11 @@ theorem Xinst.step_stateGasZero {sevm : Sevm} {devm : Devm}
       (genericCall.step_stateGasZero hrules (by exact hd2)
         _ _ _ _ _ _ _ _ _ _ _ _ _)
 
-theorem Ninst.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
-    (n : Ninst) : (Ninst.step evm n).StateGasZero := by
+theorem NextOp.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
+    (n : NextOp) : (NextOp.step evm n).StateGasZero := by
   cases n with
   | push xs prf =>
-      simp only [Ninst.step]
+      simp only [NextOp.step]
       split
       · -- Gate off: the undefined-opcode error keeps the machine.
         refine Step.ofExecution_stateGasZero _ ?_
@@ -4448,12 +4448,12 @@ theorem Ninst.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
         refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) ?_
         intro d hd
         exact Devm.push_stateGasZero _ hd
-  | reg r =>
+  | plain r =>
       exact Step.ofExecution_stateGasZero _
-        (Rinst.run_stateGasZero h.2 h.1 r)
-  | exec x =>
+        (PlainOp.run_stateGasZero h.2 h.1 r)
+  | message x =>
       exact XStep.toStep_stateGasZero _
-        (Xinst.step_stateGasZero h.1 h.2 x)
+        (MessageOp.step_stateGasZero h.1 h.2 x)
   | dupn imm =>
       refine Step.ofExecution_stateGasZero _ ?_
       split
@@ -4490,12 +4490,12 @@ theorem Evm.step_stateGasZero {evm : Evm} (h : evm.StateGasZero) :
   unfold Evm.step
   split
   · exact h.2
-  · exact Ninst.step_stateGasZero h _
-  · exact Step.ofJump_stateGasZero (Jinst.run_stateGasZero h.2 _)
-  · exact Linst.run_stateGasZero h.2 h.1 _
+  · exact NextOp.step_stateGasZero h _
+  · exact Step.ofJump_stateGasZero (JumpOp.run_stateGasZero h.2 _)
+  · exact HaltOp.run_stateGasZero h.2 h.1 _
 
 theorem Resume.run_stateGasZero {rsm : Resume} (hr : rsm.StateGasZero)
-    {r : Except (EvmError × State × AdrSet × Tra) Devm} :
+    {r : Except (EvmError × State × AdrSet × TransientStorage) Devm} :
     (rsm.run r).StateGasZero := by
   cases rsm with
   | create parent newAddress =>
@@ -4601,101 +4601,101 @@ theorem execFueled_run_gasMeasure_eq_gasLeft {fuel : Nat} {evm : Evm}
 -- projections survive normalization, but storage is cleared on deletion.
 -- Readers at another address remain unchanged.
 
-theorem Devm.getCode_state (d : Devm) (a : Adr) :
+theorem Devm.getCode_state (d : Devm) (a : Address) :
     d.getCode a = d.state.getCode a := rfl
 
-theorem State.setBal_get_self {st : Jaune.State} {adr : Adr} {v : B256} :
-    (st.setBal adr v).get adr = ((st.get adr).withBal v).clearIfEmpty :=
+theorem State.setBal_get_self {st : Jaune.State} {adr : Address} {v : U256} :
+    (st.setBal adr v).get adr = ((st.get adr).withBalance v).clearIfEmpty :=
   State.setAccount_get_self _ _ _
 
-theorem State.setBal_get_ne {st : Jaune.State} {adr a : Adr} {v : B256} (h : adr ≠ a) :
+theorem State.setBal_get_ne {st : Jaune.State} {adr a : Address} {v : U256} (h : adr ≠ a) :
     (st.setBal adr v).get a = st.get a := State.setAccount_get_ne _ h _
 
 /-- A balance update clears storage exactly when it deletes the account. -/
-theorem State.setBal_get_stor {st : Jaune.State} {b a : Adr} {v : B256} :
-    ((st.setBal b v).get a).stor =
-      if b = a ∧ ((st.get b).withBal v).Empty then .empty else (st.get a).stor := by
+theorem State.setBal_get_stor {st : Jaune.State} {b a : Address} {v : U256} :
+    ((st.setBal b v).get a).storage =
+      if b = a ∧ ((st.get b).withBalance v).isEmpty then .empty else (st.get a).storage := by
   by_cases h : b = a
   · subst h
-    simp only [State.setBal_get_self, Acct.clearIfEmpty_stor, eq_self, true_and]
+    simp only [State.setBal_get_self, Account.clearIfEmpty_storage, eq_self, true_and]
     rfl
   · simp only [State.setBal_get_ne h, h, false_and, ite_false]
 
-theorem State.setBal_get_code {st : Jaune.State} {b a : Adr} {v : B256} :
+theorem State.setBal_get_code {st : Jaune.State} {b a : Address} {v : U256} :
     ((st.setBal b v).get a).code = (st.get a).code := by
   by_cases h : b = a
-  · subst h; rw [State.setBal_get_self, Acct.clearIfEmpty_code]; rfl
+  · subst h; rw [State.setBal_get_self, Account.clearIfEmpty_code]; rfl
   · rw [State.setBal_get_ne h]
 
-theorem State.of_subBal {st st' : Jaune.State} {ct : Adr} {wad : B256}
+theorem State.of_subBal {st st' : Jaune.State} {ct : Address} {wad : U256}
     (h : st.subBal ct wad = some st') :
     wad ≤ st.bal ct ∧ st' = st.setBal ct (st.bal ct - wad) := by
   unfold State.subBal at h
   split_ifs at h with h_lt
   cases h
-  exact ⟨B256.not_lt.mp h_lt, rfl⟩
+  exact ⟨U256.not_lt.mp h_lt, rfl⟩
 
-theorem State.incrNonce_get_bal {st : Jaune.State} {adr a : Adr} :
-    ((st.incrNonce adr).get a).bal = (st.get a).bal := by
+theorem State.incrNonce_get_bal {st : Jaune.State} {adr a : Address} :
+    ((st.incrNonce adr).get a).balance = (st.get a).balance := by
   simp only [State.incrNonce]
   by_cases h : adr = a
-  · subst h; rw [State.setAccount_get_self, Acct.clearIfEmpty_bal]
+  · subst h; rw [State.setAccount_get_self, Account.clearIfEmpty_balance]
   · rw [State.setAccount_get_ne _ h]
 
 /-- The general nonce mutator includes wraparound; callers rule out overflow.
 Storage is cleared exactly when its resulting account is empty. -/
-theorem State.incrNonce_get_stor {st : Jaune.State} {adr a : Adr} :
-    ((st.incrNonce adr).get a).stor =
-      if adr = a ∧ ({st.get adr with nonce := (st.get adr).nonce + 1} : Acct).Empty
-      then .empty else (st.get a).stor := by
+theorem State.incrNonce_get_stor {st : Jaune.State} {adr a : Address} :
+    ((st.incrNonce adr).get a).storage =
+      if adr = a ∧ ({st.get adr with nonce := (st.get adr).nonce + 1} : Account).isEmpty
+      then .empty else (st.get a).storage := by
   simp only [State.incrNonce]
   by_cases h : adr = a
   · subst h
-    simp only [State.setAccount_get_self, Acct.clearIfEmpty_stor, eq_self, true_and]
+    simp only [State.setAccount_get_self, Account.clearIfEmpty_storage, eq_self, true_and]
   · simp only [State.setAccount_get_ne _ h, h, false_and, ite_false]
 
-theorem State.incrNonce_get_code {st : Jaune.State} {adr a : Adr} :
+theorem State.incrNonce_get_code {st : Jaune.State} {adr a : Address} :
     ((st.incrNonce adr).get a).code = (st.get a).code := by
   simp only [State.incrNonce]
   by_cases h : adr = a
-  · subst h; rw [State.setAccount_get_self, Acct.clearIfEmpty_code]
+  · subst h; rw [State.setAccount_get_self, Account.clearIfEmpty_code]
   · rw [State.setAccount_get_ne _ h]
 
-theorem State.setBal_getCode (st : State) (adr a : Adr) (val : B256) :
+theorem State.setBal_getCode (st : State) (adr a : Address) (val : U256) :
     (st.setBal adr val).getCode a = st.getCode a :=
   State.setBal_get_code
 
-theorem State.addBal_getCode (st : State) (adr a : Adr) (val : B256) :
+theorem State.addBal_getCode (st : State) (adr a : Address) (val : U256) :
     (st.addBal adr val).getCode a = st.getCode a :=
   State.setBal_getCode st adr a (st.bal adr + val)
 
-theorem State.subBal_getCode {st st' : State} {adr a : Adr} {val : B256}
+theorem State.subBal_getCode {st st' : State} {adr a : Address} {val : U256}
     (h : st.subBal adr val = some st') : st'.getCode a = st.getCode a := by
   rw [(State.of_subBal h).2]
   exact State.setBal_getCode st adr a (st.bal adr - val)
 
-theorem Benv.addBal_getCode (benv : Benv) (adr a : Adr) (val : B256) :
+theorem Benv.addBal_getCode (benv : Benv) (adr a : Address) (val : U256) :
     (benv.addBal adr val).state.getCode a = benv.state.getCode a :=
   State.addBal_getCode benv.state adr a val
 
-theorem Devm.incrNonce_getCode {devm : Devm} {adr a : Adr} :
+theorem Devm.incrNonce_getCode {devm : Devm} {adr a : Address} :
     (devm.incrNonce adr).getCode a = devm.getCode a :=
   State.incrNonce_get_code
 
-theorem Benv.incrNonce_getCode {benv : Benv} {adr a : Adr} :
+theorem Benv.incrNonce_getCode {benv : Benv} {adr a : Address} :
     (benv.incrNonce adr).state.getCode a = benv.state.getCode a :=
   State.incrNonce_get_code
 
 /-- A credit clears storage at `ca` precisely when it deletes that account. -/
-theorem getStor_addBal (w : Jaune.State) (ca a : Adr) (val : B256) :
+theorem getStor_addBal (w : Jaune.State) (ca a : Address) (val : U256) :
     (w.addBal a val).getStor ca =
-      if a = ca ∧ ((w.get a).withBal (w.bal a + val)).Empty
+      if a = ca ∧ ((w.get a).withBalance (w.bal a + val)).isEmpty
       then .empty else w.getStor ca :=
   State.setBal_get_stor
 
 /-- Persistent storage writes preserve account code. -/
-theorem Devm.setStorVal_getCode (devm : Devm) (owner : Adr)
-    (key value : B256) (address : Adr) :
+theorem Devm.setStorVal_getCode (devm : Devm) (owner : Address)
+    (key value : U256) (address : Address) :
     (devm.setStorVal owner key value).getCode address =
       devm.getCode address := by
   show ((devm.state.setStorVal owner key value).get address).code =
@@ -4706,17 +4706,17 @@ theorem Devm.setStorVal_getCode (devm : Devm) (owner : Adr)
   · rw [State.setStorVal_get_ne _ h]
 
 /-- Installing code clears storage precisely when it deletes an empty account. -/
-theorem Devm.setCode_getStor (devm : Devm) (address : Adr)
+theorem Devm.setCode_getStor (devm : Devm) (address : Address)
     (code : ByteArray) :
     Devm.getStor (devm.setCode address code) = fun target =>
-      if address = target ∧ ({devm.state.get address with code := code} : Acct).Empty
+      if address = target ∧ ({devm.state.get address with code := code} : Account).isEmpty
       then .empty else devm.getStor target := by
   funext target
-  change ((devm.state.setCode address code).get target).stor = _
+  change ((devm.state.setCode address code).get target).storage = _
   unfold State.setCode
   by_cases h : address = target
   · subst h
-    simp only [State.setAccount_get_self, Acct.clearIfEmpty_stor, eq_self, true_and]
+    simp only [State.setAccount_get_self, Account.clearIfEmpty_storage, eq_self, true_and]
     rfl
   · simp only [State.setAccount_get_ne _ h, h, false_and, ite_false]
     rfl

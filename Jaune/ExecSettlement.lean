@@ -63,7 +63,7 @@ private theorem execution_commits_of_handleErrorWith_clean
 
 private theorem processMessage_clean_input
     {msg : Msg}
-    {input : Except (EvmError × State × AdrSet × Tra) Devm}
+    {input : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     {post : Devm}
     (hresult : processMessage.settle msg input = .ok post)
     (hclean : post.error.isNone = true) :
@@ -87,7 +87,7 @@ settlement seam for consumers that need the exact retained endpoint rather
 than merely the fact that the frame commits. -/
 theorem ProcessMessage.clean_input_state_of_settle
     {msg : Msg}
-    {input : Except (EvmError × State × AdrSet × Tra) Devm}
+    {input : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     {post : Devm}
     (hresult : processMessage.settle msg input = .ok post)
     (hclean : post.error.isSome = false) :
@@ -108,7 +108,7 @@ theorem ProcessMessage.clean_input_state_of_settle
 
 private theorem processCreateMessage_clean_input
     {msg : Msg}
-    {input : Except (EvmError × State × AdrSet × Tra) Devm}
+    {input : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     {post : Devm}
     (hresult : processCreateMessage.settle msg input = .ok post)
     (hclean : post.error.isNone = true) :
@@ -322,47 +322,47 @@ theorem Frame.settlementCommits_ofCall_of_raw_commits
 
 /-- Updating one account without changing its balance preserves the complete
 world-balance map. -/
-lemma State.set_bal {st : Jaune.State} {a : Adr} {ac : Acct}
-    (h : ac.bal = (st.get a).bal) : (st.set a ac).bal = st.bal := by
+lemma State.set_bal {st : Jaune.State} {a : Address} {ac : Account}
+    (h : ac.balance = (st.get a).balance) : (st.set a ac).bal = st.bal := by
   funext b
   by_cases hb : b = a
   · subst hb
-    show ((st.set b ac).get b).bal = (st.get b).bal
+    show ((st.set b ac).get b).balance = (st.get b).balance
     rw [State.get_set_self]
     exact h
-  · show ((st.set a ac).get b).bal = (st.get b).bal
+  · show ((st.set a ac).get b).balance = (st.get b).balance
     rw [State.get_set_ne _ (fun hc => hb hc.symm)]
 
 /-- Presence-preserving updates also preserve every balance when the written
 account's balance agrees with the prior account. -/
-lemma State.setPresent_bal {st : Jaune.State} {a : Adr} {ac : Acct}
-    (h : ac.bal = (st.get a).bal) : (st.setPresent a ac).bal = st.bal := by
+lemma State.setPresent_bal {st : Jaune.State} {a : Address} {ac : Account}
+    (h : ac.balance = (st.get a).balance) : (st.setPresent a ac).bal = st.bal := by
   funext b
   by_cases hb : b = a
   · subst hb
-    show ((st.setPresent b ac).get b).bal = (st.get b).bal
+    show ((st.setPresent b ac).get b).balance = (st.get b).balance
     rw [State.get_setPresent_self]
     exact h
-  · show ((st.setPresent a ac).get b).bal = (st.get b).bal
+  · show ((st.setPresent a ac).get b).balance = (st.get b).balance
     rw [State.get_setPresent_ne _ (fun hc => hb hc.symm)]
 
-lemma State.setStor_bal {st : Jaune.State} {a : Adr} {s : Stor} :
+lemma State.setStor_bal {st : Jaune.State} {a : Address} {s : Storage} :
     (st.setStor a s).bal = st.bal := by
   unfold State.setStor
   split
   · exact State.setPresent_bal rfl
   · exact State.set_bal rfl
 
-lemma State.incrNonce_bal {st : Jaune.State} {a : Adr} :
-    (st.incrNonce a).bal = st.bal := State.set_bal (Acct.clearIfEmpty_bal _)
+lemma State.incrNonce_bal {st : Jaune.State} {a : Address} :
+    (st.incrNonce a).bal = st.bal := State.set_bal (Account.clearIfEmpty_balance _)
 
-lemma State.setCode_bal {st : Jaune.State} {a : Adr} {cd : ByteArray} :
-    (st.setCode a cd).bal = st.bal := State.set_bal (Acct.clearIfEmpty_bal _)
+lemma State.setCode_bal {st : Jaune.State} {a : Address} {cd : ByteArray} :
+    (st.setCode a cd).bal = st.bal := State.set_bal (Account.clearIfEmpty_balance _)
 
 /-- CREATE's nonce and access-list preparation leaves the complete world
 balance map unchanged. -/
 theorem genericCreate_prepared_bal
-    (sevm : Sevm) (pre : Devm) (newAddress : Adr) :
+    (sevm : Sevm) (pre : Devm) (newAddress : Address) :
     (addAccessedAddress
       (((pre.withGasLeft
           (pre.gasLeft - except64th pre.gasLeft)).withReturnData
@@ -374,7 +374,7 @@ theorem genericCreate_prepared_bal
 /-- CREATE's nonce/access-list preparation preserves persistent storage when
 the creator's incremented nonce is nonzero (as enforced by CREATE's overflow check). -/
 theorem genericCreate_prepared_getStor
-    (sevm : Sevm) (pre : Devm) (newAddress : Adr)
+    (sevm : Sevm) (pre : Devm) (newAddress : Address)
     (hnonce : (pre.state.get sevm.currentTarget).nonce + 1 ≠ 0) :
     (addAccessedAddress
         (((pre.withGasLeft
@@ -385,7 +385,7 @@ theorem genericCreate_prepared_getStor
   change (pre.state.incrNonce sevm.currentTarget).getStor address =
     pre.state.getStor address
   simp only [State.getStor, State.incrNonce_get_stor]
-  simp [Acct.Empty, hnonce]
+  simp [Account.isEmpty, hnonce]
 
 /-- CREATE message preparation clears the prospective account storage and
 increments its nonce, but leaves the complete world-balance map unchanged. -/

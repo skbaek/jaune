@@ -25,12 +25,12 @@ namespace JauneConsensus.Facts
 
 open JauneConsensus
 
-variable {P : Preset} {f : CFork}
+variable {P : Preset} {f : ConsensusFork}
 
 /-- One iteration of the loop of `process_pending_consolidations` on the loop state
 `(state, next_pending_consolidation)`. -/
 def pendingConsolidationStep (nextEpoch : U64) (pc : PendingConsolidation)
-    (acc : BeaconState P f × Nat) : M (ForInStep (BeaconState P f × Nat)) := do
+    (acc : BeaconState P f × Nat) : Fallible (ForInStep (BeaconState P f × Nat)) := do
   let site := "process_pending_consolidations"
   let state := acc.1
   let next := acc.2
@@ -46,7 +46,7 @@ def pendingConsolidationStep (nextEpoch : U64) (pc : PendingConsolidation)
 
 /-- The loop as a recursion over the queue. -/
 def pendingConsolidationsLoop (nextEpoch : U64) :
-    List PendingConsolidation → BeaconState P f × Nat → M (BeaconState P f × Nat)
+    List PendingConsolidation → BeaconState P f × Nat → Fallible (BeaconState P f × Nat)
   | [], acc => pure acc
   | pc :: pcs, acc => do
     match ← pendingConsolidationStep nextEpoch pc acc with
@@ -208,21 +208,21 @@ changes after the loop. -/
 theorem processPendingConsolidations_fate (hE : f.atLeast .electra = true) {cfg : Config}
     {state s' : BeaconState P f} (hp : processPendingConsolidations cfg state = .ok s') :
     ∃ nextEpoch k mid,
-      k ≤ (Gated.get hE state.pending_consolidations).toArray.size ∧
+      k ≤ (ForkField.get hE state.pending_consolidations).toArray.size ∧
       ConsolidationRun nextEpoch state 0
-        ((Gated.get hE state.pending_consolidations).toArray.toList.take k) mid ∧
-      (Gated.get hE s'.pending_consolidations).toArray =
-        (Gated.get hE state.pending_consolidations).toArray.extract k
-          (Gated.get hE state.pending_consolidations).toArray.size ∧
+        ((ForkField.get hE state.pending_consolidations).toArray.toList.take k) mid ∧
+      (ForkField.get hE s'.pending_consolidations).toArray =
+        (ForkField.get hE state.pending_consolidations).toArray.extract k
+          (ForkField.get hE state.pending_consolidations).toArray.size ∧
       s'.validators = mid.validators ∧ s'.balances = mid.balances := by
   rw [processPendingConsolidations_eq] at hp
   dsimp only at hp
   obtain ⟨e0, -, hp⟩ := bind_ok_elim hp
   obtain ⟨nextEpoch, -, hp⟩ := bind_ok_elim hp
   obtain ⟨pending, hpend, hp⟩ := bind_ok_elim hp
-  have hpq : pending = Gated.get hE state.pending_consolidations := by
+  have hpq : pending = ForkField.get hE state.pending_consolidations := by
     unfold BeaconState.pendingConsolidations at hpend
-    rw [gated_read_get hE] at hpend
+    rw [forkField_read_get hE] at hpend
     exact (Except.ok.inj hpend).symm
   subst hpq
   obtain ⟨out, hloop, hp⟩ := bind_ok_elim hp
@@ -232,15 +232,15 @@ theorem processPendingConsolidations_fate (hE : f.atLeast .electra = true) {cfg 
   obtain ⟨g, hg, hp⟩ := bind_ok_elim hp
   cases hp
   refine ⟨nextEpoch, k, out.1, by simpa using hk, hrun, ?_, rfl, rfl⟩
-  have hgq : g = Gated.mk hE q := by
-    rw [gated_write_eq hE] at hg; exact (Except.ok.inj hg).symm
-  show (Gated.get hE g).toArray = _
-  rw [hgq, Gated.get_mk]
+  have hgq : g = ForkField.mk hE q := by
+    rw [forkField_write_eq hE] at hg; exact (Except.ok.inj hg).symm
+  show (ForkField.get hE g).toArray = _
+  rw [hgq, ForkField.get_mk]
   unfold SszList.ofArray at hq
   split at hq
   · cases hq
-    show (Gated.get hE state.pending_consolidations).toArray.extract out.2
-      (Gated.get hE state.pending_consolidations).length = _
+    show (ForkField.get hE state.pending_consolidations).toArray.extract out.2
+      (ForkField.get hE state.pending_consolidations).length = _
     rw [hn, Nat.zero_add]
     rfl
   · cases hq

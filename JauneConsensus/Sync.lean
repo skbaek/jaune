@@ -25,9 +25,9 @@ The execution engine's responses (`PayloadStatusV1`) are inputs.
 
 namespace JauneConsensus
 
-open Jaune (Bytes B256)
+open Jaune (Bytes U256)
 
-variable {P : Preset} {f : CFork}
+variable {P : Preset} {f : ConsensusFork}
 
 /-- `SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY` (`specs/bellatrix/optimistic-sync.md`, "Constants"). -/
 def SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY : Nat := 128
@@ -55,7 +55,7 @@ structure PayloadStatusV1 where
 
 /-- `OptimisticStore` (`specs/bellatrix/optimistic-sync.md`), with the set of blocks designated `INVALIDATED`
 the consensus engine "MUST track". -/
-structure OptimisticStore (P : Preset) (f : CFork) where
+structure OptimisticStore (P : Preset) (f : ConsensusFork) where
   optimistic_roots : Std.TreeSet Root compare
   head_block_root : Root
   blocks : RootMap (BeaconBlock P f)
@@ -65,7 +65,7 @@ structure OptimisticStore (P : Preset) (f : CFork) where
 /-- The optimistic store at an anchor, as the pyspec test helper `get_optimistic_store` builds
 it: no optimistic roots, the anchor as head. -/
 def getOptimisticStore (anchorState : BeaconState P f) (anchorBlock : BeaconBlock P f) :
-    M (OptimisticStore P f) := do
+    Fallible (OptimisticStore P f) := do
   require (anchorBlock.state_root == Ssz.hashTreeRoot anchorState) "get_optimistic_store"
   let anchorRoot : Root := Ssz.hashTreeRoot anchorBlock
   pure { optimistic_roots := ∅, head_block_root := anchorRoot,
@@ -79,7 +79,7 @@ def isOptimistic (optStore : OptimisticStore P f) (block : BeaconBlock P f) : Bo
 /-- `latest_verified_ancestor(opt_store, block)`, its `while True` bounded by the number of
 stored blocks plus one. -/
 def latestVerifiedAncestor (optStore : OptimisticStore P f) (block : BeaconBlock P f) :
-    M (BeaconBlock P f) := do
+    Fallible (BeaconBlock P f) := do
   let mut block := block
   for _ in [0:optStore.blocks.size + 1] do
     if !isOptimistic optStore block || block.parent_root == zeroRoot then return block
@@ -101,11 +101,11 @@ def isExecutionBlock (block : BeaconBlock P f) : Bool :=
 
 /-- `is_optimistic_candidate_block(opt_store, current_slot, block)`. -/
 def isOptimisticCandidateBlock (optStore : OptimisticStore P f) (currentSlot : Slot)
-    (block : BeaconBlock P f) : M Bool := do
+    (block : BeaconBlock P f) : Fallible Bool := do
   let parent ← lookup optStore.blocks block.parent_root
     "is_optimistic_candidate_block: opt_store.blocks[block.parent_root]"
   if isExecutionBlock parent then return true
-  if (← block.slot.add? (← c64 SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY) "is_optimistic_candidate_block")
+  if (← block.slot.add? (← u64Checked SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY) "is_optimistic_candidate_block")
       ≤ currentSlot then return true
   return false
 
@@ -170,13 +170,13 @@ def invalidBlockOf (blocks : RootMap (BeaconBlock P f)) (block : BeaconBlock P f
 Returns the stores and whether the block was imported. -/
 def onBlockOptimistic (ctx : Ctx) (oracle : DataOracle P) (store : Store P f)
     (optStore : OptimisticStore P f) (status : PayloadStatusV1)
-    (signedBlock : SignedBeaconBlock P f) : M (Store P f × OptimisticStore P f × Bool) := do
+    (signedBlock : SignedBeaconBlock P f) : Fallible (Store P f × OptimisticStore P f × Bool) := do
   let block := signedBlock.message
   let blockRoot : Root := Ssz.hashTreeRoot block
   -- The parent of the block MUST NOT have an `INVALIDATED` execution payload.
   if optStore.invalidated.contains block.parent_root then return (store, optStore, false)
   if status.status.isNotValidated then
-    let currentSlot ← getCurrentSlot ctx.cfg store
+    let currentSlot ← getCurrentSlot ctx.config store
     if !(← isOptimisticCandidateBlock optStore currentSlot block) then
       return (store, optStore, false)
   match onBlock { ctx with executionValid := status.status.newPayloadVerdict } oracle store signedBlock with
@@ -213,7 +213,7 @@ def onBlockOptimistic (ctx : Ctx) (oracle : DataOracle P) (store : Store P f)
 
 /-- The optimistic node's head: `get_head` with `INVALIDATED` blocks removed from the tree. -/
 def getOptimisticHead (cfg : Config) (store : Store P f) (optStore : OptimisticStore P f) :
-    M ForkChoiceNode :=
+    Fallible ForkChoiceNode :=
   getHeadExcluding cfg store (fun r => optStore.invalidated.contains r)
 
 end JauneConsensus

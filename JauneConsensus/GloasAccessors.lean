@@ -37,7 +37,7 @@ def DOMAIN_BEACON_BUILDER : DomainType := #v[0x0B, 0x00, 0x00, 0x00]
 def BUILDER_INDEX_SELF_BUILD : BuilderIndex := UINT64_MAX
 
 /-- `BUILDER_INDEX_FLAG = uint64(2**40)` ("Misc"). -/
-def BUILDER_INDEX_FLAG : U64 := U64.lit (2 ^ 40)
+def BUILDER_INDEX_FLAG : U64 := U64.literal (2 ^ 40)
 
 /-- `BUILDER_DEPOSIT_REQUEST_TYPE = Bytes1('0x03')` (EIP-8282). -/
 def builderDepositRequestType : UInt8 := 0x03
@@ -47,13 +47,13 @@ def builderExitRequestType : UInt8 := 0x04
 /-! ## Epochs, domains, time -/
 
 /-- `get_current_epoch(state)`. -/
-def getCurrentEpoch (state : BeaconState P) : M Epoch := computeEpochAtSlot P state.slot
+def getCurrentEpoch (state : BeaconState P) : Fallible Epoch := computeEpochAtSlot P state.slot
 
 /-- `get_domain(state, domain_type, epoch=None)`: `epoch` defaults to the current epoch; the
 fork version is the state's `fork.previous_version` before `fork.epoch`, its
 `current_version` from then on. -/
 def getDomain (state : BeaconState P) (domainType : DomainType) (epoch : Option Epoch := none) :
-    M Domain := do
+    Fallible Domain := do
   let e ← match epoch with
     | some e => pure e
     | none => getCurrentEpoch state
@@ -61,25 +61,25 @@ def getDomain (state : BeaconState P) (domainType : DomainType) (epoch : Option 
 
 /-- `compute_time_at_slot(state.genesis_time, slot)` (the `v1.7.0-beta.4` millisecond form,
 which raises on `uint64` overflow). -/
-def computeTimeAtSlot (cfg : Config) (state : BeaconState P) (slot : Slot) : M U64 :=
+def computeTimeAtSlot (cfg : Config) (state : BeaconState P) (slot : Slot) : Fallible U64 :=
   computeTimeAtSlotOf cfg state.genesis_time slot
 
 /-! ## Registry lookups -/
 
 /-- `state.validators[validator_index].pubkey` (`IndexError` when out of range). -/
-def validatorPubkey (state : BeaconState P) (validatorIndex : ValidatorIndex) : M BLSPubkey := do
+def validatorPubkey (state : BeaconState P) (validatorIndex : ValidatorIndex) : Fallible BLSPubkey := do
   let v ← getAt state.validators.toArray validatorIndex.toNat "state.validators[validator_index]"
   pure v.pubkey
 
 /-- `state.builders[builder_index].pubkey` (`IndexError` when out of range). -/
-def builderPubkey (state : BeaconState P) (builderIndex : BuilderIndex) : M BLSPubkey := do
+def builderPubkey (state : BeaconState P) (builderIndex : BuilderIndex) : Fallible BLSPubkey := do
   let b ← getAt state.builders.toArray builderIndex.toNat "state.builders[builder_index]"
   pure b.pubkey
 
 /-- The key a builder-signed object (envelope or bid) of `builder_index` is verified against
 (`verify_execution_payload_envelope_signature`): for `BUILDER_INDEX_SELF_BUILD`, the pubkey of
 the latest block header's proposer; otherwise the builder's own pubkey. -/
-def builderSigningPubkey (state : BeaconState P) (builderIndex : BuilderIndex) : M BLSPubkey :=
+def builderSigningPubkey (state : BeaconState P) (builderIndex : BuilderIndex) : Fallible BLSPubkey :=
   if builderIndex == BUILDER_INDEX_SELF_BUILD then
     validatorPubkey state state.latest_block_header.proposer_index
   else
@@ -105,8 +105,8 @@ def latestBlockRoot (state : BeaconState P) : Root :=
 versioned_hashes.append(kzg_commitment_to_versioned_hash(commitment))`. `VersionedHashes` is
 `List[VersionedHash, MAX_BLOB_COMMITMENTS_PER_BLOCK]`, so an append past the limit raises
 (`Reject.limit`); the commitments themselves are a `ProgressiveList` with no limit. -/
-def blobVersionedHashes (commitments : ProgressiveListR KZGCommitment) :
-    M (SszList Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK) :=
+def blobVersionedHashes (commitments : ProgressiveListRightSpine KZGCommitment) :
+    Fallible (SszList Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK) :=
   let hashes := commitments.toArray.map fun c => kzgCommitmentToVersionedHash c.toArray.toList
   if h : hashes.size ≤ P.MAX_BLOB_COMMITMENTS_PER_BLOCK then pure ⟨hashes, h⟩
   else throw (.limit "VersionedHashes.append" P.MAX_BLOB_COMMITMENTS_PER_BLOCK hashes.size)
@@ -133,7 +133,7 @@ def ExecutionRequests.lists (r : ExecutionRequests) :
    r.builder_deposits.toArray.toList, r.builder_exits.toArray.toList)
 
 /-- A progressive list is determined by its elements. -/
-theorem ProgressiveListS.eq_of_toList_eq {s : Spine} {α : Type} {a b : ProgressiveListS s α}
+theorem ProgressiveListOnSpine.eq_of_toList_eq {s : Spine} {α : Type} {a b : ProgressiveListOnSpine s α}
     (h : a.toArray.toList = b.toArray.toList) : a = b := by
   cases a; cases b
   simp only at h
@@ -141,10 +141,10 @@ theorem ProgressiveListS.eq_of_toList_eq {s : Spine} {α : Type} {a b : Progress
 
 /-- Equal elements give equal `hash_tree_root`s (the easy direction; the converse would need
 `hash_tree_root` to be injective, which is the SSZ collision caveat and is not provable). -/
-theorem ProgressiveListS.hashTreeRoot_eq_of_toList_eq {s : Spine} {α : Type} [Ssz α]
-    {a b : ProgressiveListS s α} (h : a.toArray.toList = b.toArray.toList) :
+theorem ProgressiveListOnSpine.hashTreeRoot_eq_of_toList_eq {s : Spine} {α : Type} [Ssz α]
+    {a b : ProgressiveListOnSpine s α} (h : a.toArray.toList = b.toArray.toList) :
     Ssz.hashTreeRoot a = Ssz.hashTreeRoot b := by
-  rw [ProgressiveListS.eq_of_toList_eq h]
+  rw [ProgressiveListOnSpine.eq_of_toList_eq h]
 
 /-- Requests with the same five lists are the same container. -/
 theorem ExecutionRequests.eq_of_lists_eq {r r' : ExecutionRequests} (h : r.lists = r'.lists) :
@@ -152,9 +152,9 @@ theorem ExecutionRequests.eq_of_lists_eq {r r' : ExecutionRequests} (h : r.lists
   cases r; cases r'
   simp only [ExecutionRequests.lists, Prod.mk.injEq] at h
   obtain ⟨h1, h2, h3, h4, h5⟩ := h
-  rw [ProgressiveListS.eq_of_toList_eq h1, ProgressiveListS.eq_of_toList_eq h2,
-    ProgressiveListS.eq_of_toList_eq h3, ProgressiveListS.eq_of_toList_eq h4,
-    ProgressiveListS.eq_of_toList_eq h5]
+  rw [ProgressiveListOnSpine.eq_of_toList_eq h1, ProgressiveListOnSpine.eq_of_toList_eq h2,
+    ProgressiveListOnSpine.eq_of_toList_eq h3, ProgressiveListOnSpine.eq_of_toList_eq h4,
+    ProgressiveListOnSpine.eq_of_toList_eq h5]
 
 /-- Requests with the same five lists have the same `hash_tree_root` (the easy direction; the
 converse is the SSZ collision caveat). -/

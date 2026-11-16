@@ -78,12 +78,12 @@ def benchSigV : Bool := false
 def benchScalar : Nat :=
   0xFEDCBA9876543210FEDCBA9876543210FEDCBA9876543210FEDCBA9876543210
 
-def bn254G2Generator : BNP2 :=
+def bn254G2Generator : Bn254G2 :=
   ⟨
-    BNF2.mk
+    Bn254Fp2.mk
       11559732032986387107991004021392285783925812861821192530917403151452391805634
       10857046999023057135944570762232829481370756359578518086990519993285655852781,
-    BNF2.mk
+    Bn254Fp2.mk
       4082367875863433681332203403145435568316851327593401208105741076214120093531
       8495653923123431417604973247489272438418190587263600148770280649306958101930
   ⟩
@@ -116,21 +116,21 @@ def benchSigAdr : Nat := 0xfcad0b19bb29d4674531d6f115237e16afce377c
 -- Rendering only. `String.drop` yields a `String.Slice`, which has no
 -- `DecidableEq`, so an address is never compared in this form; `Adr.toNat` is
 -- the comparison, matching `checkAdr` in `scripts/check-ec.lean`.
-def adrHex (a : Adr) : String := "0x" ++ (a.toB256.toHex.drop 24)
+def adrHex (a : Address) : String := "0x" ++ (a.toU256.toHex.drop 24)
 
 def main : IO UInt32 := do
   -- Preflight, outside every timed region: the recovery row is only meaningful
   -- if its tuple takes the successful path, in which case it performs three
   -- full-length scalar multiplications (`s`, `h`, and `rInv` are all 255–256
   -- bits) rather than failing early in the square root.
-  match secp256k1.recover benchSigHash.toB256 benchSigV
-          benchSigR.toB256 benchSigS.toB256 with
+  match secp256k1.recover benchSigHash.toU256 benchSigV
+          benchSigR.toU256 benchSigS.toU256 with
   | none =>
     IO.println "ERROR: the benchmark signature tuple does not recover"
     return 1
   | some adr =>
     if adr.toNat ≠ benchSigAdr then
-      IO.println s!"ERROR: benchmark tuple recovered {adrHex adr}, expected {adrHex benchSigAdr.toAdr}"
+      IO.println s!"ERROR: benchmark tuple recovered {adrHex adr}, expected {adrHex benchSigAdr.toAddress}"
       return 1
     IO.println s!"# recover tuple recovers {adrHex adr} (full successful path)"
   if !bn254G2Generator.isOnCurve then
@@ -140,8 +140,8 @@ def main : IO UInt32 := do
   -- inversion, one affine subtraction, one keccak.  Iteration `i` perturbs the
   -- message hash only, so `r` (and therefore the square root) is fixed.
   bench "secp256k1-recover" 200 (fun i acc =>
-    match secp256k1.recover (benchSigHash + i).toB256 benchSigV
-            benchSigR.toB256 benchSigS.toB256 with
+    match secp256k1.recover (benchSigHash + i).toU256 benchSigV
+            benchSigR.toU256 benchSigS.toU256 with
     | some adr => mix acc adr.toNat
     | none => mix acc 0)
   -- One 256-bit scalar multiplication on the same curve, for attribution
@@ -151,7 +151,7 @@ def main : IO UInt32 := do
       ((benchScalar + i) % secp256k1.curveOrder)).x.val)
   -- BN254 G1 uses the same generic ladder over a 254-bit base field.
   bench "bn254-g1-mul" 200 (fun i acc =>
-    mix acc ((⟨1, 2⟩ : BNP).mulBy
+    mix acc ((⟨1, 2⟩ : Bn254G1).mulBy
       ((benchScalar + i) % altBn128CurveOrder)).x.val)
   bench "bls-g1-mul" 200 (fun i acc =>
     mix acc (blsG1Generator.mulBy
@@ -164,11 +164,11 @@ def main : IO UInt32 := do
   -- corresponding `-miller` rows disable only the final exponentiation, so
   -- Step 7 can distinguish affine loop cost from the exponentiation tail.
   bench "bn254-pairing" 1 (fun _ acc =>
-    match pairing bn254G2Generator (⟨1, 2⟩ : BNP) with
+    match pairing bn254G2Generator (⟨1, 2⟩ : Bn254G1) with
     | some f => mix acc (fieldSink f)
     | none => mix acc 0)
   bench "bn254-miller" 1 (fun _ acc =>
-    match pairing bn254G2Generator (⟨1, 2⟩ : BNP) false with
+    match pairing bn254G2Generator (⟨1, 2⟩ : Bn254G1) false with
     | some f => mix acc (fieldSink f)
     | none => mix acc 0)
   bench "bls-pairing" 1 (fun _ acc =>
