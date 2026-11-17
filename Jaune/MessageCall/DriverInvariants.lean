@@ -41,9 +41,6 @@ theorem completeDelegationAccess_mach (d : Devm) (b : Bool) (a : Address) :
   · exact addAccessedAddress_mach _ _
   · rfl
 
-theorem Devm.balReadAccount_mach (rules : ForkRules) (a : Address) (d : Devm) :
-    (d.balReadAccount rules a).mach = d.mach := rfl
-
 open Lean Elab Tactic Meta in
 /-- `inv_close_core` through the delegation-access helpers of the message opcodes. -/
 elab "inv_close_msg" : tactic => withMainContext do
@@ -56,7 +53,7 @@ elab "inv_close_msg" : tactic => withMainContext do
     let ok ← (focusAndDone do
         evalTactic (← `(tactic| apply Inv.of_mach $h))
         evalTactic (← `(tactic| all_goals try (simp only [ForkRules.accessDelegation_mach,
-          completeDelegationAccess_mach, Devm.balReadAccount_mach, addAccessedAddress_mach]; done)))
+          completeDelegationAccess_mach, Jaune.Devm.balReadAccount_mach, addAccessedAddress_mach]; done)))
         evalTactic (← `(tactic| all_goals first | rfl | exact Nat.le_refl _ | omega))
         pure true) <|>
       (do s.restore; pure false)

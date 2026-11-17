@@ -1,5 +1,6 @@
 import Jaune.Exec
 import Jaune.MessageCall.Step
+import Jaune.SymbolicPush
 
 /-!
 Symbolic rules for the binary arithmetic family `ADD`, `SUB` and `MUL`, with
@@ -153,5 +154,18 @@ theorem nextOp_step_stackUnderflow (evm : Evm) (op : Op)
   match stk, short with
   | [], _ => rfl
   | [_], _ => rfl
+
+
+/-- `prepend` on the four-part message call: prepend a covered binary operation to a complete
+continuation, preserving its outcome. -/
+def prependExec {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
+    (op : Op) (x y : U256) (rest : List U256)
+    (decoded : PlainOp.At sevm.code pc op.rinst)
+    (stack : pre.stack = x :: y :: rest)
+    (gas : op.cost ≤ pre.gasLeft) (room : rest.length < 1024)
+    (next : Exec (pc + 1) sevm (post op x y rest pre) out) :
+    Exec pc sevm pre out :=
+  .cont ((Evm.step_of_next (n := .plain op.rinst) decoded).trans
+    (nextOp_step_success ⟨pc, sevm, pre⟩ op x y rest stack gas room)) next
 
 end Jaune.SymbolicArith
