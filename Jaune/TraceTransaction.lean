@@ -76,7 +76,7 @@ def runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     pure ⟨result.value, by
       simpa only [processMessageCall.call, hfork] using result.erases⟩
   | none =>
-    match hauth : processMessageCall.legacyAuthorization msg with
+    match hauth : processMessageCall.authorize msg with
     | .error error =>
       pure ⟨.error error, by simp only [processMessageCall.call, hfork, hauth]; rfl⟩
     | .ok ⟨delegated, refund⟩ =>

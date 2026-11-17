@@ -53,19 +53,19 @@ def popped (rest : List U256) (pre : Devm) : Devm :=
 /-! ## On the four-part message call's `NextOp.step` -/
 
 /-- Every covered opcode steps through `applyBinary` with its own function and cost. -/
-theorem nextOp_step_eq (evm : Evm) (op : Op) :
+theorem step_eq (evm : Evm) (op : Op) :
     NextOp.step evm (.plain op.rinst) =
       Step.ofExecution (evm.pc + 1) (applyBinary op.eval op.cost evm.dyna) := by
   cases op <;> rfl
 
 /-- Success pops `x` (top) and `y`, pushes `op.eval x y`, and charges `op.cost`. -/
-theorem nextOp_step_success (evm : Evm) (op : Op) (x y : U256) (rest : List U256)
+theorem step_success (evm : Evm) (op : Op) (x y : U256) (rest : List U256)
     (stack : evm.dyna.stack = x :: y :: rest)
     (gas : op.cost ≤ evm.dyna.gasLeft)
     (room : rest.length < 1024) :
     NextOp.step evm (.plain op.rinst) =
       .next (evm.pc + 1) (post op x y rest evm.dyna) := by
-  rw [nextOp_step_eq, applyBinary_def]
+  rw [step_eq, applyBinary_def]
   dsimp [Devm.stack] at stack
   dsimp [Devm.gasLeft] at gas
   simp [Devm.pop_def, Devm.stack, stack, pushItem_def, chargeGas_def, safeSub, gas,
@@ -73,12 +73,12 @@ theorem nextOp_step_success (evm : Evm) (op : Op) (x y : U256) (rest : List U256
     Step.ofExecution, Devm.gasLeft]
 
 /-- With two operands but too little gas, the raw error carries the popped stack. -/
-theorem nextOp_step_outOfGas (evm : Evm) (op : Op) (x y : U256) (rest : List U256)
+theorem step_outOfGas (evm : Evm) (op : Op) (x y : U256) (rest : List U256)
     (stack : evm.dyna.stack = x :: y :: rest)
     (gas : evm.dyna.gasLeft < op.cost) :
     NextOp.step evm (.plain op.rinst) =
       .halt (.error ⟨.halt (.outOfGas .none), popped rest evm.dyna⟩) := by
-  rw [nextOp_step_eq, applyBinary_def]
+  rw [step_eq, applyBinary_def]
   dsimp [Devm.stack] at stack
   dsimp [Devm.gasLeft] at gas
   simp [Devm.pop_def, Devm.stack, stack, pushItem_def, chargeGas_def, safeSub,
@@ -87,11 +87,11 @@ theorem nextOp_step_outOfGas (evm : Evm) (op : Op) (x y : U256) (rest : List U25
 
 /-- Fewer than two operands underflow before any gas is charged; the raw error
 carries the emptied stack and the input gas. -/
-theorem nextOp_step_stackUnderflow (evm : Evm) (op : Op)
+theorem step_stackUnderflow (evm : Evm) (op : Op)
     (short : evm.dyna.stack.length < 2) :
     NextOp.step evm (.plain op.rinst) =
       .halt (.error ⟨.halt (.stackUnderflow .none), popped [] evm.dyna⟩) := by
-  rw [nextOp_step_eq, applyBinary_def]
+  rw [step_eq, applyBinary_def]
   rcases evm with ⟨pc, sevm, ⟨⟨stk, memory, gasLeft, stateGas⟩, view, world⟩⟩
   dsimp [Devm.stack] at short
   match stk, short with
@@ -101,7 +101,7 @@ theorem nextOp_step_stackUnderflow (evm : Evm) (op : Op)
 
 /-- `prepend` on the four-part message call: prepend a covered binary operation to a complete
 continuation, preserving its outcome. -/
-def prependExec {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
+def prepend {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
     (op : Op) (x y : U256) (rest : List U256)
     (decoded : PlainOp.At sevm.code pc op.rinst)
     (stack : pre.stack = x :: y :: rest)
@@ -109,6 +109,6 @@ def prependExec {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
     (next : Exec (pc + 1) sevm (post op x y rest pre) out) :
     Exec pc sevm pre out :=
   .cont ((Evm.step_of_next (n := .plain op.rinst) decoded).trans
-    (nextOp_step_success ⟨pc, sevm, pre⟩ op x y rest stack gas room)) next
+    (step_success ⟨pc, sevm, pre⟩ op x y rest stack gas room)) next
 
 end Jaune.SymbolicArith

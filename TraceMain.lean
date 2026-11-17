@@ -1,6 +1,6 @@
 import Jaune.MessageCall.TraceJson
 import Jaune.TraceTransaction
-import Jaune.Adapter.Io
+import Jaune.Adapter.IO
 import Jaune.MessageCall.Top
 
 /-! Standalone message or signed-transaction tracing. Inputs state their scope;

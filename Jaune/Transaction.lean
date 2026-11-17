@@ -678,32 +678,32 @@ its failure settlement. The frame then runs by `Frame.runTop` and its `Frame.Res
 by `Frame.output` or `Frame.outputAmsterdam`. -/
 
 /-- Ordinary top-level authorization follows the active fork's delegation rule. -/
-def processMessageCall.legacyAuthorization (msg : Msg) : Except EvmError (Msg × Nat) :=
+def processMessageCall.authorize (msg : Msg) : Except EvmError (Msg × Nat) :=
   if !msg.benv.stat.rules.delegationEnabled || msg.tenv.stat.auths.isEmpty then
     .ok ⟨msg, 0⟩
   else do
     let ⟨delegated, refund⟩ ← setDelegation msg
     .ok ⟨delegated, refund.toNat⟩
 
-theorem processMessageCall.legacyAuthorization_disabled (msg : Msg)
+theorem processMessageCall.authorize_disabled (msg : Msg)
     (h : msg.benv.stat.rules.delegationEnabled = false) :
-    legacyAuthorization msg = .ok ⟨msg, 0⟩ := by
-  simp only [legacyAuthorization, h, Bool.not_false, Bool.true_or, ↓reduceIte]
+    authorize msg = .ok ⟨msg, 0⟩ := by
+  simp only [authorize, h, Bool.not_false, Bool.true_or, ↓reduceIte]
 
-theorem processMessageCall.legacyAuthorization_enabled (msg : Msg)
+theorem processMessageCall.authorize_enabled (msg : Msg)
     (h : msg.benv.stat.rules.delegationEnabled = true) :
-    legacyAuthorization msg =
+    authorize msg =
       (if msg.tenv.stat.auths.isEmpty then .ok ⟨msg, 0⟩ else do
         let ⟨delegated, refund⟩ ← setDelegation msg
         .ok ⟨delegated, refund.toNat⟩) := by
-  simp only [legacyAuthorization, h, Bool.not_true, Bool.false_or]
+  simp only [authorize, h, Bool.not_true, Bool.false_or]
 
 /-- The ordinary top-level authorization leaves a message with a code address: an
 unchanged message keeps its own, and `setDelegation` fails closed without one. -/
-theorem processMessageCall.legacyAuthorization_codeAddress {msg : Msg} {q : Msg × Nat}
-    (h : legacyAuthorization msg = .ok q) (hc : msg.codeAddress ≠ none) :
+theorem processMessageCall.authorize_codeAddress {msg : Msg} {q : Msg × Nat}
+    (h : authorize msg = .ok q) (hc : msg.codeAddress ≠ none) :
     q.1.codeAddress ≠ none := by
-  unfold legacyAuthorization at h
+  unfold authorize at h
   split at h
   · cases h; exact hc
   · obtain ⟨pair, hpair, h⟩ := Except.bind_eq_ok h
@@ -718,10 +718,10 @@ theorem processMessageCall.legacyAuthorization_codeAddress {msg : Msg} {q : Msg 
       subst hpair
       simp [hca]
 
-theorem processMessageCall.legacyAuthorization_canonical {msg : Msg}
-    (h : msg.Canonical) {p} (hp : legacyAuthorization msg = .ok p) :
+theorem processMessageCall.authorize_canonical {msg : Msg}
+    (h : msg.Canonical) {p} (hp : authorize msg = .ok p) :
     p.1.Canonical := by
-  unfold legacyAuthorization at hp
+  unfold authorize at hp
   split at hp
   · cases hp; exact h
   · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
@@ -791,7 +791,7 @@ def processMessageCall.call (msg : Msg) :
     Except EvmError (State × MsgCallOutput) := do
   match msg.benv.stat.rules.stateGas with
   | none =>
-    let ⟨delegated, authorizationRefund⟩ ← processMessageCall.legacyAuthorization msg
+    let ⟨delegated, authorizationRefund⟩ ← processMessageCall.authorize msg
     let f := Frame.ofTop delegated.resolveCodeDelegation false
     let r ← (Frame.runTop f).mapError Fault.toEvmError
     f.output authorizationRefund r
@@ -5532,7 +5532,7 @@ theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
   split at hp
   · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
     obtain ⟨delegated, refund⟩ := pair
-    have hm := processMessageCall.legacyAuthorization_canonical h hpair
+    have hm := processMessageCall.authorize_canonical h hpair
     exact runTopOutput_canonical
       (Frame.ofTop_canonical (Msg.resolveCodeDelegation_canonical hm) false)
       (fun _ hw _ hk => frameOutput_canonical hw hk) hp

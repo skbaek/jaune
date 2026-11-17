@@ -40,7 +40,7 @@ private theorem nextOp_step_push {evm : Evm} {xs : Bytes} {le : xs.length ≤ 32
           devm.push xs.toU256) := rfl
 
 /-- Success charges the selected PUSH cost and prepends the operand word. -/
-theorem nextOp_step_success (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
+theorem step_success (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
     (gas : cost bytes ≤ evm.dyna.gasLeft)
     (room : evm.dyna.stack.length < 1024)
     (hgate : bytes ≠ [] ∨ evm.sta.benvStat.rules.opcodes.push0) :
@@ -53,7 +53,7 @@ theorem nextOp_step_success (evm : Evm) (bytes : Bytes) (width : bytes.length �
     Devm.stack, Devm.setMach, room, post, cost, bind, Except.bind, Step.ofExecution]
 
 /-- Gas exhaustion is checked before stack capacity and leaves the input state. -/
-theorem nextOp_step_outOfGas (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
+theorem step_outOfGas (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
     (gas : evm.dyna.gasLeft < cost bytes)
     (hgate : bytes ≠ [] ∨ evm.sta.benvStat.rules.opcodes.push0) :
     NextOp.step evm (.push bytes width) =
@@ -64,7 +64,7 @@ theorem nextOp_step_outOfGas (evm : Evm) (bytes : Bytes) (width : bytes.length �
     bind, Except.bind, Step.ofExecution]
 
 /-- With gas available, stack overflow retains the gas charge in the raw error. -/
-theorem nextOp_step_stackOverflow (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
+theorem step_stackOverflow (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
     (gas : cost bytes ≤ evm.dyna.gasLeft)
     (full : 1024 ≤ evm.dyna.stack.length)
     (hgate : bytes ≠ [] ∨ evm.sta.benvStat.rules.opcodes.push0) :
@@ -79,7 +79,7 @@ theorem nextOp_step_stackOverflow (evm : Evm) (bytes : Bytes) (width : bytes.len
 
 /-- `prepend` on the four-part message call: prepend a decoded PUSH to a complete continuation,
 preserving its outcome. -/
-def prependExec {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
+def prepend {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
     (bytes : Bytes) (width : bytes.length ≤ 32)
     (decoded : NextOp.At sevm.code pc (.push bytes width))
     (gas : cost bytes ≤ pre.gasLeft) (room : pre.stack.length < 1024)
@@ -87,6 +87,6 @@ def prependExec {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
     (next : Exec (pc + bytes.length + 1) sevm (post bytes pre) out) :
     Exec pc sevm pre out :=
   .cont ((Evm.step_of_next decoded).trans
-    (nextOp_step_success ⟨pc, sevm, pre⟩ bytes width gas room hgate)) next
+    (step_success ⟨pc, sevm, pre⟩ bytes width gas room hgate)) next
 
 end Jaune.SymbolicPush

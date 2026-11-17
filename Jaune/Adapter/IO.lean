@@ -1,4 +1,4 @@
--- Adapter/Io.lean : `IO` helpers of the runner front ends.
+-- Adapter/IO.lean : `IO` helpers of the runner front ends.
 --
 -- Adapter module (see `scripts/layering.json`). Option-to-`IO` lifts, the
 -- `IO` failure and guard helpers, hex-prefix stripping in `IO` and the JSON file

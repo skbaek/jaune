@@ -13,7 +13,7 @@ and 8)
   (`prepareMessage_codeAddress_eq_none_iff`), and the creation flag `processMessageCall` passes is
   `msg.target.isNone`; top-level delegation resolution only ever sets a code address
   (`Msg.resolveCodeDelegation_codeAddress_eq_none`). Together with the authorization step and
-  Amsterdam's preparation, which keep the code address (`legacyAuthorization_codeAddress`,
+  Amsterdam's preparation, which keep the code address (`authorize_codeAddress`,
   `prepareTopLevelAmsterdam_message`), every top frame `processMessageCall` runs on a prepared
   message is coherent (`processMessageCall.topFrame_kindCoherent`).
 * **The spawn checkpoint.** A spawned child's checkpoint is its caller after the opcode's own
@@ -318,7 +318,7 @@ inductive processMessageCall.TopFrame (msg : Msg) : Frame → Prop
   | create (ht : msg.target = none) (hs : msg.benv.stat.rules.stateGas = none) :
       processMessageCall.TopFrame msg (Frame.ofTop msg true)
   | call (ht : msg.target ≠ none) (hs : msg.benv.stat.rules.stateGas = none) {q : Msg × Nat}
-      (ha : processMessageCall.legacyAuthorization msg = .ok q) :
+      (ha : processMessageCall.authorize msg = .ok q) :
       processMessageCall.TopFrame msg (Frame.ofTop q.1.resolveCodeDelegation false)
   | amsterdam {state : StateGasRules} (hs : msg.benv.stat.rules.stateGas = some state)
       {p : Msg × Devm} (hp : prepareTopLevelAmsterdam state msg = .ok p) :
@@ -337,7 +337,7 @@ theorem processMessageCall.topFrame_kindCoherent {benv : Benv} {tenv : Tenv} {tx
   | create ht _ => exact prepareMessage_create_kindCoherent hm ht
   | call ht _ ha =>
     exact resolveCodeDelegation_call_kindCoherent
-      (processMessageCall.legacyAuthorization_codeAddress ha (fun e => ht (hca.mp e)))
+      (processMessageCall.authorize_codeAddress ha (fun e => ht (hca.mp e)))
   | amsterdam _ hp =>
     obtain ⟨htarget, hcreate, hcall⟩ := prepareTopLevelAmsterdam_message hp
     refine (Message.ofLegacy_kindCoherent_iff _ _).mpr ?_

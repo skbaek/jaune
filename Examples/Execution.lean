@@ -53,14 +53,14 @@ theorem final_meta (base : Devm) (a b : UInt8) :
 
 The derivation over `Exec` and `exec` of the four-part message call. -/
 
-/-- A data-valued derivation on the four-part chain, from `SymbolicPush.prependExec`. -/
-def executionExec (env : Sevm) (base : Devm) (a b : UInt8) :
+/-- A data-valued derivation on the four-part chain, from `SymbolicPush.prepend`. -/
+def execution (env : Sevm) (base : Devm) (a b : UInt8) :
     Jaune.Exec 0 { env with code := code a b } (initial base) (.ok (finalState base a b)) := by
-  apply SymbolicPush.prependExec [a] (by simp) (first a b)
+  apply SymbolicPush.prepend [a] (by simp) (first a b)
   · simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]
   · simp [initial, Devm.stack, Devm.setMach]
   · exact Or.inl (by simp)
-  apply SymbolicPush.prependExec [b] (by simp) (second a b)
+  apply SymbolicPush.prepend [b] (by simp) (second a b)
   · simp [SymbolicPush.cost, SymbolicPush.post, initial, Devm.gasLeft,
       Devm.setMach, Gas.veryLow]
   · simp [SymbolicPush.post, initial, Devm.stack, Devm.setMach]
@@ -68,8 +68,8 @@ def executionExec (env : Sevm) (base : Devm) (a b : UInt8) :
   exact .halt (Jaune.Evm.step_of_halt (devm := finalState base a b) (l := .stop) (last a b))
 
 /-- Adequacy on the four-part chain connects the derivation to `exec`. -/
-theorem interpreterExec (env : Sevm) (base : Devm) (a b : UInt8) :
+theorem interpreter (env : Sevm) (base : Devm) (a b : UInt8) :
     exec ⟨0, { env with code := code a b }, initial base⟩ = .ok (finalState base a b) :=
-  (Jaune.exec_iff_exec_eq _ _ _ _).mp ⟨executionExec env base a b⟩
+  (Jaune.exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b⟩
 
 end Examples.Execution

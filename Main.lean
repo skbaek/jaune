@@ -6,7 +6,7 @@ import Jaune.ChainStore
 import Jaune.FixtureTransition
 import Jaune.BLSGuards
 import Jaune.T8n
-import Jaune.Adapter.Io
+import Jaune.Adapter.IO
 
 open Jaune
 

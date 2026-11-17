@@ -32,7 +32,7 @@
 
 import Jaune.Transaction
 import Jaune.FixtureException
-import Jaune.Adapter.Io
+import Jaune.Adapter.IO
 
 open Jaune
 

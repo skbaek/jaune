@@ -9,11 +9,11 @@ memory, metadata and world are all variables. The derivation is a completed
 raw frame: it ends at `STOP` with an `.ok` machine state, and it says nothing
 about message settlement or transaction validation. Its premises are
 `9 ≤ g` (three static charges of 3) and `s.length < 1023` (room for two pushes).
-`concreteExec` exhibits them at `g = 9`, `s = []`.
+`concrete` exhibits them at `g = 9`, `s = []`.
 
-`executionExec` builds one derivation. `resultExec` inverts an arbitrary derivation
+`execution` builds one derivation. `result` inverts an arbitrary derivation
 step by step, so every derivation from this start state (not only the one we
-built) ends in the same state; `interpreterExec` then reads the total interpreter's
+built) ends in the same state; `interpreter` then reads the total interpreter's
 answer through adequacy. The negative checks at the end fail the build if a
 wrong premise or an unsupported opcode ever starts elaborating.
 -/
@@ -110,7 +110,7 @@ error into a pass and any other outcome, including success, into a build error. 
 -- describe its step.
 /--
 error: Type mismatch
-  SymbolicArith.nextOp_step_success evm SymbolicArith.Op.add x y rest stack gas room
+  SymbolicArith.step_success evm SymbolicArith.Op.add x y rest stack gas room
 has type
   NextOp.step evm (NextOp.plain SymbolicArith.Op.add.rinst) =
     Step.next (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
@@ -124,7 +124,7 @@ example (evm : Evm) (x y : U256) (rest : List U256)
     (gas : SymbolicArith.Op.cost .add ≤ evm.dyna.gasLeft) (room : rest.length < 1024) :
     NextOp.step evm (.plain .div) =
       .next (evm.pc + 1) (SymbolicArith.post .add x y rest evm.dyna) :=
-  SymbolicArith.nextOp_step_success evm .add x y rest stack gas room
+  SymbolicArith.step_success evm .add x y rest stack gas room
 
 /-! ## The derivation
 
@@ -135,49 +135,49 @@ section StepsExec
 
 variable (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
 
-theorem stepExec0 (gas : 9 ≤ g) (room : s.length < 1023) :
+theorem step0 (gas : 9 ≤ g) (room : s.length < 1023) :
     Evm.step ⟨0, sevm env a b, initial base g s⟩ = .next 2 (afterFirst base a g s) :=
   (Evm.step_of_next (first a b)).trans <|
-    SymbolicPush.nextOp_step_success _ [a] (by simp)
+    SymbolicPush.step_success _ [a] (by simp)
       (by simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]; omega)
       (by simp [initial, Devm.stack, Devm.setMach]; omega)
       (Or.inl (by simp))
 
-theorem stepExec2 (gas : 9 ≤ g) (room : s.length < 1023) :
+theorem step2 (gas : 9 ≤ g) (room : s.length < 1023) :
     Evm.step ⟨2, sevm env a b, afterFirst base a g s⟩ = .next 4 (afterSecond base a b g s) :=
   (Evm.step_of_next (second a b)).trans <|
-    SymbolicPush.nextOp_step_success _ [b] (by simp)
+    SymbolicPush.step_success _ [b] (by simp)
       (by simp [SymbolicPush.cost, SymbolicPush.post, afterFirst, initial, Devm.gasLeft,
             Devm.setMach, Gas.veryLow]; omega)
       (by simp [SymbolicPush.post, afterFirst, initial, Devm.stack, Devm.setMach]; omega)
       (Or.inl (by simp))
 
-theorem stepExec4 (gas : 9 ≤ g) (room : s.length < 1023) :
+theorem step4 (gas : 9 ≤ g) (room : s.length < 1023) :
     Evm.step ⟨4, sevm env a b, afterSecond base a b g s⟩ = .next 5 (finalState base a b g s) :=
   (Evm.step_of_next (pc := 4) (sevm := sevm env a b)
     (n := .plain SymbolicArith.Op.add.rinst) (third a b)).trans <|
-    SymbolicArith.nextOp_step_success _ .add _ _ s rfl
+    SymbolicArith.step_success _ .add _ _ s rfl
       (by simp [SymbolicArith.Op.cost, SymbolicPush.cost, SymbolicPush.post, afterSecond,
             afterFirst, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]; omega)
       (by omega)
 
-theorem stepExec5 :
+theorem step5 :
     Evm.step ⟨5, sevm env a b, finalState base a b g s⟩ = .halt (.ok (finalState base a b g s)) :=
   Evm.step_of_halt (l := .stop) (last a b)
 
 end StepsExec
 
 /-- One derivation on the four-part chain. -/
-def executionExec (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
+def execution (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) :
     Exec 0 (sevm env a b) (initial base g s) (.ok (finalState base a b g s)) :=
-  .cont (stepExec0 env base a b g s gas room) <|
-  .cont (stepExec2 env base a b g s gas room) <|
-  .cont (stepExec4 env base a b g s gas room) <|
-  .halt (stepExec5 env base a b g s)
+  .cont (step0 env base a b g s gas room) <|
+  .cont (step2 env base a b g s gas room) <|
+  .cont (step4 env base a b g s gas room) <|
+  .halt (step5 env base a b g s)
 
 /-- Inversion at a continuing step, on the four-part chain. -/
-def nextExec {pc pc' : Nat} {sevm : Sevm} {devm devm' : Devm} {out : Execution}
+def next {pc pc' : Nat} {sevm : Sevm} {devm devm' : Devm} {out : Execution}
     (d : Exec pc sevm devm out) (h : Evm.step ⟨pc, sevm, devm⟩ = .next pc' devm') :
     Exec pc' sevm devm' out := by
   cases d with
@@ -189,26 +189,26 @@ def nextExec {pc pc' : Nat} {sevm : Sevm} {devm devm' : Devm} {out : Execution}
   | runOk h' _ _ _ _ => cases h.symm.trans h'
 
 /-- Every derivation on the four-part chain from this start state ends in `finalState`. -/
-theorem resultExec (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
+theorem result (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) {out : Execution}
     (d : Exec 0 (sevm env a b) (initial base g s) out) :
     out = .ok (finalState base a b g s) :=
-  let d2 := nextExec d (stepExec0 env base a b g s gas room)
-  let d4 := nextExec d2 (stepExec2 env base a b g s gas room)
-  let d5 := nextExec d4 (stepExec4 env base a b g s gas room)
-  d5.halt_inv (stepExec5 env base a b g s)
+  let d2 := next d (step0 env base a b g s gas room)
+  let d4 := next d2 (step2 env base a b g s gas room)
+  let d5 := next d4 (step4 env base a b g s gas room)
+  d5.halt_inv (step5 env base a b g s)
 
 /-- Adequacy on the four-part chain connects the derivation to `exec`. -/
-theorem interpreterExec (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
+theorem interpreter (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) :
     exec ⟨0, sevm env a b, initial base g s⟩ = .ok (finalState base a b g s) :=
-  (exec_iff_exec_eq _ _ _ _).mp ⟨executionExec env base a b g s gas room⟩
+  (exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b g s gas room⟩
 
 /-- The premises are satisfiable on the four-part chain: exactly nine gas and an empty stack. -/
-theorem concreteExec (env : Sevm) (base : Devm) (a b : UInt8) :
+theorem concrete (env : Sevm) (base : Devm) (a b : UInt8) :
     exec ⟨0, sevm env a b, initial base 9 []⟩ = .ok (finalState base a b 9 []) ∧
       (finalState base a b 9 []).gasLeft = 0 :=
-  ⟨interpreterExec env base a b 9 [] (by decide) (by decide), final_gas base a b 9 []⟩
+  ⟨interpreter env base a b 9 [] (by decide) (by decide), final_gas base a b 9 []⟩
 
 -- Eight gas is one short of the three static charges: the gas premise is rejected.
 /--
@@ -219,6 +219,6 @@ is false
 #guard_msgs in
 example (env : Sevm) (base : Devm) (a b : UInt8) :
     exec ⟨0, sevm env a b, initial base 8 []⟩ = .ok (finalState base a b 8 []) :=
-  interpreterExec env base a b 8 [] (by decide) (by decide)
+  interpreter env base a b 8 [] (by decide) (by decide)
 
 end Examples.Arithmetic

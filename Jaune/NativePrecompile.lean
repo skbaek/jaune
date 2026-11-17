@@ -26,7 +26,7 @@ private theorem accessDelegation_direct {rules : ForkRules} {d : Devm} {target :
 
 /-! ## On the four-part message call -/
 
-private theorem genericCall_native_not_run'
+private theorem genericCall_native_not_run
     {sevm : Sevm} {d : Devm} {target : Address} {gas ii isz oi osz : Nat} {code : ByteArray}
     {child : Frame} {pending : Pending} {c : Evm}
     (active : decide (sevm.benvStat.rules.isPrecompile target) = true)
@@ -82,6 +82,6 @@ theorem MessageOp.step_staticcall_not_run_of_precompile
     split at spawn
     · simp only [MessageOp.Outcome.ofExcept, reduceCtorEq] at spawn
     · simp only [pure, Except.pure, MessageOp.Outcome.ofExcept] at spawn
-      exact genericCall_native_not_run' active spawn entered
+      exact genericCall_native_not_run active spawn entered
 
 end Jaune

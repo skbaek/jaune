@@ -455,7 +455,7 @@ theorem Frame.Returns.of_exec {child : Frame} {cevm : Evm} {r : Frame.Result}
 /-- One nonterminal instruction run to its next machine on the four-part message call, with any
 child it needs: the step goes on in place, or it spawns a child that returns a result and the
 caller resumes with it. The four-part counterpart of `NextOp.Run`. -/
-def NextOp.RunExec (sevm : Sevm) (devm : Devm) (n : NextOp) (devm' : Devm) : Prop :=
+def NextOp.Run (sevm : Sevm) (devm : Devm) (n : NextOp) (devm' : Devm) : Prop :=
   ∃ pc pc', NextOp.step ⟨pc, sevm, devm⟩ n = .next pc' devm' ∨
     ∃ child pending r, NextOp.step ⟨pc, sevm, devm⟩ n = .spawn child pending pc' ∧
       Frame.Returns child r ∧

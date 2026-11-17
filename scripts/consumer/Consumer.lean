@@ -12,7 +12,7 @@ def outOfGas {pc : Nat} {env : Sevm} {pre : Devm}
     (hgate : bytes ≠ [] ∨ env.benvStat.rules.opcodes.push0) :
     Jaune.Exec pc env pre (.error ⟨.halt (.outOfGas .none), pre⟩) :=
   .halt ((Jaune.Evm.step_of_next decoded).trans
-    (SymbolicPush.nextOp_step_outOfGas ⟨pc, env, pre⟩ bytes width gas hgate))
+    (SymbolicPush.step_outOfGas ⟨pc, env, pre⟩ bytes width gas hgate))
 
 theorem interpreter_outOfGas {pc : Nat} {env : Sevm} {pre : Devm}
     (bytes : Bytes) (width : bytes.length ≤ 32)

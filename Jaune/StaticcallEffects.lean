@@ -45,7 +45,7 @@ private theorem complete_delegation_effects (pre : Devm) (delegated : Bool) (tar
 
 /-! ### Over the four-part message call
 
-The effects for a STATICCALL run under `NextOp.RunExec`: the step goes on in place, or it
+The effects for a STATICCALL run under `NextOp.Run`: the step goes on in place, or it
 spawns a child whose returned result the caller resumes with. -/
 
 /-- A message opcode's outcome brings the caller to `post`: finished in place, or a spawned child
@@ -155,10 +155,10 @@ private theorem generic_call_runs_effects {sevm : Sevm} {pre post : Devm} {gas r
 
 /-- Every STATICCALL run on the four-part message call consumes its six operands, pushes one
 status word and writes only a bounded reply to the prepaid output window, on every fork. -/
-theorem NextOp.staticcall_runExec_effects {sevm : Sevm} {pre post : Devm}
+theorem NextOp.staticcall_run_effects {sevm : Sevm} {pre post : Devm}
     {gas target ii size oi os : U256} {rest : List U256}
     (stack : pre.stack = gas :: target :: ii :: size :: oi :: os :: rest)
-    (run : NextOp.RunExec sevm pre (.message .staticcall) post) :
+    (run : NextOp.Run sevm pre (.message .staticcall) post) :
     (∃ flag, post.stack = flag :: rest) ∧
       ∃ bytes : Bytes, bytes.length ≤ os.toNat ∧
         post.memory = (pre.memory.extends [(ii.toNat, size.toNat), (oi.toNat, os.toNat)]).write oi.toNat bytes := by
