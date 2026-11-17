@@ -200,7 +200,7 @@ equation about the flattened frame/step functions of Jaune.  `RunFrame` is the
 generic frame relation; the named mirrors specialize it so that the statements
 consumed by `Common.lean` and `Solvent.lean` keep their current shape. -/
 
-def RunFrame (f : Frame) (xl : Xlot)
+def RunFrame (f : Legacy.Frame) (xl : Xlot)
     (r : Except (EvmError × State × AdrSet × TransientStorage) Devm) : Prop :=
   match f.enter with
   | .done r' => xl = .none ∧ r = r'
@@ -216,11 +216,11 @@ def ExecuteCode (msg : Msg) (xl : Xlot)
 
 def ProcessMessage (msg : Msg) (xl : Xlot)
     (ex : Except (EvmError × State × AdrSet × TransientStorage) Devm) : Prop :=
-  RunFrame (Frame.ofCall msg) xl ex
+  RunFrame (Legacy.Frame.ofCall msg) xl ex
 
 def ProcessCreateMessage (msg : Msg) (xl : Xlot)
     (ex : Except (EvmError × State × AdrSet × TransientStorage) Devm) : Prop :=
-  RunFrame (Frame.ofCreate msg) xl ex
+  RunFrame (Legacy.Frame.ofCreate msg) xl ex
 
 def XStep.Run (s : XStep) (xl : Xlot) (ex : Execution) : Prop :=
   match s with
@@ -230,7 +230,7 @@ def XStep.Run (s : XStep) (xl : Xlot) (ex : Execution) : Prop :=
 def GenericCreate (sevm : Sevm) (devm : Devm) (endowment : U256) (newAddress : Address)
     (memoryIndex memorySize : Nat) (xl : Xlot) (ex : Execution) : Prop :=
   XStep.Run
-    (genericCreate.step sevm devm endowment newAddress memoryIndex memorySize)
+    (Legacy.genericCreate.step sevm devm endowment newAddress memoryIndex memorySize)
     xl ex
 
 def GenericCall
@@ -252,7 +252,7 @@ def GenericCall
     (xl : Xlot)
     (ex : Execution) : Prop :=
   XStep.Run
-    (genericCall.step sevm devm gas value caller target codeAddress
+    (Legacy.genericCall.step sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall input_index input_size
       output_index output_size code disablePrecompiles)
     xl ex
@@ -261,7 +261,7 @@ def GenericCreateAmsterdam (sevm : Sevm) (state : StateGasRules) (devm : Devm)
     (endowment : U256) (newAddress : Address) (memoryIndex memorySize : Nat)
     (xl : Xlot) (ex : Execution) : Prop :=
   XStep.Run
-    (genericCreateAmsterdam.step sevm state devm endowment newAddress
+    (Legacy.genericCreateAmsterdam.step sevm state devm endowment newAddress
       memoryIndex memorySize)
     xl ex
 
@@ -272,7 +272,7 @@ def GenericCallAmsterdam (sevm : Sevm) (state : StateGasRules) (devm : Devm)
     (disablePrecompiles newAccountCharged insufficientBalance : Bool)
     (xl : Xlot) (ex : Execution) : Prop :=
   XStep.Run
-    (genericCallAmsterdam.step sevm state devm gas reservoir value caller
+    (Legacy.genericCallAmsterdam.step sevm state devm gas reservoir value caller
       target codeAddress shouldTransferValue isStaticcall input_index
       input_size output_index output_size code disablePrecompiles
       newAccountCharged insufficientBalance)
@@ -280,9 +280,9 @@ def GenericCallAmsterdam (sevm : Sevm) (state : StateGasRules) (devm : Devm)
 
 def MessageOp.Run (sevm : Sevm) (devm : Devm) :
     MessageOp → Xlot → Execution → Prop :=
-  fun x xl ex => XStep.Run (MessageOp.step sevm devm x) xl ex
+  fun x xl ex => XStep.Run (Legacy.MessageOp.step sevm devm x) xl ex
 
-def Step.Run (s : Step) (xl : Xlot) (ex : Execution) : Prop :=
+def Legacy.Step.Run (s : Legacy.Step) (xl : Xlot) (ex : Execution) : Prop :=
   match s with
   | .halt ex' => xl = .none ∧ ex = ex'
   | .cont _ devm => xl = .none ∧ ex = .ok devm
@@ -290,144 +290,144 @@ def Step.Run (s : Step) (xl : Xlot) (ex : Execution) : Prop :=
 
 def NextOp.StepRun (pc : Nat) (sevm : Sevm) (devm : Devm)
     (n : NextOp) (xl : Xlot) (ex : Execution) : Prop :=
-  Step.Run (NextOp.step ⟨pc, sevm, devm⟩ n) xl ex
+  Legacy.Step.Run (Legacy.NextOp.step ⟨pc, sevm, devm⟩ n) xl ex
 
 /-- A childless step outcome built from a plain `Execution` carries exactly
 that result.  This is the workhorse for the non-spawning instruction kinds. -/
-lemma Step.run_ofExecution {pc : Nat} {e ex : Execution} {xl : Xlot} :
-    Step.Run (Step.ofExecution pc e) xl ex ↔ (xl = .none ∧ ex = e) := by
-  unfold Step.ofExecution
-  split <;> simp [Step.Run]
+lemma Legacy.Step.run_ofExecution {pc : Nat} {e ex : Execution} {xl : Xlot} :
+    Legacy.Step.Run (Legacy.Step.ofExecution pc e) xl ex ↔ (xl = .none ∧ ex = e) := by
+  unfold Legacy.Step.ofExecution
+  split <;> simp [Legacy.Step.Run]
 
-lemma Step.ofExecution_ne_spawn {pc : Nat} {ex : Execution}
-    {f : Frame} {rsm : Resume} {pc' : Nat} :
-    Step.ofExecution pc ex ≠ .spawn f rsm pc' := by
-  cases ex <;> simp [Step.ofExecution]
+lemma Legacy.Step.ofExecution_ne_spawn {pc : Nat} {ex : Execution}
+    {f : Legacy.Frame} {rsm : Resume} {pc' : Nat} :
+    Legacy.Step.ofExecution pc ex ≠ .spawn f rsm pc' := by
+  cases ex <;> simp [Legacy.Step.ofExecution]
 
-lemma Step.ofJump_ne_spawn {j : Except (EvmError × Devm) (Nat × Devm)}
-    {f : Frame} {rsm : Resume} {pc' : Nat} :
-    Step.ofJump j ≠ .spawn f rsm pc' := by
-  cases j <;> simp [Step.ofJump]
+lemma Legacy.Step.ofJump_ne_spawn {j : Except (EvmError × Devm) (Nat × Devm)}
+    {f : Legacy.Frame} {rsm : Resume} {pc' : Nat} :
+    Legacy.Step.ofJump j ≠ .spawn f rsm pc' := by
+  cases j <;> simp [Legacy.Step.ofJump]
 
 lemma XStep.toStep_spawn {pc : Nat} {s : XStep}
-    {f : Frame} {rsm : Resume} {pc' : Nat}
+    {f : Legacy.Frame} {rsm : Resume} {pc' : Nat}
     (h : XStep.toStep pc s = .spawn f rsm pc') : s = .spawn f rsm := by
   cases s
-  · cases Step.ofExecution_ne_spawn h
+  · cases Legacy.Step.ofExecution_ne_spawn h
   · cases h; rfl
 
 /-- Wrapping a call-type step outcome for the driver does not change what it
 relates: the program counter it records is only consulted after the child
 returns. -/
 lemma XStep.run_toStep {pc : Nat} {s : XStep} {xl : Xlot} {ex : Execution} :
-    Step.Run (XStep.toStep pc s) xl ex ↔ XStep.Run s xl ex := by
+    Legacy.Step.Run (XStep.toStep pc s) xl ex ↔ XStep.Run s xl ex := by
   cases s with
-  | done e => simp only [XStep.toStep, XStep.Run, Step.run_ofExecution]
+  | done e => simp only [XStep.toStep, XStep.Run, Legacy.Step.run_ofExecution]
   | spawn f rsm => exact Iff.rfl
 
 /-- A jump's step outcome carries the jump's own result, whichever branch it
 took, and never suspends. -/
-lemma Step.run_ofJump {j : Except (EvmError × Devm) (Nat × Devm)} {xl : Xlot}
-    {ex : Execution} (h : Step.Run (Step.ofJump j) xl ex) :
+lemma Legacy.Step.run_ofJump {j : Except (EvmError × Devm) (Nat × Devm)} {xl : Xlot}
+    {ex : Execution} (h : Legacy.Step.Run (Legacy.Step.ofJump j) xl ex) :
     xl = .none ∧
       ((∃ e, j = .error e ∧ ex = .error e) ∨
         (∃ pc' d, j = .ok ⟨pc', d⟩ ∧ ex = .ok d)) := by
-  rcases j with e | ⟨pc', devm'⟩ <;> simp only [Step.ofJump, Step.Run] at h <;>
+  rcases j with e | ⟨pc', devm'⟩ <;> simp only [Legacy.Step.ofJump, Legacy.Step.Run] at h <;>
     obtain ⟨rfl, rfl⟩ := h
   · exact ⟨rfl, Or.inl ⟨e, rfl, rfl⟩⟩
   · exact ⟨rfl, Or.inr ⟨pc', devm', rfl, rfl⟩⟩
 
-lemma Step.ofExecution_cont {pc pc' : Nat} {e : Execution} {devm' : Devm}
-    (h : Step.ofExecution pc e = .cont pc' devm') : pc' = pc ∧ e = .ok devm' := by
-  unfold Step.ofExecution at h
+lemma Legacy.Step.ofExecution_cont {pc pc' : Nat} {e : Execution} {devm' : Devm}
+    (h : Legacy.Step.ofExecution pc e = .cont pc' devm') : pc' = pc ∧ e = .ok devm' := by
+  unfold Legacy.Step.ofExecution at h
   split at h <;> cases h
   exact ⟨rfl, rfl⟩
 
-lemma Step.ofExecution_ne_halt_ok {pc : Nat} {e : Execution} {devm' : Devm} :
-    Step.ofExecution pc e ≠ .halt (.ok devm') := by
-  unfold Step.ofExecution
+lemma Legacy.Step.ofExecution_ne_halt_ok {pc : Nat} {e : Execution} {devm' : Devm} :
+    Legacy.Step.ofExecution pc e ≠ .halt (.ok devm') := by
+  unfold Legacy.Step.ofExecution
   split <;> simp
 
-lemma Step.ofJump_cont {j : Except (EvmError × Devm) (Nat × Devm)}
-    {pc' : Nat} {devm' : Devm} (h : Step.ofJump j = .cont pc' devm') :
+lemma Legacy.Step.ofJump_cont {j : Except (EvmError × Devm) (Nat × Devm)}
+    {pc' : Nat} {devm' : Devm} (h : Legacy.Step.ofJump j = .cont pc' devm') :
     j = .ok ⟨pc', devm'⟩ := by
-  unfold Step.ofJump at h
+  unfold Legacy.Step.ofJump at h
   split at h <;> cases h
   rfl
 
-lemma Step.ofJump_ne_halt_ok {j : Except (EvmError × Devm) (Nat × Devm)}
-    {devm' : Devm} : Step.ofJump j ≠ .halt (.ok devm') := by
-  unfold Step.ofJump
+lemma Legacy.Step.ofJump_ne_halt_ok {j : Except (EvmError × Devm) (Nat × Devm)}
+    {devm' : Devm} : Legacy.Step.ofJump j ≠ .halt (.ok devm') := by
+  unfold Legacy.Step.ofJump
   split <;> simp
 
 /-- Every step outcome of an ordinary instruction resumes at `pc + n.size`;
 the program-counter arithmetic that used to live in `exec` now lives in
 `Ninst.step`, so it is recovered here once. -/
-lemma NextOp.step_cont_pc {evm : Evm} {n : NextOp} {pc' : Nat} {devm' : Devm}
-    (h : NextOp.step evm n = .cont pc' devm') : pc' = evm.pc + n.size := by
-  unfold NextOp.step at h
+lemma Legacy.NextOp.step_cont_pc {evm : Evm} {n : NextOp} {pc' : Nat} {devm' : Devm}
+    (h : Legacy.NextOp.step evm n = .cont pc' devm') : pc' = evm.pc + n.size := by
+  unfold Legacy.NextOp.step at h
   rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [] at h
-  · exact (Step.ofExecution_cont h).1
+  · exact (Legacy.Step.ofExecution_cont h).1
   · unfold XStep.toStep at h
     split at h
-    · exact (Step.ofExecution_cont h).1
+    · exact (Legacy.Step.ofExecution_cont h).1
     · cases h
-  · split at h <;> exact (Step.ofExecution_cont h).1
-  · exact (Step.ofExecution_cont h).1
-  · exact (Step.ofExecution_cont h).1
-  · exact (Step.ofExecution_cont h).1
+  · split at h <;> exact (Legacy.Step.ofExecution_cont h).1
+  · exact (Legacy.Step.ofExecution_cont h).1
+  · exact (Legacy.Step.ofExecution_cont h).1
+  · exact (Legacy.Step.ofExecution_cont h).1
 
-lemma NextOp.step_spawn_pc {evm : Evm} {n : NextOp}
-    {f : Frame} {rsm : Resume} {pc' : Nat}
-    (h : NextOp.step evm n = .spawn f rsm pc') : pc' = evm.pc + n.size := by
-  unfold NextOp.step at h
+lemma Legacy.NextOp.step_spawn_pc {evm : Evm} {n : NextOp}
+    {f : Legacy.Frame} {rsm : Resume} {pc' : Nat}
+    (h : Legacy.NextOp.step evm n = .spawn f rsm pc') : pc' = evm.pc + n.size := by
+  unfold Legacy.NextOp.step at h
   rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [] at h
-  · cases Step.ofExecution_ne_spawn h
+  · cases Legacy.Step.ofExecution_ne_spawn h
   · unfold XStep.toStep at h
     split at h
-    · cases Step.ofExecution_ne_spawn h
+    · cases Legacy.Step.ofExecution_ne_spawn h
     · cases h; rfl
-  · split at h <;> cases Step.ofExecution_ne_spawn h
-  · cases Step.ofExecution_ne_spawn h
-  · cases Step.ofExecution_ne_spawn h
-  · cases Step.ofExecution_ne_spawn h
+  · split at h <;> cases Legacy.Step.ofExecution_ne_spawn h
+  · cases Legacy.Step.ofExecution_ne_spawn h
+  · cases Legacy.Step.ofExecution_ne_spawn h
+  · cases Legacy.Step.ofExecution_ne_spawn h
 
-lemma NextOp.step_ne_halt_ok {evm : Evm} {n : NextOp} {devm' : Devm} :
-    NextOp.step evm n ≠ .halt (.ok devm') := by
-  unfold NextOp.step
+lemma Legacy.NextOp.step_ne_halt_ok {evm : Evm} {n : NextOp} {devm' : Devm} :
+    Legacy.NextOp.step evm n ≠ .halt (.ok devm') := by
+  unfold Legacy.NextOp.step
   rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only []
-  · exact Step.ofExecution_ne_halt_ok
+  · exact Legacy.Step.ofExecution_ne_halt_ok
   · unfold XStep.toStep
     split
-    · exact Step.ofExecution_ne_halt_ok
+    · exact Legacy.Step.ofExecution_ne_halt_ok
     · simp
-  · split <;> exact Step.ofExecution_ne_halt_ok
-  · exact Step.ofExecution_ne_halt_ok
-  · exact Step.ofExecution_ne_halt_ok
-  · exact Step.ofExecution_ne_halt_ok
+  · split <;> exact Legacy.Step.ofExecution_ne_halt_ok
+  · exact Legacy.Step.ofExecution_ne_halt_ok
+  · exact Legacy.Step.ofExecution_ne_halt_ok
+  · exact Legacy.Step.ofExecution_ne_halt_ok
 
 /-! ### The six branches of `Ninst.step`, made explicit. -/
 
-lemma NextOp.step_reg {evm : Evm} {r : PlainOp} :
-    NextOp.step evm (.plain r) = Step.ofExecution (evm.pc + 1) (r.run evm) := rfl
+lemma Legacy.NextOp.step_reg {evm : Evm} {r : PlainOp} :
+    Legacy.NextOp.step evm (.plain r) = Legacy.Step.ofExecution (evm.pc + 1) (r.run evm) := rfl
 
-lemma NextOp.step_push {evm : Evm} {xs : Bytes} {le : xs.length ≤ 32} :
-    NextOp.step evm (.push xs le) =
+lemma Legacy.NextOp.step_push {evm : Evm} {xs : Bytes} {le : xs.length ≤ 32} :
+    Legacy.NextOp.step evm (.push xs le) =
       if xs = [] && !evm.sta.benvStat.rules.opcodes.push0 then
-        Step.ofExecution (evm.pc + xs.length + 1)
+        Legacy.Step.ofExecution (evm.pc + xs.length + 1)
           (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
       else
-        Step.ofExecution (evm.pc + xs.length + 1)
+        Legacy.Step.ofExecution (evm.pc + xs.length + 1)
           (do let d ← chargeGas (if xs = [] then Gas.base else Gas.veryLow) evm.dyna
               d.push xs.toU256) := rfl
 
-lemma NextOp.step_exec {evm : Evm} {x : MessageOp} :
-    NextOp.step evm (.message x) =
-      XStep.toStep (evm.pc + 1) (MessageOp.step evm.sta evm.dyna x) := rfl
+lemma Legacy.NextOp.step_exec {evm : Evm} {x : MessageOp} :
+    Legacy.NextOp.step evm (.message x) =
+      XStep.toStep (evm.pc + 1) (Legacy.MessageOp.step evm.sta evm.dyna x) := rfl
 
-lemma NextOp.step_dupn {evm : Evm} {imm : UInt8} :
-    NextOp.step evm (.dupn imm) =
-      Step.ofExecution (evm.pc + 2)
+lemma Legacy.NextOp.step_dupn {evm : Evm} {imm : UInt8} :
+    Legacy.NextOp.step evm (.dupn imm) =
+      Legacy.Step.ofExecution (evm.pc + 2)
         (do if evm.sta.benvStat.rules.opcodes.stackAccess then
               let devm ← chargeGas Gas.veryLow evm.dyna
               match decodeSingle imm with
@@ -439,9 +439,9 @@ lemma NextOp.step_dupn {evm : Evm} {imm : UInt8} :
             else
               .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩) := rfl
 
-lemma NextOp.step_swapn {evm : Evm} {imm : UInt8} :
-    NextOp.step evm (.swapn imm) =
-      Step.ofExecution (evm.pc + 2)
+lemma Legacy.NextOp.step_swapn {evm : Evm} {imm : UInt8} :
+    Legacy.NextOp.step evm (.swapn imm) =
+      Legacy.Step.ofExecution (evm.pc + 2)
         (do if evm.sta.benvStat.rules.opcodes.stackAccess then
               let devm ← chargeGas Gas.veryLow evm.dyna
               match decodeSingle imm with
@@ -453,9 +453,9 @@ lemma NextOp.step_swapn {evm : Evm} {imm : UInt8} :
             else
               .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩) := rfl
 
-lemma NextOp.step_exchange {evm : Evm} {imm : UInt8} :
-    NextOp.step evm (.exchange imm) =
-      Step.ofExecution (evm.pc + 2)
+lemma Legacy.NextOp.step_exchange {evm : Evm} {imm : UInt8} :
+    Legacy.NextOp.step evm (.exchange imm) =
+      Legacy.Step.ofExecution (evm.pc + 2)
         (do if evm.sta.benvStat.rules.opcodes.stackAccess then
               let devm ← chargeGas Gas.veryLow evm.dyna
               match decodePair imm with
@@ -469,19 +469,19 @@ lemma NextOp.step_exchange {evm : Evm} {imm : UInt8} :
 
 /-! ### Introducing frame relations from the frame-entry equation. -/
 
-lemma RunFrame.of_done {f : Frame} {r} (h : f.enter = .done r) :
+lemma RunFrame.of_done {f : Legacy.Frame} {r} (h : f.enter = .done r) :
     RunFrame f .none r := by
   unfold RunFrame; rw [h]; exact ⟨rfl, rfl⟩
 
-lemma RunFrame.of_run {f : Frame} {cevm : Evm} {raw : Execution}
+lemma RunFrame.of_run {f : Legacy.Frame} {cevm : Evm} {raw : Execution}
     (h : f.enter = .run cevm) :
     RunFrame f (.some ⟨cevm, raw⟩) (f.settle raw) := by
   unfold RunFrame; rw [h]; exact ⟨raw, rfl, rfl⟩
 
 /-- Entering a frame preserves the frame's own depth. -/
-lemma Frame.enter_run_depth {f : Frame} {cevm : Evm}
+lemma Legacy.Frame.enter_run_depth {f : Legacy.Frame} {cevm : Evm}
     (h : f.enter = .run cevm) : cevm.sta.depth = f.inner.depth := by
-  unfold Frame.enter at h
+  unfold Legacy.Frame.enter at h
   split at h
   · cases h
   · rename_i benv hbenv
@@ -632,9 +632,9 @@ installs the result; neither touches `BenvStat` — the chain rules, chain id an
 the rest are fixed for the block. A multi-contract frame invariant that names
 another account's status under those rules needs exactly this to cross a call
 boundary, which `Frame.enter_run_depth` alone cannot supply. -/
-lemma Frame.enter_run_benvStat {f : Frame} {cevm : Evm}
+lemma Legacy.Frame.enter_run_benvStat {f : Legacy.Frame} {cevm : Evm}
     (h : f.enter = .run cevm) : cevm.sta.benvStat = f.inner.benv.stat := by
-  unfold Frame.enter at h
+  unfold Legacy.Frame.enter at h
   split at h
   · cases h
   · rename_i benv hbenv
@@ -653,7 +653,7 @@ lemma Frame.enter_run_benvStat {f : Frame} {cevm : Evm}
 
 /-- A filled slot means the frame was actually entered, and the suspended
 machine is exactly the one `Frame.enter` produced. -/
-lemma RunFrame.some_inv {f : Frame} {evm_ : Evm} {exn_ : Execution} {r}
+lemma RunFrame.some_inv {f : Legacy.Frame} {evm_ : Evm} {exn_ : Execution} {r}
     (run : RunFrame f (.some ⟨evm_, exn_⟩) r) :
     f.enter = .run evm_ ∧ r = f.settle exn_ := by
   unfold RunFrame at run
@@ -664,18 +664,18 @@ lemma RunFrame.some_inv {f : Frame} {evm_ : Evm} {exn_ : Execution} {r}
     exact ⟨rfl, hr⟩
 
 /-- The depth of a suspended child frame, read off the slot. -/
-lemma RunFrame.depth_eq {f : Frame} {evm_ : Evm} {exn_ : Execution} {r}
+lemma RunFrame.depth_eq {f : Legacy.Frame} {evm_ : Evm} {exn_ : Execution} {r}
     (run : RunFrame f (.some ⟨evm_, exn_⟩) r) :
     evm_.sta.depth = f.inner.depth :=
-  Frame.enter_run_depth (RunFrame.some_inv run).1
+  Legacy.Frame.enter_run_depth (RunFrame.some_inv run).1
 
 /-- The block statics of a suspended child frame, read off the slot. The
 `RunFrame` form of `Frame.enter_run_benvStat`, shaped like `depth_eq` so the
 two read the same way at a call site. -/
-lemma RunFrame.benvStat_eq {f : Frame} {evm_ : Evm} {exn_ : Execution} {r}
+lemma RunFrame.benvStat_eq {f : Legacy.Frame} {evm_ : Evm} {exn_ : Execution} {r}
     (run : RunFrame f (.some ⟨evm_, exn_⟩) r) :
     evm_.sta.benvStat = f.inner.benv.stat :=
-  Frame.enter_run_benvStat (RunFrame.some_inv run).1
+  Legacy.Frame.enter_run_benvStat (RunFrame.some_inv run).1
 
 /-- A filled slot on a call-type instruction means the step spawned, and the
 slot holds that spawn's child frame. -/
@@ -690,11 +690,11 @@ lemma XStep.Run.some_inv {s : XStep} {evm_ : Evm} {exn_ : Execution} {ex : Execu
     obtain ⟨henter, hr⟩ := RunFrame.some_inv hframe
     exact ⟨f, rsm, rfl, henter, by rw [hex, hr]⟩
 
-lemma Step.Run.some_inv {s : Step} {evm_ : Evm} {exn_ : Execution} {ex : Execution}
-    (run : Step.Run s (.some ⟨evm_, exn_⟩) ex) :
+lemma Legacy.Step.Run.some_inv {s : Legacy.Step} {evm_ : Evm} {exn_ : Execution} {ex : Execution}
+    (run : Legacy.Step.Run s (.some ⟨evm_, exn_⟩) ex) :
     ∃ f rsm pc', s = .spawn f rsm pc' ∧ f.enter = .run evm_ ∧
       ex = rsm.run (f.settle exn_) := by
-  unfold Step.Run at run
+  unfold Legacy.Step.Run at run
   cases s with
   | halt ex' => cases run.1
   | cont pc devm => cases run.1
@@ -704,18 +704,18 @@ lemma Step.Run.some_inv {s : Step} {evm_ : Evm} {exn_ : Execution} {ex : Executi
     exact ⟨f, rsm, pc', rfl, henter, by rw [hex, hr]⟩
 
 /-- Only a call-type instruction spawns, and it delegates to `Xinst.step`. -/
-lemma NextOp.step_spawn_inv {evm : Evm} {n : NextOp}
-    {f : Frame} {rsm : Resume} {pc' : Nat}
-    (h : NextOp.step evm n = .spawn f rsm pc') :
-    ∃ x, n = .message x ∧ MessageOp.step evm.sta evm.dyna x = .spawn f rsm := by
+lemma Legacy.NextOp.step_spawn_inv {evm : Evm} {n : NextOp}
+    {f : Legacy.Frame} {rsm : Resume} {pc' : Nat}
+    (h : Legacy.NextOp.step evm n = .spawn f rsm pc') :
+    ∃ x, n = .message x ∧ Legacy.MessageOp.step evm.sta evm.dyna x = .spawn f rsm := by
   rcases n with r | x | ⟨xs, hxs⟩ | a | a | a
-  · rw [NextOp.step_reg] at h; cases Step.ofExecution_ne_spawn h
-  · rw [NextOp.step_exec] at h; exact ⟨x, rfl, XStep.toStep_spawn h⟩
-  · rw [NextOp.step_push] at h
-    split at h <;> cases Step.ofExecution_ne_spawn h
-  · unfold NextOp.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
-  · unfold NextOp.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
-  · unfold NextOp.step at h; simp only [] at h; cases Step.ofExecution_ne_spawn h
+  · rw [Legacy.NextOp.step_reg] at h; cases Legacy.Step.ofExecution_ne_spawn h
+  · rw [Legacy.NextOp.step_exec] at h; exact ⟨x, rfl, XStep.toStep_spawn h⟩
+  · rw [Legacy.NextOp.step_push] at h
+    split at h <;> cases Legacy.Step.ofExecution_ne_spawn h
+  · unfold Legacy.NextOp.step at h; simp only [] at h; cases Legacy.Step.ofExecution_ne_spawn h
+  · unfold Legacy.NextOp.step at h; simp only [] at h; cases Legacy.Step.ofExecution_ne_spawn h
+  · unfold Legacy.NextOp.step at h; simp only [] at h; cases Legacy.Step.ofExecution_ne_spawn h
 
 /-- The initial machine of an entered code frame is `initEvm` of the message,
 whichever decode branch `executeCode.enter` took. -/
@@ -731,10 +731,10 @@ lemma executeCode.enter_inl {msg : Msg} {evm : Evm}
 /-- Frame entry, inverted: an entered frame transferred value successfully and
 then suspends on the initial machine of the transferred message.  This is the
 single fact every downstream "what does the child start from?" argument needs. -/
-lemma Frame.enter_run_inv {f : Frame} {cevm : Evm} (h : f.enter = .run cevm) :
+lemma Legacy.Frame.enter_run_inv {f : Legacy.Frame} {cevm : Evm} (h : f.enter = .run cevm) :
     ∃ benv, f.inner.benvAfterTransfer = .ok benv ∧
       cevm = initEvm (f.inner.withBenv benv) := by
-  unfold Frame.enter at h
+  unfold Legacy.Frame.enter at h
   rcases hbenv : f.inner.benvAfterTransfer with e | benv <;> simp only [hbenv] at h
   · cases h
   · refine ⟨benv, rfl, ?_⟩
@@ -786,7 +786,7 @@ lemma executeCode.handleErrorWith_ok {sg : Option StateGasRules}
   cases sg <;> rfl
 
 /-- `Frame.settle` is `settleMsg` after the rules-selected handler. -/
-lemma Frame.settle_eq_settleMsg_handleErrorWith {f : Frame} {raw : Execution} :
+lemma Legacy.Frame.settle_eq_settleMsg_handleErrorWith {f : Legacy.Frame} {raw : Execution} :
     f.settle raw =
       f.settleMsg
         (executeCode.handleErrorWith f.inner.benv.stat.rules.stateGas raw) := rfl
@@ -806,14 +806,14 @@ def FrameBody (m : Msg) (xl : Xlot)
 frame relation decomposes into a transfer failure or a code-execution relation
 on the transferred message.  This is the bridge that lets every former
 `ProcessMessage`/`ProcessCreateMessage` argument be phrased once. -/
-lemma RunFrame.decompose {f : Frame} {xl : Xlot}
+lemma RunFrame.decompose {f : Legacy.Frame} {xl : Xlot}
     {r : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     (run : RunFrame f xl r) :
     (∃ e, f.inner.benvAfterTransfer = .error e ∧ xl = .none ∧
         r = f.settleMsg (.error e)) ∨
     (∃ benv r', f.inner.benvAfterTransfer = .ok benv ∧
         ExecuteCode (f.inner.withBenv benv) xl r' ∧ r = f.settleMsg r') := by
-  unfold RunFrame Frame.enter at run
+  unfold RunFrame Legacy.Frame.enter at run
   rcases hbenv : f.inner.benvAfterTransfer with e | benv <;>
     simp only [hbenv] at run
   · exact Or.inl ⟨e, rfl, run.1, run.2⟩
@@ -834,7 +834,7 @@ lemma RunFrame.decompose {f : Frame} {xl : Xlot}
       exact run.2
 
 /-- `RunFrame` is exactly `FrameBody` composed with the frame's settlement. -/
-lemma RunFrame.iff_settleMsg {f : Frame} {xl : Xlot}
+lemma RunFrame.iff_settleMsg {f : Legacy.Frame} {xl : Xlot}
     {r : Except (EvmError × State × AdrSet × TransientStorage) Devm} :
     RunFrame f xl r ↔ ∃ r0, FrameBody f.inner xl r0 ∧ r = f.settleMsg r0 := by
   constructor
@@ -844,7 +844,7 @@ lemma RunFrame.iff_settleMsg {f : Frame} {xl : Xlot}
     · exact ⟨r0, by unfold FrameBody; rw [hbenv]; exact hec, hr⟩
   · rintro ⟨r0, hbody, rfl⟩
     unfold FrameBody at hbody
-    unfold RunFrame Frame.enter
+    unfold RunFrame Legacy.Frame.enter
     rcases hbenv : f.inner.benvAfterTransfer with e | benv <;>
       simp only [hbenv] at hbody ⊢
     · exact ⟨hbody.1, by rw [hbody.2]⟩
@@ -857,13 +857,13 @@ lemma RunFrame.iff_settleMsg {f : Frame} {xl : Xlot}
         show f.settleMsg (executeCode.handleErrorWith benv.stat.rules.stateGas raw)
           = f.settle raw
         rw [Msg.benvAfterTransfer_ok_stateGas hbenv]
-        exact Frame.settle_eq_settleMsg_handleErrorWith.symm
+        exact Legacy.Frame.settle_eq_settleMsg_handleErrorWith.symm
       · refine ⟨hbody.1, ?_⟩
         rw [hbody.2]
         show f.settleMsg (executeCode.handleErrorWith benv.stat.rules.stateGas raw)
           = f.settle raw
         rw [Msg.benvAfterTransfer_ok_stateGas hbenv]
-        exact Frame.settle_eq_settleMsg_handleErrorWith.symm
+        exact Legacy.Frame.settle_eq_settleMsg_handleErrorWith.symm
 
 lemma ProcessMessage.iff_body {msg : Msg} {xl : Xlot}
     {r : Except (EvmError × State × AdrSet × TransientStorage) Devm} :
@@ -892,52 +892,52 @@ four `*.At` decode predicates pins the driver's step outcome.  These four
 equations are what let the former per-instruction relational reasoning survive
 against the single step function. -/
 
-lemma Evm.step_invOp {pc : Nat} {sevm : Sevm} {devm : Devm}
+lemma Legacy.Evm.step_invOp {pc : Nat} {sevm : Sevm} {devm : Devm}
     (h : sevm.code.getOp pc = none) :
-    Evm.step ⟨pc, sevm, devm⟩ = .halt (.error ⟨.halt (.invalidOpcode .none), devm⟩) := by
-  unfold Evm.step
+    Legacy.Evm.step ⟨pc, sevm, devm⟩ = .halt (.error ⟨.halt (.invalidOpcode .none), devm⟩) := by
+  unfold Legacy.Evm.step
   rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = none from h]
 
-lemma Evm.step_next {pc : Nat} {sevm : Sevm} {devm : Devm} {n : NextOp}
+lemma Legacy.Evm.step_next {pc : Nat} {sevm : Sevm} {devm : Devm} {n : NextOp}
     (h : NextOp.At sevm.code pc n) :
-    Evm.step ⟨pc, sevm, devm⟩ = NextOp.step ⟨pc, sevm, devm⟩ n := by
-  unfold Evm.step
+    Legacy.Evm.step ⟨pc, sevm, devm⟩ = Legacy.NextOp.step ⟨pc, sevm, devm⟩ n := by
+  unfold Legacy.Evm.step
   rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.next n) from h]
 
-lemma Evm.step_jump {pc : Nat} {sevm : Sevm} {devm : Devm} {j : JumpOp}
+lemma Legacy.Evm.step_jump {pc : Nat} {sevm : Sevm} {devm : Devm} {j : JumpOp}
     (h : JumpOp.At sevm.code pc j) :
-    Evm.step ⟨pc, sevm, devm⟩ = Step.ofJump (j.run ⟨pc, sevm, devm⟩) := by
-  unfold Evm.step
+    Legacy.Evm.step ⟨pc, sevm, devm⟩ = Legacy.Step.ofJump (j.run ⟨pc, sevm, devm⟩) := by
+  unfold Legacy.Evm.step
   rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.jump j) from h]
 
-lemma Evm.step_last {pc : Nat} {sevm : Sevm} {devm : Devm} {l : HaltOp}
+lemma Legacy.Evm.step_last {pc : Nat} {sevm : Sevm} {devm : Devm} {l : HaltOp}
     (h : HaltOp.At sevm.code pc l) :
-    Evm.step ⟨pc, sevm, devm⟩ = .halt (l.run sevm devm) := by
-  unfold Evm.step
+    Legacy.Evm.step ⟨pc, sevm, devm⟩ = .halt (l.run sevm devm) := by
+  unfold Legacy.Evm.step
   rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.halt l) from h]
 
 /-- Only a call-type instruction spawns a child frame. -/
-lemma Evm.step_spawn_inv {pc : Nat} {sevm : Sevm} {devm : Devm}
-    {f : Frame} {rsm : Resume} {pc' : Nat}
-    (hs : Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc') :
+lemma Legacy.Evm.step_spawn_inv {pc : Nat} {sevm : Sevm} {devm : Devm}
+    {f : Legacy.Frame} {rsm : Resume} {pc' : Nat}
+    (hs : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc') :
     ∃ x : MessageOp, MessageOp.At sevm.code pc x ∧
-      MessageOp.step sevm devm x = .spawn f rsm ∧ pc' = pc + 1 := by
-  unfold Evm.step at hs
+      Legacy.MessageOp.step sevm devm x = .spawn f rsm ∧ pc' = pc + 1 := by
+  unfold Legacy.Evm.step at hs
   split at hs
   · cases hs
   · rename_i n hgi
-    rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [NextOp.step] at hs
-    · cases Step.ofExecution_ne_spawn hs
+    rcases n with r | x | ⟨xs, hxs⟩ | a | a | a <;> simp only [Legacy.NextOp.step] at hs
+    · cases Legacy.Step.ofExecution_ne_spawn hs
     · refine ⟨x, hgi, XStep.toStep_spawn hs, ?_⟩
       unfold XStep.toStep at hs
       split at hs
-      · cases Step.ofExecution_ne_spawn hs
+      · cases Legacy.Step.ofExecution_ne_spawn hs
       · cases hs; rfl
-    · split at hs <;> cases Step.ofExecution_ne_spawn hs
-    · cases Step.ofExecution_ne_spawn hs
-    · cases Step.ofExecution_ne_spawn hs
-    · cases Step.ofExecution_ne_spawn hs
-  · cases Step.ofJump_ne_spawn hs
+    · split at hs <;> cases Legacy.Step.ofExecution_ne_spawn hs
+    · cases Legacy.Step.ofExecution_ne_spawn hs
+    · cases Legacy.Step.ofExecution_ne_spawn hs
+    · cases Legacy.Step.ofExecution_ne_spawn hs
+  · cases Legacy.Step.ofJump_ne_spawn hs
   · cases hs
 
 

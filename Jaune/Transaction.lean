@@ -638,7 +638,7 @@ def prepareTopLevelAmsterdam (state : StateGasRules) (msg : Msg) :
 /-- Enter the existing total interpreter with the machine prepared above.
 Only the ordinary `Frame.enter` initialization is replaced: transfer,
 precompile dispatch, execution, and frame settlement remain shared. -/
-private def runPreparedTopFrame (frame : Frame) (prepared : Devm) :
+private def Legacy.runPreparedTopFrame (frame : Legacy.Frame) (prepared : Devm) :
     Except (EvmError × State × AdrSet × TransientStorage) Devm :=
   match frame.inner.benvAfterTransfer with
   | .error e => frame.settleMsg (.error e)
@@ -650,14 +650,14 @@ private def runPreparedTopFrame (frame : Frame) (prepared : Devm) :
     let evm : Evm := {pc := 0, sta := initSevm inner, dyna := dyna}
     let raw :=
       match inner.codeAddress with
-      | none => exec evm
+      | none => Legacy.exec evm
       | some adr =>
         if !inner.disablePrecompiles && inner.benv.stat.rules.isPrecompile adr then
           executePrecompile evm adr
-        else exec evm
+        else Legacy.exec evm
     frame.settle raw
 
-private def msgCallOutputAmsterdam (msg : Msg) (evm : Devm) :
+private def Legacy.msgCallOutputAmsterdam (msg : Msg) (evm : Devm) :
     Except EvmError (State × MsgCallOutput) := do
   let refundCounter ←
     if evm.error.isNone then
@@ -690,7 +690,7 @@ the interpreter was entered: a halt rolls the state back, forfeits the remaining
 gas and reports the pre-call state with the reads preparation had already
 recorded, while every other error propagates unchanged. Amsterdam-only, and
 reached only from `processTopLevelAmsterdam`'s error branch. -/
-def settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
+def Legacy.settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
     (devm : Devm) : Except EvmError (State × MsgCallOutput) :=
   match error with
   | .halt reason =>
@@ -724,17 +724,17 @@ preparation failure, or enter the shared interpreter on the prepared frame and
 render its output. `frameOf` selects the creation or the call frame, which is
 what makes this the one Amsterdam body behind both `processMessageCall.create`
 and `processMessageCall.call`. Amsterdam-only. -/
-def processTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
-    (frameOf : Msg → Frame) : Except EvmError (State × MsgCallOutput) :=
+def Legacy.processTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
+    (frameOf : Msg → Legacy.Frame) : Except EvmError (State × MsgCallOutput) :=
   match prepareTopLevelAmsterdam state msg with
   | .error ⟨error, devm⟩ =>
-    settleTopLevelPreparationFailure msg error devm
+    Legacy.settleTopLevelPreparationFailure msg error devm
   | .ok ⟨msg, devm⟩ => do
     let evm ← Except.bimap Prod.fst id
-      (runPreparedTopFrame (frameOf msg) devm)
-    msgCallOutputAmsterdam msg evm
+      (Legacy.runPreparedTopFrame (frameOf msg) devm)
+    Legacy.msgCallOutputAmsterdam msg evm
 
-def processMessageCall.create (msg : Msg) :
+def Legacy.processMessageCall.create (msg : Msg) :
   Except EvmError (State × MsgCallOutput) := do
   match msg.benv.stat.rules.stateGas with
   | none =>
@@ -772,10 +772,10 @@ def processMessageCall.create (msg : Msg) :
         }
       ⟩
   | some state =>
-    processTopLevelAmsterdam state msg Frame.ofCreate
+    Legacy.processTopLevelAmsterdam state msg Legacy.Frame.ofCreate
 
 /-- Ordinary top-level authorization follows the active fork's delegation rule. -/
-def processMessageCall.legacyAuthorization (msg : Msg) : Except EvmError (Msg × Nat) :=
+def Legacy.processMessageCall.legacyAuthorization (msg : Msg) : Except EvmError (Msg × Nat) :=
   if !msg.benv.stat.rules.delegationEnabled || msg.tenv.stat.auths.isEmpty then
     .ok ⟨msg, 0⟩
   else do
@@ -793,12 +793,12 @@ def Msg.resolveCodeDelegation (msg : Msg) : Msg :=
       code := msg.benv.state.getCode address
       codeAddress := some address }
 
-theorem processMessageCall.legacyAuthorization_disabled (msg : Msg)
+theorem Legacy.processMessageCall.legacyAuthorization_disabled (msg : Msg)
     (h : msg.benv.stat.rules.delegationEnabled = false) :
     legacyAuthorization msg = .ok ⟨msg, 0⟩ := by
   simp only [legacyAuthorization, h, Bool.not_false, Bool.true_or, ↓reduceIte]
 
-theorem processMessageCall.legacyAuthorization_enabled (msg : Msg)
+theorem Legacy.processMessageCall.legacyAuthorization_enabled (msg : Msg)
     (h : msg.benv.stat.rules.delegationEnabled = true) :
     legacyAuthorization msg =
       (if msg.tenv.stat.auths.isEmpty then .ok ⟨msg, 0⟩ else do
@@ -829,7 +829,7 @@ theorem Msg.resolveCodeDelegation_canonical {msg : Msg} (h : msg.Canonical) :
   unfold resolveCodeDelegation
   split <;> exact h
 
-theorem processMessageCall.legacyAuthorization_canonical {msg : Msg}
+theorem Legacy.processMessageCall.legacyAuthorization_canonical {msg : Msg}
     (h : msg.Canonical) {p} (hp : legacyAuthorization msg = .ok p) :
     p.1.Canonical := by
   unfold legacyAuthorization at hp
@@ -839,11 +839,11 @@ theorem processMessageCall.legacyAuthorization_canonical {msg : Msg}
     cases hp
     exact setDelegation_canonical h hpair
 
-def processMessageCall.call (msg : Msg) :
+def Legacy.processMessageCall.call (msg : Msg) :
   Except EvmError (State × MsgCallOutput) := do
   match msg.benv.stat.rules.stateGas with
   | none =>
-    let ⟨msgDelegation, refundDelegation⟩ ← processMessageCall.legacyAuthorization msg
+    let ⟨msgDelegation, refundDelegation⟩ ← Legacy.processMessageCall.legacyAuthorization msg
     let msgPc := msgDelegation.resolveCodeDelegation
     let evm ← Except.bimap Prod.fst id (processMessage msgPc)
     let refundProcessMessage ←
@@ -871,14 +871,14 @@ def processMessageCall.call (msg : Msg) :
       }
     ⟩
   | some state =>
-    processTopLevelAmsterdam state msg Frame.ofCall
+    Legacy.processTopLevelAmsterdam state msg Legacy.Frame.ofCall
 
-def processMessageCall (msg : Msg) :
+def Legacy.processMessageCall (msg : Msg) :
     Except EvmError (State × MsgCallOutput) := do
   if msg.target.isNone then
-    processMessageCall.create msg
+    Legacy.processMessageCall.create msg
   else
-    processMessageCall.call msg
+    Legacy.processMessageCall.call msg
 
 def Transaction.isEip4844 (tx : Transaction) : Bool :=
   match tx.type with
@@ -1959,7 +1959,7 @@ def processTransaction
     }
   }
   let msg ← prepareMessage {benv with state := state} tenv tx
-  let ⟨state, txOutput⟩ ← Except.mapError TransitionError.vm (processMessageCall msg)
+  let ⟨state, txOutput⟩ ← Except.mapError TransitionError.vm (Legacy.processMessageCall msg)
   let refundCounter : Nat ←
     (Int.toNat? txOutput.refundCounter).toExcept
       (TransitionError.internal (.invariant (.text "refund counter is negative")))
@@ -2487,7 +2487,7 @@ def processSystemTransaction (benv : Benv)
   let txEnv : Tenv := processSystemTransactionTenv benv
   let systemTxMsg : Msg :=
     processSystemTransactionMsg benv txEnv target data code
-  processMessageCall systemTxMsg
+  Legacy.processMessageCall systemTxMsg
 
 def extractDepositData (data : Bytes) : Except BlockValidationError Bytes := do
   if data.length != depositEventLength then
@@ -5306,12 +5306,12 @@ private theorem prepareTopLevelAmsterdam_canonical {state : StateGasRules}
   · exact Except.CanonicalOn.bind (setDelegationAmsterdam_canonical hi)
       (fun _ hd => finishTopLevelAmsterdam_canonical hm hd)
 
-private theorem runPreparedTopFrame_canonicalSettle {frame : Frame}
+private theorem Legacy.runPreparedTopFrame_canonicalSettle {frame : Legacy.Frame}
     {prepared : Devm} (hf : frame.Canonical) (hp : prepared.Canonical) :
-    (runPreparedTopFrame frame prepared).CanonicalSettle := by
-  unfold runPreparedTopFrame
+    (Legacy.runPreparedTopFrame frame prepared).CanonicalSettle := by
+  unfold Legacy.runPreparedTopFrame
   rcases hbt : frame.inner.benvAfterTransfer with e | benv
-  · exact Frame.settleMsg_canonicalSettle hf
+  · exact Legacy.Frame.settleMsg_canonicalSettle hf
       (Msg.benvAfterTransfer_error_canonical hf.2 hbt)
   · have hb := Msg.benvAfterTransfer_ok_canonical hf.2 hbt
     have hi := Msg.Canonical.withBenv hf.2 hb
@@ -5328,19 +5328,19 @@ private theorem runPreparedTopFrame_canonicalSettle {frame : Frame}
     have hevm : evm.Canonical := ⟨initSevm_canonical hi, hd⟩
     dsimp only
     split
-    · exact Frame.settle_canonicalSettle hf (exec_canonical hevm)
+    · exact Legacy.Frame.settle_canonicalSettle hf (Legacy.exec_canonical hevm)
     · split
-      · exact Frame.settle_canonicalSettle hf
+      · exact Legacy.Frame.settle_canonicalSettle hf
           (executePrecompile_canonical hevm.2 _)
-      · exact Frame.settle_canonicalSettle hf (exec_canonical hevm)
+      · exact Legacy.Frame.settle_canonicalSettle hf (Legacy.exec_canonical hevm)
 
-private theorem processTopLevelAmsterdam_canonical {state : StateGasRules}
-    {msg : Msg} (hm : msg.Canonical) (frameOf : Msg → Frame)
+private theorem Legacy.processTopLevelAmsterdam_canonical {state : StateGasRules}
+    {msg : Msg} (hm : msg.Canonical) (frameOf : Msg → Legacy.Frame)
     (hframe : ∀ {prepared : Msg}, prepared.Canonical →
       (frameOf prepared).Canonical) {p}
-    (hp : processTopLevelAmsterdam state msg frameOf = .ok p) :
+    (hp : Legacy.processTopLevelAmsterdam state msg frameOf = .ok p) :
     State.Canonical p.1 := by
-  unfold processTopLevelAmsterdam at hp
+  unfold Legacy.processTopLevelAmsterdam at hp
   have hprepare := prepareTopLevelAmsterdam_canonical (state := state) hm
   cases hprep : prepareTopLevelAmsterdam state msg with
   | error failure =>
@@ -5348,35 +5348,35 @@ private theorem processTopLevelAmsterdam_canonical {state : StateGasRules}
     obtain ⟨error, devm⟩ := failure
     cases error with
     | halt reason =>
-      simp only [settleTopLevelPreparationFailure] at hp
+      simp only [Legacy.settleTopLevelPreparationFailure] at hp
       cases hp
       exact hm.1.1
     | revert =>
-      simp only [settleTopLevelPreparationFailure] at hp
+      simp only [Legacy.settleTopLevelPreparationFailure] at hp
       cases hp
     | crypto reason =>
-      simp only [settleTopLevelPreparationFailure] at hp
+      simp only [Legacy.settleTopLevelPreparationFailure] at hp
       cases hp
     | internal reason =>
-      simp only [settleTopLevelPreparationFailure] at hp
+      simp only [Legacy.settleTopLevelPreparationFailure] at hp
       cases hp
   | ok prepared =>
     rw [hprep] at hp hprepare
     obtain ⟨preparedMsg, preparedDevm⟩ := prepared
     obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
-    have hrun := runPreparedTopFrame_canonicalSettle
+    have hrun := Legacy.runPreparedTopFrame_canonicalSettle
       (hframe hprepare.1) hprepare.2
     rw [Except.bimap_id_eq_ok hevm] at hrun
-    unfold msgCallOutputAmsterdam at hp
+    unfold Legacy.msgCallOutputAmsterdam at hp
     split at hp <;>
       (obtain ⟨refundCounter, _, hp⟩ := Except.bind_eq_ok hp
        cases hp
        exact hrun.1)
 
-theorem processMessageCall.create_canonical {msg : Msg} (h : msg.Canonical)
-    {p} (hp : processMessageCall.create msg = .ok p) :
+theorem Legacy.processMessageCall.create_canonical {msg : Msg} (h : msg.Canonical)
+    {p} (hp : Legacy.processMessageCall.create msg = .ok p) :
     State.Canonical p.1 := by
-  unfold processMessageCall.create at hp
+  unfold Legacy.processMessageCall.create at hp
   dsimp only at hp
   split at hp
   · split at hp <;>
@@ -5389,18 +5389,18 @@ theorem processMessageCall.create_canonical {msg : Msg} (h : msg.Canonical)
            (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
             cases hp
             exact hcan.1))
-  · exact processTopLevelAmsterdam_canonical h Frame.ofCreate
-      (fun hm => Frame.canonical_ofCreate hm) hp
+  · exact Legacy.processTopLevelAmsterdam_canonical h Legacy.Frame.ofCreate
+      (fun hm => Legacy.Frame.canonical_ofCreate hm) hp
 
-theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
-    {p} (hp : processMessageCall.call msg = .ok p) :
+theorem Legacy.processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
+    {p} (hp : Legacy.processMessageCall.call msg = .ok p) :
     State.Canonical p.1 := by
-  unfold processMessageCall.call at hp
+  unfold Legacy.processMessageCall.call at hp
   dsimp only at hp
   split at hp
   · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
     obtain ⟨delegated, refund⟩ := pair
-    have hm := processMessageCall.legacyAuthorization_canonical h hpair
+    have hm := Legacy.processMessageCall.legacyAuthorization_canonical h hpair
     dsimp only at hp
     obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
     have hcan := processMessage_ok_canonical
@@ -5409,17 +5409,17 @@ theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
       (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
        cases hp
        exact hcan.1)
-  · exact processTopLevelAmsterdam_canonical h Frame.ofCall
-      (fun hm => Frame.canonical_ofCall hm) hp
+  · exact Legacy.processTopLevelAmsterdam_canonical h Legacy.Frame.ofCall
+      (fun hm => Legacy.Frame.canonical_ofCall hm) hp
 
 /-- A successful message call leaves a canonical state, for both the create
 and the call route. -/
-theorem processMessageCall_canonical {msg : Msg} (h : msg.Canonical)
-    {p} (hp : processMessageCall msg = .ok p) : State.Canonical p.1 := by
-  unfold processMessageCall at hp
+theorem Legacy.processMessageCall_canonical {msg : Msg} (h : msg.Canonical)
+    {p} (hp : Legacy.processMessageCall msg = .ok p) : State.Canonical p.1 := by
+  unfold Legacy.processMessageCall at hp
   split at hp
-  · exact processMessageCall.create_canonical h hp
-  · exact processMessageCall.call_canonical h hp
+  · exact Legacy.processMessageCall.create_canonical h hp
+  · exact Legacy.processMessageCall.call_canonical h hp
 
 theorem prepareMessage_canonical {benv : Benv} {tenv : Tenv} {tx : Transaction}
     (hb : benv.Canonical) (ht : tenv.Canonical) {msg : Msg}
@@ -5487,7 +5487,7 @@ theorem processTransaction_canonical {benv : Benv} (h : benv.Canonical)
   have hmsgc : msg.Canonical :=
     prepareMessage_canonical (by exact ⟨hst1c, h.1⟩)
       (by exact TransientStorage.canonical_empty) hmsg
-  have hqc := processMessageCall_canonical hmsgc (Except.mapError_eq_ok_iff.mp hq)
+  have hqc := Legacy.processMessageCall_canonical hmsgc (Except.mapError_eq_ok_iff.mp hq)
   exact State.Canonical.sweepTouchedAccounts (State.Canonical.settleSelfdestructs
     (State.Canonical.addBal (State.Canonical.addBal hqc _ _) _ _) _ _) _ _
 
@@ -5504,7 +5504,7 @@ theorem processSystemTransaction_canonical {benv : Benv} (h : benv.Canonical)
     (hp : processSystemTransaction benv target code data = .ok p) :
     State.Canonical p.1 := by
   unfold processSystemTransaction at hp
-  exact processMessageCall_canonical
+  exact Legacy.processMessageCall_canonical
     (by exact ⟨⟨h.1, h.1⟩, TransientStorage.canonical_empty⟩) hp
 
 theorem processUncheckedSystemTransaction_canonical {benv : Benv}

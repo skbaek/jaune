@@ -23,7 +23,7 @@ namespace Jaune.Staging
 namespace TraceJson
 
 open Lean Jaune
-open Jaune.TraceJson (Config OpenFrame opcode)
+open Jaune.Legacy.TraceJson (Config OpenFrame opcode)
 
 def number (n : Nat) : Json := toJson n
 def quantity (n : Nat) : Json := .str (T8n.hexQuantity n)
@@ -48,7 +48,7 @@ def gasCost? (before : Evm) (step : Step) : Option Nat :=
       safeSub before.dyna.gasLeft (child.checkpoint.machine.gasLeft + child.message.gas)
 
 /-- Today's pre-operation row over the staged step. -/
-def instruction (cfg : Config) (context : Jaune.Trace.Context) (refundBase : Int)
+def instruction (cfg : Config) (context : Jaune.Legacy.Trace.Context) (refundBase : Int)
     (before : Evm) (step : Step) : Except String Json := do
   if before.dyna.returnData.length > cfg.maxDataBytes then
     throw "return data exceeds maxDataBytes"
@@ -76,12 +76,12 @@ def instruction (cfg : Config) (context : Jaune.Trace.Context) (refundBase : Int
     fields := fields ++ [("error", textBytes error.render)]
   return Json.mkObj fields
 
-def lifecycle (context : Jaune.Trace.Context) (event : String)
+def lifecycle (context : Jaune.Legacy.Trace.Context) (event : String)
     (extra : List (String × Json) := []) : Json :=
   Json.mkObj ([("runId", .str context.runId), ("frame", number context.frame),
     ("depth", number context.depth), ("event", .str event)] ++ extra)
 
-def current (cfg : Config) (state : Jaune.TraceJson.State) (ctx : Jaune.Trace.Context) :
+def current (cfg : Config) (state : Jaune.Legacy.TraceJson.State) (ctx : Jaune.Legacy.Trace.Context) :
     Except String OpenFrame := do
   if ctx.runId != cfg.runId then throw "event run identity differs"
   match state.frames with
@@ -104,8 +104,8 @@ def rootSummary (cfg : Config) (frame : Frame) (result : Frame.Result) :
     ("pass", .bool !result.failed)]
 
 /-- Today's `consume` over the staged events. -/
-def consume (cfg : Config) (state : Jaune.TraceJson.State) (event : Trace.Event) :
-    Except String (Jaune.TraceJson.State × Option Json × Json) := do
+def consume (cfg : Config) (state : Jaune.Legacy.TraceJson.State) (event : Trace.Event) :
+    Except String (Jaune.Legacy.TraceJson.State × Option Json × Json) := do
   if cfg.runId.isEmpty then throw "runId must be nonempty"
   if state.closed then throw "event after root settlement"
   match event with
@@ -155,7 +155,7 @@ def consume (cfg : Config) (state : Jaune.TraceJson.State) (event : Trace.Event)
       lifecycle ctx "settled" [("root", .bool tail.isEmpty)])
 
 /-- Today's `IO` sink over the staged events: the same writes, flushes and limits. -/
-def sink (cfg : Config) (state : IO.Ref Jaune.TraceJson.State)
+def sink (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJson.State)
     (trace frames : IO.FS.Handle) : Trace.Sink IO := fun event => do
   let (next, row, frameRow) ← match consume cfg (← state.get) event with
     | .ok result => pure result

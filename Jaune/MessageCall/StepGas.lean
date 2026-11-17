@@ -1483,7 +1483,7 @@ theorem NextOp.step_gasBound (evm : Evm) (n : NextOp) :
       refine ⟨?_, ?_⟩
       · simp
       · exact Devm.spill_le_gasMeasure _
-    · refine Step.ofExecution_gasBound (fun d hd => NextOp.step_push_gasLt hd) ?_
+    · refine Step.ofExecution_gasBound (fun d hd => Legacy.NextOp.step_push_gasLt hd) ?_
       refine Execution.settledGasLe_of_gasLe ?_
       exact gasLe_bind_id (chargeGas_result_gasLe _ _)
         (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))

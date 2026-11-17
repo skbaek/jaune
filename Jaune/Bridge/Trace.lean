@@ -20,7 +20,7 @@ definitions, and deleted with them after the gate's tag (the W1 design note, sec
 namespace Jaune.Staging
 
 open Legacy
-open Jaune.Trace (Context CertifiedResult)
+open Jaune.Legacy.Trace (Context CertifiedResult)
 
 namespace Trace
 
@@ -29,9 +29,9 @@ run. The step is each side's own step of the same machine; a frame is the staged
 today's, and its entry and settled result are read by `Frame.Entry.ofLegacy` and
 `Frame.Result.ofSettled`, with today's settlement guarantees; a raw result agrees up to a fault's
 erased state. -/
-def Event.Corr : Jaune.Trace.Event → Event → Prop
+def Event.Corr : Jaune.Legacy.Trace.Event → Event → Prop
   | .instruction c b s, .instruction c' b' s' =>
-    c = c' ∧ b = b' ∧ s = Jaune.Evm.step b ∧ s' = Staging.Evm.step b
+    c = c' ∧ b = b' ∧ s = Jaune.Legacy.Evm.step b ∧ s' = Staging.Evm.step b
   | .entered c f e, .entered c' f' e' =>
     c = c' ∧ f'.message = Message.ofLegacy f.outer f.isCreate ∧ e' = Frame.Entry.ofLegacy e
   | .exited c r, .exited c' r' =>
@@ -81,7 +81,7 @@ section Shapes
 variable {m : Type → Type} [Monad m]
 
 /-- Today's caller after its child settled, keeping only the next frame number. -/
-def legacyResumed (sinkOld : Jaune.Trace.Sink m) (evm : Evm) (fuel : Nat) (context : Context)
+def legacyResumed (sinkOld : Jaune.Legacy.Trace.Sink m) (evm : Evm) (fuel : Nat) (context : Context)
     (nextFrame pc : Nat) (x : Execution) (k : Nat) : m Nat :=
   match x with
   | .error error => do
@@ -91,7 +91,7 @@ def legacyResumed (sinkOld : Jaune.Trace.Sink m) (evm : Evm) (fuel : Nat) (conte
   | .ok devm => do
     sinkOld (.resumed context nextFrame (.ok devm))
     CertifiedResult.nextFrame <$>
-      Jaune.Trace.execFueled sinkOld ⟨pc, evm.sta, devm⟩ fuel context k
+      Jaune.Legacy.Trace.execFueled sinkOld ⟨pc, evm.sta, devm⟩ fuel context k
 
 /-- The staged caller after its child settled, keeping only the next frame number. -/
 def stagedResumed (sink : Sink m) (evm : Evm) (fuel : Nat) (context : Context)
@@ -106,8 +106,8 @@ def stagedResumed (sink : Sink m) (evm : Evm) (fuel : Nat) (context : Context)
     CertifiedResult.nextFrame <$> execFueled sink ⟨pc, evm.sta, devm⟩ fuel context k
 
 /-- Today's spawn branch after the instruction event, keeping only the next frame number. -/
-def legacySpawn (sinkOld : Jaune.Trace.Sink m) (evm : Evm) (fuel : Nat) (context : Context)
-    (nextFrame : Nat) (f : Jaune.Frame) (rsm : Resume) (pc : Nat) : m Nat :=
+def legacySpawn (sinkOld : Jaune.Legacy.Trace.Sink m) (evm : Evm) (fuel : Nat) (context : Context)
+    (nextFrame : Nat) (f : Jaune.Legacy.Frame) (rsm : Resume) (pc : Nat) : m Nat :=
   let childContext : Context :=
     { context with frame := nextFrame, depth := context.depth + 1 }
   match f.enter with
@@ -118,8 +118,8 @@ def legacySpawn (sinkOld : Jaune.Trace.Sink m) (evm : Evm) (fuel : Nat) (context
   | .run child => do
     sinkOld (.entered childContext f (.run child))
     let k ← CertifiedResult.nextFrame <$>
-      Jaune.Trace.execFueled sinkOld child fuel childContext (nextFrame + 1)
-    match (Jaune.execFueled child fuel).run with
+      Jaune.Legacy.Trace.execFueled sinkOld child fuel childContext (nextFrame + 1)
+    match (Jaune.Legacy.execFueled child fuel).run with
     | none => do
       sinkOld (.exited context none)
       pure k
@@ -154,34 +154,34 @@ def stagedSpawn (sink : Sink m) (evm : Evm) (fuel : Nat) (context : Context)
 
 variable [LawfulMonad m]
 
-theorem legacy_halt (sinkOld : Jaune.Trace.Sink m) {evm : Evm} {fuel : Nat} {raw : Execution}
-    (hs : Jaune.Evm.step evm = .halt raw) (context : Context) (nextFrame : Nat) :
-    CertifiedResult.nextFrame <$> Jaune.Trace.execFueled sinkOld evm (fuel + 1) context nextFrame
+theorem legacy_halt (sinkOld : Jaune.Legacy.Trace.Sink m) {evm : Evm} {fuel : Nat} {raw : Execution}
+    (hs : Jaune.Legacy.Evm.step evm = .halt raw) (context : Context) (nextFrame : Nat) :
+    CertifiedResult.nextFrame <$> Jaune.Legacy.Trace.execFueled sinkOld evm (fuel + 1) context nextFrame
       = (do sinkOld (.instruction context evm (.halt raw)); sinkOld (.exited context (some raw))
             pure nextFrame) := by
-  rw [Jaune.Trace.execFueled]
+  rw [Jaune.Legacy.Trace.execFueled]
   split <;> rename_i hs' <;> rw [hs] at hs' <;> cases hs'
   simp only [map_bind, map_pure]
 
-theorem legacy_cont (sinkOld : Jaune.Trace.Sink m) {evm : Evm} {fuel pc : Nat} {devm : Devm}
-    (hs : Jaune.Evm.step evm = .cont pc devm) (context : Context) (nextFrame : Nat) :
-    CertifiedResult.nextFrame <$> Jaune.Trace.execFueled sinkOld evm (fuel + 1) context nextFrame
+theorem legacy_cont (sinkOld : Jaune.Legacy.Trace.Sink m) {evm : Evm} {fuel pc : Nat} {devm : Devm}
+    (hs : Jaune.Legacy.Evm.step evm = .cont pc devm) (context : Context) (nextFrame : Nat) :
+    CertifiedResult.nextFrame <$> Jaune.Legacy.Trace.execFueled sinkOld evm (fuel + 1) context nextFrame
       = (do sinkOld (.instruction context evm (.cont pc devm))
             CertifiedResult.nextFrame <$>
-              Jaune.Trace.execFueled sinkOld ⟨pc, evm.sta, devm⟩ fuel context nextFrame) := by
-  rw [Jaune.Trace.execFueled]
+              Jaune.Legacy.Trace.execFueled sinkOld ⟨pc, evm.sta, devm⟩ fuel context nextFrame) := by
+  rw [Jaune.Legacy.Trace.execFueled]
   split <;> rename_i hs' <;> rw [hs] at hs' <;> cases hs'
   simp only [map_bind]
   rw [map_cast_nextFrame]
-  simp only [Jaune.execFueled, hs]
+  simp only [Jaune.Legacy.execFueled, hs]
 
-theorem legacy_spawn (sinkOld : Jaune.Trace.Sink m) {evm : Evm} {fuel pc : Nat} {f : Jaune.Frame}
-    {rsm : Resume} (hs : Jaune.Evm.step evm = .spawn f rsm pc) (context : Context)
+theorem legacy_spawn (sinkOld : Jaune.Legacy.Trace.Sink m) {evm : Evm} {fuel pc : Nat} {f : Jaune.Legacy.Frame}
+    {rsm : Resume} (hs : Jaune.Legacy.Evm.step evm = .spawn f rsm pc) (context : Context)
     (nextFrame : Nat) :
-    CertifiedResult.nextFrame <$> Jaune.Trace.execFueled sinkOld evm (fuel + 1) context nextFrame
+    CertifiedResult.nextFrame <$> Jaune.Legacy.Trace.execFueled sinkOld evm (fuel + 1) context nextFrame
       = (do sinkOld (.instruction context evm (.spawn f rsm pc))
             legacySpawn sinkOld evm fuel context nextFrame f rsm pc) := by
-  rw [Jaune.Trace.execFueled]
+  rw [Jaune.Legacy.Trace.execFueled]
   split <;> rename_i hs' <;> rw [hs] at hs' <;> cases hs'
   simp only [map_bind, legacySpawn]
   congr 1; funext _
@@ -190,7 +190,7 @@ theorem legacy_spawn (sinkOld : Jaune.Trace.Sink m) {evm : Evm} {fuel pc : Nat} 
     congr 1; funext _; congr 1; funext _
     split <;> rename_i hr <;> simp only [hr, legacyResumed, map_bind, map_pure]
     rw [map_cast_nextFrame]
-    simp only [Jaune.execFueled, hs, he, hr]
+    simp only [Jaune.Legacy.execFueled, hs, he, hr]
   · simp only [map_bind]
     congr 1; funext _
     rw [bind_certified, bind_map_left, bind_map_left]
@@ -200,7 +200,7 @@ theorem legacy_spawn (sinkOld : Jaune.Trace.Sink m) {evm : Evm} {fuel pc : Nat} 
     congr 1; funext _
     split <;> rename_i hr <;> simp only [hr, legacyResumed, map_bind, map_pure]
     rw [map_cast_nextFrame]
-    simp only [Jaune.execFueled, hs, he, hc, hr]
+    simp only [Jaune.Legacy.execFueled, hs, he, hc, hr]
 
 theorem staged_halt (sink : Sink m) {evm : Evm} {fuel : Nat} {raw : Execution}
     (hs : Staging.Evm.step evm = .halt raw) (context : Context) (nextFrame : Nat) :
@@ -255,13 +255,13 @@ end Shapes
 section Simulation
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m]
-  (sinkOld : Jaune.Trace.Sink m) (sink : Sink m)
+  (sinkOld : Jaune.Legacy.Trace.Sink m) (sink : Sink m)
   (hsink : ∀ eo en, Event.Corr eo en → sinkOld eo = sink en)
 include hsink
 
 omit [LawfulMonad m] in
 /-- One corresponding event, then corresponding continuations. -/
-theorem corr_bind {β : Type} {eo : Jaune.Trace.Event} {en : Event} {k k' : PUnit → m β}
+theorem corr_bind {β : Type} {eo : Jaune.Legacy.Trace.Event} {en : Event} {k k' : PUnit → m β}
     (h : Event.Corr eo en) (hk : ∀ u, k u = k' u) : (sinkOld eo >>= k) = (sink en >>= k') := by
   rw [hsink _ _ h]; congr 1; funext u; exact hk u
 
@@ -269,7 +269,7 @@ omit [LawfulMonad m] in
 /-- The resumption tails agree on raw results that agree up to a fault's erased state. -/
 theorem resumed_legacy {evm : Evm} {fuel : Nat}
     (ih : ∀ (evm : Evm) (context : Context) (nextFrame : Nat),
-      CertifiedResult.nextFrame <$> Jaune.Trace.execFueled sinkOld evm fuel context nextFrame
+      CertifiedResult.nextFrame <$> Jaune.Legacy.Trace.execFueled sinkOld evm fuel context nextFrame
         = CertifiedResult.nextFrame <$> execFueled sink evm fuel context nextFrame)
     (context : Context) (nextFrame pc : Nat) {x y : Execution} (h : x.observe = y.observe)
     (k : Nat) :
@@ -292,9 +292,9 @@ omit [LawfulMonad m] in
 /-- The spawn branches agree, given that the drivers agree at the remaining fuel. -/
 theorem spawn_legacy {evm : Evm} {fuel : Nat}
     (ih : ∀ (evm : Evm) (context : Context) (nextFrame : Nat),
-      CertifiedResult.nextFrame <$> Jaune.Trace.execFueled sinkOld evm fuel context nextFrame
+      CertifiedResult.nextFrame <$> Jaune.Legacy.Trace.execFueled sinkOld evm fuel context nextFrame
         = CertifiedResult.nextFrame <$> execFueled sink evm fuel context nextFrame)
-    {f : Jaune.Frame} {rsm : Resume} {pc : Nat} (hs : Jaune.Evm.step evm = .spawn f rsm pc)
+    {f : Jaune.Legacy.Frame} {rsm : Resume} {pc : Nat} (hs : Jaune.Legacy.Evm.step evm = .spawn f rsm pc)
     (context : Context) (nextFrame : Nat) :
     legacySpawn sinkOld evm fuel context nextFrame f rsm pc
       = stagedSpawn sink evm fuel context nextFrame (Frame.ofLegacy f rsm) (Pending.ofLegacy rsm)
@@ -318,7 +318,7 @@ theorem spawn_legacy {evm : Evm} {fuel : Nat}
     rw [ih]
     congr 1; funext k
     have hih := execFueled_legacy fuel child
-    cases hL : (Jaune.execFueled child fuel).run with
+    cases hL : (Jaune.Legacy.execFueled child fuel).run with
     | none =>
       rw [hL, Option.map_none, eq_comm, Option.map_eq_none_iff] at hih
       rw [hih]
@@ -349,17 +349,17 @@ theorem spawn_legacy {evm : Evm} {fuel : Nat}
 on corresponding events, have the same effects and return the same next frame number, for every
 machine, fuel, run identity and frame number, in every lawful monad. -/
 theorem execFueled_trace_legacy (fuel : Nat) (evm : Evm) (context : Context) (nextFrame : Nat) :
-    CertifiedResult.nextFrame <$> Jaune.Trace.execFueled sinkOld evm fuel context nextFrame
+    CertifiedResult.nextFrame <$> Jaune.Legacy.Trace.execFueled sinkOld evm fuel context nextFrame
       = CertifiedResult.nextFrame <$> execFueled sink evm fuel context nextFrame := by
   induction fuel generalizing evm context nextFrame with
   | zero =>
-    rw [Jaune.Trace.execFueled, execFueled]
+    rw [Jaune.Legacy.Trace.execFueled, execFueled]
     simp only [map_bind, map_pure]
     refine corr_bind sinkOld sink hsink ?_ fun _ => rfl
     unfold Event.Corr; exact ⟨rfl, rfl⟩
   | succ fuel ih =>
     have hst := step_legacy evm
-    rcases hs : Jaune.Evm.step evm with raw | ⟨pc, devm⟩ | ⟨f, rsm, pc⟩ <;> rw [hs] at hst
+    rcases hs : Jaune.Legacy.Evm.step evm with raw | ⟨pc, devm⟩ | ⟨f, rsm, pc⟩ <;> rw [hs] at hst
     · rw [legacy_halt sinkOld hs, staged_halt sink hst.symm]
       refine corr_bind sinkOld sink hsink ?_ fun _ => ?_
       · unfold Event.Corr; exact ⟨rfl, rfl, hs.symm, hst⟩
@@ -376,11 +376,11 @@ theorem execFueled_trace_legacy (fuel : Nat) (evm : Evm) (context : Context) (ne
 /-- **The total trace driver.** Today's `Trace.exec` and the staged one, run with sinks that agree
 on corresponding events, have the same effects and return the same next frame number. -/
 theorem exec_trace_legacy (evm : Evm) (context : Context) (nextFrame : Nat) :
-    Jaune.Trace.ExecutionResult.nextFrame <$> Jaune.Trace.exec sinkOld evm context nextFrame
+    Jaune.Legacy.Trace.ExecutionResult.nextFrame <$> Jaune.Legacy.Trace.exec sinkOld evm context nextFrame
       = ExecutionResult.nextFrame <$> exec sink evm context nextFrame := by
-  unfold Jaune.Trace.exec exec
+  unfold Jaune.Legacy.Trace.exec exec
   simp only [map_bind]
-  rw [bind_certified (Jaune.Trace.execFueled sinkOld evm _ context nextFrame),
+  rw [bind_certified (Jaune.Legacy.Trace.execFueled sinkOld evm _ context nextFrame),
     bind_certified (execFueled sink evm _ context nextFrame),
     execFueled_trace_legacy sinkOld sink hsink]
   congr 1; funext k
@@ -388,7 +388,7 @@ theorem exec_trace_legacy (evm : Evm) (context : Context) (nextFrame : Nat) :
   split
   · split <;> simp only [map_pure]
   · rename_i hrun
-    simp [execFueled_run_sufficientFuel] at hrun
+    simp [Legacy.execFueled_run_sufficientFuel] at hrun
 
 end Simulation
 
@@ -401,7 +401,7 @@ namespace Jaune
 namespace Legacy
 
 /-- What today's settlement guarantees, for a frame coherent with its top-level start. -/
-theorem settledFacts_top {f : Jaune.Frame} {parent : Devm} {rules : ForkRules}
+theorem settledFacts_top {f : Jaune.Legacy.Frame} {parent : Devm} {rules : ForkRules}
     (h : Frame.TopCoherent f parent) (hr : f.outer.benv.stat.rules = rules) {raw : Execution}
     (clean : raw.Clean) : SettledFacts parent rules (f.settle raw) where
   fault := Frame.settle_error_isFault f raw
@@ -412,7 +412,7 @@ theorem settledFacts_top {f : Jaune.Frame} {parent : Devm} {rules : ForkRules}
   halted := Frame.settle_halted f clean
 
 /-- `Frame.enter_done_facts` for a frame coherent with its top-level start. -/
-theorem Frame.enter_done_facts_top {f : Jaune.Frame} {parent : Devm} {rules : ForkRules}
+theorem Frame.enter_done_facts_top {f : Jaune.Legacy.Frame} {parent : Devm} {rules : ForkRules}
     (h : Frame.TopCoherent f parent) (hr : f.outer.benv.stat.rules = rules)
     {r : Except (EvmError × Jaune.State × AdrSet × TransientStorage) Devm}
     (he : f.enter = .done r) : SettledFacts parent rules r := by
@@ -423,7 +423,7 @@ theorem Frame.enter_done_facts_top {f : Jaune.Frame} {parent : Devm} {rules : Fo
     cases he
     have hfault := Msg.benvAfterTransfer_error hb
     have hs : f.settleMsg (.error e) = .error e := by
-      unfold Jaune.Frame.settleMsg processMessage.settle processCreateMessage.settle
+      unfold Jaune.Legacy.Frame.settleMsg processMessage.settle processCreateMessage.settle
       split <;> rfl
     rw [hs]
     refine ⟨?_, fun hs _ => (nomatch hs), fun hs _ _ => (nomatch hs), fun hs _ => (nomatch hs)⟩
@@ -444,7 +444,7 @@ theorem Frame.enter_done_facts_top {f : Jaune.Frame} {parent : Devm} {rules : Fo
 
 /-- The top-level frames of today are coherent with their message's start. -/
 theorem Frame.top_topCoherent (msg : Msg) (isCreate : Bool) :
-    Frame.TopCoherent (if isCreate then Jaune.Frame.ofCreate msg else Jaune.Frame.ofCall msg)
+    Frame.TopCoherent (if isCreate then Jaune.Legacy.Frame.ofCreate msg else Jaune.Legacy.Frame.ofCall msg)
       (initDevm msg) := by
   cases isCreate <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
@@ -455,7 +455,7 @@ end Jaune
 namespace Jaune.Staging
 
 open Legacy
-open Jaune.Trace (Context CertifiedResult)
+open Jaune.Legacy.Trace (Context CertifiedResult)
 
 namespace Trace
 
@@ -466,9 +466,9 @@ theorem ofTop_start (msg : Msg) (isCreate : Bool) :
 
 /-- A total execution result of today is determined by its next frame number. -/
 theorem bind_execution_legacy {m : Type → Type} [Monad m] [LawfulMonad m] {evm : Evm} {β : Type}
-    (x : m (Jaune.Trace.ExecutionResult evm)) (g : Jaune.Trace.ExecutionResult evm → m β) :
-    x >>= g = (Jaune.Trace.ExecutionResult.nextFrame <$> x) >>= fun k =>
-      g ⟨Jaune.exec evm, k, rfl⟩ := by
+    (x : m (Jaune.Legacy.Trace.ExecutionResult evm)) (g : Jaune.Legacy.Trace.ExecutionResult evm → m β) :
+    x >>= g = (Jaune.Legacy.Trace.ExecutionResult.nextFrame <$> x) >>= fun k =>
+      g ⟨Jaune.Legacy.exec evm, k, rfl⟩ := by
   rw [bind_map_left]; congr 1; funext r; rcases r with ⟨v, k, h⟩; subst h; rfl
 
 /-- A staged total execution result is determined by its next frame number. -/
@@ -480,7 +480,7 @@ theorem bind_execution {m : Type → Type} [Monad m] [LawfulMonad m] {evm : Evm}
 section Top
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m]
-  (sinkOld : Jaune.Trace.Sink m) (sink : Sink m)
+  (sinkOld : Jaune.Legacy.Trace.Sink m) (sink : Sink m)
   (hsink : ∀ eo en, Event.Corr eo en → sinkOld eo = sink en)
 include hsink
 
@@ -488,21 +488,21 @@ include hsink
 staged one on the message's top frame, run with sinks that agree on corresponding events, have
 the same effects and return the same next frame number. -/
 theorem runFrame_trace_legacy (msg : Msg) (isCreate : Bool) (runId : String) :
-    Jaune.Trace.FrameResult.nextFrame <$> Jaune.Trace.runFrame sinkOld
-        (if isCreate then Jaune.Frame.ofCreate msg else Jaune.Frame.ofCall msg) runId
+    Jaune.Legacy.Trace.FrameResult.nextFrame <$> Jaune.Legacy.Trace.runFrame sinkOld
+        (if isCreate then Jaune.Legacy.Frame.ofCreate msg else Jaune.Legacy.Frame.ofCall msg) runId
       = FrameResult.nextFrame <$> runFrame sink (Frame.ofTop msg isCreate) runId := by
   have htop := Legacy.Frame.top_topCoherent msg isCreate
   have hmsg : (Frame.ofTop msg isCreate).message
       = Message.ofLegacy
-          (if isCreate then Jaune.Frame.ofCreate msg else Jaune.Frame.ofCall msg).outer
-          (if isCreate then Jaune.Frame.ofCreate msg else Jaune.Frame.ofCall msg).isCreate := by
+          (if isCreate then Jaune.Legacy.Frame.ofCreate msg else Jaune.Legacy.Frame.ofCall msg).outer
+          (if isCreate then Jaune.Legacy.Frame.ofCreate msg else Jaune.Legacy.Frame.ofCall msg).isCreate := by
     cases isCreate <;> rfl
   have hgas := congrArg Message.gas (inner_fields htop.paired).1
   have hE := enterWith_top msg isCreate
   rw [← ofTop_start msg isCreate] at hE
-  generalize (if isCreate then Jaune.Frame.ofCreate msg else Jaune.Frame.ofCall msg) = F
+  generalize (if isCreate then Jaune.Legacy.Frame.ofCreate msg else Jaune.Legacy.Frame.ofCall msg) = F
     at htop hmsg hgas hE ⊢
-  unfold Jaune.Trace.runFrame runFrame
+  unfold Jaune.Legacy.Trace.runFrame runFrame
   dsimp only
   split <;> rename_i he <;> split <;> rename_i he' <;> rw [he', he] at hE <;>
     simp only [Frame.Entry.ofLegacy, Frame.Entry.done.injEq, Frame.Entry.run.injEq,
@@ -523,18 +523,18 @@ theorem runFrame_trace_legacy (msg : Msg) (isCreate : Bool) (runId : String) :
     congr 1; funext k
     dsimp only
     rename_i child _
-    have hclean : Execution.Clean (Jaune.exec child) := by
-      cases hx : Jaune.exec child with
+    have hclean : Execution.Clean (Jaune.Legacy.exec child) := by
+      cases hx : Jaune.Legacy.exec child with
       | error _ => trivial
       | ok d =>
         exact (execFueled_ok_error _ child
-          ((execFueled_run_sufficientFuel child).trans (congrArg some hx))).trans
+          ((Legacy.execFueled_run_sufficientFuel child).trans (congrArg some hx))).trans
           (Legacy.Frame.enter_run_error he)
     have hf : Frame.ofTop msg isCreate
         = ⟨Message.ofLegacy F.outer F.isCreate, Frame.State.ofDevm (initDevm msg)⟩ := by
       rw [← hmsg]; rfl
     have hset : settle (Frame.ofTop msg isCreate) (Staging.exec child)
-        = Frame.Result.ofSettled (F.settle (Jaune.exec child)) := by
+        = Frame.Result.ofSettled (F.settle (Jaune.Legacy.exec child)) := by
       rw [settle_observe (exec_legacy child).symm, hf,
         settle_legacy F (initDevm msg) htop _ hclean]
     rw [hset]
@@ -549,11 +549,11 @@ end Trace
 namespace TraceJson
 
 open Lean
-open Jaune.TraceJson (Config)
+open Jaune.Legacy.TraceJson (Config)
 
 /-- The gas cost read from the staged step is today's, for the step of any machine. -/
-theorem gasCost?_legacy {before : Evm} {s : Jaune.Step} (hs : Jaune.Evm.step before = s) :
-    gasCost? before (Step.ofLegacy s) = Jaune.TraceJson.gasCost? before s := by
+theorem gasCost?_legacy {before : Evm} {s : Jaune.Legacy.Step} (hs : Jaune.Legacy.Evm.step before = s) :
+    gasCost? before (Step.ofLegacy s) = Jaune.Legacy.TraceJson.gasCost? before s := by
   rcases s with raw | ⟨pc, devm⟩ | ⟨f, rsm, pc⟩
   · rcases raw with ⟨e, d⟩ | d
     · cases e <;> rfl
@@ -561,7 +561,7 @@ theorem gasCost?_legacy {before : Evm} {s : Jaune.Step} (hs : Jaune.Evm.step bef
   · rfl
   · obtain ⟨hc, -, -, hm⟩ := step_spawn_coherent hs
     have hgas : f.inner.gas = f.outer.gas := congrArg Message.gas (inner_fields hc.paired).1
-    unfold gasCost? Jaune.TraceJson.gasCost?
+    unfold gasCost? Jaune.Legacy.TraceJson.gasCost?
     split
     · rfl
     · rename_i hsg
@@ -571,9 +571,9 @@ theorem gasCost?_legacy {before : Evm} {s : Jaune.Step} (hs : Jaune.Evm.step bef
 
 /-- The instruction row read from the staged step is today's, for the step of any machine. -/
 theorem instruction_legacy (cfg : Config) (context : Context) (refundBase : Int) {before : Evm}
-    {s : Jaune.Step} (hs : Jaune.Evm.step before = s) :
+    {s : Jaune.Legacy.Step} (hs : Jaune.Legacy.Evm.step before = s) :
     instruction cfg context refundBase before (Step.ofLegacy s)
-      = Jaune.TraceJson.instruction cfg context refundBase before s := by
+      = Jaune.Legacy.TraceJson.instruction cfg context refundBase before s := by
   have hg := gasCost?_legacy hs
   unfold instruction
   rw [hg]
@@ -601,15 +601,15 @@ theorem rootSummary_eq (cfg : Config) (f : Frame) (r : Frame.Result) {grant : Na
 
 /-- **The serialiser.** The staged `consume` gives today's rows and state on corresponding
 events. -/
-theorem consume_legacy (cfg : Config) (state : Jaune.TraceJson.State) {eo : Jaune.Trace.Event}
+theorem consume_legacy (cfg : Config) (state : Jaune.Legacy.TraceJson.State) {eo : Jaune.Legacy.Trace.Event}
     {en : Trace.Event} (h : Trace.Event.Corr eo en) :
-    consume cfg state en = Jaune.TraceJson.consume cfg state eo := by
+    consume cfg state en = Jaune.Legacy.TraceJson.consume cfg state eo := by
   rcases eo with ⟨c, b, s⟩ | ⟨c, f, e⟩ | ⟨c, r⟩ | ⟨c, f, r⟩ | ⟨c, k, x⟩ <;>
     rcases en with ⟨c', b', s'⟩ | ⟨c', f', e'⟩ | ⟨c', r'⟩ | ⟨c', f', r'⟩ | ⟨c', k', x'⟩ <;>
     simp only [Trace.Event.Corr] at h
   · obtain ⟨rfl, rfl, rfl, rfl⟩ := h
     rw [← step_legacy]
-    generalize hs : Jaune.Evm.step b = st
+    generalize hs : Jaune.Legacy.Evm.step b = st
     rcases st with raw | ⟨pc, devm⟩ | ⟨f, rsm, pc⟩
     · rcases raw with ⟨e, d⟩ | d
       · cases e <;> rfl
@@ -676,26 +676,26 @@ instance instLawfulMonadIO : LawfulMonad IO :=
 
 /-- **The `IO` sink.** The staged sink performs today's reads, writes, flushes and state update
 on corresponding events. -/
-theorem sink_legacy (cfg : Config) (state : IO.Ref Jaune.TraceJson.State)
-    (trace frames : IO.FS.Handle) {eo : Jaune.Trace.Event} {en : Trace.Event}
+theorem sink_legacy (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJson.State)
+    (trace frames : IO.FS.Handle) {eo : Jaune.Legacy.Trace.Event} {en : Trace.Event}
     (h : Trace.Event.Corr eo en) :
-    sink cfg state trace frames en = Jaune.TraceJson.sink cfg state trace frames eo := by
-  unfold sink Jaune.TraceJson.sink
+    sink cfg state trace frames en = Jaune.Legacy.TraceJson.sink cfg state trace frames eo := by
+  unfold sink Jaune.Legacy.TraceJson.sink
   simp only [consume_legacy cfg _ h]
   rfl
 
 /-- **The tracer's message run.** With the serialiser's `IO` sink, today's top-level frame run
 (as `TraceMain` builds it) and the staged one perform the same `IO` actions, so they write the
 same bytes to the same handles, and return the same next frame number. -/
-theorem runFrame_json_legacy (cfg : Config) (state : IO.Ref Jaune.TraceJson.State)
+theorem runFrame_json_legacy (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJson.State)
     (trace frames : IO.FS.Handle) (msg : Msg) (runId : String) :
-    Jaune.Trace.FrameResult.nextFrame <$> Jaune.Trace.runFrame
-        (Jaune.TraceJson.sink cfg state trace frames)
-        (if msg.target.isSome then Jaune.Frame.ofCall msg else Jaune.Frame.ofCreate msg) runId
+    Jaune.Legacy.Trace.FrameResult.nextFrame <$> Jaune.Legacy.Trace.runFrame
+        (Jaune.Legacy.TraceJson.sink cfg state trace frames)
+        (if msg.target.isSome then Jaune.Legacy.Frame.ofCall msg else Jaune.Legacy.Frame.ofCreate msg) runId
       = Trace.FrameResult.nextFrame <$> Trace.runFrame (sink cfg state trace frames)
           (Frame.ofTop msg msg.target.isNone) runId := by
-  have e : (if msg.target.isSome then Jaune.Frame.ofCall msg else Jaune.Frame.ofCreate msg)
-      = (if msg.target.isNone then Jaune.Frame.ofCreate msg else Jaune.Frame.ofCall msg) := by
+  have e : (if msg.target.isSome then Jaune.Legacy.Frame.ofCall msg else Jaune.Legacy.Frame.ofCreate msg)
+      = (if msg.target.isNone then Jaune.Legacy.Frame.ofCreate msg else Jaune.Legacy.Frame.ofCall msg) := by
     cases h : msg.target <;> simp
   rw [e]
   exact Trace.runFrame_trace_legacy (m := IO) _ _
@@ -704,10 +704,10 @@ theorem runFrame_json_legacy (cfg : Config) (state : IO.Ref Jaune.TraceJson.Stat
 /-- **The tracer's total run.** With the serialiser's `IO` sink, today's `Trace.exec` (which the
 transaction tracer runs) and the staged one perform the same `IO` actions and return the same
 next frame number. -/
-theorem exec_json_legacy (cfg : Config) (state : IO.Ref Jaune.TraceJson.State)
+theorem exec_json_legacy (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJson.State)
     (trace frames : IO.FS.Handle) (evm : Evm) (context : Context) (nextFrame : Nat) :
-    Jaune.Trace.ExecutionResult.nextFrame <$>
-        Jaune.Trace.exec (Jaune.TraceJson.sink cfg state trace frames) evm context nextFrame
+    Jaune.Legacy.Trace.ExecutionResult.nextFrame <$>
+        Jaune.Legacy.Trace.exec (Jaune.Legacy.TraceJson.sink cfg state trace frames) evm context nextFrame
       = Trace.ExecutionResult.nextFrame <$>
           Trace.exec (sink cfg state trace frames) evm context nextFrame :=
   Trace.exec_trace_legacy _ _ (fun _ _ h => (sink_legacy cfg state trace frames h).symm)

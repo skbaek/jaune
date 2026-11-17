@@ -21,8 +21,8 @@ that exact entry.  This is the generic bridge for callers that already retain
 the `Frame.enter` equation, including delegated children. -/
 theorem processMessage_eq_settle_exec_of_enter
     (msg : Msg) (evm : Evm)
-    (henter : (Frame.ofCall msg).enter = .run evm) :
-    processMessage msg = (Frame.ofCall msg).settle (exec evm) := by
+    (henter : (Legacy.Frame.ofCall msg).enter = .run evm) :
+    processMessage msg = (Legacy.Frame.ofCall msg).settle (Legacy.exec evm) := by
   unfold processMessage runFrame
   rw [henter]
 
@@ -36,7 +36,7 @@ theorem frameEnter_eq_run_afterTransfer_of_notPrecompile
     (hcode : msg.codeAddress = some codeAddress)
     (hnotPrecompile :
       ¬ afterTransfer.stat.rules.isPrecompile codeAddress) :
-    (Frame.ofCall msg).enter =
+    (Legacy.Frame.ofCall msg).enter =
       .run (initEvm (msg.withBenv afterTransfer)) := by
   have hcode' :
       (msg.withBenv afterTransfer).codeAddress = some codeAddress := hcode
@@ -45,7 +45,7 @@ theorem frameEnter_eq_run_afterTransfer_of_notPrecompile
     unfold executeCode.enter
     rw [hcode']
     simp [hnotPrecompile]
-  unfold Frame.enter Frame.ofCall
+  unfold Legacy.Frame.enter Legacy.Frame.ofCall
   rw [hentry]
   simp only
   rw [henter]
@@ -59,8 +59,8 @@ theorem processMessage_eq_settle_exec_afterTransfer_of_notPrecompile
     (hnotPrecompile :
       ¬ afterTransfer.stat.rules.isPrecompile codeAddress) :
     processMessage msg =
-      (Frame.ofCall msg).settle
-        (exec (initEvm (msg.withBenv afterTransfer))) :=
+      (Legacy.Frame.ofCall msg).settle
+        (Legacy.exec (initEvm (msg.withBenv afterTransfer))) :=
   processMessage_eq_settle_exec_of_enter msg _
     (frameEnter_eq_run_afterTransfer_of_notPrecompile
       msg afterTransfer codeAddress hentry hcode hnotPrecompile)
@@ -73,9 +73,9 @@ theorem processMessage_eq_settle_exec_afterTransfer_of_noCodeAddress
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hcodeAddress : msg.codeAddress = .none) :
     processMessage msg =
-      (Frame.ofCall msg).settle
-        (exec (initEvm (msg.withBenv afterTransfer))) := by
-  unfold processMessage runFrame Frame.enter Frame.ofCall
+      (Legacy.Frame.ofCall msg).settle
+        (Legacy.exec (initEvm (msg.withBenv afterTransfer))) := by
+  unfold processMessage runFrame Legacy.Frame.enter Legacy.Frame.ofCall
   rw [hentry]
   unfold executeCode.enter
   simp only [Msg.withBenv, hcodeAddress]
@@ -88,8 +88,8 @@ theorem processMessage_eq_settle_exec_afterTransfer
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hdisable : msg.disablePrecompiles = true) :
     processMessage msg =
-      (Frame.ofCall msg).settle
-        (exec (initEvm (msg.withBenv afterTransfer))) := by
+      (Legacy.Frame.ofCall msg).settle
+        (Legacy.exec (initEvm (msg.withBenv afterTransfer))) := by
   have henter : executeCode.enter (msg.withBenv afterTransfer) =
       .inl (initEvm (msg.withBenv afterTransfer)) := by
     unfold executeCode.enter
@@ -98,9 +98,9 @@ theorem processMessage_eq_settle_exec_afterTransfer
     cases (msg.withBenv afterTransfer).codeAddress <;>
       simp [hdisable']
   have hframe :
-      (Frame.ofCall msg).enter =
+      (Legacy.Frame.ofCall msg).enter =
         .run (initEvm (msg.withBenv afterTransfer)) := by
-    unfold Frame.enter Frame.ofCall
+    unfold Legacy.Frame.enter Legacy.Frame.ofCall
     rw [hentry]
     simp only
     rw [henter]
@@ -130,12 +130,12 @@ theorem processMessage_eq_settle_exec_afterTransfer_of_codeEntry
     (hcodeEntry : executeCode.enter (msg.withBenv benv) =
       .inl (initEvm (msg.withBenv benv))) :
     processMessage msg =
-      (Frame.ofCall msg).settle
-        (exec (initEvm (msg.withBenv benv))) := by
+      (Legacy.Frame.ofCall msg).settle
+        (Legacy.exec (initEvm (msg.withBenv benv))) := by
   have henter :
-      (Frame.ofCall msg).enter =
+      (Legacy.Frame.ofCall msg).enter =
         .run (initEvm (msg.withBenv benv)) := by
-    unfold Frame.enter Frame.ofCall
+    unfold Legacy.Frame.enter Legacy.Frame.ofCall
     rw [hentry]
     simp only
     rw [hcodeEntry]
@@ -149,7 +149,7 @@ theorem processMessage_eq_settle_exec
     (hentry : msg.benvAfterTransfer = .ok msg.benv)
     (hdisable : msg.disablePrecompiles = true) :
     processMessage msg =
-      (Frame.ofCall msg).settle (exec (initEvm msg)) := by
+      (Legacy.Frame.ofCall msg).settle (Legacy.exec (initEvm msg)) := by
   have hself : msg.withBenv msg.benv = msg := by
     cases msg
     rfl
@@ -176,12 +176,12 @@ theorem processMessage_clean_of_exec_afterTransfer
     (hentry : msg.benvAfterTransfer = .ok afterTransfer)
     (hdisable : msg.disablePrecompiles = true)
     (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
-    (hexec : exec (initEvm (msg.withBenv afterTransfer)) = .ok post)
+    (hexec : Legacy.exec (initEvm (msg.withBenv afterTransfer)) = .ok post)
     (herror : post.error = none) :
     processMessage msg = .ok post := by
   rw [processMessage_eq_settle_exec_afterTransfer
     msg afterTransfer hentry hdisable, hexec]
-  simp [Frame.ofCall, Frame.settle, Frame.settleMsg,
+  simp [Legacy.Frame.ofCall, Legacy.Frame.settle, Legacy.Frame.settleMsg,
     executeCode.handleErrorWith_ok, processMessage.settle, herror, hsweep,
     Bind.bind, Except.bind]
 
@@ -191,7 +191,7 @@ theorem processMessage_clean_of_exec
     (hentry : msg.benvAfterTransfer = .ok msg.benv)
     (hdisable : msg.disablePrecompiles = true)
     (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
-    (hexec : exec (initEvm msg) = .ok post)
+    (hexec : Legacy.exec (initEvm msg) = .ok post)
     (herror : post.error = none) :
     processMessage msg = .ok post := by
   have hself : msg.withBenv msg.benv = msg := by
@@ -209,13 +209,13 @@ theorem processMessage_revert_of_exec_afterTransfer
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
     (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
-    (hexec : exec (initEvm (msg.withBenv afterTransfer)) =
+    (hexec : Legacy.exec (initEvm (msg.withBenv afterTransfer)) =
       .error (.revert, raw)) :
     processMessage msg = .ok (settledRevert msg raw) := by
   rw [processMessage_eq_settle_exec_afterTransfer
     msg afterTransfer hentry hdisable, hexec]
-  simp only [Frame.settle_eq_settleMsg_handleErrorWith, Frame.ofCall, hgas]
-  simp only [Frame.settleMsg, processMessage.settle, Devm.recordTouch_of_not_touchedSweep hsweep]
+  simp only [Legacy.Frame.settle_eq_settleMsg_handleErrorWith, Legacy.Frame.ofCall, hgas]
+  simp only [Legacy.Frame.settleMsg, processMessage.settle, Devm.recordTouch_of_not_touchedSweep hsweep]
   rfl
 
 /-- A raw REVERT from creation code with no separate code address settles to
@@ -226,13 +226,13 @@ theorem processMessage_revert_of_exec_afterTransfer_of_noCodeAddress
     (hcodeAddress : msg.codeAddress = .none)
     (hgas : msg.benv.stat.rules.stateGas = none)
     (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
-    (hexec : exec (initEvm (msg.withBenv afterTransfer)) =
+    (hexec : Legacy.exec (initEvm (msg.withBenv afterTransfer)) =
       .error (.revert, raw)) :
     processMessage msg = .ok (settledRevert msg raw) := by
   rw [processMessage_eq_settle_exec_afterTransfer_of_noCodeAddress
     msg afterTransfer hentry hcodeAddress, hexec]
-  simp only [Frame.settle_eq_settleMsg_handleErrorWith, Frame.ofCall, hgas]
-  simp only [Frame.settleMsg, processMessage.settle, Devm.recordTouch_of_not_touchedSweep hsweep]
+  simp only [Legacy.Frame.settle_eq_settleMsg_handleErrorWith, Legacy.Frame.ofCall, hgas]
+  simp only [Legacy.Frame.settleMsg, processMessage.settle, Devm.recordTouch_of_not_touchedSweep hsweep]
   rfl
 
 /-- A clean raw execution from an exact post-transfer interpreter entry
@@ -243,12 +243,12 @@ theorem processMessage_clean_of_exec_afterTransfer_of_codeEntry
     (hcodeEntry : executeCode.enter (msg.withBenv benv) =
       .inl (initEvm (msg.withBenv benv)))
     (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
-    (hexec : exec (initEvm (msg.withBenv benv)) = .ok post)
+    (hexec : Legacy.exec (initEvm (msg.withBenv benv)) = .ok post)
     (herror : post.error = none) :
     processMessage msg = .ok post := by
   rw [processMessage_eq_settle_exec_afterTransfer_of_codeEntry
     msg benv hentry hcodeEntry, hexec]
-  simp [Frame.ofCall, Frame.settle, Frame.settleMsg,
+  simp [Legacy.Frame.ofCall, Legacy.Frame.settle, Legacy.Frame.settleMsg,
     executeCode.handleErrorWith_ok, processMessage.settle, herror, hsweep,
     Bind.bind, Except.bind]
 
@@ -259,7 +259,7 @@ theorem processMessage_revert_of_exec
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
     (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
-    (hexec : exec (initEvm msg) = .error (.revert, raw)) :
+    (hexec : Legacy.exec (initEvm msg) = .error (.revert, raw)) :
     processMessage msg = .ok (settledRevert msg raw) := by
   have hself : msg.withBenv msg.benv = msg := by
     cases msg
@@ -277,13 +277,13 @@ theorem processMessage_halt_of_exec_afterTransfer
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
     (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
-    (hexec : exec (initEvm (msg.withBenv afterTransfer)) =
+    (hexec : Legacy.exec (initEvm (msg.withBenv afterTransfer)) =
       .error (.halt reason, raw)) :
     processMessage msg = .ok (settledHalt msg reason raw) := by
   rw [processMessage_eq_settle_exec_afterTransfer
     msg afterTransfer hentry hdisable, hexec]
-  simp only [Frame.settle_eq_settleMsg_handleErrorWith, Frame.ofCall, hgas]
-  simp only [Frame.settleMsg, processMessage.settle, Devm.recordTouch_of_not_touchedSweep hsweep]
+  simp only [Legacy.Frame.settle_eq_settleMsg_handleErrorWith, Legacy.Frame.ofCall, hgas]
+  simp only [Legacy.Frame.settleMsg, processMessage.settle, Devm.recordTouch_of_not_touchedSweep hsweep]
   rfl
 
 /-- A raw exceptional halt settles to `settledHalt`. -/
@@ -293,7 +293,7 @@ theorem processMessage_halt_of_exec
     (hdisable : msg.disablePrecompiles = true)
     (hgas : msg.benv.stat.rules.stateGas = none)
     (hsweep : msg.benv.stat.rules.settlement.touchedSweep = false)
-    (hexec : exec (initEvm msg) = .error (.halt reason, raw)) :
+    (hexec : Legacy.exec (initEvm msg) = .error (.halt reason, raw)) :
     processMessage msg = .ok (settledHalt msg reason raw) := by
   have hself : msg.withBenv msg.benv = msg := by
     cases msg

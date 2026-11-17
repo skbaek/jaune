@@ -23,7 +23,7 @@ namespace Legacy
 the outer one, after a creation's set-up; the saved state's world, created accounts and accessed
 sets are the outer message's. `Frame.ofCall msg` and `Frame.ofCreate msg` have it with
 `initDevm msg`. -/
-structure Frame.TopCoherent (f : Jaune.Frame) (saved : Devm) : Prop where
+structure Frame.TopCoherent (f : Jaune.Legacy.Frame) (saved : Devm) : Prop where
   /-- The inner message is the outer one, set up for a creation. -/
   paired : f.inner = if f.isCreate then processCreateMessage.msg f.outer else f.outer
   /-- The saved state is the outer message's. -/
@@ -41,7 +41,7 @@ structure Frame.TopCoherent (f : Jaune.Frame) (saved : Devm) : Prop where
 
 /-- `Frame.TopCoherent`, and the outer message's inherited deletions are the saved state's,
 when the rules pay a self-destruct refund. A spawned child has it with its saved caller. -/
-structure Frame.Coherent (f : Jaune.Frame) (saved : Devm) : Prop
+structure Frame.Coherent (f : Jaune.Legacy.Frame) (saved : Devm) : Prop
     extends Frame.TopCoherent f saved where
   /-- The inherited deletions are the saved caller's, under rules with the refund. -/
   deletions : f.outer.inheritedDeletions =
@@ -197,7 +197,7 @@ def Frame.Result.ofSettled :
 
 /-- **Settle.** Today's settlement, read as a frame result, is the staged one, for every clean raw
 result. -/
-theorem settle_legacy (f : Jaune.Frame) (saved : Devm) (h : Legacy.Frame.TopCoherent f saved)
+theorem settle_legacy (f : Jaune.Legacy.Frame) (saved : Devm) (h : Legacy.Frame.TopCoherent f saved)
     (raw : Execution) (clean : raw.Clean) :
     Frame.Result.ofSettled (f.settle raw)
       = settle ⟨Message.ofLegacy f.outer f.isCreate, Frame.State.ofDevm saved⟩ raw := by
@@ -210,7 +210,7 @@ theorem settle_legacy (f : Jaune.Frame) (saved : Devm) (h : Legacy.Frame.TopCohe
         simp [Devm.error, Devm.withError, Devm.setMeta, Devm.withGasLeft, Devm.setMach,
           Devm.rollback, Devm.setWorld, Devm.withStorageWrites, Devm.restoreStateGas,
           Devm.withRefundCounter, Devm.forfeitRemainingGas, Devm.output, Devm.gasLeft,
-          Devm.stateGas, Devm.createdAccounts, Jaune.Frame.settle, settle, Jaune.Frame.settleMsg,
+          Devm.stateGas, Devm.createdAccounts, Jaune.Legacy.Frame.settle, settle, Jaune.Legacy.Frame.settleMsg,
           executeCode.handleErrorWith, executeCode.handleError, executeCode.handleErrorAmsterdam,
           processMessage.settle,
           Frame.Result.ofSettled, Message.ofLegacy, hsg, Frame.enteredWorld, bind, Except.bind,
@@ -218,7 +218,7 @@ theorem settle_legacy (f : Jaune.Frame) (saved : Devm) (h : Legacy.Frame.TopCohe
       all_goals rfl
     · simp only [Execution.Clean, Devm.error] at clean
       cases hsg : inner.benv.stat.rules.stateGas <;>
-        simp [hsg, Devm.error, Devm.output, Jaune.Frame.settle, settle, Jaune.Frame.settleMsg,
+        simp [hsg, Devm.error, Devm.output, Jaune.Legacy.Frame.settle, settle, Jaune.Legacy.Frame.settleMsg,
           executeCode.handleErrorWith, executeCode.handleError, executeCode.handleErrorAmsterdam,
           processMessage.settle, Frame.Result.ofSettled, Message.ofLegacy, bind, Except.bind,
           clean]
@@ -228,7 +228,7 @@ theorem settle_legacy (f : Jaune.Frame) (saved : Devm) (h : Legacy.Frame.TopCohe
         simp [Devm.error, Devm.withError, Devm.setMeta, Devm.withGasLeft, Devm.setMach,
           Devm.rollback, Devm.setWorld, Devm.withStorageWrites, Devm.restoreStateGas,
           Devm.withRefundCounter, Devm.forfeitRemainingGas, Devm.output, Devm.gasLeft,
-          Devm.stateGas, Devm.createdAccounts, Jaune.Frame.settle, settle, Jaune.Frame.settleMsg,
+          Devm.stateGas, Devm.createdAccounts, Jaune.Legacy.Frame.settle, settle, Jaune.Legacy.Frame.settleMsg,
           executeCode.handleErrorWith, executeCode.handleError, executeCode.handleErrorAmsterdam,
           processMessage.settle, Frame.Result.ofSettled, Message.ofLegacy, Frame.enteredWorld,
           bind, Except.bind, recordTouch_self_contains_ripemd160, Frame.State.ofDevm, Devm.state,
@@ -241,7 +241,7 @@ theorem settle_legacy (f : Jaune.Frame) (saved : Devm) (h : Legacy.Frame.TopCohe
         simp [hsg, Devm.error, Devm.setMeta, Devm.withGasLeft, Devm.setMach, Devm.setWorld,
           Devm.withStorageWrites, Devm.restoreStateGas,
           Devm.withRefundCounter, Devm.forfeitRemainingGas, Devm.output, Devm.gasLeft,
-          Devm.stateGas, Devm.createdAccounts, Jaune.Frame.settle, settle, Jaune.Frame.settleMsg,
+          Devm.stateGas, Devm.createdAccounts, Jaune.Legacy.Frame.settle, settle, Jaune.Legacy.Frame.settleMsg,
           executeCode.handleErrorWith, executeCode.handleError, executeCode.handleErrorAmsterdam,
           processMessage.settle, Frame.Result.ofSettled, Message.ofLegacy, bind, Except.bind,
           Frame.State.ofDevm, Devm.state, processCreateMessage.settle, processCreateMessage.msg,
@@ -315,13 +315,13 @@ theorem processCreateMessage.settle_failed_world {msg : Msg}
     · cases hs; rfl
 
 /-- A failed settled result's world is the outer message's. -/
-theorem Frame.settle_failed_world (f : Jaune.Frame)
+theorem Frame.settle_failed_world (f : Jaune.Legacy.Frame)
     (paired : f.inner = if f.isCreate then processCreateMessage.msg f.outer else f.outer)
     {raw : Execution} {d : Devm} (hs : f.settle raw = .ok d) (hf : d.error.isSome) :
     d.world = { state := f.outer.benv.state, transientStorage := f.outer.tenv.transientStorage
                 storageWrites := f.outer.benv.storageWrites } := by
   rcases f with ⟨outer, inner, isCreate⟩
-  simp only [Jaune.Frame.settle, Jaune.Frame.settleMsg] at hs
+  simp only [Jaune.Legacy.Frame.settle, Jaune.Legacy.Frame.settleMsg] at hs
   cases isCreate <;> simp only [ite_true, Bool.false_eq_true, ite_false] at paired hs <;>
     subst paired
   · exact processMessage.settle_failed_world hs hf
@@ -388,7 +388,7 @@ theorem processCreateMessage.settle_failed_refund {msg : Msg} {sg : StateGasRule
     exact hin (by simpa [Devm.error, Option.isSome_iff_ne_none] using hn)
 
 /-- Under state gas a failed settled result has refund zero, given a clean raw result. -/
-theorem Frame.settle_failed_refund (f : Jaune.Frame)
+theorem Frame.settle_failed_refund (f : Jaune.Legacy.Frame)
     (paired : f.inner = if f.isCreate then processCreateMessage.msg f.outer else f.outer)
     (hrules : f.outer.benv.stat.rules.stateGas.isSome) {raw : Execution} (clean : raw.Clean)
     {d : Devm} (hs : f.settle raw = .ok d) (hf : d.error.isSome) :
@@ -396,7 +396,7 @@ theorem Frame.settle_failed_refund (f : Jaune.Frame)
   obtain ⟨sg, hsg⟩ := Option.isSome_iff_exists.mp hrules
   have hinner : f.inner.benv.stat.rules.stateGas = some sg := by
     rw [paired]; split <;> exact hsg
-  simp only [Jaune.Frame.settle, Jaune.Frame.settleMsg, executeCode.handleErrorWith, hinner] at hs
+  simp only [Jaune.Legacy.Frame.settle, Jaune.Legacy.Frame.settleMsg, executeCode.handleErrorWith, hinner] at hs
   have key : ∀ {d : Devm}, processMessage.settle f.inner
       (executeCode.handleErrorAmsterdam raw) = .ok d → d.error.isSome → d.refundCounter = 0 := by
     intro d h hf

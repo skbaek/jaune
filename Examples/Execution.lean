@@ -50,7 +50,7 @@ def execution (env : Sevm) (base : Devm) (a b : UInt8) :
       Devm.setMach, Gas.veryLow]
   · simp [SymbolicPush.post, initial, Devm.stack, Devm.setMach]
   · exact Or.inl (by simp)
-  exact .halt (Jaune.Evm.step_last (devm := finalState base a b) (l := .stop) (last a b))
+  exact .halt (Jaune.Legacy.Evm.step_last (devm := finalState base a b) (l := .stop) (last a b))
 
 theorem final_stack (base : Devm) (a b : UInt8) :
     (finalState base a b).stack = [Bytes.toU256 [b], Bytes.toU256 [a]] := rfl
@@ -66,8 +66,8 @@ theorem final_meta (base : Devm) (a b : UInt8) :
 
 /-- Adequacy connects the constructed derivation to the total interpreter. -/
 theorem interpreter (env : Sevm) (base : Devm) (a b : UInt8) :
-    exec ⟨0, { env with code := code a b }, initial base⟩ =
+    Legacy.exec ⟨0, { env with code := code a b }, initial base⟩ =
       .ok (finalState base a b) :=
-  (Jaune.exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b⟩
+  (Jaune.Legacy.exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b⟩
 
 end Examples.Execution

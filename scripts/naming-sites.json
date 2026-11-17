@@ -1,5 +1,42 @@
 {
  "schema_version": 1,
  "description": "Reviewed sites of the next whole-tree plan. Empty: the 50 G0a sites (jsn-u9) decided tokens of the pre-rename tree for the G0a map; the G0a application consumed them (45 of their files changed bytes, and the 5 unchanged ones name tokens no later map row leaves unresolved), so they are retired at the G0b map carry (jsn-u17). They remain in Git history at 904d7fff.",
- "sites": []
+ "sites": [
+  {
+   "path": "scripts/naming-map-gen/CollisionCheck.lean",
+   "sha256": "5934a447eaa9a17467b4f442677cb601855a079bd365108f6cc02f8462669f64",
+   "line": 24,
+   "column": 23,
+   "token": "Trace",
+   "decision": "unchanged",
+   "reason": "A module name in an importModules literal (`Jaune.Trace` / `Jaune.TraceJson`), not a constant: the W1 switch moves the old tracer's namespaces to Jaune.Legacy but no module (jsn-u29, relocation 1)."
+  },
+  {
+   "path": "scripts/naming-map-gen/CollisionCheck.lean",
+   "sha256": "5934a447eaa9a17467b4f442677cb601855a079bd365108f6cc02f8462669f64",
+   "line": 24,
+   "column": 49,
+   "token": "TraceJson",
+   "decision": "unchanged",
+   "reason": "A module name in an importModules literal (`Jaune.Trace` / `Jaune.TraceJson`), not a constant: the W1 switch moves the old tracer's namespaces to Jaune.Legacy but no module (jsn-u29, relocation 1)."
+  },
+  {
+   "path": "scripts/naming-map-gen/EnvWalk.lean",
+   "sha256": "02544b56e2a5f9658bb70c5c13d18856cfa34124bf5f9cac8da617e5ab549ffd",
+   "line": 24,
+   "column": 23,
+   "token": "Trace",
+   "decision": "unchanged",
+   "reason": "A module name in an importModules literal (`Jaune.Trace` / `Jaune.TraceJson`), not a constant: the W1 switch moves the old tracer's namespaces to Jaune.Legacy but no module (jsn-u29, relocation 1)."
+  },
+  {
+   "path": "scripts/naming-map-gen/EnvWalk.lean",
+   "sha256": "02544b56e2a5f9658bb70c5c13d18856cfa34124bf5f9cac8da617e5ab549ffd",
+   "line": 24,
+   "column": 49,
+   "token": "TraceJson",
+   "decision": "unchanged",
+   "reason": "A module name in an importModules literal (`Jaune.Trace` / `Jaune.TraceJson`), not a constant: the W1 switch moves the old tracer's namespaces to Jaune.Legacy but no module (jsn-u29, relocation 1)."
+  }
+ ]
 }

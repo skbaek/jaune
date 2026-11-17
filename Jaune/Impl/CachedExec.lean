@@ -30,25 +30,25 @@ when a later call asks for the identical slice.  The proof field is erased by
 code generation and makes every cache hit definitionally accountable to the
 ordinary `Array.sliceD` result. -/
 
-private structure CalldataCacheKey where
+private structure Legacy.CalldataCacheKey where
   data : Array UInt8
   inputIndex : Nat
   inputSize : Nat
 deriving DecidableEq
 
-private structure CalldataCache where
-  key : CalldataCacheKey
+private structure Legacy.CalldataCache where
+  key : Legacy.CalldataCacheKey
   calldata : Bytes
   valid : calldata = key.data.sliceD key.inputIndex key.inputSize 0
 
-private def CalldataCache.get
-    (cache : Option CalldataCache) (data : Array UInt8)
-    (inputIndex inputSize : Nat) : Bytes × Option CalldataCache :=
-  let key : CalldataCacheKey := ⟨data, inputIndex, inputSize⟩
+private def Legacy.CalldataCache.get
+    (cache : Option Legacy.CalldataCache) (data : Array UInt8)
+    (inputIndex inputSize : Nat) : Bytes × Option Legacy.CalldataCache :=
+  let key : Legacy.CalldataCacheKey := ⟨data, inputIndex, inputSize⟩
   match cache with
   | some cached =>
     if h : cached.key = key then
-      let current : CalldataCache :=
+      let current : Legacy.CalldataCache :=
         { key := key
           calldata := cached.calldata
           valid := by simpa [← h] using cached.valid }
@@ -60,12 +60,12 @@ private def CalldataCache.get
     let calldata := data.sliceD inputIndex inputSize 0
     (calldata, some ⟨key, calldata, rfl⟩)
 
-private theorem CalldataCache.get_fst
-    (cache : Option CalldataCache) (data : Array UInt8)
+private theorem Legacy.CalldataCache.get_fst
+    (cache : Option Legacy.CalldataCache) (data : Array UInt8)
     (inputIndex inputSize : Nat) :
-    (CalldataCache.get cache data inputIndex inputSize).1 =
+    (Legacy.CalldataCache.get cache data inputIndex inputSize).1 =
       data.sliceD inputIndex inputSize 0 := by
-  unfold CalldataCache.get
+  unfold Legacy.CalldataCache.get
   rcases cache with _ | cached
   · rfl
   · dsimp only
@@ -80,7 +80,7 @@ private def genericCall.stepCached
     (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool)
-    (cache : Option CalldataCache) : XStep × Option CalldataCache :=
+    (cache : Option Legacy.CalldataCache) : XStep × Option Legacy.CalldataCache :=
   let evm1 := devm.withReturnData []
   if sevm.depth = 0 then
     (XStep.ofExcept do
@@ -88,11 +88,11 @@ private def genericCall.stepCached
       return .done (.ok devm), cache)
   else
     let (calldata, cache) :=
-      CalldataCache.get cache evm1.memory.data inputIndex inputSize
+      Legacy.CalldataCache.get cache evm1.memory.data inputIndex inputSize
     let childMsg :=
       callMsg sevm evm1 gas value caller target codeAddress
         shouldTransferValue isStaticcall calldata code disablePrecompiles
-    (.spawn (Frame.ofCall childMsg) (.call evm1 outputIndex outputSize), cache)
+    (.spawn (Legacy.Frame.ofCall childMsg) (.call evm1 outputIndex outputSize), cache)
 
 private theorem genericCall.stepCached_fst
     (sevm : Sevm) (devm : Devm) (gas : Nat) (value : U256)
@@ -100,34 +100,34 @@ private theorem genericCall.stepCached_fst
     (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool)
-    (cache : Option CalldataCache) :
+    (cache : Option Legacy.CalldataCache) :
     (genericCall.stepCached sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles cache).1 =
-    genericCall.step sevm devm gas value caller target codeAddress
+    Legacy.genericCall.step sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles := by
-  unfold genericCall.stepCached genericCall.step
+  unfold genericCall.stepCached Legacy.genericCall.step
   dsimp only
   split
   · rfl
-  · simp only [CalldataCache.get_fst]
+  · simp only [Legacy.CalldataCache.get_fst]
 
 /-- The cache-threaded counterpart of `XStep.ofExcept`: an `Except` whose value
 already carries the threaded cache, with the untouched cache restored on the
 error path. Naming it lets each cached call arm's proof be a rewrite rather
 than a hand-driven case analysis over the whole gas computation. -/
 private def XStep.ofExceptCached
-    (cache : Option CalldataCache)
-    (ec : Except (EvmError × Devm) (XStep × Option CalldataCache)) :
-    XStep × Option CalldataCache :=
+    (cache : Option Legacy.CalldataCache)
+    (ec : Except (EvmError × Devm) (XStep × Option Legacy.CalldataCache)) :
+    XStep × Option Legacy.CalldataCache :=
   match ec with
   | .error e => (.done (.error e), cache)
   | .ok result => result
 
 private theorem XStep.ofExceptCached_fst
-    (cache : Option CalldataCache)
-    {ec : Except (EvmError × Devm) (XStep × Option CalldataCache)}
+    (cache : Option Legacy.CalldataCache)
+    {ec : Except (EvmError × Devm) (XStep × Option Legacy.CalldataCache)}
     {eu : Except (EvmError × Devm) XStep}
     (h : Except.map Prod.fst ec = eu) :
     (XStep.ofExceptCached cache ec).1 = XStep.ofExcept eu := by
@@ -162,11 +162,11 @@ legacy arms are reproduced here verbatim from `Xinst.step` with
 through the early returns. The Amsterdam (`stateGas = some _`) arms are not
 specialized: they reach `genericCallAmsterdam.step`, a separate definition. -/
 private def MessageOp.stepCached
-    (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) :
-    MessageOp → XStep × Option CalldataCache
+    (sevm : Sevm) (devm : Devm) (cache : Option Legacy.CalldataCache) :
+    MessageOp → XStep × Option Legacy.CalldataCache
   | .call =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (MessageOp.step sevm devm .call, cache)
+    | some _ => (Legacy.MessageOp.step sevm devm .call, cache)
     | none =>
     XStep.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -214,10 +214,10 @@ private def MessageOp.stepCached
           sevm devm msgCallStipend value sevm.currentTarget callee
           newCodeAddress true false inputIndex inputSize outputIndex outputSize
           code disablePrecompiles cache :
-      Except (EvmError × Devm) (XStep × Option CalldataCache))
+      Except (EvmError × Devm) (XStep × Option Legacy.CalldataCache))
   | .callcode =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (MessageOp.step sevm devm .callcode, cache)
+    | some _ => (Legacy.MessageOp.step sevm devm .callcode, cache)
     | none =>
     XStep.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -263,10 +263,10 @@ private def MessageOp.stepCached
           sevm.currentTarget newCodeAddress true false
           inputIndex inputSize outputIndex outputSize code disablePrecompiles
           cache :
-      Except (EvmError × Devm) (XStep × Option CalldataCache))
+      Except (EvmError × Devm) (XStep × Option Legacy.CalldataCache))
   | .delegatecall =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (MessageOp.step sevm devm .delegatecall, cache)
+    | some _ => (Legacy.MessageOp.step sevm devm .delegatecall, cache)
     | none =>
     XStep.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -301,10 +301,10 @@ private def MessageOp.stepCached
         sevm.currentTarget newCodeAddress false false
         inputIndex inputSize outputIndex outputSize code disablePrecompiles
         cache :
-      Except (EvmError × Devm) (XStep × Option CalldataCache))
+      Except (EvmError × Devm) (XStep × Option Legacy.CalldataCache))
   | .staticcall =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (MessageOp.step sevm devm .staticcall, cache)
+    | some _ => (Legacy.MessageOp.step sevm devm .staticcall, cache)
     | none =>
     XStep.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -338,13 +338,13 @@ private def MessageOp.stepCached
         sevm devm msgCallStipend 0 sevm.currentTarget target newCodeAddress
         true true inputIndex inputSize outputIndex outputSize code
         disablePrecompiles cache :
-      Except (EvmError × Devm) (XStep × Option CalldataCache))
-  | x => (MessageOp.step sevm devm x, cache)
+      Except (EvmError × Devm) (XStep × Option Legacy.CalldataCache))
+  | x => (Legacy.MessageOp.step sevm devm x, cache)
 
 private theorem MessageOp.stepCached_fst
-    (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) (x : MessageOp) :
-    (MessageOp.stepCached sevm devm cache x).1 = MessageOp.step sevm devm x := by
-  cases x <;> simp only [MessageOp.stepCached, MessageOp.step]
+    (sevm : Sevm) (devm : Devm) (cache : Option Legacy.CalldataCache) (x : MessageOp) :
+    (MessageOp.stepCached sevm devm cache x).1 = Legacy.MessageOp.step sevm devm x := by
+  cases x <;> simp only [MessageOp.stepCached, Legacy.MessageOp.step]
   case call =>
     rcases hs : sevm.benvStat.rules.stateGas with _ | state
     · refine XStep.ofExceptCached_fst cache ?_
@@ -377,35 +377,35 @@ private theorem MessageOp.stepCached_fst
     · rfl
 
 private def NextOp.stepCached
-    (evm : Evm) (cache : Option CalldataCache) (n : NextOp) :
-    Step × Option CalldataCache :=
+    (evm : Evm) (cache : Option Legacy.CalldataCache) (n : NextOp) :
+    Legacy.Step × Option Legacy.CalldataCache :=
   let pc := evm.pc + n.size
   match n with
   | .message x =>
     let result := MessageOp.stepCached evm.sta evm.dyna cache x
     (XStep.toStep pc result.1, result.2)
-  | _ => (NextOp.step evm n, cache)
+  | _ => (Legacy.NextOp.step evm n, cache)
 
 private theorem NextOp.stepCached_fst
-    (evm : Evm) (cache : Option CalldataCache) (n : NextOp) :
-    (NextOp.stepCached evm cache n).1 = NextOp.step evm n := by
+    (evm : Evm) (cache : Option Legacy.CalldataCache) (n : NextOp) :
+    (NextOp.stepCached evm cache n).1 = Legacy.NextOp.step evm n := by
   cases n <;>
-    simp [NextOp.stepCached, NextOp.step, MessageOp.stepCached_fst]
+    simp [NextOp.stepCached, Legacy.NextOp.step, MessageOp.stepCached_fst]
 
 private def Evm.stepCached
-    (evm : Evm) (cache : Option CalldataCache) :
-    Step × Option CalldataCache :=
+    (evm : Evm) (cache : Option Legacy.CalldataCache) :
+    Legacy.Step × Option Legacy.CalldataCache :=
   match evm.getInst with
   | .none =>
     (.halt (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩), cache)
   | .some (.next n) => NextOp.stepCached evm cache n
-  | .some (.jump j) => (Step.ofJump (j.run evm), cache)
+  | .some (.jump j) => (Legacy.Step.ofJump (j.run evm), cache)
   | .some (.halt l) => (.halt (l.run evm.sta evm.dyna), cache)
 
 private theorem Evm.stepCached_fst
-    (evm : Evm) (cache : Option CalldataCache) :
-    (Evm.stepCached evm cache).1 = Evm.step evm := by
-  unfold Evm.stepCached Evm.step
+    (evm : Evm) (cache : Option Legacy.CalldataCache) :
+    (Evm.stepCached evm cache).1 = Legacy.Evm.step evm := by
+  unfold Evm.stepCached Legacy.Evm.step
   cases h : evm.getInst with
   | none => rfl
   | some inst =>
@@ -418,8 +418,8 @@ private theorem Evm.stepCached_fst
 exactly `execFueled`; the extra component only retains a shareable physical
 representative of an exact calldata slice. -/
 private def execFueledCachedCore :
-    Evm → Nat → Option CalldataCache →
-      Fueled (EvmError × Devm) Devm × Option CalldataCache
+    Evm → Nat → Option Legacy.CalldataCache →
+      Fueled (EvmError × Devm) Devm × Option Legacy.CalldataCache
   | _, 0, cache => (Fueled.exhausted, cache)
   | evm, fuel + 1, cache =>
     let ⟨step, cache⟩ := Evm.stepCached evm cache
@@ -444,18 +444,18 @@ private def execFueledCachedCore :
 
 private theorem execFueledCachedCore_fst :
     ∀ fuel evm cache,
-      (execFueledCachedCore evm fuel cache).1 = execFueled evm fuel := by
+      (execFueledCachedCore evm fuel cache).1 = Legacy.execFueled evm fuel := by
   intro fuel
   induction fuel with
   | zero =>
     intro evm cache
-    simp [execFueledCachedCore, execFueled]
+    simp [execFueledCachedCore, Legacy.execFueled]
   | succ fuel ih =>
     intro evm cache
     rcases hstep : Evm.stepCached evm cache with ⟨step, cache'⟩
-    have hs : step = Evm.step evm := by
+    have hs : step = Legacy.Evm.step evm := by
       simpa [hstep] using Evm.stepCached_fst evm cache
-    simp only [execFueledCachedCore, hstep, execFueled, ← hs]
+    simp only [execFueledCachedCore, hstep, Legacy.execFueled, ← hs]
     cases step with
     | halt ex => rfl
     | cont pc devm => exact ih ⟨pc, evm.sta, devm⟩ cache'
@@ -473,11 +473,11 @@ private theorem execFueledCachedCore_fst :
         dsimp only
         rcases hchild : execFueledCachedCore child fuel cache' with
           ⟨childResult, cache''⟩
-        have hc : childResult = execFueled child fuel := by
+        have hc : childResult = Legacy.execFueled child fuel := by
           simpa [hchild] using ih child cache'
         dsimp only
         rw [hc]
-        cases hrun : (execFueled child fuel).run with
+        cases hrun : (Legacy.execFueled child fuel).run with
         | none => dsimp only
         | some raw =>
           dsimp only
@@ -492,7 +492,7 @@ private def execFueledCached
   (execFueledCachedCore evm fuel none).1
 
 @[csimp] private theorem execFueled_eq_cached :
-    execFueled = execFueledCached := by
+    Legacy.execFueled = execFueledCached := by
   funext evm fuel
   symm
   exact execFueledCachedCore_fst fuel evm none

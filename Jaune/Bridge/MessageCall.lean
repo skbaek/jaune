@@ -69,7 +69,7 @@ def Pending.ofLegacy : Resume → Pending
 
 /-- A spawned child frame of today, with the `Resume` it was spawned with: the message is the
 outer one (before a creation's set-up), the checkpoint is the saved caller. -/
-def Frame.ofLegacy (f : Jaune.Frame) (rsm : Resume) : Frame :=
+def Frame.ofLegacy (f : Jaune.Legacy.Frame) (rsm : Resume) : Frame :=
   ⟨Message.ofLegacy f.outer f.isCreate, Frame.State.ofDevm rsm.parent⟩
 
 /-- A top-level frame of today: the checkpoint is the state its message starts on. -/

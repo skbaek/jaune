@@ -9,7 +9,7 @@ A sink may fail (for example, `IO` writing to a closed stream). Every successful
 return carries a kernel-checked execution projection; this says nothing about
 sink success, trace serialization, or gas-observation conventions.
 -/
-namespace Jaune.Trace
+namespace Jaune.Legacy.Trace
 
 /-- Explicit run identity plus a unique frame number and observed call depth.
 The depth here counts entered frames, unlike Sevm.depth's remaining allowance. -/
@@ -24,10 +24,10 @@ structure Context where
 must interpret gas at spawn separately for CALL and CREATE. `entered` covers
 both code and zero-instruction/precompile/preparation-failure boundaries. -/
 inductive Event where
-  | instruction (context : Context) (before : Evm) (step : Step)
-  | entered (context : Context) (frame : Frame) (entry : FrameEntry)
+  | instruction (context : Context) (before : Evm) (step : Legacy.Step)
+  | entered (context : Context) (frame : Legacy.Frame) (entry : FrameEntry)
   | exited (context : Context) (raw : Option Execution)
-  | settled (context : Context) (frame : Frame)
+  | settled (context : Context) (frame : Legacy.Frame)
       (result : Except (EvmError × State × AdrSet × TransientStorage) Devm)
   | resumed (parent : Context) (childFrame : Nat) (raw : Execution)
 
@@ -41,7 +41,7 @@ structure CertifiedResult (expected : Fueled (EvmError × Devm) Devm) where
   erases : value = expected
 
 /-- Index by the expected result so proof transport erases to runtime identity. -/
-abbrev Result (evm : Evm) (fuel : Nat) := CertifiedResult (Jaune.execFueled evm fuel)
+abbrev Result (evm : Evm) (fuel : Nat) := CertifiedResult (Jaune.Legacy.execFueled evm fuel)
 
 /-- A production driver with an arbitrary monadic streaming sink. Fuel zero
 emits no instruction. Child events precede the parent's next instruction.
@@ -55,17 +55,17 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
     (evm : Evm) → (fuel : Nat) → Context → Nat → m (Result evm fuel)
   | evm, 0, context, nextFrame => do
     sink (.exited context none)
-    pure ⟨Fueled.exhausted, nextFrame, by simp only [Jaune.execFueled]⟩
+    pure ⟨Fueled.exhausted, nextFrame, by simp only [Jaune.Legacy.execFueled]⟩
   | evm, fuel + 1, context, nextFrame => do
-    match hstep : evm.step with
+    match hstep : Legacy.Evm.step evm with
     | .halt raw =>
       sink (.instruction context evm (.halt raw))
       sink (.exited context (some raw))
-      pure ⟨Fueled.ofExcept raw, nextFrame, by simp only [Jaune.execFueled, hstep]⟩
+      pure ⟨Fueled.ofExcept raw, nextFrame, by simp only [Jaune.Legacy.execFueled, hstep]⟩
     | .cont pc devm =>
       sink (.instruction context evm (.cont pc devm))
       cast (congrArg (fun expected => m (CertifiedResult expected)) (by
-        simp only [Jaune.execFueled, hstep]))
+        simp only [Jaune.Legacy.execFueled, hstep]))
         (execFueled sink ⟨pc, evm.sta, devm⟩ fuel context nextFrame)
     | .spawn frame rsm pc =>
       sink (.instruction context evm (.spawn frame rsm pc))
@@ -79,11 +79,11 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
           sink (.resumed context nextFrame (.error error))
           sink (.exited context (some (.error error)))
           pure ⟨Fueled.ofExcept (.error error), nextFrame + 1, by
-            simp only [Jaune.execFueled, hstep, hentry, hresume]⟩
+            simp only [Jaune.Legacy.execFueled, hstep, hentry, hresume]⟩
         | .ok devm =>
           sink (.resumed context nextFrame (.ok devm))
           cast (congrArg (fun expected => m (CertifiedResult expected)) (by
-            simp only [Jaune.execFueled, hstep, hentry, hresume]))
+            simp only [Jaune.Legacy.execFueled, hstep, hentry, hresume]))
             (execFueled sink ⟨pc, evm.sta, devm⟩ fuel context (nextFrame + 1))
       | .run child =>
         sink (.entered childContext frame (.run child))
@@ -92,7 +92,7 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
         | none =>
           sink (.exited context none)
           pure ⟨Fueled.exhausted, childResult.nextFrame, by
-            simp only [Jaune.execFueled, hstep, hentry, ← childResult.erases, hchild]⟩
+            simp only [Jaune.Legacy.execFueled, hstep, hentry, ← childResult.erases, hchild]⟩
         | some raw =>
           let settled := frame.settle raw
           sink (.settled childContext frame settled)
@@ -102,13 +102,13 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
             sink (.exited context (some (.error error)))
             pure ⟨Fueled.ofExcept (.error error), childResult.nextFrame, by
               dsimp only [settled] at hresume
-              simp only [Jaune.execFueled, hstep, hentry, ← childResult.erases,
+              simp only [Jaune.Legacy.execFueled, hstep, hentry, ← childResult.erases,
                 hchild, hresume]⟩
           | .ok devm =>
             sink (.resumed context nextFrame (.ok devm))
             cast (congrArg (fun expected => m (CertifiedResult expected)) (by
               dsimp only [settled] at hresume
-              simp only [Jaune.execFueled, hstep, hentry, ← childResult.erases,
+              simp only [Jaune.Legacy.execFueled, hstep, hentry, ← childResult.erases,
                 hchild, hresume]))
               (execFueled sink ⟨pc, evm.sta, devm⟩ fuel context childResult.nextFrame)
   termination_by _ fuel _ _ => fuel
@@ -116,13 +116,13 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
 /-- The exact execution projection of every successfully returned production
 result, independent of the sink's effects. -/
 theorem execFueled_erasure {evm : Evm} {fuel : Nat} (result : Result evm fuel) :
-    result.value = Jaune.execFueled evm fuel := result.erases
+    result.value = Jaune.Legacy.execFueled evm fuel := result.erases
 
 /-- Successful total executions agree with the public executor. -/
 structure ExecutionResult (evm : Evm) where
   value : Execution
   nextFrame : Nat
-  erases : value = Jaune.exec evm
+  erases : value = Jaune.Legacy.exec evm
 
 /-- Seed exactly the same sufficient fuel as the public executor. -/
 def exec {m : Type → Type} [Monad m] (sink : Sink m) (evm : Evm)
@@ -131,21 +131,21 @@ def exec {m : Type → Type} [Monad m] (sink : Sink m) (evm : Evm)
   match hrun : result.value.run with
   | some raw =>
     pure ⟨raw, result.nextFrame, by
-      have h := execFueled_run_sufficientFuel evm
+      have h := Legacy.execFueled_run_sufficientFuel evm
       rw [← result.erases, hrun] at h
       exact Option.some.inj h⟩
   | none =>
-    have h : (none : Option Execution) = some (Jaune.exec evm) := by
-      have h := execFueled_run_sufficientFuel evm
+    have h : (none : Option Execution) = some (Jaune.Legacy.exec evm) := by
+      have h := Legacy.execFueled_run_sufficientFuel evm
       rw [← result.erases, hrun] at h
       exact h
     nomatch h
 
 /-- The total driver returns exactly the public executor's result. -/
 theorem exec_erasure {evm : Evm} (result : ExecutionResult evm) :
-    result.value = Jaune.exec evm := result.erases
+    result.value = Jaune.Legacy.exec evm := result.erases
 
-structure FrameResult (frame : Frame) where
+structure FrameResult (frame : Legacy.Frame) where
   value : Except (EvmError × State × AdrSet × TransientStorage) Devm
   nextFrame : Nat
   erases : value = Jaune.runFrame frame
@@ -153,7 +153,7 @@ structure FrameResult (frame : Frame) where
 /-- The frame boundary used by processMessage/processCreateMessage. A root
 precompile or preparation failure has no instruction events, but still has
 entry and settlement events. One invocation represents one identified run. -/
-def runFrame {m : Type → Type} [Monad m] (sink : Sink m) (frame : Frame)
+def runFrame {m : Type → Type} [Monad m] (sink : Sink m) (frame : Legacy.Frame)
     (runId : String) : m (FrameResult frame) := do
   let context : Context := ⟨runId, 0, 1⟩
   match hentry : frame.enter with
@@ -170,16 +170,16 @@ def runFrame {m : Type → Type} [Monad m] (sink : Sink m) (frame : Frame)
       simp only [Jaune.runFrame, hentry, settled, result.erases]⟩
 
 /-- Exact connection to the public runner's frame operation. -/
-theorem runFrame_erasure {frame : Frame} (result : FrameResult frame) :
+theorem runFrame_erasure {frame : Legacy.Frame} (result : FrameResult frame) :
     result.value = Jaune.runFrame frame := result.erases
 
 /-- CALL message entry uses the same settled result as the public operation. -/
-theorem processMessage_erasure {msg : Msg} (result : FrameResult (Frame.ofCall msg)) :
+theorem processMessage_erasure {msg : Msg} (result : FrameResult (Legacy.Frame.ofCall msg)) :
     result.value = Jaune.processMessage msg := result.erases
 
 /-- CREATE message entry uses the same settled result as the public operation. -/
 theorem processCreateMessage_erasure {msg : Msg}
-    (result : FrameResult (Frame.ofCreate msg)) :
+    (result : FrameResult (Legacy.Frame.ofCreate msg)) :
     result.value = Jaune.processCreateMessage msg := result.erases
 
 /-- Direct equation on the actual production driver, instantiated with any
@@ -187,16 +187,16 @@ pure sink. Effects retained by a pure state sink are not part of the execution
 projection. -/
 theorem execFueled_id_erasure (sink : Sink Id) (evm : Evm) (fuel : Nat)
     (context : Context) (nextFrame : Nat) :
-    (execFueled sink evm fuel context nextFrame).value = Jaune.execFueled evm fuel :=
+    (execFueled sink evm fuel context nextFrame).value = Jaune.Legacy.execFueled evm fuel :=
   (execFueled sink evm fuel context nextFrame).erases
 
 theorem exec_id_erasure (sink : Sink Id) (evm : Evm)
     (context : Context) (nextFrame : Nat) :
-    (exec sink evm context nextFrame).value = Jaune.exec evm :=
+    (exec sink evm context nextFrame).value = Jaune.Legacy.exec evm :=
   (exec sink evm context nextFrame).erases
 
-theorem runFrame_id_erasure (sink : Sink Id) (frame : Frame) (runId : String) :
+theorem runFrame_id_erasure (sink : Sink Id) (frame : Legacy.Frame) (runId : String) :
     (runFrame sink frame runId).value = Jaune.runFrame frame :=
   (runFrame sink frame runId).erases
 
-end Jaune.Trace
+end Jaune.Legacy.Trace

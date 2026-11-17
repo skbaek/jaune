@@ -31,38 +31,38 @@ theorem step_success (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
     (gas : cost bytes ≤ evm.dyna.gasLeft)
     (room : evm.dyna.stack.length < 1024)
     (hgate : bytes ≠ [] ∨ evm.sta.benvStat.rules.opcodes.push0) :
-    NextOp.step evm (.push bytes width) =
+    Legacy.NextOp.step evm (.push bytes width) =
       .cont (evm.pc + bytes.length + 1) (post bytes evm.dyna) := by
   dsimp [cost] at gas
   dsimp [Devm.stack] at room
-  rw [NextOp.step_push, pushGate_false evm bytes hgate]
+  rw [Legacy.NextOp.step_push, pushGate_false evm bytes hgate]
   simp [chargeGas_def, safeSub, gas, Devm.push_def, Except.assert,
-    Devm.stack, Devm.setMach, room, post, cost, bind, Except.bind, Step.ofExecution]
+    Devm.stack, Devm.setMach, room, post, cost, bind, Except.bind, Legacy.Step.ofExecution]
 
 /-- Gas exhaustion is checked before stack capacity and leaves the input state. -/
 theorem step_outOfGas (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
     (gas : evm.dyna.gasLeft < cost bytes)
     (hgate : bytes ≠ [] ∨ evm.sta.benvStat.rules.opcodes.push0) :
-    NextOp.step evm (.push bytes width) =
+    Legacy.NextOp.step evm (.push bytes width) =
       .halt (.error ⟨.halt (.outOfGas .none), evm.dyna⟩) := by
   dsimp [cost] at gas
-  rw [NextOp.step_push, pushGate_false evm bytes hgate]
+  rw [Legacy.NextOp.step_push, pushGate_false evm bytes hgate]
   simp [chargeGas_def, safeSub, Nat.not_le_of_lt gas,
-    bind, Except.bind, Step.ofExecution]
+    bind, Except.bind, Legacy.Step.ofExecution]
 
 /-- With gas available, stack overflow retains the gas charge in the raw error. -/
 theorem step_stackOverflow (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
     (gas : cost bytes ≤ evm.dyna.gasLeft)
     (full : 1024 ≤ evm.dyna.stack.length)
     (hgate : bytes ≠ [] ∨ evm.sta.benvStat.rules.opcodes.push0) :
-    NextOp.step evm (.push bytes width) =
+    Legacy.NextOp.step evm (.push bytes width) =
       .halt (.error ⟨.halt (.stackOverflow .none), afterCharge bytes evm.dyna⟩) := by
   dsimp [cost] at gas
   dsimp [Devm.stack] at full
-  rw [NextOp.step_push, pushGate_false evm bytes hgate]
+  rw [Legacy.NextOp.step_push, pushGate_false evm bytes hgate]
   simp [chargeGas_def, safeSub, gas, Devm.push_def, Except.assert,
     Devm.stack, Devm.setMach, afterCharge, cost, bind, Except.bind,
-    Step.ofExecution, Nat.not_lt_of_ge full]
+    Legacy.Step.ofExecution, Nat.not_lt_of_ge full]
 
 /-- Prepend a decoded PUSH to a complete continuation, preserving its outcome. -/
 def prepend {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
@@ -72,7 +72,7 @@ def prepend {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
     (hgate : bytes ≠ [] ∨ sevm.benvStat.rules.opcodes.push0)
     (next : Exec (pc + bytes.length + 1) sevm (post bytes pre) out) :
     Exec pc sevm pre out :=
-  .cont ((Evm.step_next decoded).trans
+  .cont ((Legacy.Evm.step_next decoded).trans
     (step_success ⟨pc, sevm, pre⟩ bytes width gas room hgate)) next
 
 end Jaune.SymbolicPush

@@ -213,7 +213,7 @@ private def prepareCreateGuard (collision : Bool) :
   match prepareTopLevelAmsterdam amsterdamStateGasRules msg with
   | .ok ⟨_, devm⟩ => some ⟨devm.gasLeft, devm.stateGasLeft, none⟩
   | .error ⟨error, devm⟩ =>
-    match settleTopLevelPreparationFailure msg error devm with
+    match Legacy.settleTopLevelPreparationFailure msg error devm with
     | .ok ⟨_, output⟩ =>
       some ⟨output.gasLeft, output.stateGasLeft, output.error⟩
     | .error _ => none
@@ -293,7 +293,7 @@ private def legacyStorageOnlyCreateGuard : Bool :=
     {(default : Msg) with
       benv := {(default : Benv) with state := state}
       target := none, currentTarget := address, gas := 20000, depth := 1024}
-  match processMessageCall.create msg with
+  match Legacy.processMessageCall.create msg with
   | .ok ⟨post, output⟩ =>
     output.error.isNone && (post.get address).storage.isEmpty && (post.get address).nonce == 1
   | .error _ => false
@@ -302,7 +302,7 @@ private def amsterdamStorageOnlyCreateGuard : Bool :=
   let address : Address := 13
   let state := State.setStorVal .empty address 1 1
   let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
-  match processMessageCall.create msg with
+  match Legacy.processMessageCall.create msg with
   | .ok ⟨post, output⟩ =>
     output.error.isNone && (post.get address).storage.isEmpty && (post.get address).nonce == 1
   | .error _ => false
@@ -316,7 +316,7 @@ private def legacyCreateCollisionGuard (code : Bool) : Bool :=
     {(default : Msg) with
       benv := {(default : Benv) with state := state}
       target := none, currentTarget := address, gas := 20000, depth := 1024}
-  match processMessageCall.create msg with
+  match Legacy.processMessageCall.create msg with
   | .ok ⟨_, output⟩ =>
     output.gasLeft == 0 && output.error == some (.halt (.addressCollision .none))
   | .error _ => false
@@ -2042,7 +2042,7 @@ private def orderingGuardCall
     (gas : Nat) (x : MessageOp) (stack : List U256) :=
   let msg := orderingGuardDelegatedMessage gas
   let d := (initDevm msg).withStack stack
-  match MessageOp.step (initSevm msg) d x with
+  match Legacy.MessageOp.step (initSevm msg) d x with
   | .done r => orderingGuardSummary r
   | .spawn _ _ => ("spawn", 0, [], false, false)
 
@@ -2255,7 +2255,7 @@ private def touchMsg (fork : Fork) (parentCode cCode : List UInt8) : Msg :=
 /-- The transaction-level touched set `processMessageCall` reports. -/
 private def touchedOf (fork : Fork) (parentCode : List UInt8)
     (cCode : List UInt8 := []) : Option (List Address) :=
-  match processMessageCall (touchMsg fork parentCode cCode) with
+  match Legacy.processMessageCall (touchMsg fork parentCode cCode) with
   | .ok (_, out) => some out.touchedAccounts.toList
   | .error _ => none
 
@@ -2268,7 +2268,7 @@ private def touchedOf (fork : Fork) (parentCode : List UInt8)
 -- credit erases it at once and nothing is touched. Reported as (`touchE` still
 -- present, its slot 1, the touched set).
 private def touchSelfdestruct (fork : Fork) : Option (Bool × U256 × List Address) :=
-  match processMessageCall (touchMsg fork [0x61, 0x20, 0x00, 0xFF] []) with
+  match Legacy.processMessageCall (touchMsg fork [0x61, 0x20, 0x00, 0xFF] []) with
   | .ok (state, out) =>
     some (state[touchE]?.isSome, (state.get touchE).storage.get 1, out.touchedAccounts.toList)
   | .error _ => none
@@ -2313,7 +2313,7 @@ private def touchSelfdestructThenFund (fork : Fork) : Option (U256 × U256) :=
   let parentCode := touchCall 0x4000 50000 ++ touchCallValue 0x2000 1000 1 ++ [0x00]
   let msg := touchMsg fork parentCode [0x61, 0x20, 0x00, 0xFF]
   let msg := { msg with benv := msg.benv.setBal touchParent 1 }
-  match processMessageCall msg with
+  match Legacy.processMessageCall msg with
   | .ok (state, out) =>
     let state := sweepTouchedAccounts msg.benv.stat.rules out.touchedAccounts.toList state
     some ((state.get touchE).balance, (state.get touchE).storage.get 1)

@@ -46,7 +46,7 @@ private def totalGuardSummary
 -- definite out-of-gas result, because the seeded budget is provably sufficient.
 private def totalGuardArithmeticLoop : Bool :=
   let msg := totalGuardMsg [0x5B, 0x60, 0x00, 0x56] 1000 8
-  match exec (initEvm msg), processMessage msg with
+  match Legacy.exec (initEvm msg), processMessage msg with
   | .error ⟨err, _⟩, .ok devm =>
     err == .halt (.outOfGas .none) &&
       devm.error == some (.halt (.outOfGas .none)) &&
@@ -69,7 +69,7 @@ private def totalGuardNestedCallMsg : Msg :=
   }
 
 private def totalGuardNestedCallDirect :=
-  totalGuardSummary (runFrame (Frame.ofCall totalGuardNestedCallMsg))
+  totalGuardSummary (runFrame (Legacy.Frame.ofCall totalGuardNestedCallMsg))
 
 private def totalGuardNestedCallPublic :=
   totalGuardSummary (processMessage totalGuardNestedCallMsg)
@@ -133,7 +133,7 @@ private def totalGuardDepthZero : Bool :=
 -- A PUSH with zero gas halts through the frozen OutOfGasError channel.
 private def totalGuardOog : Bool :=
   let msg := totalGuardMsg [0x60, 0x01, 0x00] 0 8
-  match exec (initEvm msg) with
+  match Legacy.exec (initEvm msg) with
   | .error ⟨err, _⟩ => err == .halt (.outOfGas .none)
   | .ok _ => false
 
@@ -146,7 +146,7 @@ private def totalGuardRevert : Bool :=
       [ 0x60, 0x2A, 0x60, 0x00, 0x52,
         0x60, 0x20, 0x60, 0x00, 0xFD ]
       1000 8
-  match runFrame (Frame.ofCall msg) with
+  match runFrame (Legacy.Frame.ofCall msg) with
   | .ok devm =>
     devm.error == some .revert &&
       devm.output.length == 32 &&

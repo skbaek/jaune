@@ -1020,16 +1020,16 @@ hypothesis is what each `Xinst` constructor has to establish: the gas the parent
 keeps, plus the whole budget handed to the child, is still strictly less than
 what the parent had when the step began. The depth-0 refund branch hands the
 budget straight back, so it needs exactly the same inequality. -/
-theorem genericCall.step_gasDecreasing
+theorem Legacy.genericCall.step_gasDecreasing
     (sevm : Sevm) (devm : Devm) (gas : Nat) (value : U256)
     (caller target codeAddress : Address) (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool) {n : Nat}
     (hn : devm.gasMeasure + gas < n) :
-    (genericCall.step sevm devm gas value caller target codeAddress
+    (Legacy.genericCall.step sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles).GasDecreasing sevm n := by
-  unfold genericCall.step
+  unfold Legacy.genericCall.step
   split
   · apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -1047,11 +1047,11 @@ theorem genericCall.step_gasDecreasing
     -- under the spawning frame's rules -- which holds by construction, since
     -- `callMsg` copies `sevm.benvStat` verbatim.
     refine ⟨?_, rfl⟩
-    show (Frame.ofCall _).inner.gas + Resume.parentGas _ < n
-    simp only [Frame.ofCall, callMsg, Resume.parentGas, Devm.withReturnData_gasMeasure]
+    show (Legacy.Frame.ofCall _).inner.gas + Resume.parentGas _ < n
+    simp only [Legacy.Frame.ofCall, callMsg, Resume.parentGas, Devm.withReturnData_gasMeasure]
     omega
 
-theorem genericCallAmsterdam.step_gasDecreasing
+theorem Legacy.genericCallAmsterdam.step_gasDecreasing
     (sevm : Sevm) (state : StateGasRules) (devm : Devm)
     (gas reservoir : Nat) (value : U256)
     (caller target codeAddress : Address) (shouldTransferValue isStaticcall : Bool)
@@ -1059,11 +1059,11 @@ theorem genericCallAmsterdam.step_gasDecreasing
     (code : ByteArray)
     (disablePrecompiles newAccountCharged insufficientBalance : Bool) {n : Nat}
     (hn : devm.gasMeasure + gas < n) :
-    (genericCallAmsterdam.step sevm state devm gas reservoir value caller target
+    (Legacy.genericCallAmsterdam.step sevm state devm gas reservoir value caller target
       codeAddress shouldTransferValue isStaticcall inputIndex inputSize
       outputIndex outputSize code disablePrecompiles newAccountCharged
       insufficientBalance).GasDecreasing sevm n := by
-  unfold genericCallAmsterdam.step
+  unfold Legacy.genericCallAmsterdam.step
   split
   · apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -1078,8 +1078,8 @@ theorem genericCallAmsterdam.step_gasDecreasing
         Devm.creditStateGasRefund_gasMeasure] <;>
       omega
   · refine ⟨?_, rfl⟩
-    show (Frame.ofCall _).inner.gas + Resume.parentGas _ < n
-    simp only [Frame.ofCall, callMsg, Resume.parentGas,
+    show (Legacy.Frame.ofCall _).inner.gas + Resume.parentGas _ < n
+    simp only [Legacy.Frame.ofCall, callMsg, Resume.parentGas,
       Devm.withReturnData_gasMeasure]
     omega
 
@@ -1103,16 +1103,16 @@ theorem call_charge_stipend_lt
     (cs := cs) hstip
   omega
 
-theorem MessageOp.step_call_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
+theorem Legacy.MessageOp.step_call_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     (hstate : sevm.benvStat.rules.stateGas = none) :
-    (MessageOp.step sevm devm .call).GasDecreasing sevm devm.gasMeasure := by
+    (Legacy.MessageOp.step sevm devm .call).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
   have hacc := hv.access
   -- The access step, of either shape: the arms reduce by `match` on the
   -- schedule, and both leave a positive price `pre` and a gas-neutral `dA`.
   rcases hA : sevm.benvStat.rules.access with g | _ <;> rw [hA] at hacc
   all_goals
-    simp only [MessageOp.step, hstate, hA]
+    simp only [Legacy.MessageOp.step, hstate, hA]
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
     obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
@@ -1186,17 +1186,17 @@ theorem MessageOp.step_call_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     · -- The spawn: the child's whole budget is the stipend.
       simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
       rw [← hstep]
-      apply genericCall.step_gasDecreasing
+      apply Legacy.genericCall.step_gasDecreasing
       rw [Devm.memExtends_gasMeasure]
       exact key
 
-theorem MessageOp.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (MessageOp.step sevm devm .call).GasDecreasing sevm devm.gasMeasure := by
+theorem Legacy.MessageOp.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Legacy.MessageOp.step sevm devm .call).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
-  simp only [MessageOp.step]
+  simp only [Legacy.MessageOp.step]
   split
-  · simpa only [MessageOp.step, *] using
-      MessageOp.step_call_gasDecreasing_legacy sevm devm (by assumption)
+  · simpa only [Legacy.MessageOp.step, *] using
+      Legacy.MessageOp.step_call_gasDecreasing_legacy sevm devm (by assumption)
   · rename_i state hstate
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -1293,7 +1293,7 @@ theorem MessageOp.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
         Gas.callStipend
       simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
       rw [← hstep]
-      apply genericCallAmsterdam.step_gasDecreasing
+      apply Legacy.genericCallAmsterdam.step_gasDecreasing
       rw [Devm.memExtends_gasMeasure,
         Devm.drainStateGasReservoir_gasMeasure]
       omega
@@ -1304,7 +1304,7 @@ theorem MessageOp.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
         Gas.callStipend
       simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
       rw [← hstep]
-      apply genericCallAmsterdam.step_gasDecreasing
+      apply Legacy.genericCallAmsterdam.step_gasDecreasing
       rw [Devm.memExtends_gasMeasure,
         Devm.drainStateGasReservoir_gasMeasure]
       omega
@@ -2050,13 +2050,13 @@ theorem except64th_le (n : Nat) : except64th n ≤ n := by
 @[simp] theorem processCreateMessage.msg_gas (msg : Msg) :
     (processCreateMessage.msg msg).gas = msg.gas := rfl
 
-theorem genericCreate.step_gasDecreasing
+theorem Legacy.genericCreate.step_gasDecreasing
     (sevm : Sevm) (devm : Devm) (endowment : U256)
     (newAddress : Address) (memoryIndex memorySize : Nat) {n : Nat}
     (hn : devm.gasMeasure < n) :
     XStep.GasDecreasing sevm n
-      (genericCreate.step sevm devm endowment newAddress memoryIndex memorySize) := by
-  unfold genericCreate.step
+      (Legacy.genericCreate.step sevm devm endowment newAddress memoryIndex memorySize) := by
+  unfold Legacy.genericCreate.step
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
   obtain ⟨_, _hsize, hstep⟩ := Except.bind_eq_ok hstep
@@ -2089,8 +2089,8 @@ theorem genericCreate.step_gasDecreasing
     · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
       rw [← hstep]
       refine ⟨?_, rfl⟩
-      show (Frame.ofCreate _).inner.gas + Resume.parentGas _ < n
-      simp only [Frame.ofCreate, processCreateMessage.msg_gas, createMsg,
+      show (Legacy.Frame.ofCreate _).inner.gas + Resume.parentGas _ < n
+      simp only [Legacy.Frame.ofCreate, processCreateMessage.msg_gas, createMsg,
         Resume.parentGas, addAccessedAddress_gasMeasure,
         Devm.incrNonce_gasMeasure, Devm.withReturnData_gasMeasure,
         Devm.withGasLeft_gasMeasure]
@@ -2098,13 +2098,13 @@ theorem genericCreate.step_gasDecreasing
       have hm := Devm.gasMeasure_eq devm
       omega
 
-theorem genericCreateAmsterdam.step_gasDecreasing
+theorem Legacy.genericCreateAmsterdam.step_gasDecreasing
     (sevm : Sevm) (state : StateGasRules) (devm : Devm) (endowment : U256)
     (newAddress : Address) (memoryIndex memorySize : Nat) {n : Nat}
     (hn : devm.gasMeasure < n) :
-    (genericCreateAmsterdam.step sevm state devm endowment newAddress
+    (Legacy.genericCreateAmsterdam.step sevm state devm endowment newAddress
       memoryIndex memorySize).GasDecreasing sevm n := by
-  unfold genericCreateAmsterdam.step
+  unfold Legacy.genericCreateAmsterdam.step
   apply XStep.ofExcept_gasDecreasing
   intro step hstep
   dsimp only at hstep
@@ -2137,8 +2137,8 @@ theorem genericCreateAmsterdam.step_gasDecreasing
       · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
         rw [← hstep]
         refine ⟨?_, rfl⟩
-        show (Frame.ofCreate _).inner.gas + Resume.parentGas _ < n
-        simp only [Frame.ofCreate, processCreateMessage.msg_gas, createMsg,
+        show (Legacy.Frame.ofCreate _).inner.gas + Resume.parentGas _ < n
+        simp only [Legacy.Frame.ofCreate, processCreateMessage.msg_gas, createMsg,
           Resume.parentGas, Devm.incrNonce_gasMeasure,
           Devm.drainStateGasReservoir_gasMeasure]
         omega
@@ -2159,15 +2159,15 @@ theorem genericCreateAmsterdam.step_gasDecreasing
       · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
         rw [← hstep]
         refine ⟨?_, rfl⟩
-        show (Frame.ofCreate _).inner.gas + Resume.parentGas _ < n
-        simp only [Frame.ofCreate, processCreateMessage.msg_gas, createMsg,
+        show (Legacy.Frame.ofCreate _).inner.gas + Resume.parentGas _ < n
+        simp only [Legacy.Frame.ofCreate, processCreateMessage.msg_gas, createMsg,
           Resume.parentGas, Devm.incrNonce_gasMeasure,
           Devm.drainStateGasReservoir_gasMeasure]
         omega
-theorem MessageOp.step_create_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (MessageOp.step sevm devm .create).GasDecreasing sevm devm.gasMeasure := by
+theorem Legacy.MessageOp.step_create_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Legacy.MessageOp.step sevm devm .create).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
-  simp only [MessageOp.step]
+  simp only [Legacy.MessageOp.step]
   split
   · apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -2177,7 +2177,7 @@ theorem MessageOp.step_create_gasDecreasing (sevm : Sevm) (devm : Devm) :
     obtain ⟨d4, h4, hstep⟩ := Except.bind_eq_ok hstep
     simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
     rw [← hstep]
-    apply genericCreate.step_gasDecreasing
+    apply Legacy.genericCreate.step_gasDecreasing
     have e1 := Devm.pop_gasMeasure h1
     have e2 := Devm.popToNat_gasMeasure h2
     have e3 := Devm.popToNat_gasMeasure h3
@@ -2196,7 +2196,7 @@ theorem MessageOp.step_create_gasDecreasing (sevm : Sevm) (devm : Devm) :
     obtain ⟨_, hsize, hstep⟩ := Except.bind_eq_ok hstep
     simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
     rw [← hstep]
-    apply genericCreateAmsterdam.step_gasDecreasing
+    apply Legacy.genericCreateAmsterdam.step_gasDecreasing
     have e1 := Devm.pop_gasMeasure h1
     have e2 := Devm.popToNat_gasMeasure h2
     have e3 := Devm.popToNat_gasMeasure h3
@@ -2206,10 +2206,10 @@ theorem MessageOp.step_create_gasDecreasing (sevm : Sevm) (devm : Devm) :
     rw [Devm.memExtends_gasMeasure]
     omega
 
-theorem MessageOp.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (MessageOp.step sevm devm .create2).GasDecreasing sevm devm.gasMeasure := by
+theorem Legacy.MessageOp.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Legacy.MessageOp.step sevm devm .create2).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
-  simp only [MessageOp.step]
+  simp only [Legacy.MessageOp.step]
   split
   · split
     · apply XStep.ofExcept_gasDecreasing
@@ -2221,7 +2221,7 @@ theorem MessageOp.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm) :
       obtain ⟨d5, h5, hstep⟩ := Except.bind_eq_ok hstep
       simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
       rw [← hstep]
-      apply genericCreate.step_gasDecreasing
+      apply Legacy.genericCreate.step_gasDecreasing
       have e1 := Devm.pop_gasMeasure h1
       have e2 := Devm.popToNat_gasMeasure h2
       have e3 := Devm.popToNat_gasMeasure h3
@@ -2242,7 +2242,7 @@ theorem MessageOp.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm) :
       obtain ⟨_, hsize, hstep⟩ := Except.bind_eq_ok hstep
       simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
       rw [← hstep]
-      apply genericCreateAmsterdam.step_gasDecreasing
+      apply Legacy.genericCreateAmsterdam.step_gasDecreasing
       have e1 := Devm.pop_gasMeasure h1
       have e2 := Devm.popToNat_gasMeasure h2
       have e3 := Devm.popToNat_gasMeasure h3
@@ -2257,16 +2257,16 @@ theorem MessageOp.step_create2_gasDecreasing (sevm : Sevm) (devm : Devm) :
     intro step hstep
     nomatch hstep
 
-theorem MessageOp.step_callcode_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
+theorem Legacy.MessageOp.step_callcode_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     (hstate : sevm.benvStat.rules.stateGas = none) :
-    (MessageOp.step sevm devm .callcode).GasDecreasing sevm devm.gasMeasure := by
+    (Legacy.MessageOp.step sevm devm .callcode).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
   have hacc := hv.access
   -- The access step, of either shape: the arms reduce by `match` on the
   -- schedule, and both leave a positive price `pre` and a gas-neutral `dA`.
   rcases hA : sevm.benvStat.rules.access with g | _ <;> rw [hA] at hacc
   all_goals
-    simp only [MessageOp.step, hstate, hA]
+    simp only [Legacy.MessageOp.step, hstate, hA]
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
     obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
@@ -2333,17 +2333,17 @@ theorem MessageOp.step_callcode_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
       exact key
     · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
       rw [← hstep]
-      apply genericCall.step_gasDecreasing
+      apply Legacy.genericCall.step_gasDecreasing
       rw [Devm.memExtends_gasMeasure]
       exact key
 
-theorem MessageOp.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (MessageOp.step sevm devm .callcode).GasDecreasing sevm devm.gasMeasure := by
+theorem Legacy.MessageOp.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Legacy.MessageOp.step sevm devm .callcode).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
-  simp only [MessageOp.step]
+  simp only [Legacy.MessageOp.step]
   split
-  · simpa only [MessageOp.step, *] using
-      MessageOp.step_callcode_gasDecreasing_legacy sevm devm (by assumption)
+  · simpa only [Legacy.MessageOp.step, *] using
+      Legacy.MessageOp.step_callcode_gasDecreasing_legacy sevm devm (by assumption)
   · rename_i state hstate
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -2400,21 +2400,21 @@ theorem MessageOp.step_callcode_gasDecreasing (sevm : Sevm) (devm : Devm) :
     have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
     simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
     rw [← hstep]
-    apply genericCallAmsterdam.step_gasDecreasing
+    apply Legacy.genericCallAmsterdam.step_gasDecreasing
     rw [Devm.memExtends_gasMeasure,
       Devm.drainStateGasReservoir_gasMeasure]
     exact key
 
-theorem MessageOp.step_delegatecall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
+theorem Legacy.MessageOp.step_delegatecall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     (hstate : sevm.benvStat.rules.stateGas = none) :
-    (MessageOp.step sevm devm .delegatecall).GasDecreasing sevm devm.gasMeasure := by
+    (Legacy.MessageOp.step sevm devm .delegatecall).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
   have hacc := hv.access
   -- The access step, of either shape: the arms reduce by `match` on the
   -- schedule, and both leave a positive price `pre` and a gas-neutral `dA`.
   rcases hA : sevm.benvStat.rules.access with g | _ <;> rw [hA] at hacc
   all_goals
-    simp only [MessageOp.step, hstate, hA]
+    simp only [Legacy.MessageOp.step, hstate, hA]
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
     obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
@@ -2462,17 +2462,17 @@ theorem MessageOp.step_delegatecall_gasDecreasing_legacy (sevm : Sevm) (devm : D
     have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
     simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
     rw [← hstep]
-    apply genericCall.step_gasDecreasing
+    apply Legacy.genericCall.step_gasDecreasing
     rw [Devm.memExtends_gasMeasure]
     exact key
 
-theorem MessageOp.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (MessageOp.step sevm devm .delegatecall).GasDecreasing sevm devm.gasMeasure := by
+theorem Legacy.MessageOp.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Legacy.MessageOp.step sevm devm .delegatecall).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
-  simp only [MessageOp.step]
+  simp only [Legacy.MessageOp.step]
   split
-  · simpa only [MessageOp.step, *] using
-      MessageOp.step_delegatecall_gasDecreasing_legacy sevm devm (by assumption)
+  · simpa only [Legacy.MessageOp.step, *] using
+      Legacy.MessageOp.step_delegatecall_gasDecreasing_legacy sevm devm (by assumption)
   · rename_i state hstate
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -2519,21 +2519,21 @@ theorem MessageOp.step_delegatecall_gasDecreasing (sevm : Sevm) (devm : Devm) :
     have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
     simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
     rw [← hstep]
-    apply genericCallAmsterdam.step_gasDecreasing
+    apply Legacy.genericCallAmsterdam.step_gasDecreasing
     rw [Devm.memExtends_gasMeasure,
       Devm.drainStateGasReservoir_gasMeasure]
     exact key
 
-theorem MessageOp.step_staticcall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
+theorem Legacy.MessageOp.step_staticcall_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
     (hstate : sevm.benvStat.rules.stateGas = none) :
-    (MessageOp.step sevm devm .staticcall).GasDecreasing sevm devm.gasMeasure := by
+    (Legacy.MessageOp.step sevm devm .staticcall).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
   have hacc := hv.access
   -- The access step, of either shape: the arms reduce by `match` on the
   -- schedule, and both leave a positive price `pre` and a gas-neutral `dA`.
   rcases hA : sevm.benvStat.rules.access with g | _ <;> rw [hA] at hacc
   all_goals
-    simp only [MessageOp.step, hstate, hA]
+    simp only [Legacy.MessageOp.step, hstate, hA]
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
     obtain ⟨⟨gas, d1⟩, p1, hstep⟩ := Except.bind_eq_ok hstep
@@ -2581,17 +2581,17 @@ theorem MessageOp.step_staticcall_gasDecreasing_legacy (sevm : Sevm) (devm : Dev
     have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
     simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
     rw [← hstep]
-    apply genericCall.step_gasDecreasing
+    apply Legacy.genericCall.step_gasDecreasing
     rw [Devm.memExtends_gasMeasure]
     exact key
 
-theorem MessageOp.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
-    (MessageOp.step sevm devm .staticcall).GasDecreasing sevm devm.gasMeasure := by
+theorem Legacy.MessageOp.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
+    (Legacy.MessageOp.step sevm devm .staticcall).GasDecreasing sevm devm.gasMeasure := by
   have hv := Sevm.rules_valid sevm
-  simp only [MessageOp.step]
+  simp only [Legacy.MessageOp.step]
   split
-  · simpa only [MessageOp.step, *] using
-      MessageOp.step_staticcall_gasDecreasing_legacy sevm devm (by assumption)
+  · simpa only [Legacy.MessageOp.step, *] using
+      Legacy.MessageOp.step_staticcall_gasDecreasing_legacy sevm devm (by assumption)
   · rename_i state hstate
     apply XStep.ofExcept_gasDecreasing
     intro step hstep
@@ -2638,20 +2638,20 @@ theorem MessageOp.step_staticcall_gasDecreasing (sevm : Sevm) (devm : Devm) :
     have key := call_charge_stipend_lt (devm := devm) hstip eA pcharge
     simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
     rw [← hstep]
-    apply genericCallAmsterdam.step_gasDecreasing
+    apply Legacy.genericCallAmsterdam.step_gasDecreasing
     rw [Devm.memExtends_gasMeasure,
       Devm.drainStateGasReservoir_gasMeasure]
     exact key
 
-theorem MessageOp.step_gasDecreasing (sevm : Sevm) (devm : Devm) (x : MessageOp) :
-    (MessageOp.step sevm devm x).GasDecreasing sevm devm.gasMeasure := by
+theorem Legacy.MessageOp.step_gasDecreasing (sevm : Sevm) (devm : Devm) (x : MessageOp) :
+    (Legacy.MessageOp.step sevm devm x).GasDecreasing sevm devm.gasMeasure := by
   cases x
-  case create => exact MessageOp.step_create_gasDecreasing sevm devm
-  case create2 => exact MessageOp.step_create2_gasDecreasing sevm devm
-  case call => exact MessageOp.step_call_gasDecreasing sevm devm
-  case callcode => exact MessageOp.step_callcode_gasDecreasing sevm devm
-  case delegatecall => exact MessageOp.step_delegatecall_gasDecreasing sevm devm
-  case staticcall => exact MessageOp.step_staticcall_gasDecreasing sevm devm
+  case create => exact Legacy.MessageOp.step_create_gasDecreasing sevm devm
+  case create2 => exact Legacy.MessageOp.step_create2_gasDecreasing sevm devm
+  case call => exact Legacy.MessageOp.step_call_gasDecreasing sevm devm
+  case callcode => exact Legacy.MessageOp.step_callcode_gasDecreasing sevm devm
+  case delegatecall => exact Legacy.MessageOp.step_delegatecall_gasDecreasing sevm devm
+  case staticcall => exact Legacy.MessageOp.step_staticcall_gasDecreasing sevm devm
 
 theorem executePrecompile_gasLe (evm : Evm) (adr : Address) :
     (executePrecompile evm adr).gasMeasure ≤ evm.dyna.gasMeasure := by
@@ -3808,23 +3808,23 @@ theorem chargeStateGas_haltLe (amount : Nat) {devm : Devm} {n : Nat}
     rw [h] at hg
     exact Nat.le_trans hg hn
 
-theorem genericCall.step_halt
+theorem Legacy.genericCall.step_halt
     (sevm : Sevm) (devm : Devm) (gas : Nat) (value : U256)
     (caller target codeAddress : Address) (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool) {s : StateGasMeter} {n : Nat}
     (hs : devm.mach.stateGas = s) (hsn : s.spilled + s.committedSpill ≤ n) :
-    (genericCall.step sevm devm gas value caller target codeAddress
+    (Legacy.genericCall.step sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles).Halt n := by
-  unfold genericCall.step
+  unfold Legacy.genericCall.step
   split
   · exact XStep.ofExcept_halt hsn
       (xstepHalt_bind (Devm.push_haltOut (by simpa using hs))
         (fun _ _ => XStep.done_ok_halt _ _))
   · trivial
 
-theorem genericCallAmsterdam.step_halt
+theorem Legacy.genericCallAmsterdam.step_halt
     (sevm : Sevm) (state : StateGasRules) (devm : Devm)
     (gas reservoir : Nat) (value : U256)
     (caller target codeAddress : Address) (shouldTransferValue isStaticcall : Bool)
@@ -3832,11 +3832,11 @@ theorem genericCallAmsterdam.step_halt
     (code : ByteArray)
     (disablePrecompiles newAccountCharged insufficientBalance : Bool) {n : Nat}
     (hn : devm.spill ≤ n) :
-    (genericCallAmsterdam.step sevm state devm gas reservoir value caller target
+    (Legacy.genericCallAmsterdam.step sevm state devm gas reservoir value caller target
       codeAddress shouldTransferValue isStaticcall inputIndex inputSize
       outputIndex outputSize code disablePrecompiles newAccountCharged
       insufficientBalance).Halt n := by
-  unfold genericCallAmsterdam.step
+  unfold Legacy.genericCallAmsterdam.step
   split
   · apply XStep.ofExcept_haltLe
     refine HaltLe.bind (Devm.push_haltLe_spill 0 ?_) ?_
@@ -3847,13 +3847,13 @@ theorem genericCallAmsterdam.step_halt
       exact XStep.done_ok_halt d n
   · trivial
 
-theorem genericCreate.step_halt
+theorem Legacy.genericCreate.step_halt
     (sevm : Sevm) (devm : Devm) (endowment : U256) (newAddress : Address)
     (memoryIndex memorySize : Nat) {s : StateGasMeter} {n : Nat}
     (hs : devm.mach.stateGas = s) (hsn : s.spilled + s.committedSpill ≤ n) :
-    (genericCreate.step sevm devm endowment newAddress memoryIndex
+    (Legacy.genericCreate.step sevm devm endowment newAddress memoryIndex
       memorySize).Halt n := by
-  unfold genericCreate.step
+  unfold Legacy.genericCreate.step
   apply XStep.ofExcept_halt hsn
   refine xstepHalt_bind (assert_haltOut (by decide) hs) ?_
   intro _ _
@@ -3868,13 +3868,13 @@ theorem genericCreate.step_halt
         (fun _ _ => XStep.done_ok_halt _ _)
     · trivial
 
-theorem genericCreateAmsterdam.step_halt
+theorem Legacy.genericCreateAmsterdam.step_halt
     (sevm : Sevm) (state : StateGasRules) (devm : Devm) (endowment : U256)
     (newAddress : Address) (memoryIndex memorySize : Nat) {n : Nat}
     (hn : devm.gasMeasure ≤ n) :
-    (genericCreateAmsterdam.step sevm state devm endowment newAddress
+    (Legacy.genericCreateAmsterdam.step sevm state devm endowment newAddress
       memoryIndex memorySize).Halt n := by
-  unfold genericCreateAmsterdam.step
+  unfold Legacy.genericCreateAmsterdam.step
   apply XStep.ofExcept_haltLe
   dsimp only
   split
@@ -3912,12 +3912,12 @@ theorem genericCreateAmsterdam.step_halt
           exact XStep.done_ok_halt d2 n
       · trivial
 
-theorem MessageOp.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : MessageOp)
+theorem Legacy.MessageOp.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : MessageOp)
     {s : StateGasMeter} {n : Nat}
     (hs : devm.mach.stateGas = s) (hsn : s.spilled + s.committedSpill ≤ n)
     (hstate : sevm.benvStat.rules.stateGas = none) :
-    (MessageOp.step sevm devm x).Halt n := by
-  cases x <;> simp only [MessageOp.step, hstate]
+    (Legacy.MessageOp.step sevm devm x).Halt n := by
+  cases x <;> simp only [Legacy.MessageOp.step, hstate]
   case create2 =>
     split
     · apply XStep.ofExcept_halt hsn
@@ -3931,7 +3931,7 @@ theorem MessageOp.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : MessageOp)
       rintro ⟨salt, d4⟩ h4
       refine xstepHalt_bind (chargeGas_haltOut h4) ?_
       intro d5 h5
-      exact genericCreate.step_halt _ _ _ _ _ _ (by simpa using h5) hsn
+      exact Legacy.genericCreate.step_halt _ _ _ _ _ _ (by simpa using h5) hsn
     · -- Gate off: the invalid-opcode error is non-`Revert` and keeps the meter.
       apply XStep.ofExcept_halt hsn
       refine ⟨?_, ?_⟩
@@ -3947,7 +3947,7 @@ theorem MessageOp.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : MessageOp)
     rintro ⟨memorySize, d3⟩ h3
     refine xstepHalt_bind (chargeGas_haltOut h3) ?_
     intro d4 h4
-    exact genericCreate.step_halt _ _ _ _ _ _ (by simpa using h4) hsn
+    exact Legacy.genericCreate.step_halt _ _ _ _ _ _ (by simpa using h4) hsn
   case call =>
     refine xstepHalt_bind (Devm.pop_haltOut hs) ?_
     rintro ⟨gas, d1⟩ h1
@@ -3972,7 +3972,7 @@ theorem MessageOp.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : MessageOp)
     split
     · exact xstepHalt_bind (Devm.push_haltOut (by simpa using h8))
         (fun _ _ => XStep.done_ok_halt _ _)
-    · exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h8) hsn
+    · exact Legacy.genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h8) hsn
   case callcode =>
     refine xstepHalt_bind (Devm.pop_haltOut hs) ?_
     rintro ⟨gas, d1⟩ h1
@@ -3995,7 +3995,7 @@ theorem MessageOp.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : MessageOp)
     split
     · exact xstepHalt_bind (Devm.push_haltOut (by simpa using h8))
         (fun _ _ => XStep.done_ok_halt _ _)
-    · exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h8) hsn
+    · exact Legacy.genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h8) hsn
   case delegatecall =>
     refine xstepHalt_bind (Devm.pop_haltOut hs) ?_
     rintro ⟨gas, d1⟩ h1
@@ -4013,7 +4013,7 @@ theorem MessageOp.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : MessageOp)
       simp only [ForkRules.accessDelegation_stateGas]
       split <;> simpa only [addAccessedAddress_stateGas] using h6)) ?_
     intro d7 h7
-    exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h7) hsn
+    exact Legacy.genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h7) hsn
   case staticcall =>
     refine xstepHalt_bind (Devm.pop_haltOut hs) ?_
     rintro ⟨gas, d1⟩ h1
@@ -4031,18 +4031,18 @@ theorem MessageOp.step_halt_legacy (sevm : Sevm) (devm : Devm) (x : MessageOp)
       simp only [ForkRules.accessDelegation_stateGas]
       split <;> simpa only [addAccessedAddress_stateGas] using h6)) ?_
     intro d7 h7
-    exact genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h7) hsn
+    exact Legacy.genericCall.step_halt _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (by simpa using h7) hsn
 
-theorem MessageOp.step_halt (sevm : Sevm) (devm : Devm) (x : MessageOp)
+theorem Legacy.MessageOp.step_halt (sevm : Sevm) (devm : Devm) (x : MessageOp)
     {s : StateGasMeter} {n : Nat}
     (hs : devm.mach.stateGas = s) (hsn : s.spilled + s.committedSpill ≤ n)
     (hn : devm.gasMeasure ≤ n) :
-    (MessageOp.step sevm devm x).Halt n := by
+    (Legacy.MessageOp.step sevm devm x).Halt n := by
   cases hstate : sevm.benvStat.rules.stateGas with
   | none =>
-    exact MessageOp.step_halt_legacy sevm devm x hs hsn hstate
+    exact Legacy.MessageOp.step_halt_legacy sevm devm x hs hsn hstate
   | some state =>
-    cases x <;> simp only [MessageOp.step, hstate]
+    cases x <;> simp only [Legacy.MessageOp.step, hstate]
     case create2 =>
       split
       · apply XStep.ofExcept_haltLe
@@ -4060,7 +4060,7 @@ theorem MessageOp.step_halt (sevm : Sevm) (devm : Devm) (x : MessageOp)
         intro d5 h5
         refine HaltLe.bind (assert_haltLe _ (by decide) h5) ?_
         intro _ _
-        apply genericCreateAmsterdam.step_halt
+        apply Legacy.genericCreateAmsterdam.step_halt
         simpa only [Devm.memExtends_gasMeasure] using h5
       · -- Gate off: the invalid-opcode error is non-`Revert` and
         -- spill-bounded.
@@ -4082,7 +4082,7 @@ theorem MessageOp.step_halt (sevm : Sevm) (devm : Devm) (x : MessageOp)
       intro d4 h4
       refine HaltLe.bind (assert_haltLe _ (by decide) h4) ?_
       intro _ _
-      apply genericCreateAmsterdam.step_halt
+      apply Legacy.genericCreateAmsterdam.step_halt
       simpa only [Devm.memExtends_gasMeasure] using h4
     case call =>
       refine HaltLe.bind (Devm.pop_haltLe hn) ?_
@@ -4125,14 +4125,14 @@ theorem MessageOp.step_halt (sevm : Sevm) (devm : Devm) (x : MessageOp)
           intro d9 h9
           refine HaltLe.bind (chargeGas_haltLe _ h9) ?_
           intro d10 h10
-          apply genericCallAmsterdam.step_halt
+          apply Legacy.genericCallAmsterdam.step_halt
           exact Nat.le_trans (Devm.spill_le_gasMeasure _)
             (by simpa only [Devm.drainStateGasReservoir_gasMeasure,
               Devm.memExtends_gasMeasure] using h10)
         · simp only [bind, Except.bind]
           refine HaltLe.bind (chargeGas_haltLe _ h8) ?_
           intro d9 h9
-          apply genericCallAmsterdam.step_halt
+          apply Legacy.genericCallAmsterdam.step_halt
           exact Nat.le_trans (Devm.spill_le_gasMeasure _)
             (by simpa only [Devm.drainStateGasReservoir_gasMeasure,
               Devm.memExtends_gasMeasure] using h9)
@@ -4170,7 +4170,7 @@ theorem MessageOp.step_halt (sevm : Sevm) (devm : Devm) (x : MessageOp)
             using hfull
         refine HaltLe.bind (chargeGas_haltLe _ haccess) ?_
         intro d8 h8
-        apply genericCallAmsterdam.step_halt
+        apply Legacy.genericCallAmsterdam.step_halt
         exact Nat.le_trans (Devm.spill_le_gasMeasure _)
           (by simpa only [Devm.drainStateGasReservoir_gasMeasure,
             Devm.memExtends_gasMeasure] using h8)
@@ -4206,7 +4206,7 @@ theorem MessageOp.step_halt (sevm : Sevm) (devm : Devm) (x : MessageOp)
             using hfull
         refine HaltLe.bind (chargeGas_haltLe _ haccess) ?_
         intro d7 h7
-        apply genericCallAmsterdam.step_halt
+        apply Legacy.genericCallAmsterdam.step_halt
         exact Nat.le_trans (Devm.spill_le_gasMeasure _)
           (by simpa only [Devm.drainStateGasReservoir_gasMeasure,
             Devm.memExtends_gasMeasure] using h7)
@@ -4242,7 +4242,7 @@ theorem MessageOp.step_halt (sevm : Sevm) (devm : Devm) (x : MessageOp)
             using hfull
         refine HaltLe.bind (chargeGas_haltLe _ haccess) ?_
         intro d7 h7
-        apply genericCallAmsterdam.step_halt
+        apply Legacy.genericCallAmsterdam.step_halt
         exact Nat.le_trans (Devm.spill_le_gasMeasure _)
           (by simpa only [Devm.drainStateGasReservoir_gasMeasure,
             Devm.memExtends_gasMeasure] using h7)
@@ -4467,10 +4467,10 @@ theorem processCreateMessage.settle_ok_gasLe {msg : Msg}
     · simp only [Except.ok.injEq] at h
       rw [← h, Devm.withStorageWrites_gasMeasure, Devm.rollback_gasMeasure]
 
-theorem Frame.settleMsg_ok_gasLe {f : Frame}
+theorem Legacy.Frame.settleMsg_ok_gasLe {f : Legacy.Frame}
     {r : Except (EvmError × State × AdrSet × TransientStorage) Devm} {d : Devm}
     (h : f.settleMsg r = .ok d) : ∃ d0, r = .ok d0 ∧ d.gasMeasure ≤ d0.gasMeasure := by
-  unfold Frame.settleMsg at h
+  unfold Legacy.Frame.settleMsg at h
   dsimp only at h
   split at h
   · obtain ⟨d1, h1, hle1⟩ := processCreateMessage.settle_ok_gasLe h
@@ -4478,10 +4478,10 @@ theorem Frame.settleMsg_ok_gasLe {f : Frame}
     exact ⟨d0, h0, Nat.le_trans hle1 hle0⟩
   · exact processMessage.settle_ok_gasLe h
 
-theorem Frame.settle_gasLe {f : Frame} {raw : Execution} {n : Nat} {d : Devm}
+theorem Legacy.Frame.settle_gasLe {f : Legacy.Frame} {raw : Execution} {n : Nat} {d : Devm}
     (hraw : raw.SettledGasLe n) (h : f.settle raw = .ok d) : d.gasMeasure ≤ n := by
-  unfold Frame.settle at h
-  obtain ⟨d0, h0, hle⟩ := Frame.settleMsg_ok_gasLe h
+  unfold Legacy.Frame.settle at h
+  obtain ⟨d0, h0, hle⟩ := Legacy.Frame.settleMsg_ok_gasLe h
   exact Nat.le_trans hle (hraw f.inner.benv.stat.rules.stateGas d0 h0)
 
 /-! ## Entering a frame
@@ -4594,10 +4594,10 @@ theorem executeCode.enter_inl_rules {msg : Msg} {evm : Evm}
     · simp only [Sum.inl.injEq] at h
       rw [← h, initEvm_rules]
 
-theorem Frame.enter_run_rules {f : Frame} {child : Evm}
+theorem Legacy.Frame.enter_run_rules {f : Legacy.Frame} {child : Evm}
     (h : f.enter = .run child) :
     child.sta.benvStat.rules = f.inner.benv.stat.rules := by
-  unfold Frame.enter at h
+  unfold Legacy.Frame.enter at h
   split at h
   · nomatch h
   · rename_i benv hbenv
@@ -4633,30 +4633,30 @@ that from the two builders to `Evm.step`, which is where the driver needs it. -/
 @[simp] theorem processCreateMessage_msg_stat (msg : Msg) :
     (processCreateMessage.msg msg).benv.stat = msg.benv.stat := rfl
 
-@[simp] theorem Frame.ofCall_inner_stat (msg : Msg) :
-    (Frame.ofCall msg).inner.benv.stat = msg.benv.stat := rfl
+@[simp] theorem Legacy.Frame.ofCall_inner_stat (msg : Msg) :
+    (Legacy.Frame.ofCall msg).inner.benv.stat = msg.benv.stat := rfl
 
-@[simp] theorem Frame.ofCreate_inner_stat (msg : Msg) :
-    (Frame.ofCreate msg).inner.benv.stat = msg.benv.stat := rfl
+@[simp] theorem Legacy.Frame.ofCreate_inner_stat (msg : Msg) :
+    (Legacy.Frame.ofCreate msg).inner.benv.stat = msg.benv.stat := rfl
 
 /-- A spawn survives `XStep.ofExcept` only by having been one. -/
 theorem XStep.ofExcept_spawn {x : Except (EvmError × Devm) XStep}
-    {frame : Frame} {rsm : Resume} (h : XStep.ofExcept x = .spawn frame rsm) :
+    {frame : Legacy.Frame} {rsm : Resume} (h : XStep.ofExcept x = .spawn frame rsm) :
     x = .ok (.spawn frame rsm) := by
   cases x with
   | error e => simp only [XStep.ofExcept] at h; nomatch h
   | ok step => simp only [XStep.ofExcept] at h; rw [h]
 
-theorem genericCall.step_spawn_stat {sevm : Sevm} {devm : Devm} {gas : Nat}
+theorem Legacy.genericCall.step_spawn_stat {sevm : Sevm} {devm : Devm} {gas : Nat}
     {value : U256} {caller target codeAddress : Address}
     {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat} {code : ByteArray}
-    {disablePrecompiles : Bool} {frame : Frame} {rsm : Resume}
-    (h : genericCall.step sevm devm gas value caller target codeAddress
+    {disablePrecompiles : Bool} {frame : Legacy.Frame} {rsm : Resume}
+    (h : Legacy.genericCall.step sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles = .spawn frame rsm) :
     frame.inner.benv.stat = sevm.benvStat := by
-  unfold genericCall.step at h
+  unfold Legacy.genericCall.step at h
   split at h
   · -- The depth-0 refund never spawns.
     have hx := XStep.ofExcept_spawn h
@@ -4664,15 +4664,15 @@ theorem genericCall.step_spawn_stat {sevm : Sevm} {devm : Devm} {gas : Nat}
     simp only [Pure.pure, Except.pure, Except.ok.injEq] at hx
     nomatch hx
   · simp only [XStep.spawn.injEq] at h
-    rw [← h.1, Frame.ofCall_inner_stat, callMsg_stat]
+    rw [← h.1, Legacy.Frame.ofCall_inner_stat, callMsg_stat]
 
-theorem genericCreate.step_spawn_stat {sevm : Sevm} {devm : Devm}
+theorem Legacy.genericCreate.step_spawn_stat {sevm : Sevm} {devm : Devm}
     {endowment : U256} {newAddress : Address} {memoryIndex memorySize : Nat}
-    {frame : Frame} {rsm : Resume}
-    (h : genericCreate.step sevm devm endowment newAddress memoryIndex
+    {frame : Legacy.Frame} {rsm : Resume}
+    (h : Legacy.genericCreate.step sevm devm endowment newAddress memoryIndex
       memorySize = .spawn frame rsm) :
     frame.inner.benv.stat = sevm.benvStat := by
-  unfold genericCreate.step at h
+  unfold Legacy.genericCreate.step at h
   have hx := XStep.ofExcept_spawn h
   obtain ⟨_, _, hx⟩ := Except.bind_eq_ok hx
   obtain ⟨_, _, hx⟩ := Except.bind_eq_ok hx
@@ -4688,11 +4688,11 @@ theorem genericCreate.step_spawn_stat {sevm : Sevm} {devm : Devm}
       simp only [Pure.pure, Except.pure, Except.ok.injEq] at hx
       nomatch hx
     · simp only [Pure.pure, Except.pure, Except.ok.injEq, XStep.spawn.injEq] at hx
-      rw [← hx.1, Frame.ofCreate_inner_stat, createMsg_stat]
+      rw [← hx.1, Legacy.Frame.ofCreate_inner_stat, createMsg_stat]
 
-theorem Frame.enter_run_gasMeasure {f : Frame} {child : Evm}
+theorem Legacy.Frame.enter_run_gasMeasure {f : Legacy.Frame} {child : Evm}
     (h : f.enter = .run child) : child.dyna.gasMeasure = f.inner.gas := by
-  unfold Frame.enter at h
+  unfold Legacy.Frame.enter at h
   split at h
   · nomatch h
   · split at h
@@ -4701,21 +4701,21 @@ theorem Frame.enter_run_gasMeasure {f : Frame} {child : Evm}
       rw [← h, executeCode.enter_inl_gasMeasure henter, Msg.withBenv_gas]
     · nomatch h
 
-theorem Frame.enter_done_gasLe {f : Frame}
+theorem Legacy.Frame.enter_done_gasLe {f : Legacy.Frame}
     {r : Except (EvmError × State × AdrSet × TransientStorage) Devm} {d : Devm}
     (h : f.enter = .done r) (hd : r = .ok d) : d.gasMeasure ≤ f.inner.gas := by
-  unfold Frame.enter at h
+  unfold Legacy.Frame.enter at h
   split at h
   · simp only [FrameEntry.done.injEq] at h
     rw [← h] at hd
-    obtain ⟨d0, h0, -⟩ := Frame.settleMsg_ok_gasLe hd
+    obtain ⟨d0, h0, -⟩ := Legacy.Frame.settleMsg_ok_gasLe hd
     nomatch h0
   · split at h
     · nomatch h
     · rename_i raw henter
       simp only [FrameEntry.done.injEq] at h
       rw [← h] at hd
-      exact Frame.settle_gasLe
+      exact Legacy.Frame.settle_gasLe
         (Execution.settledGasLe_of_gasLe
           (Nat.le_trans (executeCode.enter_inr_gasLe henter)
             (Nat.le_of_eq (Msg.withBenv_gas _ _)))) hd
@@ -4826,24 +4826,24 @@ induction has a single hypothesis to consume. -/
 
 /-- What one step of the driver owes, measured against the frame's gas at the
 start of the step. -/
-def Step.GasBound (sevm : Sevm) (n : Nat) : Step → Prop
+def Legacy.Step.GasBound (sevm : Sevm) (n : Nat) : Legacy.Step → Prop
   | .halt ex => ex.SettledGasLe n
   | .cont _ devm => devm.gasMeasure < n
   | .spawn frame rsm _ =>
       frame.inner.gas + rsm.parentGas < n ∧
         frame.inner.benv.stat.rules = sevm.benvStat.rules
 
-theorem Step.ofExecution_gasBound {sevm : Sevm} {pc n : Nat} {ex : Execution}
+theorem Legacy.Step.ofExecution_gasBound {sevm : Sevm} {pc n : Nat} {ex : Execution}
     (hok : ∀ d, ex = .ok d → d.gasMeasure < n) (hset : ex.SettledGasLe n) :
-    (Step.ofExecution pc ex).GasBound sevm n := by
+    (Legacy.Step.ofExecution pc ex).GasBound sevm n := by
   cases ex with
   | error e => exact hset
   | ok d => exact hok d rfl
 
-theorem Step.ofJump_gasBound {sevm : Sevm} {n : Nat}
+theorem Legacy.Step.ofJump_gasBound {sevm : Sevm} {n : Nat}
     {x : Except (EvmError × Devm) (Nat × Devm)}
     (hok : ∀ p, x = .ok p → p.2.gasMeasure < n) (hle : resultGas Prod.snd x ≤ n) :
-    (Step.ofJump x).GasBound sevm n := by
+    (Legacy.Step.ofJump x).GasBound sevm n := by
   cases x with
   | error e => exact Execution.settledGasLe_of_gasLe hle
   | ok p => exact hok p rfl
@@ -4853,12 +4853,12 @@ theorem XStep.toStep_gasBound {sevm : Sevm} {pc n : Nat} {step : XStep}
     (XStep.toStep pc step).GasBound sevm n := by
   cases step with
   | done ex =>
-    refine Step.ofExecution_gasBound hdec ?_
+    refine Legacy.Step.ofExecution_gasBound hdec ?_
     exact Execution.settledGasLe_of_halt
       (fun d hd => Nat.le_of_lt (hdec d hd)) hh
   | spawn frame rsm => exact hdec
 
-theorem NextOp.step_push_gasLt {xs : Bytes} {evm : Evm} {devm : Devm}
+theorem Legacy.NextOp.step_push_gasLt {xs : Bytes} {evm : Evm} {devm : Devm}
     (h : (chargeGas (if xs = [] then Gas.base else Gas.veryLow) evm.dyna >>=
       Devm.push xs.toU256) = .ok devm) : devm.gasMeasure < evm.dyna.gasMeasure := by
   obtain ⟨d1, h1, h2⟩ := Except.bind_eq_ok h
@@ -4868,14 +4868,14 @@ theorem NextOp.step_push_gasLt {xs : Bytes} {evm : Evm} {devm : Devm}
     split <;> decide
   omega
 
-theorem NextOp.step_gasBound (evm : Evm) (n : NextOp) :
-    (NextOp.step evm n).GasBound evm.sta evm.dyna.gasMeasure := by
+theorem Legacy.NextOp.step_gasBound (evm : Evm) (n : NextOp) :
+    (Legacy.NextOp.step evm n).GasBound evm.sta evm.dyna.gasMeasure := by
   cases n with
   | push xs b =>
-    simp only [NextOp.step]
+    simp only [Legacy.NextOp.step]
     split
     · -- Gate off: the error is non-`Revert` and spill-bounded.
-      refine Step.ofExecution_gasBound (fun d hd => by nomatch hd) ?_
+      refine Legacy.Step.ofExecution_gasBound (fun d hd => by nomatch hd) ?_
       refine Execution.settledGasLe_of_halt (fun d hd => by nomatch hd) ?_
       intro p hp
       simp only [Except.error.injEq] at hp
@@ -4883,24 +4883,24 @@ theorem NextOp.step_gasBound (evm : Evm) (n : NextOp) :
       refine ⟨?_, ?_⟩
       · simp
       · exact Devm.spill_le_gasMeasure _
-    · refine Step.ofExecution_gasBound (fun d hd => NextOp.step_push_gasLt hd) ?_
+    · refine Legacy.Step.ofExecution_gasBound (fun d hd => Legacy.NextOp.step_push_gasLt hd) ?_
       refine Execution.settledGasLe_of_gasLe ?_
       exact gasLe_bind_id (chargeGas_result_gasLe _ _)
         (fun d => Nat.le_of_eq (Devm.push_gasLe _ d))
   | plain r =>
-    refine Step.ofExecution_gasBound
+    refine Legacy.Step.ofExecution_gasBound
       (fun d hd => PlainOp.runCore_gasLt evm.pc evm.dyna evm.sta r hd) ?_
     exact Execution.settledGasLe_of_gasLe
       (PlainOp.runCore_gasLe evm.pc evm.dyna evm.sta r)
   | message x =>
-    exact XStep.toStep_gasBound (MessageOp.step_gasDecreasing evm.sta evm.dyna x)
-      (MessageOp.step_halt evm.sta evm.dyna x rfl
+    exact XStep.toStep_gasBound (Legacy.MessageOp.step_gasDecreasing evm.sta evm.dyna x)
+      (Legacy.MessageOp.step_halt evm.sta evm.dyna x rfl
         (Devm.spill_le_gasMeasure _) (Nat.le_refl _))
   -- EIP-8024: `VERY_LOW` is charged before anything else can succeed, so a
   -- successful step strictly lowers the measure; every outcome keeps it
   -- bounded by the entry measure.
   | dupn imm =>
-    refine Step.ofExecution_gasBound (fun d hd => ?_) ?_
+    refine Legacy.Step.ofExecution_gasBound (fun d hd => ?_) ?_
     · split at hd
       · obtain ⟨d1, h1, hd⟩ := Except.bind_eq_ok hd
         have e1 := chargeGas_gasMeasure h1
@@ -4923,7 +4923,7 @@ theorem NextOp.step_gasBound (evm : Evm) (n : NextOp) :
           · exact Nat.le_of_eq (Devm.push_gasLe _ _)
       · simp
   | swapn imm =>
-    refine Step.ofExecution_gasBound (fun d hd => ?_) ?_
+    refine Legacy.Step.ofExecution_gasBound (fun d hd => ?_) ?_
     · split at hd
       · obtain ⟨d1, h1, hd⟩ := Except.bind_eq_ok hd
         have e1 := chargeGas_gasMeasure h1
@@ -4945,7 +4945,7 @@ theorem NextOp.step_gasBound (evm : Evm) (n : NextOp) :
         · split <;> simp
       · simp
   | exchange imm =>
-    refine Step.ofExecution_gasBound (fun d hd => ?_) ?_
+    refine Legacy.Step.ofExecution_gasBound (fun d hd => ?_) ?_
     · split at hd
       · obtain ⟨d1, h1, hd⟩ := Except.bind_eq_ok hd
         have e1 := chargeGas_gasMeasure h1
@@ -4967,14 +4967,14 @@ theorem NextOp.step_gasBound (evm : Evm) (n : NextOp) :
         · split <;> simp
       · simp
 
-theorem Evm.step_gasBound (evm : Evm) :
-    evm.step.GasBound evm.sta evm.dyna.gasMeasure := by
-  unfold Evm.step
+theorem Legacy.Evm.step_gasBound (evm : Evm) :
+    (Legacy.Evm.step evm).GasBound evm.sta evm.dyna.gasMeasure := by
+  unfold Legacy.Evm.step
   split
   · exact Execution.settledGasLe_of_gasLe (Nat.le_of_eq rfl)
-  · exact NextOp.step_gasBound evm _
+  · exact Legacy.NextOp.step_gasBound evm _
   · rename_i j _
-    exact Step.ofJump_gasBound
+    exact Legacy.Step.ofJump_gasBound
       (fun p hp => JumpOp.runCore_gasLt evm.pc evm.dyna evm.sta j hp)
       (JumpOp.runCore_gasLe evm.pc evm.dyna evm.sta j)
   · rename_i l _
@@ -4989,30 +4989,30 @@ not hand its parent back more gas than it was given. -/
 /-- Driver monotonicity. Stated over the settlement obligation rather than over
 raw gas, because that is the only thing a parent can extract from a child's
 result and it is what both routes of the halting corpus establish. -/
-theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution},
-    (execFueled evm fuel).run = some raw →
+theorem Legacy.execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution},
+    (Legacy.execFueled evm fuel).run = some raw →
       raw.SettledGasLe evm.dyna.gasMeasure := by
   intro fuel
   induction fuel with
   | zero =>
     intro evm raw h
-    rw [execFueled] at h
+    rw [Legacy.execFueled] at h
     simp only [Fueled.exhausted_run] at h
     nomatch h
   | succ fuel ih =>
     intro evm raw h
-    have hstep := Evm.step_gasBound evm
-    rw [execFueled] at h
-    rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩
+    have hstep := Legacy.Evm.step_gasBound evm
+    rw [Legacy.execFueled] at h
+    rcases hs : Legacy.Evm.step evm with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩
     · rw [hs] at h hstep
       simp only [Fueled.ofExcept_run, Option.some.injEq] at h
       rw [← h]
       exact hstep
     · rw [hs] at h hstep
-      simp only [Step.GasBound] at hstep
+      simp only [Legacy.Step.GasBound] at hstep
       exact (ih _ h).mono (Nat.le_of_lt hstep)
     · rw [hs] at h hstep
-      simp only [Step.GasBound] at hstep
+      simp only [Legacy.Step.GasBound] at hstep
       -- The spawn obligation also says the child runs under these rules. The
       -- recursion no longer needs that half -- the child's validity comes from
       -- its own fork -- so it is discarded here rather than threaded.
@@ -5022,7 +5022,7 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
       · rw [he] at h
         dsimp only at h
         have hres := Resume.run_gasLe (rsm := rsm) (m := frame.inner.gas)
-          (fun d hd => Frame.enter_done_gasLe he hd)
+          (fun d hd => Legacy.Frame.enter_done_gasLe he hd)
         rcases hrun : rsm.run r with ⟨e⟩ | d1
         · rw [hrun] at h hres
           simp only [Fueled.ofExcept_run, Option.some.injEq] at h
@@ -5036,16 +5036,16 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
           exact (ih _ h).mono (show d1.gasMeasure ≤ evm.dyna.gasMeasure by omega)
       · rw [he] at h
         dsimp only at h
-        rcases hc : (execFueled child fuel).run with _ | raw'
+        rcases hc : (Legacy.execFueled child fuel).run with _ | raw'
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
         · rw [hc] at h
           dsimp only at h
           have hchild := ih child hc
-          rw [Frame.enter_run_gasMeasure he] at hchild
+          rw [Legacy.Frame.enter_run_gasMeasure he] at hchild
           have hres := Resume.run_gasLe (rsm := rsm) (r := frame.settle raw')
-            (m := frame.inner.gas) (fun d hd => Frame.settle_gasLe hchild hd)
+            (m := frame.inner.gas) (fun d hd => Legacy.Frame.settle_gasLe hchild hd)
           rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1
           · rw [hrun] at h hres
             simp only [Fueled.ofExcept_run, Option.some.injEq] at h
@@ -5061,9 +5061,9 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
 /-- **Sufficiency.** Fuel strictly greater than the frame's measure always
 carries the driver to a result. The base case is vacuous: the hypothesis forces
 `fuel > 0`. -/
-theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
+theorem Legacy.execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
     evm.dyna.gasMeasure < fuel →
-      ∃ raw : Execution, (execFueled evm fuel).run = some raw := by
+      ∃ raw : Execution, (Legacy.execFueled evm fuel).run = some raw := by
   intro fuel
   induction fuel with
   | zero =>
@@ -5071,10 +5071,10 @@ theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
     omega
   | succ fuel ih =>
     intro evm h
-    have hstep := Evm.step_gasBound evm
-    rw [execFueled]
-    rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
-      rw [hs] at hstep <;> simp only [Step.GasBound] at hstep <;> dsimp only
+    have hstep := Legacy.Evm.step_gasBound evm
+    rw [Legacy.execFueled]
+    rcases hs : Legacy.Evm.step evm with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
+      rw [hs] at hstep <;> simp only [Legacy.Step.GasBound] at hstep <;> dsimp only
     · exact ⟨ex, rfl⟩
     · have hlt : devm.gasMeasure < fuel := by omega
       exact ih _ hlt
@@ -5083,10 +5083,10 @@ theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
       · rcases hrun : rsm.run r with ⟨e⟩ | d1 <;> dsimp only
         · exact ⟨.error e, rfl⟩
         · obtain ⟨d0, hd0, hgas⟩ := Resume.run_ok_gasMeasure hrun
-          have hle : d0.gasMeasure ≤ frame.inner.gas := Frame.enter_done_gasLe he hd0
+          have hle : d0.gasMeasure ≤ frame.inner.gas := Legacy.Frame.enter_done_gasLe he hd0
           have hlt : d1.gasMeasure < fuel := by omega
           exact ih _ hlt
-      · have hgas : child.dyna.gasMeasure = frame.inner.gas := Frame.enter_run_gasMeasure he
+      · have hgas : child.dyna.gasMeasure = frame.inner.gas := Legacy.Frame.enter_run_gasMeasure he
         have hchildlt : child.dyna.gasMeasure < fuel := by omega
         obtain ⟨raw', hraw'⟩ := ih child hchildlt
         rw [hraw']
@@ -5094,16 +5094,16 @@ theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
         rcases hrun : rsm.run (frame.settle raw') with ⟨e⟩ | d1 <;> dsimp only
         · exact ⟨.error e, rfl⟩
         · obtain ⟨d0, hd0, hgas2⟩ := Resume.run_ok_gasMeasure hrun
-          have hsettled := execFueled_settledGasLe fuel child hraw'
+          have hsettled := Legacy.execFueled_settledGasLe fuel child hraw'
           rw [hgas] at hsettled
-          have hle : d0.gasMeasure ≤ frame.inner.gas := Frame.settle_gasLe hsettled hd0
+          have hle : d0.gasMeasure ≤ frame.inner.gas := Legacy.Frame.settle_gasLe hsettled hd0
           have hlt : d1.gasMeasure < fuel := by omega
           exact ih _ hlt
 
-theorem execFueled_ne_exhausted (evm : Evm) (fuel : Nat)
+theorem Legacy.execFueled_ne_exhausted (evm : Evm) (fuel : Nat)
     (h : evm.dyna.gasMeasure < fuel) :
-    execFueled evm fuel ≠ Fueled.exhausted := by
-  obtain ⟨raw, hraw⟩ := execFueled_run_isSome fuel evm h
+    Legacy.execFueled evm fuel ≠ Fueled.exhausted := by
+  obtain ⟨raw, hraw⟩ := Legacy.execFueled_run_isSome fuel evm h
   intro hcon
   rw [hcon] at hraw
   simp only [Fueled.exhausted_run] at hraw
@@ -5112,9 +5112,9 @@ theorem execFueled_ne_exhausted (evm : Evm) (fuel : Nat)
 /-- The form the total `exec` consumes. The additive constant is **1**: seeding
 the driver with `gasMeasure + 1` is always enough, so the total wrapper can
 discharge the `Option` with this witness. -/
-theorem execFueled_succ_ne_exhausted (evm : Evm) :
-    execFueled evm (evm.dyna.gasMeasure + 1) ≠ Fueled.exhausted :=
-  execFueled_ne_exhausted evm (evm.dyna.gasMeasure + 1) (Nat.lt_succ_self _)
+theorem Legacy.execFueled_succ_ne_exhausted (evm : Evm) :
+    Legacy.execFueled evm (evm.dyna.gasMeasure + 1) ≠ Fueled.exhausted :=
+  Legacy.execFueled_ne_exhausted evm (evm.dyna.gasMeasure + 1) (Nat.lt_succ_self _)
 
 /-! ## The total interpreter
 
@@ -5122,10 +5122,10 @@ Everything below is fuel-free. `execFueled` survives as the structurally
 recursive definition downstream proofs reason over, but no consumer has to
 thread a fuel parameter or handle an exhaustion outcome any more. -/
 
-theorem execFueled_run_sufficientFuel_isSome (evm : Evm) :
-    ((execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run).isSome := by
+theorem Legacy.execFueled_run_sufficientFuel_isSome (evm : Evm) :
+    ((Legacy.execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run).isSome := by
   obtain ⟨raw, hraw⟩ :=
-    execFueled_run_isSome (sufficientFuel evm.dyna.gasMeasure) evm
+    Legacy.execFueled_run_isSome (sufficientFuel evm.dyna.gasMeasure) evm
       (Nat.lt_succ_self _)
   rw [hraw]
   rfl
@@ -5145,8 +5145,8 @@ below is the proof that it is never taken. Every machine carries a fork, and
 every fork's rules are usable (`Fork.ruleSet_valid`), so the witness the
 sufficiency proof needs is a fact about the machine rather than a premise: no
 machine, and therefore no entry point, can reach the branch. -/
-def exec (evm : Evm) : Except (EvmError × Devm) Devm :=
-  match (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run with
+def Legacy.exec (evm : Evm) : Except (EvmError × Devm) Devm :=
+  match (Legacy.execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run with
   | some r => r
   | none => .error ⟨.internal (.invariant .none), evm.dyna⟩
 
@@ -5154,13 +5154,13 @@ def exec (evm : Evm) : Except (EvmError × Devm) Devm :=
 total result, so no downstream proof has to reason about the invariant branch.
 Unconditional: the rule set a machine carries is its fork's, and every fork's
 is usable. -/
-theorem execFueled_run_sufficientFuel (evm : Evm) :
-    (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run = some (exec evm) := by
+theorem Legacy.execFueled_run_sufficientFuel (evm : Evm) :
+    (Legacy.execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run = some (Legacy.exec evm) := by
   obtain ⟨raw, hraw⟩ :=
-    execFueled_run_isSome (sufficientFuel evm.dyna.gasMeasure) evm
+    Legacy.execFueled_run_isSome (sufficientFuel evm.dyna.gasMeasure) evm
       (Nat.lt_succ_self _)
   rw [hraw]
-  unfold exec
+  unfold Legacy.exec
   rw [hraw]
 
 /-- The invariant branch is unreachable: `exec` is the driver's own answer, not
@@ -5169,23 +5169,23 @@ a fallback.
 Named `exec_of_valid` until goal `jaune-forks-by-construction-v1`, when the
 `ForkRules.Valid` premise the old name referred to came off every statement
 about a machine. Nothing outside this repository named it. -/
-theorem exec_ok (evm : Evm) :
-    ∃ raw, (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run = some raw
-      ∧ exec evm = raw :=
-  ⟨exec evm, execFueled_run_sufficientFuel evm, rfl⟩
+theorem Legacy.exec_ok (evm : Evm) :
+    ∃ raw, (Legacy.execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run = some raw
+      ∧ Legacy.exec evm = raw :=
+  ⟨Legacy.exec evm, Legacy.execFueled_run_sufficientFuel evm, rfl⟩
 
 /-- More fuel never changes a result the driver already reached. This is what
 makes the seeded budget an implementation detail rather than a semantic choice:
 every budget past the frame's gas gives the same answer, so replacing the old
 `gas + 50` seeding by `sufficientFuel gas` is observationally neutral. -/
-theorem execFueled_run_mono :
+theorem Legacy.execFueled_run_mono :
     ∀ (fuel : Nat) (evm : Evm) {fuel' : Nat} {raw : Execution}, fuel ≤ fuel' →
-      (execFueled evm fuel).run = some raw → (execFueled evm fuel').run = some raw := by
+      (Legacy.execFueled evm fuel).run = some raw → (Legacy.execFueled evm fuel').run = some raw := by
   intro fuel
   induction fuel with
   | zero =>
     intro evm fuel' raw _ h
-    rw [execFueled] at h
+    rw [Legacy.execFueled] at h
     simp only [Fueled.exhausted_run] at h
     nomatch h
   | succ fuel ih =>
@@ -5195,9 +5195,9 @@ theorem execFueled_run_mono :
       | zero => omega
       | succ m => exact ⟨m, rfl⟩
     have hle' : fuel ≤ m := by omega
-    rw [execFueled] at h
-    rw [execFueled]
-    rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
+    rw [Legacy.execFueled] at h
+    rw [Legacy.execFueled]
+    rcases hs : Legacy.Evm.step evm with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
       rw [hs] at h <;> dsimp only at h ⊢
     · exact h
     · exact ih _ hle' h
@@ -5207,7 +5207,7 @@ theorem execFueled_run_mono :
           dsimp only at h ⊢
         · exact h
         · exact ih _ hle' h
-      · rcases hc : (execFueled child fuel).run with _ | raw'
+      · rcases hc : (Legacy.execFueled child fuel).run with _ | raw'
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
@@ -5220,17 +5220,17 @@ theorem execFueled_run_mono :
           · exact ih _ hle' h
 
 /-- The downstream bridge at an arbitrary sufficient budget. -/
-theorem execFueled_run_of_lt {evm : Evm} {fuel : Nat} (h : evm.dyna.gasMeasure < fuel) :
-    (execFueled evm fuel).run = some (exec evm) :=
-  execFueled_run_mono _ evm h (execFueled_run_sufficientFuel evm)
+theorem Legacy.execFueled_run_of_lt {evm : Evm} {fuel : Nat} (h : evm.dyna.gasMeasure < fuel) :
+    (Legacy.execFueled evm fuel).run = some (Legacy.exec evm) :=
+  Legacy.execFueled_run_mono _ evm h (Legacy.execFueled_run_sufficientFuel evm)
 
 /-- Reading a fueled result off as the total one: the shape a proof stated over
 `execFueled` uses to transfer to `exec`. -/
-theorem exec_eq_of_run {evm : Evm} {fuel : Nat} {raw : Execution}
+theorem Legacy.exec_eq_of_run {evm : Evm} {fuel : Nat} {raw : Execution}
     (hlt : evm.dyna.gasMeasure < fuel)
-    (h : (execFueled evm fuel).run = some raw) :
-    exec evm = raw := by
-  rw [execFueled_run_of_lt hlt] at h
+    (h : (Legacy.execFueled evm fuel).run = some raw) :
+    Legacy.exec evm = raw := by
+  rw [Legacy.execFueled_run_of_lt hlt] at h
   exact Option.some.inj h
 
 /-! ## The total frame wrappers
@@ -5239,22 +5239,22 @@ These are the public entry points. They lost their `fuel` parameter and their
 `Fueled` result type together: a frame is entered, the driver runs to a
 definite result, and the frame settles it. -/
 
-def runFrame (frame : Frame) : Except (EvmError × State × AdrSet × TransientStorage) Devm :=
+def runFrame (frame : Legacy.Frame) : Except (EvmError × State × AdrSet × TransientStorage) Devm :=
   match frame.enter with
   | .done r => r
-  | .run evm => frame.settle (exec evm)
+  | .run evm => frame.settle (Legacy.exec evm)
 
 def executeCode (msg : Msg) : Except (EvmError × State × AdrSet × TransientStorage) Devm :=
   match executeCode.enter msg with
-  | .inl evm => executeCode.handleError (exec evm)
+  | .inl evm => executeCode.handleError (Legacy.exec evm)
   | .inr raw => executeCode.handleError raw
 
 def processMessage (msg : Msg) : Except (EvmError × State × AdrSet × TransientStorage) Devm :=
-  runFrame (Frame.ofCall msg)
+  runFrame (Legacy.Frame.ofCall msg)
 
 def processCreateMessage (msg : Msg) :
     Except (EvmError × State × AdrSet × TransientStorage) Devm :=
-  runFrame (Frame.ofCreate msg)
+  runFrame (Legacy.Frame.ofCreate msg)
 
 --------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
 
@@ -5276,36 +5276,36 @@ exhaustion branch a typed internal error rather than a proof obligation: the
 error channel of `exec` carries the frame's own `Devm`, which is canonical by
 hypothesis, so the branch is canonical for free. Every downstream canonicality
 statement therefore keeps the signature it had. -/
-theorem exec_canonical {evm : Evm} (h : evm.Canonical) :
-    Execution.Canonical (exec evm) := by
-  unfold exec
-  cases hr : (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run with
+theorem Legacy.exec_canonical {evm : Evm} (h : evm.Canonical) :
+    Execution.Canonical (Legacy.exec evm) := by
+  unfold Legacy.exec
+  cases hr : (Legacy.execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run with
   | none => exact h.2
-  | some raw => exact execFueled_run_canonical _ evm h hr
+  | some raw => exact Legacy.execFueled_run_canonical _ evm h hr
 
-theorem runFrame_canonicalSettle {frame : Frame} (hf : frame.Canonical) :
+theorem runFrame_canonicalSettle {frame : Legacy.Frame} (hf : frame.Canonical) :
     (runFrame frame).CanonicalSettle := by
   unfold runFrame
-  have hent := Frame.enter_canonical hf
+  have hent := Legacy.Frame.enter_canonical hf
   rcases he : frame.enter with r | evm <;> rw [he] at hent
   · exact hent
-  · exact Frame.settle_canonicalSettle hf (exec_canonical hent)
+  · exact Legacy.Frame.settle_canonicalSettle hf (Legacy.exec_canonical hent)
 
 theorem executeCode_canonicalSettle {msg : Msg} (hm : msg.Canonical) :
     (executeCode msg).CanonicalSettle := by
   unfold executeCode
   have hent := executeCode.enter_canonical hm
   rcases he : executeCode.enter msg with evm | raw <;> rw [he] at hent
-  · exact executeCode.handleError_canonicalSettle (exec_canonical hent)
+  · exact executeCode.handleError_canonicalSettle (Legacy.exec_canonical hent)
   · exact executeCode.handleError_canonicalSettle hent
 
 theorem processMessage_canonicalSettle {msg : Msg} (hm : msg.Canonical) :
     (processMessage msg).CanonicalSettle :=
-  runFrame_canonicalSettle (Frame.canonical_ofCall hm)
+  runFrame_canonicalSettle (Legacy.Frame.canonical_ofCall hm)
 
 theorem processCreateMessage_canonicalSettle {msg : Msg} (hm : msg.Canonical) :
     (processCreateMessage msg).CanonicalSettle :=
-  runFrame_canonicalSettle (Frame.canonical_ofCreate hm)
+  runFrame_canonicalSettle (Legacy.Frame.canonical_ofCreate hm)
 
 -- The eq-conditioned forms downstream walks consume without spelling the
 -- message, plus the inversion for the `bimap Prod.fst id` error-erasure the

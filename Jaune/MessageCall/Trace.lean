@@ -22,7 +22,7 @@ namespace Jaune.Staging
 
 namespace Trace
 
-open Jaune.Trace (Context CertifiedResult)
+open Jaune.Legacy.Trace (Context CertifiedResult)
 
 /-- Today's events with the staged payloads. `instruction` carries the pre-state and the staged
 step; `entered` the staged frame and entry; `settled` the staged settled result. -/

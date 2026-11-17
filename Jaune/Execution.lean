@@ -440,14 +440,14 @@ def createMsg
       else devm.accountsToDelete
   }
 
-structure Frame : Type where
+structure Legacy.Frame : Type where
   outer : Msg
   inner : Msg
   isCreate : Bool
 
-def Frame.ofCall (msg : Msg) : Frame := ⟨msg, msg, false⟩
+def Legacy.Frame.ofCall (msg : Msg) : Legacy.Frame := ⟨msg, msg, false⟩
 
-def Frame.ofCreate (msg : Msg) : Frame :=
+def Legacy.Frame.ofCreate (msg : Msg) : Legacy.Frame :=
   ⟨msg, processCreateMessage.msg msg, true⟩
 
 /-- Both saved states a call frame can restore from are canonical.
@@ -458,14 +458,14 @@ whose code-deposit charge fails restores the *outer* one. The invariant
 therefore has to name both, which is exactly the "every saved parent/rollback
 state" clause of P0.4 item 5. Statement only -- Step 4 of
 the integrity plan (kept outside this repository) owns the preservation proofs. -/
-def Frame.Canonical (f : Frame) : Prop :=
+def Legacy.Frame.Canonical (f : Legacy.Frame) : Prop :=
   Msg.Canonical f.outer ∧ Msg.Canonical f.inner
 
-instance {f : Frame} : Decidable (Frame.Canonical f) := by
-  unfold Frame.Canonical; infer_instance
+instance {f : Legacy.Frame} : Decidable (Legacy.Frame.Canonical f) := by
+  unfold Legacy.Frame.Canonical; infer_instance
 
-theorem Frame.canonical_ofCall {msg : Msg} (h : Msg.Canonical msg) :
-    Frame.Canonical (Frame.ofCall msg) := ⟨h, h⟩
+theorem Legacy.Frame.canonical_ofCall {msg : Msg} (h : Msg.Canonical msg) :
+    Legacy.Frame.Canonical (Legacy.Frame.ofCall msg) := ⟨h, h⟩
 
 /-- `process_message`'s settlement: a failed frame rolls back.
 
@@ -519,13 +519,13 @@ def processCreateMessage.settle (msg : Msg)
     .ok ((evm.rollback msg.benv.state msg.tenv.transientStorage).withStorageWrites
       msg.benv.storageWrites)
 
-def Frame.settleMsg (f : Frame)
+def Legacy.Frame.settleMsg (f : Legacy.Frame)
     (r : Except (EvmError × State × AdrSet × TransientStorage) Devm) :
     Except (EvmError × State × AdrSet × TransientStorage) Devm :=
   let r := processMessage.settle f.inner r
   if f.isCreate then processCreateMessage.settle f.outer r else r
 
-def Frame.settle (f : Frame) (raw : Execution) :
+def Legacy.Frame.settle (f : Legacy.Frame) (raw : Execution) :
     Except (EvmError × State × AdrSet × TransientStorage) Devm :=
   f.settleMsg (executeCode.handleErrorWith f.inner.benv.stat.rules.stateGas raw)
 
@@ -543,7 +543,7 @@ inductive FrameEntry : Type
   | done (r : Except (EvmError × State × AdrSet × TransientStorage) Devm)
   | run (evm : Evm)
 
-def Frame.enter (f : Frame) : FrameEntry :=
+def Legacy.Frame.enter (f : Legacy.Frame) : FrameEntry :=
   /- In the original reference python implementation, there is a test here that
      checks the msg.depth value, and fails with a "stack depth limit error" if
      it is larger than 1024. However, due to the way processMessage is defined
@@ -624,30 +624,30 @@ def Resume.run :
 
 inductive XStep : Type
   | done (ex : Execution)
-  | spawn (frame : Frame) (rsm : Resume)
+  | spawn (frame : Legacy.Frame) (rsm : Resume)
 
 def XStep.ofExcept : Except (EvmError × Devm) XStep → XStep
   | .error e => .done (.error e)
   | .ok step => step
 
-inductive Step : Type
+inductive Legacy.Step : Type
   | halt (ex : Execution)
   | cont (pc : Nat) (devm : Devm)
-  | spawn (frame : Frame) (rsm : Resume) (pc : Nat)
+  | spawn (frame : Legacy.Frame) (rsm : Resume) (pc : Nat)
 
-def Step.ofExecution (pc : Nat) : Execution → Step
+def Legacy.Step.ofExecution (pc : Nat) : Execution → Legacy.Step
   | .error e => .halt (.error e)
   | .ok devm => .cont pc devm
 
-def Step.ofJump : Except (EvmError × Devm) (Nat × Devm) → Step
+def Legacy.Step.ofJump : Except (EvmError × Devm) (Nat × Devm) → Legacy.Step
   | .error e => .halt (.error e)
   | .ok ⟨pc, devm⟩ => .cont pc devm
 
-def XStep.toStep (pc : Nat) : XStep → Step
-  | .done ex => Step.ofExecution pc ex
+def XStep.toStep (pc : Nat) : XStep → Legacy.Step
+  | .done ex => Legacy.Step.ofExecution pc ex
   | .spawn frame rsm => .spawn frame rsm pc
 
-def genericCreate.step
+def Legacy.genericCreate.step
     (sevm : Sevm) (devm : Devm) (endowment : U256)
     (newAddress : Address) (memoryIndex memorySize : Nat) : XStep :=
   XStep.ofExcept do
@@ -676,9 +676,9 @@ def genericCreate.step
       return .done (.ok devm)
     let childMsg :=
       createMsg sevm devm createGas endowment newAddress calldata
-    return .spawn (Frame.ofCreate childMsg) (.create devm newAddress)
+    return .spawn (Legacy.Frame.ofCreate childMsg) (.create devm newAddress)
 
-def genericCall.step
+def Legacy.genericCall.step
     (sevm : Sevm) (devm : Devm) (gas : Nat) (value : U256)
     (caller target codeAddress : Address)
     (shouldTransferValue isStaticcall : Bool)
@@ -694,14 +694,14 @@ def genericCall.step
     let childMsg :=
       callMsg sevm evm1 gas value caller target codeAddress
         shouldTransferValue isStaticcall calldata code disablePrecompiles
-    .spawn (Frame.ofCall childMsg) (.call evm1 outputIndex outputSize)
+    .spawn (Legacy.Frame.ofCall childMsg) (.call evm1 outputIndex outputSize)
 
 /-- `generic_call` at the pin, for `rules.stateGas = some state`. The opcode has
 already priced the call, charged both dimensions and withheld both grants; this
 is the lifecycle: the preflight that aborts without spawning -- both grants
 return untouched and a charged creation refills -- or the spawn, whose child
 starts with the reservoir as its state-gas grant. -/
-def genericCallAmsterdam.step
+def Legacy.genericCallAmsterdam.step
     (sevm : Sevm) (state : StateGasRules) (devm : Devm)
     (gas reservoir : Nat) (value : U256)
     (caller target codeAddress : Address)
@@ -724,7 +724,7 @@ def genericCallAmsterdam.step
       { callMsg sevm evm1 gas value caller target codeAddress
           shouldTransferValue isStaticcall calldata code disablePrecompiles
         with stateGasGrant := reservoir }
-    .spawn (Frame.ofCall childMsg)
+    .spawn (Legacy.Frame.ofCall childMsg)
       (.callAmsterdam state evm1 outputIndex outputSize newAccountCharged)
 
 /-- `generic_create` at the pin, for `rules.stateGas = some state`. The opcode
@@ -732,7 +732,7 @@ has priced the operation itself; this is the lifecycle: the preflight that
 aborts with nothing charged or withheld, the destination access with its
 creation charge decided by existence alone, the withheld execution grant, the
 collision that consumes it, and the spawn with the whole reservoir. -/
-def genericCreateAmsterdam.step
+def Legacy.genericCreateAmsterdam.step
     (sevm : Sevm) (state : StateGasRules) (devm : Devm) (endowment : U256)
     (newAddress : Address) (memoryIndex memorySize : Nat) : XStep :=
   XStep.ofExcept do
@@ -769,10 +769,10 @@ def genericCreateAmsterdam.step
     let childMsg :=
       { createMsg sevm devm createGas endowment newAddress calldata
         with stateGasGrant := reservoir }
-    return .spawn (Frame.ofCreate childMsg)
+    return .spawn (Legacy.Frame.ofCreate childMsg)
       (.createAmsterdam state devm newAddress (decide newAccountCharged))
 
-def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
+def Legacy.MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
   | .create =>
     match sevm.benvStat.rules.stateGas with
     | none =>
@@ -792,7 +792,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
         let newAddress :=
           computeContractAddress
             sevm.currentTarget (devm.state.get sevm.currentTarget).nonce
-        return genericCreate.step
+        return Legacy.genericCreate.step
           sevm devm endowment newAddress memoryIndex memorySize
     | some state =>
       XStep.ofExcept do
@@ -814,7 +814,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
         let newAddress :=
           computeContractAddress
             sevm.currentTarget (devm.state.get sevm.currentTarget).nonce
-        return genericCreateAmsterdam.step
+        return Legacy.genericCreateAmsterdam.step
           sevm state devm endowment newAddress memoryIndex memorySize
   -- S8 (EIP-1014): availability first, the `CLZ` pattern in
   -- `Rinst.runCore`: without the fork the byte is an undefined instruction
@@ -845,7 +845,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
             create2NewAddress
               sevm.currentTarget salt
               (devm.memory.data.sliceD memoryIndex memorySize 0)
-          return genericCreate.step
+          return Legacy.genericCreate.step
             sevm devm endowment newAddress memoryIndex memorySize
       | some state =>
         XStep.ofExcept do
@@ -871,7 +871,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
             create2NewAddress
               sevm.currentTarget salt
               (devm.memory.data.sliceD memoryIndex memorySize 0)
-          return genericCreateAmsterdam.step
+          return Legacy.genericCreateAmsterdam.step
             sevm state devm endowment newAddress memoryIndex memorySize
     else
       XStep.ofExcept (.error ⟨.halt (.invalidOpcode .none), devm⟩)
@@ -920,7 +920,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
               ((devm.withReturnData []).withGasLeft
                 (devm.gasLeft + msgCallStipend)))
         else
-          return genericCall.step
+          return Legacy.genericCall.step
             sevm devm msgCallStipend value sevm.currentTarget callee
             newCodeAddress true false inputIndex inputSize outputIndex outputSize
             code disablePrecompiles
@@ -971,7 +971,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
         let devm :=
           devm.memExtends [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
         let senderBal := (devm.getAcct sevm.currentTarget).balance
-        return genericCallAmsterdam.step
+        return Legacy.genericCallAmsterdam.step
           sevm state devm msgCallStipend reservoir value sevm.currentTarget callee
           newCodeAddress true false inputIndex inputSize outputIndex outputSize
           code disablePrecompiles (decide newAccountCharged) (decide (senderBal < value))
@@ -1016,7 +1016,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
             (.ok
               ((devm.withGasLeft (devm.gasLeft + msgCallStipend)).withReturnData []))
         else
-          return genericCall.step
+          return Legacy.genericCall.step
             sevm devm msgCallStipend value sevm.currentTarget
             sevm.currentTarget newCodeAddress true false
             inputIndex inputSize outputIndex outputSize code disablePrecompiles
@@ -1058,7 +1058,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
         let ⟨reservoir, devm⟩ := devm.drainStateGasReservoir
         let devm :=
           devm.memExtends [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-        return genericCallAmsterdam.step
+        return Legacy.genericCallAmsterdam.step
           sevm state devm msgCallStipend reservoir value sevm.currentTarget sevm.currentTarget
           newCodeAddress true false inputIndex inputSize outputIndex outputSize
           code disablePrecompiles false (decide (senderBal < value))
@@ -1093,7 +1093,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
         let devm :=
           devm.memExtends
             [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-        return genericCall.step
+        return Legacy.genericCall.step
           sevm devm msgCallStipend sevm.value sevm.caller
           sevm.currentTarget newCodeAddress false false
           inputIndex inputSize outputIndex outputSize code disablePrecompiles
@@ -1133,7 +1133,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
         let ⟨reservoir, devm⟩ := devm.drainStateGasReservoir
         let devm :=
           devm.memExtends [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-        return genericCallAmsterdam.step
+        return Legacy.genericCallAmsterdam.step
           sevm state devm msgCallStipend reservoir sevm.value sevm.caller sevm.currentTarget
           newCodeAddress false false inputIndex inputSize outputIndex outputSize
           code disablePrecompiles false false
@@ -1168,7 +1168,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
         let devm :=
           devm.memExtends
             [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-        return genericCall.step
+        return Legacy.genericCall.step
           sevm devm msgCallStipend 0 sevm.currentTarget target newCodeAddress
           true true inputIndex inputSize outputIndex outputSize code
           disablePrecompiles
@@ -1208,12 +1208,12 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → XStep
         let ⟨reservoir, devm⟩ := devm.drainStateGasReservoir
         let devm :=
           devm.memExtends [⟨inputIndex, inputSize⟩, ⟨outputIndex, outputSize⟩]
-        return genericCallAmsterdam.step
+        return Legacy.genericCallAmsterdam.step
           sevm state devm msgCallStipend reservoir 0 sevm.currentTarget codeAddress
           newCodeAddress true true inputIndex inputSize outputIndex outputSize
           code disablePrecompiles false false
 
-def NextOp.step (evm : Evm) (n : NextOp) : Step :=
+def Legacy.NextOp.step (evm : Evm) (n : NextOp) : Legacy.Step :=
   let pc := evm.pc + n.size
   match n with
   -- S8 (EIP-3855): `PUSH0` is the empty push. Without the fork the byte is an
@@ -1221,14 +1221,14 @@ def NextOp.step (evm : Evm) (n : NextOp) : Step :=
   -- `CLZ` in `Rinst.runCore`; a nonzero push is untouched.
   | .push xs _ =>
     if xs = [] && !evm.sta.benvStat.rules.opcodes.push0 then
-      Step.ofExecution pc (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
+      Legacy.Step.ofExecution pc (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
     else
       let cost := if xs = [] then Gas.base else Gas.veryLow
-      Step.ofExecution pc <| do
+      Legacy.Step.ofExecution pc <| do
         let devm ← chargeGas cost evm.dyna
         devm.push xs.toU256
-  | .plain r => Step.ofExecution pc (r.run evm)
-  | .message x => XStep.toStep pc (MessageOp.step evm.sta evm.dyna x)
+  | .plain r => Legacy.Step.ofExecution pc (r.run evm)
+  | .message x => XStep.toStep pc (Legacy.MessageOp.step evm.sta evm.dyna x)
   -- EIP-8024 (`vm/instructions/stack.py` `dupn`/`swapn`/`exchange`): the
   -- availability check first, as for every fork-gated opcode; then
   -- `charge_gas(VERY_LOW)` *before* the immediate is decoded, so an
@@ -1239,7 +1239,7 @@ def NextOp.step (evm : Evm) (n : NextOp) : Step :=
   -- top), `SWAPN n` swaps the top with position `n + 1` (index `n`), and
   -- `EXCHANGE n m` swaps positions `n + 1` and `m + 1` (indices `n`, `m`).
   | .dupn imm =>
-    Step.ofExecution pc <| do
+    Legacy.Step.ofExecution pc <| do
       if evm.sta.benvStat.rules.opcodes.stackAccess then
         let devm ← chargeGas Gas.veryLow evm.dyna
         match decodeSingle imm with
@@ -1251,7 +1251,7 @@ def NextOp.step (evm : Evm) (n : NextOp) : Step :=
       else
         .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩
   | .swapn imm =>
-    Step.ofExecution pc <| do
+    Legacy.Step.ofExecution pc <| do
       if evm.sta.benvStat.rules.opcodes.stackAccess then
         let devm ← chargeGas Gas.veryLow evm.dyna
         match decodeSingle imm with
@@ -1263,7 +1263,7 @@ def NextOp.step (evm : Evm) (n : NextOp) : Step :=
       else
         .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩
   | .exchange imm =>
-    Step.ofExecution pc <| do
+    Legacy.Step.ofExecution pc <| do
       if evm.sta.benvStat.rules.opcodes.stackAccess then
         let devm ← chargeGas Gas.veryLow evm.dyna
         match decodePair imm with
@@ -1275,11 +1275,11 @@ def NextOp.step (evm : Evm) (n : NextOp) : Step :=
       else
         .error ⟨.halt (.invalidOpcode .none), evm.dyna⟩
 
-def Evm.step (evm : Evm) : Step :=
+def Legacy.Evm.step (evm : Evm) : Legacy.Step :=
   match evm.getInst with
   | .none => .halt (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
-  | .some (.next n) => NextOp.step evm n
-  | .some (.jump j) => Step.ofJump (j.run evm)
+  | .some (.next n) => Legacy.NextOp.step evm n
+  | .some (.jump j) => Legacy.Step.ofJump (j.run evm)
   | .some (.halt l) => .halt (l.run evm.sta evm.dyna)
 
 /-- The single recursive interpreter driver, structurally recursive on its fuel
@@ -1287,25 +1287,25 @@ parameter and therefore obliged to report exhaustion as an outcome.
 
 `Jaune.Sufficiency` proves that fuel seeded from the frame's remaining gas is
 always enough, and wraps this function as the total `exec`. -/
-def execFueled : Evm → Nat → Fueled (EvmError × Devm) Devm
+def Legacy.execFueled : Evm → Nat → Fueled (EvmError × Devm) Devm
   | _, 0 => Fueled.exhausted
   | evm, fuel + 1 =>
-    match evm.step with
+    match Legacy.Evm.step evm with
     | .halt ex => Fueled.ofExcept ex
-    | .cont pc devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
+    | .cont pc devm => Legacy.execFueled ⟨pc, evm.sta, devm⟩ fuel
     | .spawn frame rsm pc =>
       match frame.enter with
       | .done r =>
         match rsm.run r with
         | .error e => Fueled.ofExcept (.error e)
-        | .ok devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
+        | .ok devm => Legacy.execFueled ⟨pc, evm.sta, devm⟩ fuel
       | .run child =>
-        match (execFueled child fuel).run with
+        match (Legacy.execFueled child fuel).run with
         | .none => Fueled.exhausted
         | .some raw =>
           match rsm.run (frame.settle raw) with
           | .error e => Fueled.ofExcept (.error e)
-          | .ok devm => execFueled ⟨pc, evm.sta, devm⟩ fuel
+          | .ok devm => Legacy.execFueled ⟨pc, evm.sta, devm⟩ fuel
   termination_by _ fuel => fuel
 
 instance {w a} : Decidable (State.isDead w a) := by
@@ -2101,22 +2101,22 @@ theorem processCreateMessage.settle_canonicalSettle {msg : Msg}
 /-- Both restoration targets of a frame settlement are covered: the inner
 message at `processMessage.settle`, and the outer one when a create fails its
 code-deposit charge. -/
-theorem Frame.settleMsg_canonicalSettle {f : Frame} (hf : f.Canonical)
+theorem Legacy.Frame.settleMsg_canonicalSettle {f : Legacy.Frame} (hf : f.Canonical)
     {r} (hr : Except.CanonicalSettle r) :
     (f.settleMsg r).CanonicalSettle := by
-  unfold Frame.settleMsg
+  unfold Legacy.Frame.settleMsg
   split
   · exact processCreateMessage.settle_canonicalSettle hf.1
       (processMessage.settle_canonicalSettle hf.2 hr)
   · exact processMessage.settle_canonicalSettle hf.2 hr
 
-theorem Frame.settle_canonicalSettle {f : Frame} (hf : f.Canonical)
+theorem Legacy.Frame.settle_canonicalSettle {f : Legacy.Frame} (hf : f.Canonical)
     {raw} (hraw : Execution.Canonical raw) :
     (f.settle raw).CanonicalSettle :=
-  Frame.settleMsg_canonicalSettle hf (executeCode.handleErrorWith_canonicalSettle hraw)
+  Legacy.Frame.settleMsg_canonicalSettle hf (executeCode.handleErrorWith_canonicalSettle hraw)
 
-theorem Frame.canonical_ofCreate {msg : Msg} (h : msg.Canonical) :
-    (Frame.ofCreate msg).Canonical :=
+theorem Legacy.Frame.canonical_ofCreate {msg : Msg} (h : msg.Canonical) :
+    (Legacy.Frame.ofCreate msg).Canonical :=
   ⟨h, processCreateMessage.msg_canonical h⟩
 
 /-- Code entry either starts a machine over the message's world or finishes a
@@ -2136,11 +2136,11 @@ def FrameEntry.Canonical : FrameEntry → Prop
   | .done r => r.CanonicalSettle
   | .run evm => evm.Canonical
 
-theorem Frame.enter_canonical {f : Frame} (hf : f.Canonical) :
+theorem Legacy.Frame.enter_canonical {f : Legacy.Frame} (hf : f.Canonical) :
     f.enter.Canonical := by
-  unfold Frame.enter
+  unfold Legacy.Frame.enter
   rcases hbt : f.inner.benvAfterTransfer with e | benv
-  · exact Frame.settleMsg_canonicalSettle hf
+  · exact Legacy.Frame.settleMsg_canonicalSettle hf
       (Msg.benvAfterTransfer_error_canonical hf.2 hbt)
   · have hm : (f.inner.withBenv benv).Canonical :=
       Msg.Canonical.withBenv hf.2 (Msg.benvAfterTransfer_ok_canonical hf.2 hbt)
@@ -2149,7 +2149,7 @@ theorem Frame.enter_canonical {f : Frame} (hf : f.Canonical) :
     rcases henter : executeCode.enter (f.inner.withBenv benv) with evm | raw <;>
       rw [henter] at hent
     · exact hent
-    · exact Frame.settle_canonicalSettle hf hent
+    · exact Legacy.Frame.settle_canonicalSettle hf hent
 
 /-- Resuming a parent needs only the settlement's canonicality: the error
 branch rebuilds the world entirely from the settlement payload, and child
@@ -2223,7 +2223,7 @@ def XStep.Canonical : XStep → Prop
   | .spawn frame _ => frame.Canonical
 
 /-- What one step must preserve. -/
-def Step.Canonical : Step → Prop
+def Legacy.Step.Canonical : Legacy.Step → Prop
   | .halt ex => Execution.Canonical ex
   | .cont _ devm => devm.Canonical
   | .spawn frame _ _ => frame.Canonical
@@ -2234,15 +2234,15 @@ theorem XStep.ofExcept_canonical {x} (hx : x.CanonicalOn XStep.Canonical) :
   | error e => exact hx
   | ok s => exact hx
 
-theorem Step.ofExecution_canonical (pc : Nat) {x}
-    (hx : Execution.Canonical x) : (Step.ofExecution pc x).Canonical := by
+theorem Legacy.Step.ofExecution_canonical (pc : Nat) {x}
+    (hx : Execution.Canonical x) : (Legacy.Step.ofExecution pc x).Canonical := by
   cases x with
   | error e => exact hx
   | ok devm => exact hx
 
-theorem Step.ofJump_canonical {x}
+theorem Legacy.Step.ofJump_canonical {x}
     (hx : x.CanonicalOn (fun a => a.2.Canonical)) :
-    (Step.ofJump x).Canonical := by
+    (Legacy.Step.ofJump x).Canonical := by
   cases x with
   | error e => exact hx
   | ok a => exact hx
@@ -2250,7 +2250,7 @@ theorem Step.ofJump_canonical {x}
 theorem XStep.toStep_canonical (pc : Nat) {s : XStep} (hs : s.Canonical) :
     (XStep.toStep pc s).Canonical := by
   cases s with
-  | done ex => exact Step.ofExecution_canonical pc hs
+  | done ex => exact Legacy.Step.ofExecution_canonical pc hs
   | spawn frame rsm => exact hs
 
 /-- The child message of a call-type instruction lives on the caller's world
@@ -2324,12 +2324,12 @@ theorem setDelegation_canonical {msg : Msg} (h : msg.Canonical)
 /-- The CREATE-family step: the only world change on the parent's side is the
 sender nonce increment, through its named mutator; the child frame is built
 over the parent's world and the frame's original state. -/
-theorem genericCreate.step_canonical {sevm : Sevm} {devm : Devm}
+theorem Legacy.genericCreate.step_canonical {sevm : Sevm} {devm : Devm}
     (hs : sevm.Canonical) (hd : devm.Canonical) (endowment : U256)
     (newAddress : Address) (memoryIndex memorySize : Nat) :
-    (genericCreate.step sevm devm endowment newAddress memoryIndex
+    (Legacy.genericCreate.step sevm devm endowment newAddress memoryIndex
       memorySize).Canonical := by
-  unfold genericCreate.step
+  unfold Legacy.genericCreate.step
   refine XStep.ofExcept_canonical ?_
   refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
   refine Except.CanonicalOn.bind
@@ -2346,41 +2346,41 @@ theorem genericCreate.step_canonical {sevm : Sevm} {devm : Devm}
         fun d hd1 => ?_
       exact hd1
     · refine Except.canonicalOn_ok ?_
-      exact Frame.canonical_ofCreate
+      exact Legacy.Frame.canonical_ofCreate
         (createMsg_canonical hs
           (by exact Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd _) rfl)
           _ _ _ _)
 
 /-- The CALL-family step never changes the parent world: it either refunds
 the stipend at depth zero or spawns the child frame. -/
-theorem genericCall.step_canonical {sevm : Sevm} {devm : Devm}
+theorem Legacy.genericCall.step_canonical {sevm : Sevm} {devm : Devm}
     (hs : sevm.Canonical) (hd : devm.Canonical) (gas : Nat) (value : U256)
     (caller target codeAddress : Address) (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool) :
-    (genericCall.step sevm devm gas value caller target codeAddress
+    (Legacy.genericCall.step sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles).Canonical := by
-  unfold genericCall.step
+  unfold Legacy.genericCall.step
   dsimp only
   split
   · refine XStep.ofExcept_canonical ?_
     refine Except.CanonicalOn.bind
       (liftMachExecution_canonical (by exact hd)) fun d hd1 => ?_
     exact hd1
-  · exact Frame.canonical_ofCall
+  · exact Legacy.Frame.canonical_ofCall
       (callMsg_canonical hs (by exact hd) _ _ _ _ _ _ _ _ _ _)
 
-theorem genericCallAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules}
+theorem Legacy.genericCallAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules}
     {devm : Devm} (hs : sevm.Canonical) (hd : devm.Canonical)
     (gas reservoir : Nat) (value : U256) (caller target codeAddress : Address)
     (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat) (code : ByteArray)
     (disablePrecompiles newAccountCharged insufficientBalance : Bool) :
-    (genericCallAmsterdam.step sevm state devm gas reservoir value caller target
+    (Legacy.genericCallAmsterdam.step sevm state devm gas reservoir value caller target
       codeAddress shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles newAccountCharged insufficientBalance).Canonical := by
-  unfold genericCallAmsterdam.step
+  unfold Legacy.genericCallAmsterdam.step
   dsimp only
   split
   · refine XStep.ofExcept_canonical ?_
@@ -2395,7 +2395,7 @@ theorem genericCallAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules
     refine Except.CanonicalOn.bind
       (liftMachExecution_canonical hp) fun d hd1 => ?_
     exact hd1
-  · apply Frame.canonical_ofCall
+  · apply Legacy.Frame.canonical_ofCall
     change (callMsg sevm (devm.withReturnData []) gas value caller target codeAddress
       shouldTransferValue isStaticcall
       ((devm.withReturnData []).memory.data.sliceD inputIndex inputSize 0)
@@ -2405,12 +2405,12 @@ theorem genericCallAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules
       ((devm.withReturnData []).memory.data.sliceD inputIndex inputSize 0)
       code disablePrecompiles
 
-theorem genericCreateAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules}
+theorem Legacy.genericCreateAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRules}
     {devm : Devm} (hs : sevm.Canonical) (hd : devm.Canonical)
     (endowment : U256) (newAddress : Address) (memoryIndex memorySize : Nat) :
-    (genericCreateAmsterdam.step sevm state devm endowment newAddress memoryIndex
+    (Legacy.genericCreateAmsterdam.step sevm state devm endowment newAddress memoryIndex
       memorySize).Canonical := by
-  unfold genericCreateAmsterdam.step
+  unfold Legacy.genericCreateAmsterdam.step
   refine XStep.ofExcept_canonical ?_
   dsimp only
   split
@@ -2427,7 +2427,7 @@ theorem genericCreateAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRul
             (Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd1 _) rfl))
           fun d2 hd2 => ?_
         exact Except.canonicalOn_ok hd2
-      · exact Except.canonicalOn_ok <| Frame.canonical_ofCreate <|
+      · exact Except.canonicalOn_ok <| Legacy.Frame.canonical_ofCreate <|
           createMsg_canonical hs
             (Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd1 _) rfl)
             d.withholdCreateGas.1 endowment newAddress
@@ -2441,16 +2441,16 @@ theorem genericCreateAmsterdam.step_canonical {sevm : Sevm} {state : StateGasRul
             (Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd1 _) rfl))
           fun d2 hd2 => ?_
         exact Except.canonicalOn_ok hd2
-      · exact Except.canonicalOn_ok <| Frame.canonical_ofCreate <|
+      · exact Except.canonicalOn_ok <| Legacy.Frame.canonical_ofCreate <|
           createMsg_canonical hs
             (Devm.Canonical.of_world_eq (Devm.Canonical.incrNonce hd1 _) rfl)
             d.withholdCreateGas.1 endowment newAddress
             (devm.memory.data.sliceD memoryIndex memorySize 0)
 
-theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
+theorem Legacy.MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
     (hs : sevm.Canonical) (hd : devm.Canonical) (x : MessageOp) :
-    (MessageOp.step sevm devm x).Canonical := by
-  cases x <;> simp only [MessageOp.step]
+    (Legacy.MessageOp.step sevm devm x).Canonical := by
+  cases x <;> simp only [Legacy.MessageOp.step]
   case create =>
     split
     · refine XStep.ofExcept_canonical ?_
@@ -2459,7 +2459,7 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (liftMach_canonicalOn hb) fun c hc => ?_
       refine Except.CanonicalOn.bind (liftMachExecution_canonical hc) fun d hd1 => ?_
       exact Except.canonicalOn_ok
-        (genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
+        (Legacy.genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
     · refine XStep.ofExcept_canonical ?_
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd) fun _ _ => ?_
       refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
@@ -2468,7 +2468,7 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
       refine Except.CanonicalOn.bind (liftMachExecution_canonical hc) fun d hd1 => ?_
       refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd1) fun _ _ => ?_
       apply Except.canonicalOn_ok
-      apply genericCreateAmsterdam.step_canonical
+      apply Legacy.genericCreateAmsterdam.step_canonical
       · exact hs
       · exact Devm.Canonical.of_world_eq hd1 rfl
   case create2 =>
@@ -2482,7 +2482,7 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
         refine Except.CanonicalOn.bind (liftMachExecution_canonical he)
           fun d hd1 => ?_
         exact Except.canonicalOn_ok
-          (genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
+          (Legacy.genericCreate.step_canonical hs (by exact hd1) _ _ _ _)
       · refine XStep.ofExcept_canonical ?_
         refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd)
           fun _ _ => ?_
@@ -2495,7 +2495,7 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
         refine Except.CanonicalOn.bind (Except.canonicalOn_assert hd1)
           fun _ _ => ?_
         apply Except.canonicalOn_ok
-        apply genericCreateAmsterdam.step_canonical
+        apply Legacy.genericCreateAmsterdam.step_canonical
         · exact hs
         · exact Devm.Canonical.of_world_eq hd1 rfl
     · -- Gate off: the undefined-opcode error keeps the machine.
@@ -2526,7 +2526,7 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
           (liftMachExecution_canonical (by exact hd2)) fun d3 hd3 => ?_
         exact hd3
       · exact Except.canonicalOn_ok
-          (genericCall.step_canonical hs (by exact hd2)
+          (Legacy.genericCall.step_canonical hs (by exact hd2)
             _ _ _ _ _ _ _ _ _ _ _ _ _)
     · refine XStep.ofExcept_canonical ?_
       refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
@@ -2555,13 +2555,13 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
       · refine Except.CanonicalOn.bind (liftMachExecution_canonical hd2) fun d3 hd3 => ?_
         refine Except.CanonicalOn.bind (liftMachExecution_canonical hd3) fun d4 hd4 => ?_
         apply Except.canonicalOn_ok
-        apply genericCallAmsterdam.step_canonical
+        apply Legacy.genericCallAmsterdam.step_canonical
         · exact hs
         · exact Devm.Canonical.of_world_eq hd4 rfl
       · refine Except.CanonicalOn.bind (Except.canonicalOn_ok hd2) fun d3 hd3 => ?_
         refine Except.CanonicalOn.bind (liftMachExecution_canonical hd3) fun d4 hd4 => ?_
         apply Except.canonicalOn_ok
-        apply genericCallAmsterdam.step_canonical
+        apply Legacy.genericCallAmsterdam.step_canonical
         · exact hs
         · exact Devm.Canonical.of_world_eq hd4 rfl
   case callcode =>
@@ -2588,7 +2588,7 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
           (liftMachExecution_canonical (by exact hd2)) fun d3 hd3 => ?_
         exact hd3
       · exact Except.canonicalOn_ok
-          (genericCall.step_canonical hs (by exact hd2)
+          (Legacy.genericCall.step_canonical hs (by exact hd2)
             _ _ _ _ _ _ _ _ _ _ _ _ _)
     · refine XStep.ofExcept_canonical ?_
       refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
@@ -2613,7 +2613,7 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
           (addAccessedAddress g.2 b.1) b.1).2.1
       refine Except.CanonicalOn.bind (liftMachExecution_canonical haccess) fun d2 hd2 => ?_
       apply Except.canonicalOn_ok
-      apply genericCallAmsterdam.step_canonical
+      apply Legacy.genericCallAmsterdam.step_canonical
       · exact hs
       · exact Devm.Canonical.of_world_eq hd2 rfl
   case delegatecall =>
@@ -2635,7 +2635,7 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
             (by split <;> exact hf) _))
         fun d2 hd2 => ?_
       exact Except.canonicalOn_ok
-        (genericCall.step_canonical hs (by exact hd2)
+        (Legacy.genericCall.step_canonical hs (by exact hd2)
           _ _ _ _ _ _ _ _ _ _ _ _ _)
     · refine XStep.ofExcept_canonical ?_
       refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
@@ -2659,7 +2659,7 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
           (addAccessedAddress f.2 b.1) b.1).2.1
       refine Except.CanonicalOn.bind (liftMachExecution_canonical haccess) fun d2 hd2 => ?_
       apply Except.canonicalOn_ok
-      apply genericCallAmsterdam.step_canonical
+      apply Legacy.genericCallAmsterdam.step_canonical
       · exact hs
       · exact Devm.Canonical.of_world_eq hd2 rfl
   case staticcall =>
@@ -2681,7 +2681,7 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
             (by split <;> exact hf) _))
         fun d2 hd2 => ?_
       exact Except.canonicalOn_ok
-        (genericCall.step_canonical hs (by exact hd2)
+        (Legacy.genericCall.step_canonical hs (by exact hd2)
           _ _ _ _ _ _ _ _ _ _ _ _ _)
     · refine XStep.ofExcept_canonical ?_
       refine Except.CanonicalOn.bind (liftMach_canonicalOn hd) fun a ha => ?_
@@ -2705,26 +2705,26 @@ theorem MessageOp.step_canonical {sevm : Sevm} {devm : Devm}
           (addAccessedAddress f.2 b.1) b.1).2.1
       refine Except.CanonicalOn.bind (liftMachExecution_canonical haccess) fun d2 hd2 => ?_
       apply Except.canonicalOn_ok
-      apply genericCallAmsterdam.step_canonical
+      apply Legacy.genericCallAmsterdam.step_canonical
       · exact hs
       · exact Devm.Canonical.of_world_eq hd2 rfl
 
-theorem NextOp.step_canonical {evm : Evm} (h : evm.Canonical) (n : NextOp) :
-    (NextOp.step evm n).Canonical := by
+theorem Legacy.NextOp.step_canonical {evm : Evm} (h : evm.Canonical) (n : NextOp) :
+    (Legacy.NextOp.step evm n).Canonical := by
   cases n with
   | push xs prf =>
-    simp only [NextOp.step]
+    simp only [Legacy.NextOp.step]
     split
     · -- Gate off: the undefined-opcode error keeps the machine.
-      refine Step.ofExecution_canonical _ ?_
+      refine Legacy.Step.ofExecution_canonical _ ?_
       exact h.2
-    · refine Step.ofExecution_canonical _ ?_
+    · refine Legacy.Step.ofExecution_canonical _ ?_
       exact Except.CanonicalOn.bind (liftMachExecution_canonical h.2)
         fun d hd => liftMachExecution_canonical hd
-  | plain r => exact Step.ofExecution_canonical _ (PlainOp.run_canonical h.2 r)
-  | message x => exact XStep.toStep_canonical _ (MessageOp.step_canonical h.1 h.2 x)
+  | plain r => exact Legacy.Step.ofExecution_canonical _ (PlainOp.run_canonical h.2 r)
+  | message x => exact XStep.toStep_canonical _ (Legacy.MessageOp.step_canonical h.1 h.2 x)
   | dupn imm =>
-    refine Step.ofExecution_canonical _ ?_
+    refine Legacy.Step.ofExecution_canonical _ ?_
     split
     · refine Except.CanonicalOn.bind (liftMachExecution_canonical h.2) fun d hd => ?_
       split
@@ -2734,7 +2734,7 @@ theorem NextOp.step_canonical {evm : Evm} (h : evm.Canonical) (n : NextOp) :
         · exact liftMachExecution_canonical hd
     · exact h.2
   | swapn imm =>
-    refine Step.ofExecution_canonical _ ?_
+    refine Legacy.Step.ofExecution_canonical _ ?_
     split
     · refine Except.CanonicalOn.bind (liftMachExecution_canonical h.2) fun d hd => ?_
       split
@@ -2744,7 +2744,7 @@ theorem NextOp.step_canonical {evm : Evm} (h : evm.Canonical) (n : NextOp) :
         · exact Devm.Canonical.of_world_eq hd rfl
     · exact h.2
   | exchange imm =>
-    refine Step.ofExecution_canonical _ ?_
+    refine Legacy.Step.ofExecution_canonical _ ?_
     split
     · refine Except.CanonicalOn.bind (liftMachExecution_canonical h.2) fun d hd => ?_
       split
@@ -2756,13 +2756,13 @@ theorem NextOp.step_canonical {evm : Evm} (h : evm.Canonical) (n : NextOp) :
 
 /-- One interpreter step preserves the invariant: whatever the step decides --
 halt, continue, or spawn -- every state it hands on is canonical. -/
-theorem Evm.step_canonical {evm : Evm} (h : evm.Canonical) :
-    evm.step.Canonical := by
-  unfold Evm.step
+theorem Legacy.Evm.step_canonical {evm : Evm} (h : evm.Canonical) :
+    (Legacy.Evm.step evm).Canonical := by
+  unfold Legacy.Evm.step
   split
   · exact h.2
-  · exact NextOp.step_canonical h _
-  · exact Step.ofJump_canonical (JumpOp.run_canonicalOn h.2 _)
+  · exact Legacy.NextOp.step_canonical h _
+  · exact Legacy.Step.ofJump_canonical (JumpOp.run_canonicalOn h.2 _)
   · exact HaltOp.run_canonical h.2 _
 
 /-- **Canonicality through the fueled interpreter.** Any result the driver
@@ -2770,28 +2770,28 @@ reaches from a canonical frame is canonical, on both channels. The induction
 mirrors `execFueled_run_mono`; the spawn arm threads `Frame.enter_canonical`,
 `Frame.settle_canonicalSettle`, and `Resume.run_canonical`, so no parent
 world is ever needed as a restoration source. -/
-theorem execFueled_run_canonical :
+theorem Legacy.execFueled_run_canonical :
     ∀ (fuel : Nat) (evm : Evm), evm.Canonical →
-      ∀ {raw : Execution}, (execFueled evm fuel).run = some raw →
+      ∀ {raw : Execution}, (Legacy.execFueled evm fuel).run = some raw →
         Execution.Canonical raw := by
   intro fuel
   induction fuel with
   | zero =>
     intro evm _ raw h
-    rw [execFueled] at h
+    rw [Legacy.execFueled] at h
     simp only [Fueled.exhausted_run] at h
     nomatch h
   | succ fuel ih =>
     intro evm hevm raw h
-    have hst := Evm.step_canonical hevm
-    rw [execFueled] at h
-    rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
+    have hst := Legacy.Evm.step_canonical hevm
+    rw [Legacy.execFueled] at h
+    rcases hs : Legacy.Evm.step evm with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
       rw [hs] at h hst <;> dsimp only at h
     · simp only [Fueled.ofExcept_run, Option.some.injEq] at h
       rw [← h]
       exact hst
     · exact ih ⟨pc, evm.sta, devm⟩ ⟨hevm.1, hst⟩ h
-    · have hent := Frame.enter_canonical hst
+    · have hent := Legacy.Frame.enter_canonical hst
       rcases he : frame.enter with r | child <;> rw [he] at h hent <;>
         dsimp only at h
       · have hcan := Resume.run_canonical (rsm := rsm) hent
@@ -2801,13 +2801,13 @@ theorem execFueled_run_canonical :
           rw [← h]
           exact hcan
         · exact ih ⟨pc, evm.sta, d1⟩ ⟨hevm.1, hcan⟩ h
-      · rcases hc : (execFueled child fuel).run with _ | raw2
+      · rcases hc : (Legacy.execFueled child fuel).run with _ | raw2
         · rw [hc] at h
           simp only [Fueled.exhausted_run] at h
           nomatch h
         · rw [hc] at h
           dsimp only at h
-          have hsettle := Frame.settle_canonicalSettle hst (ih child hent hc)
+          have hsettle := Legacy.Frame.settle_canonicalSettle hst (ih child hent hc)
           have hcan := Resume.run_canonical (rsm := rsm) hsettle
           rcases hrun : rsm.run (frame.settle raw2) with ⟨e⟩ | d1 <;>
             rw [hrun] at h hcan <;> dsimp only at h
@@ -2837,7 +2837,7 @@ theorem Except.SettlementStateGasZero.bind {x} {f : Devm → _}
   | error e => exact hx
   | ok devm => exact hf devm hx
 
-def Frame.StateGasZero (frame : Frame) : Prop :=
+def Legacy.Frame.StateGasZero (frame : Legacy.Frame) : Prop :=
   frame.outer.benv.stat.rules.stateGas = none ∧
     frame.inner.benv.stat.rules.stateGas = none ∧
     frame.inner.stateGasGrant = 0
@@ -2852,7 +2852,7 @@ def XStep.StateGasZero : XStep → Prop
   | .done ex => ex.StateGasZero
   | .spawn frame rsm => frame.StateGasZero ∧ rsm.StateGasZero
 
-def Step.StateGasZero : Step → Prop
+def Legacy.Step.StateGasZero : Legacy.Step → Prop
   | .halt ex => ex.StateGasZero
   | .cont _ devm => devm.StateGasZero
   | .spawn frame rsm _ => frame.StateGasZero ∧ rsm.StateGasZero
@@ -2871,15 +2871,15 @@ theorem XStep.ofExcept_stateGasZero {x : Except (EvmError × Devm) XStep}
   | error e => exact h
   | ok step => exact h
 
-theorem Step.ofExecution_stateGasZero (pc : Nat) {x : Execution}
-    (h : x.StateGasZero) : (Step.ofExecution pc x).StateGasZero := by
+theorem Legacy.Step.ofExecution_stateGasZero (pc : Nat) {x : Execution}
+    (h : x.StateGasZero) : (Legacy.Step.ofExecution pc x).StateGasZero := by
   cases x with
   | error e => exact h
   | ok devm => exact h
 
-theorem Step.ofJump_stateGasZero {x : Except (EvmError × Devm) (Nat × Devm)}
+theorem Legacy.Step.ofJump_stateGasZero {x : Except (EvmError × Devm) (Nat × Devm)}
     (h : x.StateGasZeroOn (fun a => a.2.StateGasZero)) :
-    (Step.ofJump x).StateGasZero := by
+    (Legacy.Step.ofJump x).StateGasZero := by
   cases x with
   | error e => exact h
   | ok a => exact h
@@ -2887,18 +2887,18 @@ theorem Step.ofJump_stateGasZero {x : Except (EvmError × Devm) (Nat × Devm)}
 theorem XStep.toStep_stateGasZero (pc : Nat) {x : XStep}
     (h : x.StateGasZero) : (x.toStep pc).StateGasZero := by
   cases x with
-  | done ex => exact Step.ofExecution_stateGasZero pc h
+  | done ex => exact Legacy.Step.ofExecution_stateGasZero pc h
   | spawn frame rsm => exact h
 
-theorem Frame.ofCall_stateGasZero {msg : Msg}
+theorem Legacy.Frame.ofCall_stateGasZero {msg : Msg}
     (hrules : msg.benv.stat.rules.stateGas = none)
     (hgrant : msg.stateGasGrant = 0) :
-    (Frame.ofCall msg).StateGasZero := ⟨hrules, hrules, hgrant⟩
+    (Legacy.Frame.ofCall msg).StateGasZero := ⟨hrules, hrules, hgrant⟩
 
-theorem Frame.ofCreate_stateGasZero {msg : Msg}
+theorem Legacy.Frame.ofCreate_stateGasZero {msg : Msg}
     (hrules : msg.benv.stat.rules.stateGas = none)
     (hgrant : msg.stateGasGrant = 0) :
-    (Frame.ofCreate msg).StateGasZero := ⟨hrules, hrules, hgrant⟩
+    (Legacy.Frame.ofCreate msg).StateGasZero := ⟨hrules, hrules, hgrant⟩
 
 theorem initEvm_stateGasZero {msg : Msg}
     (hrules : msg.benv.stat.rules.stateGas = none)
@@ -3022,31 +3022,31 @@ theorem processCreateMessage.settle_stateGasZero {msg : Msg}
     · trivial
   · exact hd
 
-theorem Frame.settleMsg_stateGasZero {frame : Frame}
+theorem Legacy.Frame.settleMsg_stateGasZero {frame : Legacy.Frame}
     (hf : frame.StateGasZero)
     {r : Except (EvmError × State × AdrSet × TransientStorage) Devm}
     (h : Except.SettlementStateGasZero r) :
     Except.SettlementStateGasZero (frame.settleMsg r) := by
-  unfold Frame.settleMsg
+  unfold Legacy.Frame.settleMsg
   split
   · exact processCreateMessage.settle_stateGasZero hf.1
       (processMessage.settle_stateGasZero h)
   · exact processMessage.settle_stateGasZero h
 
-theorem Frame.settle_stateGasZero {frame : Frame}
+theorem Legacy.Frame.settle_stateGasZero {frame : Legacy.Frame}
     (hf : frame.StateGasZero) {raw : Execution} (h : raw.StateGasZero) :
     Except.SettlementStateGasZero (frame.settle raw) := by
-  unfold Frame.settle
+  unfold Legacy.Frame.settle
   rw [hf.2.1]
-  exact Frame.settleMsg_stateGasZero hf
+  exact Legacy.Frame.settleMsg_stateGasZero hf
     (executeCode.handleErrorWith_stateGasZero h)
 
-theorem Frame.enter_stateGasZero {frame : Frame} (hf : frame.StateGasZero) :
+theorem Legacy.Frame.enter_stateGasZero {frame : Legacy.Frame} (hf : frame.StateGasZero) :
     frame.enter.StateGasZero := by
-  unfold Frame.enter
+  unfold Legacy.Frame.enter
   cases he : frame.inner.benvAfterTransfer with
   | error e =>
-      exact Frame.settleMsg_stateGasZero hf trivial
+      exact Legacy.Frame.settleMsg_stateGasZero hf trivial
   | ok benv =>
       dsimp only
       have hstat := Msg.benvAfterTransfer_ok_stateGas he
@@ -3057,19 +3057,19 @@ theorem Frame.enter_stateGasZero {frame : Frame} (hf : frame.StateGasZero) :
       | inl evm => rw [hx] at hent; exact hent
       | inr raw =>
           rw [hx] at hent
-          exact Frame.settle_stateGasZero hf hent
+          exact Legacy.Frame.settle_stateGasZero hf hent
 
-theorem genericCall.step_stateGasZero {sevm : Sevm} {devm : Devm}
+theorem Legacy.genericCall.step_stateGasZero {sevm : Sevm} {devm : Devm}
     (hrules : sevm.benvStat.rules.stateGas = none)
     (h : devm.StateGasZero)
     (gas : Nat) (value : U256) (caller target codeAddress : Address)
     (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles : Bool) :
-    (genericCall.step sevm devm gas value caller target codeAddress
+    (Legacy.genericCall.step sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles).StateGasZero := by
-  unfold genericCall.step
+  unfold Legacy.genericCall.step
   dsimp only
   split
   · refine XStep.ofExcept_stateGasZero ?_
@@ -3077,14 +3077,14 @@ theorem genericCall.step_stateGasZero {sevm : Sevm} {devm : Devm}
       (Devm.push_stateGasZero _ (Devm.stateGasZero_withGasLeft h)) ?_
     intro d hd
     exact Except.stateGasZeroOn_ok hd
-  · exact ⟨Frame.ofCall_stateGasZero hrules rfl, h⟩
+  · exact ⟨Legacy.Frame.ofCall_stateGasZero hrules rfl, h⟩
 
-theorem genericCreate.step_stateGasZero {sevm : Sevm} {devm : Devm}
+theorem Legacy.genericCreate.step_stateGasZero {sevm : Sevm} {devm : Devm}
     (hrules : sevm.benvStat.rules.stateGas = none)
     (h : devm.StateGasZero) (endowment : U256) (newAddress : Address)
     (memoryIndex memorySize : Nat) :
-    (genericCreate.step sevm devm endowment newAddress memoryIndex memorySize).StateGasZero := by
-  unfold genericCreate.step
+    (Legacy.genericCreate.step sevm devm endowment newAddress memoryIndex memorySize).StateGasZero := by
+  unfold Legacy.genericCreate.step
   refine XStep.ofExcept_stateGasZero ?_
   refine Except.StateGasZeroOn.bind (Except.stateGasZeroOn_assert h) ?_
   intro _ _
@@ -3103,7 +3103,7 @@ theorem genericCreate.step_stateGasZero {sevm : Sevm} {devm : Devm}
       intro d hd
       exact Except.stateGasZeroOn_ok hd
     · exact Except.stateGasZeroOn_ok
-        ⟨Frame.ofCreate_stateGasZero hrules rfl,
+        ⟨Legacy.Frame.ofCreate_stateGasZero hrules rfl,
           Devm.stateGasZero_withGasLeft h⟩
 
 theorem accessDelegation_stateGasZero {devm : Devm}
@@ -3135,11 +3135,11 @@ theorem completeDelegationAccess_stateGasZero {devm : Devm}
   dsimp only
   split <;> exact h
 
-theorem MessageOp.step_stateGasZero {sevm : Sevm} {devm : Devm}
+theorem Legacy.MessageOp.step_stateGasZero {sevm : Sevm} {devm : Devm}
     (hrules : sevm.benvStat.rules.stateGas = none)
     (h : devm.StateGasZero) (x : MessageOp) :
-    (MessageOp.step sevm devm x).StateGasZero := by
-  cases x <;> simp only [MessageOp.step, hrules]
+    (Legacy.MessageOp.step sevm devm x).StateGasZero := by
+  cases x <;> simp only [Legacy.MessageOp.step, hrules]
   case create =>
     refine XStep.ofExcept_stateGasZero ?_
     refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero h) fun a ha => ?_
@@ -3147,7 +3147,7 @@ theorem MessageOp.step_stateGasZero {sevm : Sevm} {devm : Devm}
     refine Except.StateGasZeroOn.bind (Devm.popToNat_stateGasZero hb) fun c hc => ?_
     refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ hc) fun d hd => ?_
     exact Except.stateGasZeroOn_ok
-      (genericCreate.step_stateGasZero hrules (by exact hd) _ _ _ _)
+      (Legacy.genericCreate.step_stateGasZero hrules (by exact hd) _ _ _ _)
   case create2 =>
     split
     · refine XStep.ofExcept_stateGasZero ?_
@@ -3157,7 +3157,7 @@ theorem MessageOp.step_stateGasZero {sevm : Sevm} {devm : Devm}
       refine Except.StateGasZeroOn.bind (Devm.pop_stateGasZero hc) fun e he => ?_
       refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ he) fun d hd => ?_
       exact Except.stateGasZeroOn_ok
-        (genericCreate.step_stateGasZero hrules (by exact hd) _ _ _ _)
+        (Legacy.genericCreate.step_stateGasZero hrules (by exact hd) _ _ _ _)
     · -- Gate off: the undefined-opcode error keeps the machine.
       refine XStep.ofExcept_stateGasZero ?_
       exact h
@@ -3181,7 +3181,7 @@ theorem MessageOp.step_stateGasZero {sevm : Sevm} {devm : Devm}
     · refine Except.StateGasZeroOn.bind (Devm.push_stateGasZero _ hd2) fun d3 hd3 => ?_
       exact Except.stateGasZeroOn_ok hd3
     · exact Except.stateGasZeroOn_ok
-        (genericCall.step_stateGasZero hrules (by exact hd2)
+        (Legacy.genericCall.step_stateGasZero hrules (by exact hd2)
           _ _ _ _ _ _ _ _ _ _ _ _ _)
   case callcode =>
     refine XStep.ofExcept_stateGasZero ?_
@@ -3202,7 +3202,7 @@ theorem MessageOp.step_stateGasZero {sevm : Sevm} {devm : Devm}
     · refine Except.StateGasZeroOn.bind (Devm.push_stateGasZero _ hd2) fun d3 hd3 => ?_
       exact Except.stateGasZeroOn_ok hd3
     · exact Except.stateGasZeroOn_ok
-        (genericCall.step_stateGasZero hrules (by exact hd2)
+        (Legacy.genericCall.step_stateGasZero hrules (by exact hd2)
           _ _ _ _ _ _ _ _ _ _ _ _ _)
   case delegatecall =>
     refine XStep.ofExcept_stateGasZero ?_
@@ -3219,7 +3219,7 @@ theorem MessageOp.step_stateGasZero {sevm : Sevm} {devm : Devm}
       (by split <;> exact hf) b.1
     refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ haccess) fun d2 hd2 => ?_
     exact Except.stateGasZeroOn_ok
-      (genericCall.step_stateGasZero hrules (by exact hd2)
+      (Legacy.genericCall.step_stateGasZero hrules (by exact hd2)
         _ _ _ _ _ _ _ _ _ _ _ _ _)
   case staticcall =>
     refine XStep.ofExcept_stateGasZero ?_
@@ -3236,30 +3236,30 @@ theorem MessageOp.step_stateGasZero {sevm : Sevm} {devm : Devm}
       (by split <;> exact hf) b.1
     refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ haccess) fun d2 hd2 => ?_
     exact Except.stateGasZeroOn_ok
-      (genericCall.step_stateGasZero hrules (by exact hd2)
+      (Legacy.genericCall.step_stateGasZero hrules (by exact hd2)
         _ _ _ _ _ _ _ _ _ _ _ _ _)
 
-theorem NextOp.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
-    (n : NextOp) : (NextOp.step evm n).StateGasZero := by
+theorem Legacy.NextOp.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
+    (n : NextOp) : (Legacy.NextOp.step evm n).StateGasZero := by
   cases n with
   | push xs prf =>
-      simp only [NextOp.step]
+      simp only [Legacy.NextOp.step]
       split
       · -- Gate off: the undefined-opcode error keeps the machine.
-        refine Step.ofExecution_stateGasZero _ ?_
+        refine Legacy.Step.ofExecution_stateGasZero _ ?_
         exact Except.stateGasZeroOn_error h.2
-      · refine Step.ofExecution_stateGasZero _ ?_
+      · refine Legacy.Step.ofExecution_stateGasZero _ ?_
         refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) ?_
         intro d hd
         exact Devm.push_stateGasZero _ hd
   | plain r =>
-      exact Step.ofExecution_stateGasZero _
+      exact Legacy.Step.ofExecution_stateGasZero _
         (PlainOp.run_stateGasZero h.2 h.1 r)
   | message x =>
       exact XStep.toStep_stateGasZero _
-        (MessageOp.step_stateGasZero h.1 h.2 x)
+        (Legacy.MessageOp.step_stateGasZero h.1 h.2 x)
   | dupn imm =>
-      refine Step.ofExecution_stateGasZero _ ?_
+      refine Legacy.Step.ofExecution_stateGasZero _ ?_
       split
       · refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) fun d hd => ?_
         split
@@ -3269,7 +3269,7 @@ theorem NextOp.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
           · exact Devm.push_stateGasZero _ hd
       · exact Except.stateGasZeroOn_error h.2
   | swapn imm =>
-      refine Step.ofExecution_stateGasZero _ ?_
+      refine Legacy.Step.ofExecution_stateGasZero _ ?_
       split
       · refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) fun d hd => ?_
         split
@@ -3279,7 +3279,7 @@ theorem NextOp.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
           · exact Except.stateGasZeroOn_ok hd
       · exact Except.stateGasZeroOn_error h.2
   | exchange imm =>
-      refine Step.ofExecution_stateGasZero _ ?_
+      refine Legacy.Step.ofExecution_stateGasZero _ ?_
       split
       · refine Except.StateGasZeroOn.bind (chargeGas_stateGasZero _ h.2) fun d hd => ?_
         split
@@ -3289,13 +3289,13 @@ theorem NextOp.step_stateGasZero {evm : Evm} (h : evm.StateGasZero)
           · exact Except.stateGasZeroOn_ok hd
       · exact Except.stateGasZeroOn_error h.2
 
-theorem Evm.step_stateGasZero {evm : Evm} (h : evm.StateGasZero) :
-    evm.step.StateGasZero := by
-  unfold Evm.step
+theorem Legacy.Evm.step_stateGasZero {evm : Evm} (h : evm.StateGasZero) :
+    (Legacy.Evm.step evm).StateGasZero := by
+  unfold Legacy.Evm.step
   split
   · exact h.2
-  · exact NextOp.step_stateGasZero h _
-  · exact Step.ofJump_stateGasZero (JumpOp.run_stateGasZero h.2 _)
+  · exact Legacy.NextOp.step_stateGasZero h _
+  · exact Legacy.Step.ofJump_stateGasZero (JumpOp.run_stateGasZero h.2 _)
   · exact HaltOp.run_stateGasZero h.2 h.1 _
 
 theorem Resume.run_stateGasZero {rsm : Resume} (hr : rsm.StateGasZero)
@@ -3345,28 +3345,28 @@ theorem Resume.run_stateGasZero {rsm : Resume} (hr : rsm.StateGasZero)
 
 /-- A legacy execution started with the disabled state-gas meter returns with
 that meter still zero, on both success and exceptional-halt channels. -/
-theorem execFueled_run_stateGasZero :
+theorem Legacy.execFueled_run_stateGasZero :
     ∀ (fuel : Nat) (evm : Evm), evm.StateGasZero →
-      ∀ {raw : Execution}, (execFueled evm fuel).run = some raw →
+      ∀ {raw : Execution}, (Legacy.execFueled evm fuel).run = some raw →
         raw.StateGasZero := by
   intro fuel
   induction fuel with
   | zero =>
       intro evm _ raw hrun
-      rw [execFueled] at hrun
+      rw [Legacy.execFueled] at hrun
       simp only [Fueled.exhausted_run] at hrun
       nomatch hrun
   | succ fuel ih =>
       intro evm hevm raw hrun
-      have hstep := Evm.step_stateGasZero hevm
-      rw [execFueled] at hrun
-      rcases hs : evm.step with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
+      have hstep := Legacy.Evm.step_stateGasZero hevm
+      rw [Legacy.execFueled] at hrun
+      rcases hs : Legacy.Evm.step evm with ⟨ex⟩ | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
         rw [hs] at hrun hstep <;> dsimp only at hrun
       · simp only [Fueled.ofExcept_run, Option.some.injEq] at hrun
         rw [← hrun]
         exact hstep
       · exact ih ⟨pc, evm.sta, devm⟩ ⟨hevm.1, hstep⟩ hrun
-      · have henter := Frame.enter_stateGasZero hstep.1
+      · have henter := Legacy.Frame.enter_stateGasZero hstep.1
         rcases he : frame.enter with r | child <;>
           rw [he] at hrun henter <;> dsimp only at hrun
         · have hresume := Resume.run_stateGasZero hstep.2 (r := r)
@@ -3376,13 +3376,13 @@ theorem execFueled_run_stateGasZero :
             rw [← hrun]
             exact hresume
           · exact ih ⟨pc, evm.sta, d⟩ ⟨hevm.1, hresume⟩ hrun
-        · rcases hc : (execFueled child fuel).run with _ | raw2
+        · rcases hc : (Legacy.execFueled child fuel).run with _ | raw2
           · rw [hc] at hrun
             simp only [Fueled.exhausted_run] at hrun
             nomatch hrun
           · rw [hc] at hrun
             dsimp only at hrun
-            have hsettle := Frame.settle_stateGasZero hstep.1
+            have hsettle := Legacy.Frame.settle_stateGasZero hstep.1
               (ih child henter hc)
             have hresume := Resume.run_stateGasZero hstep.2
               (r := frame.settle raw2)
@@ -3393,11 +3393,11 @@ theorem execFueled_run_stateGasZero :
               exact hresume
             · exact ih ⟨pc, evm.sta, d⟩ ⟨hevm.1, hresume⟩ hrun
 
-theorem execFueled_run_gasMeasure_eq_gasLeft {fuel : Nat} {evm : Evm}
+theorem Legacy.execFueled_run_gasMeasure_eq_gasLeft {fuel : Nat} {evm : Evm}
     (h : evm.StateGasZero) {devm : Devm}
-    (hrun : (execFueled evm fuel).run = some (.ok devm)) :
+    (hrun : (Legacy.execFueled evm fuel).run = some (.ok devm)) :
     devm.gasMeasure = devm.gasLeft :=
-  Devm.stateGasZero_gasMeasure (execFueled_run_stateGasZero fuel evm h hrun)
+  Devm.stateGasZero_gasMeasure (Legacy.execFueled_run_stateGasZero fuel evm h hrun)
 
 --------------- ACCOUNT ACCESSORS OVER STATE WRITERS ---------------
 

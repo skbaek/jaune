@@ -11,7 +11,7 @@ def outOfGas {pc : Nat} {env : Sevm} {pre : Devm}
     (gas : pre.gasLeft < SymbolicPush.cost bytes)
     (hgate : bytes ≠ [] ∨ env.benvStat.rules.opcodes.push0) :
     Jaune.Exec pc env pre (.error ⟨.halt (.outOfGas .none), pre⟩) :=
-  .halt ((Jaune.Evm.step_next decoded).trans
+  .halt ((Jaune.Legacy.Evm.step_next decoded).trans
     (SymbolicPush.step_outOfGas ⟨pc, env, pre⟩ bytes width gas hgate))
 
 theorem interpreter_outOfGas {pc : Nat} {env : Sevm} {pre : Devm}
@@ -19,7 +19,7 @@ theorem interpreter_outOfGas {pc : Nat} {env : Sevm} {pre : Devm}
     (decoded : Jaune.NextOp.At env.code pc (.push bytes width))
     (gas : pre.gasLeft < SymbolicPush.cost bytes)
     (hgate : bytes ≠ [] ∨ env.benvStat.rules.opcodes.push0) :
-    exec ⟨pc, env, pre⟩ = .error ⟨.halt (.outOfGas .none), pre⟩ :=
-  (Jaune.exec_iff_exec_eq _ _ _ _).mp ⟨outOfGas bytes width decoded gas hgate⟩
+    Legacy.exec ⟨pc, env, pre⟩ = .error ⟨.halt (.outOfGas .none), pre⟩ :=
+  (Jaune.Legacy.exec_iff_exec_eq _ _ _ _).mp ⟨outOfGas bytes width decoded gas hgate⟩
 
 end Consumer

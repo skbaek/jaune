@@ -72,17 +72,17 @@ variable (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
 abbrev sevm : Sevm := { env with code := code a b }
 
 theorem step0 (gas : 9 ≤ g) (room : s.length < 1023) :
-    Evm.step ⟨0, sevm env a b, initial base g s⟩ = .cont 2 (afterFirst base a g s) :=
-  (Evm.step_next (first a b)).trans <|
+    Legacy.Evm.step ⟨0, sevm env a b, initial base g s⟩ = .cont 2 (afterFirst base a g s) :=
+  (Legacy.Evm.step_next (first a b)).trans <|
     SymbolicPush.step_success _ [a] (by simp)
       (by simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]; omega)
       (by simp [initial, Devm.stack, Devm.setMach]; omega)
       (Or.inl (by simp))
 
 theorem step2 (gas : 9 ≤ g) (room : s.length < 1023) :
-    Evm.step ⟨2, sevm env a b, afterFirst base a g s⟩ =
+    Legacy.Evm.step ⟨2, sevm env a b, afterFirst base a g s⟩ =
       .cont 4 (afterSecond base a b g s) :=
-  (Evm.step_next (second a b)).trans <|
+  (Legacy.Evm.step_next (second a b)).trans <|
     SymbolicPush.step_success _ [b] (by simp)
       (by simp [SymbolicPush.cost, SymbolicPush.post, afterFirst, initial, Devm.gasLeft,
             Devm.setMach, Gas.veryLow]; omega)
@@ -90,9 +90,9 @@ theorem step2 (gas : 9 ≤ g) (room : s.length < 1023) :
       (Or.inl (by simp))
 
 theorem step4 (gas : 9 ≤ g) (room : s.length < 1023) :
-    Evm.step ⟨4, sevm env a b, afterSecond base a b g s⟩ =
+    Legacy.Evm.step ⟨4, sevm env a b, afterSecond base a b g s⟩ =
       .cont 5 (finalState base a b g s) :=
-  (Evm.step_next (pc := 4) (sevm := sevm env a b)
+  (Legacy.Evm.step_next (pc := 4) (sevm := sevm env a b)
     (n := .plain SymbolicArith.Op.add.rinst) (third a b)).trans <|
     SymbolicArith.step_success _ .add _ _ s rfl
       (by simp [SymbolicArith.Op.cost, SymbolicPush.cost, SymbolicPush.post, afterSecond,
@@ -100,9 +100,9 @@ theorem step4 (gas : 9 ≤ g) (room : s.length < 1023) :
       (by omega)
 
 theorem step5 :
-    Evm.step ⟨5, sevm env a b, finalState base a b g s⟩ =
+    Legacy.Evm.step ⟨5, sevm env a b, finalState base a b g s⟩ =
       .halt (.ok (finalState base a b g s)) :=
-  Evm.step_last (l := .stop) (last a b)
+  Legacy.Evm.step_last (l := .stop) (last a b)
 
 end Steps
 
@@ -118,7 +118,7 @@ def execution (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
 /-- Inversion at a continuing step: a derivation whose root step continues
 contains a derivation of the same outcome from the successor state. -/
 def next {pc pc' : Nat} {sevm : Sevm} {devm devm' : Devm} {out : Execution}
-    (d : Exec pc sevm devm out) (h : Evm.step ⟨pc, sevm, devm⟩ = .cont pc' devm') :
+    (d : Exec pc sevm devm out) (h : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .cont pc' devm') :
     Exec pc' sevm devm' out := by
   cases d with
   | halt h' => cases h.symm.trans h'
@@ -142,8 +142,8 @@ theorem result (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256
 /-- Adequacy connects the derivation to the total interpreter. -/
 theorem interpreter (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) :
-    exec ⟨0, sevm env a b, initial base g s⟩ = .ok (finalState base a b g s) :=
-  (exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b g s gas room⟩
+    Legacy.exec ⟨0, sevm env a b, initial base g s⟩ = .ok (finalState base a b g s) :=
+  (Legacy.exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b g s gas room⟩
 
 theorem final_stack (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) :
     (finalState base a b g s).stack = (Bytes.toU256 [b] + Bytes.toU256 [a]) :: s := rfl
@@ -175,7 +175,7 @@ theorem final_meta (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) :
 
 /-- The premises are satisfiable: exactly nine gas and an empty stack. -/
 theorem concrete (env : Sevm) (base : Devm) (a b : UInt8) :
-    exec ⟨0, sevm env a b, initial base 9 []⟩ = .ok (finalState base a b 9 []) ∧
+    Legacy.exec ⟨0, sevm env a b, initial base 9 []⟩ = .ok (finalState base a b 9 []) ∧
       (finalState base a b 9 []).gasLeft = 0 :=
   ⟨interpreter env base a b 9 [] (by decide) (by decide), final_gas base a b 9 []⟩
 
@@ -192,7 +192,7 @@ is false
 -/
 #guard_msgs in
 example (env : Sevm) (base : Devm) (a b : UInt8) :
-    exec ⟨0, sevm env a b, initial base 8 []⟩ = .ok (finalState base a b 8 []) :=
+    Legacy.exec ⟨0, sevm env a b, initial base 8 []⟩ = .ok (finalState base a b 8 []) :=
   interpreter env base a b 8 [] (by decide) (by decide)
 
 -- `DIV` is not a member of the arithmetic family, so the `ADD` rule cannot
@@ -201,17 +201,17 @@ example (env : Sevm) (base : Devm) (a b : UInt8) :
 error: Type mismatch
   SymbolicArith.step_success evm SymbolicArith.Op.add x y rest stack gas room
 has type
-  NextOp.step evm (NextOp.plain SymbolicArith.Op.add.rinst) =
-    Step.cont (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
+  Legacy.NextOp.step evm (NextOp.plain SymbolicArith.Op.add.rinst) =
+    Legacy.Step.cont (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
 but is expected to have type
-  NextOp.step evm (NextOp.plain PlainOp.div) =
-    Step.cont (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
+  Legacy.NextOp.step evm (NextOp.plain PlainOp.div) =
+    Legacy.Step.cont (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
 -/
 #guard_msgs in
 example (evm : Evm) (x y : U256) (rest : List U256)
     (stack : evm.dyna.stack = x :: y :: rest)
     (gas : SymbolicArith.Op.cost .add ≤ evm.dyna.gasLeft) (room : rest.length < 1024) :
-    NextOp.step evm (.plain .div) =
+    Legacy.NextOp.step evm (.plain .div) =
       .cont (evm.pc + 1) (SymbolicArith.post .add x y rest evm.dyna) :=
   SymbolicArith.step_success evm .add x y rest stack gas room
 

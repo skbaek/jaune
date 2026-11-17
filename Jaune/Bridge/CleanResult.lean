@@ -1040,20 +1040,20 @@ theorem messageOpKeepsError_done_error {e : Option SettledHalt} {x : EvmError ×
     MessageOpKeepsError e (.done (.error x)) := trivial
 
 /-- `MessageOpKeepsError` for `spawn_create`. -/
-theorem messageOpKeepsError_spawn_create {e : Option SettledHalt} {f : Frame} {p : Devm}
+theorem messageOpKeepsError_spawn_create {e : Option SettledHalt} {f : Legacy.Frame} {p : Devm}
     {a : Address} (h : p.error = e) : MessageOpKeepsError e (.spawn f (.create p a)) := h
 
 /-- `MessageOpKeepsError` for `spawn_call`. -/
-theorem messageOpKeepsError_spawn_call {e : Option SettledHalt} {f : Frame} {p : Devm}
+theorem messageOpKeepsError_spawn_call {e : Option SettledHalt} {f : Legacy.Frame} {p : Devm}
     {i n : Nat} (h : p.error = e) : MessageOpKeepsError e (.spawn f (.call p i n)) := h
 
 /-- `MessageOpKeepsError` for `spawn_createAmsterdam`. -/
-theorem messageOpKeepsError_spawn_createAmsterdam {e : Option SettledHalt} {f : Frame}
+theorem messageOpKeepsError_spawn_createAmsterdam {e : Option SettledHalt} {f : Legacy.Frame}
     {s : StateGasRules} {p : Devm} {a : Address} {c : Bool} (h : p.error = e) :
     MessageOpKeepsError e (.spawn f (.createAmsterdam s p a c)) := h
 
 /-- `MessageOpKeepsError` for `spawn_callAmsterdam`. -/
-theorem messageOpKeepsError_spawn_callAmsterdam {e : Option SettledHalt} {f : Frame}
+theorem messageOpKeepsError_spawn_callAmsterdam {e : Option SettledHalt} {f : Legacy.Frame}
     {s : StateGasRules} {p : Devm} {i n : Nat} {c : Bool} (h : p.error = e) :
     MessageOpKeepsError e (.spawn f (.callAmsterdam s p i n c)) := h
 
@@ -1071,9 +1071,9 @@ macro_rules
 theorem genericCreate.step_keepsError (sevm : Sevm) (devm : Devm) (endowment : U256)
     (newAddress : Address) (memoryIndex memorySize : Nat) :
     MessageOpKeepsError devm.error
-      (genericCreate.step sevm devm endowment newAddress memoryIndex memorySize) := by
+      (Legacy.genericCreate.step sevm devm endowment newAddress memoryIndex memorySize) := by
   have h0 : devm.error = devm.error := rfl
-  unfold genericCreate.step
+  unfold Legacy.genericCreate.step
   error_walk
 
 /-- `genericCall.step` keeps the stored error of the machine it starts from. -/
@@ -1082,10 +1082,10 @@ theorem genericCall.step_keepsError (sevm : Sevm) (devm : Devm) (gas : Nat) (val
     (inputIndex inputSize outputIndex outputSize : Nat) (code : ByteArray)
     (disablePrecompiles : Bool) :
     MessageOpKeepsError devm.error
-      (genericCall.step sevm devm gas value caller target codeAddress shouldTransferValue
+      (Legacy.genericCall.step sevm devm gas value caller target codeAddress shouldTransferValue
         isStaticcall inputIndex inputSize outputIndex outputSize code disablePrecompiles) := by
   have h0 : devm.error = devm.error := rfl
-  unfold genericCall.step
+  unfold Legacy.genericCall.step
   error_walk
 
 /-- `genericCallAmsterdam.step` keeps the stored error of the machine it starts from. -/
@@ -1094,21 +1094,21 @@ theorem genericCallAmsterdam.step_keepsError (sevm : Sevm) (state : StateGasRule
     (shouldTransferValue isStaticcall : Bool) (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles newAccountCharged insufficientBalance : Bool) :
     MessageOpKeepsError devm.error
-      (genericCallAmsterdam.step sevm state devm gas reservoir value caller target codeAddress
+      (Legacy.genericCallAmsterdam.step sevm state devm gas reservoir value caller target codeAddress
         shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize code
         disablePrecompiles newAccountCharged insufficientBalance) := by
   have h0 : devm.error = devm.error := rfl
-  unfold genericCallAmsterdam.step
+  unfold Legacy.genericCallAmsterdam.step
   error_walk
 
 /-- `genericCreateAmsterdam.step` keeps the stored error of the machine it starts from. -/
 theorem genericCreateAmsterdam.step_keepsError (sevm : Sevm) (state : StateGasRules)
     (devm : Devm) (endowment : U256) (newAddress : Address) (memoryIndex memorySize : Nat) :
     MessageOpKeepsError devm.error
-      (genericCreateAmsterdam.step sevm state devm endowment newAddress memoryIndex
+      (Legacy.genericCreateAmsterdam.step sevm state devm endowment newAddress memoryIndex
         memorySize) := by
   have h0 : devm.error = devm.error := rfl
-  unfold genericCreateAmsterdam.step
+  unfold Legacy.genericCreateAmsterdam.step
   error_walk
 
 /-- A tail started on a machine that keeps `e` keeps `e`. -/
@@ -1125,90 +1125,90 @@ macro_rules
 /-- Every message opcode keeps the error, in each rule shape. -/
 theorem MessageOp.step_keepsError_create_none (sevm : Sevm) (devm : Devm)
     (h : sevm.benvStat.rules.stateGas = none) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .create) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .create) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `CREATE` keeps the stored error, under rules with state gas. -/
 theorem MessageOp.step_keepsError_create_some (sevm : Sevm) (devm : Devm) (s : StateGasRules)
     (h : sevm.benvStat.rules.stateGas = some s) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .create) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .create) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `CREATE2` keeps the stored error, under rules without state gas. -/
 theorem MessageOp.step_keepsError_create2_none (sevm : Sevm) (devm : Devm)
     (h : sevm.benvStat.rules.stateGas = none) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .create2) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .create2) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `CREATE2` keeps the stored error, under rules with state gas. -/
 theorem MessageOp.step_keepsError_create2_some (sevm : Sevm) (devm : Devm) (s : StateGasRules)
     (h : sevm.benvStat.rules.stateGas = some s) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .create2) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .create2) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `CALL` keeps the stored error, under rules without state gas. -/
 theorem MessageOp.step_keepsError_call_none (sevm : Sevm) (devm : Devm)
     (h : sevm.benvStat.rules.stateGas = none) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .call) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .call) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `CALL` keeps the stored error, under rules with state gas. -/
 theorem MessageOp.step_keepsError_call_some (sevm : Sevm) (devm : Devm) (s : StateGasRules)
     (h : sevm.benvStat.rules.stateGas = some s) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .call) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .call) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `CALLCODE` keeps the stored error, under rules without state gas. -/
 theorem MessageOp.step_keepsError_callcode_none (sevm : Sevm) (devm : Devm)
     (h : sevm.benvStat.rules.stateGas = none) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .callcode) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .callcode) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `CALLCODE` keeps the stored error, under rules with state gas. -/
 theorem MessageOp.step_keepsError_callcode_some (sevm : Sevm) (devm : Devm) (s : StateGasRules)
     (h : sevm.benvStat.rules.stateGas = some s) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .callcode) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .callcode) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `DELEGATECALL` keeps the stored error, under rules without state gas. -/
 theorem MessageOp.step_keepsError_delegatecall_none (sevm : Sevm) (devm : Devm)
     (h : sevm.benvStat.rules.stateGas = none) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .delegatecall) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .delegatecall) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `DELEGATECALL` keeps the stored error, under rules with state gas. -/
 theorem MessageOp.step_keepsError_delegatecall_some (sevm : Sevm) (devm : Devm) (s : StateGasRules)
     (h : sevm.benvStat.rules.stateGas = some s) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .delegatecall) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .delegatecall) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `STATICCALL` keeps the stored error, under rules without state gas. -/
 theorem MessageOp.step_keepsError_staticcall_none (sevm : Sevm) (devm : Devm)
     (h : sevm.benvStat.rules.stateGas = none) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .staticcall) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .staticcall) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `STATICCALL` keeps the stored error, under rules with state gas. -/
 theorem MessageOp.step_keepsError_staticcall_some (sevm : Sevm) (devm : Devm) (s : StateGasRules)
     (h : sevm.benvStat.rules.stateGas = some s) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm .staticcall) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm .staticcall) := by
   have h0 : devm.error = devm.error := rfl
-  simp only [MessageOp.step, h]; error_walk
+  simp only [Legacy.MessageOp.step, h]; error_walk
 
 /-- `MessageOp.step` keeps the stored error of the machine it starts from. -/
 theorem MessageOp.step_keepsError (sevm : Sevm) (devm : Devm) (x : MessageOp) :
-    MessageOpKeepsError devm.error (MessageOp.step sevm devm x) := by
+    MessageOpKeepsError devm.error (Legacy.MessageOp.step sevm devm x) := by
   cases x with
   | create =>
     cases h : sevm.benvStat.rules.stateGas with
@@ -1239,14 +1239,14 @@ theorem MessageOp.step_keepsError (sevm : Sevm) (devm : Devm) (x : MessageOp) :
 
 /-- A step keeps the error `e`: a continuing or finished machine keeps it, and a spawn's saved
 caller keeps it. -/
-def StepKeepsError (e : Option SettledHalt) : Step → Prop
+def StepKeepsError (e : Option SettledHalt) : Legacy.Step → Prop
   | .halt ex => OnSuccess (fun d => d.error = e) ex
   | .cont _ d => d.error = e
   | .spawn _ rsm _ => rsm.parent.error = e
 
 /-- `StepKeepsError` through `ofExecution`. -/
 theorem stepKeepsError_ofExecution {e : Option SettledHalt} (pc : Nat) {x : Execution}
-    (h : OnSuccess (fun d => d.error = e) x) : StepKeepsError e (Step.ofExecution pc x) := by
+    (h : OnSuccess (fun d => d.error = e) x) : StepKeepsError e (Legacy.Step.ofExecution pc x) := by
   cases x with
   | error _ => trivial
   | ok d => exact h
@@ -1254,7 +1254,7 @@ theorem stepKeepsError_ofExecution {e : Option SettledHalt} (pc : Nat) {x : Exec
 /-- `StepKeepsError` through `ofJump`. -/
 theorem stepKeepsError_ofJump {e : Option SettledHalt}
     {x : Except (EvmError × Devm) (Nat × Devm)} (h : OnSuccess (fun a => a.2.error = e) x) :
-    StepKeepsError e (Step.ofJump x) := by
+    StepKeepsError e (Legacy.Step.ofJump x) := by
   cases x with
   | error _ => trivial
   | ok a => exact h
@@ -1268,13 +1268,13 @@ theorem stepKeepsError_toStep {e : Option SettledHalt} (pc : Nat) {s : XStep}
 
 /-- `NextOp.step` keeps the stored error of the machine it starts from. -/
 theorem NextOp.step_keepsError (evm : Evm) (n : NextOp) :
-    StepKeepsError evm.dyna.error (NextOp.step evm n) := by
+    StepKeepsError evm.dyna.error (Legacy.NextOp.step evm n) := by
   have h0 : evm.dyna.error = evm.dyna.error := rfl
   cases n with
   | plain r => exact stepKeepsError_ofExecution _ (PlainOp.run_onSuccess evm r)
   | message x => exact stepKeepsError_toStep _ (MessageOp.step_keepsError evm.sta evm.dyna x)
   | push xs prf =>
-    simp only [NextOp.step]
+    simp only [Legacy.NextOp.step]
     split
     · exact stepKeepsError_ofExecution _ trivial
     · exact stepKeepsError_ofExecution _ (by error_walk)
@@ -1283,8 +1283,8 @@ theorem NextOp.step_keepsError (evm : Evm) (n : NextOp) :
   | exchange imm => exact stepKeepsError_ofExecution _ (by error_walk)
 
 /-- `Evm.step` keeps the stored error of the machine it starts from. -/
-theorem Evm.step_keepsError (evm : Evm) : StepKeepsError evm.dyna.error evm.step := by
-  unfold Evm.step
+theorem Evm.step_keepsError (evm : Evm) : StepKeepsError evm.dyna.error (Legacy.Evm.step evm) := by
+  unfold Legacy.Evm.step
   split
   · trivial
   · exact NextOp.step_keepsError evm _
@@ -1294,14 +1294,14 @@ theorem Evm.step_keepsError (evm : Evm) : StepKeepsError evm.dyna.error evm.step
 /-- **F0, one step.** A step keeps the stored error of the machine it starts from: in a
 continuing or finished machine, and in the saved caller of a spawn. -/
 theorem Evm.step_error (evm : Evm) :
-    match Evm.step evm with
+    match Legacy.Evm.step evm with
     | .cont _ d => d.error = evm.dyna.error
     | .halt (.ok d) => d.error = evm.dyna.error
     | .halt (.error _) => True
     | .spawn _ rsm _ => rsm.parent.error = evm.dyna.error := by
   have h := Evm.step_keepsError evm
   revert h
-  rcases evm.step with (_ | _) | ⟨_, _⟩ | ⟨_, _, _⟩ <;> exact id
+  rcases Legacy.Evm.step evm with (_ | _) | ⟨_, _⟩ | ⟨_, _, _⟩ <;> exact id
 
 /-! ### Resume -/
 
@@ -1362,19 +1362,19 @@ it started from. Children are entered, run and settled in between; their results
 parent's `error`, because `Resume.run` keeps the saved caller's. -/
 theorem execFueled_ok_error :
     ∀ (fuel : Nat) (evm : Evm) {d : Devm},
-      (execFueled evm fuel).run = some (.ok d) → d.error = evm.dyna.error := by
+      (Legacy.execFueled evm fuel).run = some (.ok d) → d.error = evm.dyna.error := by
   intro fuel
   induction fuel with
   | zero =>
     intro evm d hrun
-    rw [execFueled] at hrun
+    rw [Legacy.execFueled] at hrun
     simp only [Fueled.exhausted_run] at hrun
     nomatch hrun
   | succ fuel ih =>
     intro evm d hrun
     have hstep := Evm.step_keepsError evm
-    rw [execFueled] at hrun
-    rcases hs : evm.step with ex | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
+    rw [Legacy.execFueled] at hrun
+    rcases hs : Legacy.Evm.step evm with ex | ⟨pc, devm⟩ | ⟨frame, rsm, pc⟩ <;>
       rw [hs] at hrun hstep <;> dsimp only at hrun
     · simp only [Fueled.ofExcept_run, Option.some.injEq] at hrun
       subst hrun
@@ -1385,7 +1385,7 @@ theorem execFueled_ok_error :
         · simp only [Fueled.ofExcept_run, Option.some.injEq] at hrun
           nomatch hrun
         · exact ((ih ⟨pc, evm.sta, d'⟩ hrun).trans (Resume.run_ok_error hr)).trans hstep
-      · rcases hc : (execFueled child fuel).run with _ | raw
+      · rcases hc : (Legacy.execFueled child fuel).run with _ | raw
         · rw [hc] at hrun
           simp only [Fueled.exhausted_run] at hrun
           nomatch hrun
@@ -1399,8 +1399,8 @@ theorem execFueled_ok_error :
 
 /-- **F0, the total interpreter.** A frame entered with no stored error yields a clean raw
 result: `exec` never returns `.ok d` with `d.error` set. -/
-theorem exec_clean {evm : Evm} (h : evm.dyna.error = none) : Execution.Clean (exec evm) := by
-  unfold exec
+theorem exec_clean {evm : Evm} (h : evm.dyna.error = none) : Execution.Clean (Legacy.exec evm) := by
+  unfold Legacy.exec
   split
   · next r hr =>
     cases r with

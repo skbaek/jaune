@@ -21,7 +21,7 @@ namespace Jaune
 namespace Legacy
 
 /-- A child machine that today's entry hands back starts with no stored error. -/
-theorem Frame.enter_run_error {f : Jaune.Frame} {child : Evm} (h : f.enter = .run child) :
+theorem Frame.enter_run_error {f : Jaune.Legacy.Frame} {child : Evm} (h : f.enter = .run child) :
     child.dyna.error = none := by
   rw [Frame.enter_eq_enterFrom] at h
   unfold Frame.enterFrom at h
@@ -36,7 +36,7 @@ theorem Frame.enter_run_error {f : Jaune.Frame} {child : Evm} (h : f.enter = .ru
 
 /-- What today's settlement guarantees holds of every result today's entry settles at once:
 a failed value transfer (an assertion fault) and a precompile's settled result. -/
-theorem Frame.enter_done_facts {f : Jaune.Frame} {parent : Devm} {rules : ForkRules}
+theorem Frame.enter_done_facts {f : Jaune.Legacy.Frame} {parent : Devm} {rules : ForkRules}
     (h : Frame.Coherent f parent) (hr : f.outer.benv.stat.rules = rules)
     {r : Except (EvmError × Jaune.State × AdrSet × TransientStorage) Devm}
     (he : f.enter = .done r) : SettledFacts parent rules r := by
@@ -47,7 +47,7 @@ theorem Frame.enter_done_facts {f : Jaune.Frame} {parent : Devm} {rules : ForkRu
     cases he
     have hfault := Msg.benvAfterTransfer_error hb
     have hs : f.settleMsg (.error e) = .error e := by
-      unfold Jaune.Frame.settleMsg processMessage.settle processCreateMessage.settle
+      unfold Jaune.Legacy.Frame.settleMsg processMessage.settle processCreateMessage.settle
       split <;> rfl
     rw [hs]
     refine ⟨?_, fun hs _ => (nomatch hs), fun hs _ _ => (nomatch hs), fun hs _ => (nomatch hs)⟩
@@ -99,14 +99,14 @@ theorem observe_eq_ok {x y : Execution} (h : x.observe = .ok y) : x = y := by
 /-- **The resume tail.** Once today's resumption and the staged one agree, observed, the two
 drivers' continuations agree, given that they agree on every machine at the remaining fuel. -/
 theorem execFueled_tail {fuel pc : Nat} {sta : Sevm}
-    (ih : ∀ evm : Evm, ((Jaune.execFueled evm fuel).run).map Execution.observe
+    (ih : ∀ evm : Evm, ((Jaune.Legacy.execFueled evm fuel).run).map Execution.observe
       = ((execFueled evm fuel).run).map Execution.observe)
     (x : Execution) (X : Except Fault Frame.Result) (rules : ForkRules) (p : Pending)
     (saved : Frame.State) (cp : Devm)
     (h : x.observe = (X >>= resume rules p saved).map ofHalting) :
     ((match (generalizing := false) x with
       | .error e => Fueled.ofExcept (.error e)
-      | .ok devm => Jaune.execFueled ⟨pc, sta, devm⟩ fuel :
+      | .ok devm => Jaune.Legacy.execFueled ⟨pc, sta, devm⟩ fuel :
         Fueled (EvmError × Devm) Devm).run).map Execution.observe
     = ((match (generalizing := false) some X with
       | none => Fueled.exhausted
@@ -144,13 +144,13 @@ theorem execFueled_tail {fuel pc : Nat} {sta : Sevm}
 /-- **The driver.** Today's driver and the staged one agree on every machine and every fuel,
 observed with a fault's state erased. -/
 theorem execFueled_legacy (fuel : Nat) (evm : Evm) :
-    ((Jaune.execFueled evm fuel).run).map Execution.observe
+    ((Jaune.Legacy.execFueled evm fuel).run).map Execution.observe
       = ((execFueled evm fuel).run).map Execution.observe := by
   induction fuel generalizing evm with
-  | zero => rw [Jaune.execFueled, execFueled]
+  | zero => rw [Jaune.Legacy.execFueled, execFueled]
   | succ fuel ih =>
-    rw [Jaune.execFueled, execFueled, ← step_legacy]
-    rcases hs : Jaune.Evm.step evm with ex | ⟨pc, devm⟩ | ⟨f, rsm, pc⟩
+    rw [Jaune.Legacy.execFueled, execFueled, ← step_legacy]
+    rcases hs : Jaune.Legacy.Evm.step evm with ex | ⟨pc, devm⟩ | ⟨f, rsm, pc⟩
     · rfl
     · exact ih _
     · obtain ⟨hc, hb, -, hm⟩ := step_spawn_coherent hs
@@ -162,7 +162,7 @@ theorem execFueled_legacy (fuel : Nat) (evm : Evm) :
           (resume_of_facts hm (Frame.enter_done_facts hc (congrArg BenvStat.rules hb) he))
       · simp only [Frame.Entry.ofLegacy]
         have hih := ih child
-        cases hL : (Jaune.execFueled child fuel).run with
+        cases hL : (Jaune.Legacy.execFueled child fuel).run with
         | none =>
           rw [hL, Option.map_none, eq_comm, Option.map_eq_none_iff] at hih
           rw [hih]
@@ -184,10 +184,10 @@ theorem execFueled_legacy (fuel : Nat) (evm : Evm) :
 /-- **The total interpreter.** Today's `exec` and the staged one agree on every machine, observed
 with a fault's state erased: both run their driver at the same seeded fuel. -/
 theorem exec_legacy (evm : Evm) :
-    Execution.observe (Jaune.exec evm) = Execution.observe (exec evm) := by
+    Execution.observe (Jaune.Legacy.exec evm) = Execution.observe (exec evm) := by
   have h := execFueled_legacy (sufficientFuel evm.dyna.gasMeasure) evm
-  unfold Jaune.exec exec
-  cases hL : (Jaune.execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run with
+  unfold Jaune.Legacy.exec exec
+  cases hL : (Jaune.Legacy.execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run with
   | none =>
     rw [hL, Option.map_none, eq_comm, Option.map_eq_none_iff] at h
     rw [h]

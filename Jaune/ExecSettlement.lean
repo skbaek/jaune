@@ -19,7 +19,7 @@ def Execution.commits : Execution → Bool
 /-- Whether the child world survives the complete message-frame settlement.
 For CREATE this is strictly stronger than raw execution success: code-deposit
 failure rolls the constructor world back before the parent resumes. -/
-def Frame.settlementCommits (frame : Frame) (raw : Execution) : Bool :=
+def Legacy.Frame.settlementCommits (frame : Legacy.Frame) (raw : Execution) : Bool :=
   match frame.settle raw with
   | .error _ => false
   | .ok post => post.error.isNone
@@ -128,17 +128,17 @@ private theorem processCreateMessage_clean_input
 
 /-- Complete frame settlement can be clean only when the underlying code
 execution itself was clean. -/
-theorem Frame.raw_commits_of_settlementCommits
-    {frame : Frame} {raw : Execution}
-    (h : Frame.settlementCommits frame raw = true) :
+theorem Legacy.Frame.raw_commits_of_settlementCommits
+    {frame : Legacy.Frame} {raw : Execution}
+    (h : Legacy.Frame.settlementCommits frame raw = true) :
     Execution.commits raw = true := by
-  unfold Frame.settlementCommits at h
+  unfold Legacy.Frame.settlementCommits at h
   cases hsettled : frame.settle raw with
   | error error => simp [hsettled] at h
   | ok settled =>
       have hclean : settled.error.isNone = true := by
         simpa only [hsettled] using h
-      unfold Frame.settle Frame.settleMsg at hsettled
+      unfold Legacy.Frame.settle Legacy.Frame.settleMsg at hsettled
       cases hcreate : frame.isCreate with
       | false =>
           simp only [hcreate, Bool.false_eq_true, ↓reduceIte] at hsettled
@@ -196,9 +196,9 @@ def Exec.descendantFrames {pc : Nat} {sevm : Sevm} {pre : Devm}
   | .runErr _ _ _ _ => []
   | .runOk (f := frame) (raw := raw) _ _ child _ next =>
       let childFrames :=
-        if h : Frame.settlementCommits frame raw = true then
+        if h : Legacy.Frame.settlementCommits frame raw = true then
           let hraw : Execution.commits raw = true :=
-            Frame.raw_commits_of_settlementCommits h
+            Legacy.Frame.raw_commits_of_settlementCommits h
           Exec.Frame.ofRun child hraw :: Exec.descendantFrames child
         else []
       childFrames ++ Exec.descendantFrames next
@@ -208,17 +208,17 @@ termination_by sizeOf run
 child's descendants and before the parent continuation's descendants. -/
 @[simp] theorem Exec.descendantFrames_runOk_of_settlementCommits
     {pc pc' : Nat} {sevm : Sevm} {pre devm' : Devm}
-    {f : Jaune.Frame} {rsm : Resume}
+    {f : Jaune.Legacy.Frame} {rsm : Resume}
     {cevm : Evm} {raw out : Execution}
-    (hstep : Jaune.Evm.step ⟨pc, sevm, pre⟩ = .spawn f rsm pc')
+    (hstep : Jaune.Legacy.Evm.step ⟨pc, sevm, pre⟩ = .spawn f rsm pc')
     (henter : f.enter = .run cevm)
     (child : Exec cevm.pc cevm.sta cevm.dyna raw)
     (hr : rsm.run (f.settle raw) = .ok devm')
     (next : Exec pc' sevm devm' out)
-    (hcommit : Frame.settlementCommits f raw = true) :
+    (hcommit : Legacy.Frame.settlementCommits f raw = true) :
     Exec.descendantFrames (Exec.runOk hstep henter child hr next) =
       Exec.Frame.ofRun child
-          (Frame.raw_commits_of_settlementCommits hcommit) ::
+          (Legacy.Frame.raw_commits_of_settlementCommits hcommit) ::
         Exec.descendantFrames child ++ Exec.descendantFrames next := by
   simp [Exec.descendantFrames, hcommit]
 
@@ -226,14 +226,14 @@ child's descendants and before the parent continuation's descendants. -/
 no retained frame, even if its raw execution itself committed. -/
 @[simp] theorem Exec.descendantFrames_runOk_of_not_settlementCommits
     {pc pc' : Nat} {sevm : Sevm} {pre devm' : Devm}
-    {f : Jaune.Frame} {rsm : Resume}
+    {f : Jaune.Legacy.Frame} {rsm : Resume}
     {cevm : Evm} {raw out : Execution}
-    (hstep : Jaune.Evm.step ⟨pc, sevm, pre⟩ = .spawn f rsm pc')
+    (hstep : Jaune.Legacy.Evm.step ⟨pc, sevm, pre⟩ = .spawn f rsm pc')
     (henter : f.enter = .run cevm)
     (child : Exec cevm.pc cevm.sta cevm.dyna raw)
     (hr : rsm.run (f.settle raw) = .ok devm')
     (next : Exec pc' sevm devm' out)
-    (hnot : Frame.settlementCommits f raw ≠ true) :
+    (hnot : Legacy.Frame.settlementCommits f raw ≠ true) :
     Exec.descendantFrames (Exec.runOk hstep henter child hr next) =
       Exec.descendantFrames next := by
   simp only [Exec.descendantFrames, dite_eq_right hnot, List.nil_append]
@@ -244,9 +244,9 @@ commit premise records the semantic counterexample to pruning by raw outcome
 alone. -/
 theorem Exec.descendantFrames_runOk_create_codeDepositRollback
     {pc pc' : Nat} {sevm : Sevm} {pre devm' settled : Devm}
-    {f : Jaune.Frame} {rsm : Resume}
+    {f : Jaune.Legacy.Frame} {rsm : Resume}
     {cevm : Evm} {raw out : Execution}
-    (hstep : Jaune.Evm.step ⟨pc, sevm, pre⟩ = .spawn f rsm pc')
+    (hstep : Jaune.Legacy.Evm.step ⟨pc, sevm, pre⟩ = .spawn f rsm pc')
     (henter : f.enter = .run cevm)
     (child : Exec cevm.pc cevm.sta cevm.dyna raw)
     (hr : rsm.run (f.settle raw) = .ok devm')
@@ -264,9 +264,9 @@ theorem Exec.descendantFrames_runOk_create_codeDepositRollback
     hstep henter child hr next
   intro hcommit
   have hframeSettle : f.settle raw = .ok settled := by
-    unfold Frame.settle Frame.settleMsg
+    unfold Legacy.Frame.settle Legacy.Frame.settleMsg
     simpa only [hcreate, ↓reduceIte] using hsettled
-  unfold Frame.settlementCommits at hcommit
+  unfold Legacy.Frame.settlementCommits at hcommit
   rw [hframeSettle] at hcommit
   cases hoption : settled.error with
   | none => simp [hoption] at herror
@@ -296,26 +296,26 @@ theorem ProcessMessage.settlementCommits_of_some_ok_clean
     (hprocess : ProcessMessage msg
       (.some ⟨⟨pc, sevm, pre⟩, raw⟩) (.ok child))
     (hclean : child.error.isSome = false) :
-    Frame.settlementCommits (Frame.ofCall msg) raw = true := by
+    Legacy.Frame.settlementCommits (Legacy.Frame.ofCall msg) raw = true := by
   have hsettle := (RunFrame.some_inv hprocess).2
   have hclean' : child.error.isNone = true := by
     cases herror : child.error <;> simp_all
-  unfold Frame.settlementCommits
+  unfold Legacy.Frame.settlementCommits
   rw [← hsettle]
   exact hclean'
 
-theorem Frame.settlementCommits_ofCall_of_raw_commits
+theorem Legacy.Frame.settlementCommits_ofCall_of_raw_commits
     {msg : Msg} {raw : Execution}
     (hraw : Execution.commits raw = true) :
-    Frame.settlementCommits (Frame.ofCall msg) raw = true := by
+    Legacy.Frame.settlementCommits (Legacy.Frame.ofCall msg) raw = true := by
   cases raw with
   | error err =>
       simp [Execution.commits] at hraw
   | ok post =>
       cases herror : post.error with
       | none =>
-          simp [Frame.settlementCommits, Frame.settle, Frame.settleMsg,
-            Frame.ofCall, executeCode.handleErrorWith_ok,
+          simp [Legacy.Frame.settlementCommits, Legacy.Frame.settle, Legacy.Frame.settleMsg,
+            Legacy.Frame.ofCall, executeCode.handleErrorWith_ok,
             processMessage.settle, Bind.bind, Except.bind, herror]
       | some error =>
           simp [Execution.commits, herror] at hraw

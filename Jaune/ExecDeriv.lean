@@ -50,14 +50,14 @@ continuation after a spawn returns (`runOkCont`). -/
 inductive Exec.Deriv.Prec : Exec.Deriv → Exec.Deriv → Prop
   | cont {pc : Nat} {sevm : Sevm} {devm : Devm} {pc' : Nat}
     {devm' : Devm} {exn : Execution}
-    (hstep : Evm.step ⟨pc, sevm, devm⟩ = .cont pc' devm')
+    (hstep : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .cont pc' devm')
     (exc : Exec pc' sevm devm' exn) :
     Exec.Deriv.Prec
       ⟨pc', sevm, devm', exn, exc⟩
       ⟨pc, sevm, devm, exn, .cont hstep exc⟩
   | doneOk {pc : Nat} {sevm : Sevm} {devm : Devm}
-    {f : Frame} {rsm : Resume} {pc' : Nat} {r} {devm' : Devm} {exn : Execution}
-    (hstep : Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc')
+    {f : Legacy.Frame} {rsm : Resume} {pc' : Nat} {r} {devm' : Devm} {exn : Execution}
+    (hstep : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc')
     (henter : f.enter = .done r)
     (hr : rsm.run r = .ok devm')
     (exc : Exec pc' sevm devm' exn) :
@@ -65,8 +65,8 @@ inductive Exec.Deriv.Prec : Exec.Deriv → Exec.Deriv → Prop
       ⟨pc', sevm, devm', exn, exc⟩
       ⟨pc, sevm, devm, exn, .doneOk hstep henter hr exc⟩
   | runErrChild {pc : Nat} {sevm : Sevm} {devm : Devm}
-    {f : Frame} {rsm : Resume} {pc' : Nat} {cevm : Evm} {raw : Execution} {e}
-    (hstep : Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc')
+    {f : Legacy.Frame} {rsm : Resume} {pc' : Nat} {cevm : Evm} {raw : Execution} {e}
+    (hstep : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc')
     (henter : f.enter = .run cevm)
     (excChild : Exec cevm.pc cevm.sta cevm.dyna raw)
     (hr : rsm.run (f.settle raw) = .error e) :
@@ -74,9 +74,9 @@ inductive Exec.Deriv.Prec : Exec.Deriv → Exec.Deriv → Prop
       ⟨cevm.pc, cevm.sta, cevm.dyna, raw, excChild⟩
       ⟨pc, sevm, devm, .error e, .runErr hstep henter excChild hr⟩
   | runOkChild {pc : Nat} {sevm : Sevm} {devm : Devm}
-    {f : Frame} {rsm : Resume} {pc' : Nat} {cevm : Evm} {raw : Execution}
+    {f : Legacy.Frame} {rsm : Resume} {pc' : Nat} {cevm : Evm} {raw : Execution}
     {devm' : Devm} {exn : Execution}
-    (hstep : Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc')
+    (hstep : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc')
     (henter : f.enter = .run cevm)
     (excChild : Exec cevm.pc cevm.sta cevm.dyna raw)
     (hr : rsm.run (f.settle raw) = .ok devm')
@@ -85,9 +85,9 @@ inductive Exec.Deriv.Prec : Exec.Deriv → Exec.Deriv → Prop
       ⟨cevm.pc, cevm.sta, cevm.dyna, raw, excChild⟩
       ⟨pc, sevm, devm, exn, .runOk hstep henter excChild hr exc⟩
   | runOkCont {pc : Nat} {sevm : Sevm} {devm : Devm}
-    {f : Frame} {rsm : Resume} {pc' : Nat} {cevm : Evm} {raw : Execution}
+    {f : Legacy.Frame} {rsm : Resume} {pc' : Nat} {cevm : Evm} {raw : Execution}
     {devm' : Devm} {exn : Execution}
-    (hstep : Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc')
+    (hstep : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc')
     (henter : f.enter = .run cevm)
     (excChild : Exec cevm.pc cevm.sta cevm.dyna raw)
     (hr : rsm.run (f.settle raw) = .ok devm')

@@ -31,7 +31,7 @@ def Msg.world (msg : Msg) : World :=
 
 /-- Today's frame entry, with the `Devm` the machine starts on as a function of the block
 environment after the value transfer. -/
-def Frame.enterFrom (f : Jaune.Frame) (dyna : Benv → Devm) : FrameEntry :=
+def Frame.enterFrom (f : Jaune.Legacy.Frame) (dyna : Benv → Devm) : FrameEntry :=
   match f.inner.benvAfterTransfer with
   | .error e => .done (f.settleMsg (.error e))
   | .ok benv =>
@@ -45,9 +45,9 @@ def Frame.enterFrom (f : Jaune.Frame) (dyna : Benv → Devm) : FrameEntry :=
       else .run evm
 
 /-- `Frame.enter` starts the machine on the inner message's `initDevm`. -/
-theorem Frame.enter_eq_enterFrom (f : Jaune.Frame) :
+theorem Frame.enter_eq_enterFrom (f : Jaune.Legacy.Frame) :
     f.enter = Frame.enterFrom f (fun benv => initDevm (f.inner.withBenv benv)) := by
-  unfold Jaune.Frame.enter Frame.enterFrom executeCode.enter initEvm
+  unfold Jaune.Legacy.Frame.enter Frame.enterFrom executeCode.enter initEvm
   cases f.inner.benvAfterTransfer with
   | error e => rfl
   | ok benv =>
@@ -57,7 +57,7 @@ theorem Frame.enter_eq_enterFrom (f : Jaune.Frame) :
     | some adr => dsimp only; split_ifs <;> rfl
 
 /-- The prepared top frame's entry, `TraceTransaction.preparedEntry`, restated verbatim. -/
-def preparedEntry (frame : Jaune.Frame) (prepared : Devm) : FrameEntry :=
+def preparedEntry (frame : Jaune.Legacy.Frame) (prepared : Devm) : FrameEntry :=
   match frame.inner.benvAfterTransfer with
   | .error e => .done (frame.settleMsg (.error e))
   | .ok benv =>
@@ -74,7 +74,7 @@ def preparedEntry (frame : Jaune.Frame) (prepared : Devm) : FrameEntry :=
       else .run evm
 
 /-- The prepared entry starts the machine on the prepared state with the transferred world. -/
-theorem preparedEntry_eq_enterFrom (frame : Jaune.Frame) (prepared : Devm) :
+theorem preparedEntry_eq_enterFrom (frame : Jaune.Legacy.Frame) (prepared : Devm) :
     preparedEntry frame prepared = Frame.enterFrom frame (fun benv =>
       ((prepared.withState benv.state).withStorageWrites benv.storageWrites).withCreatedAccounts
         benv.createdAccounts) := rfl
@@ -144,7 +144,7 @@ theorem Message.transfer_legacy (msg : Msg) (isCreate : Bool) :
     rfl
 
 /-- The world a legacy frame is entered on is its inner message's. -/
-theorem enteredWorld_legacy {f : Jaune.Frame} {saved : Devm}
+theorem enteredWorld_legacy {f : Jaune.Legacy.Frame} {saved : Devm}
     (h : Legacy.Frame.TopCoherent f saved) :
     Frame.enteredWorld ⟨Message.ofLegacy f.outer f.isCreate, Frame.State.ofDevm saved⟩
       = Legacy.Msg.world f.inner := by
@@ -164,7 +164,7 @@ theorem enteredWorld_legacy {f : Jaune.Frame} {saved : Devm}
 /-- **Entry, from a given start.** Today's entry agrees with the staged one when its start
 `Devm` is the staged start state set on the world after the value transfer, and the start state
 stores no error. -/
-theorem enterFrom_legacy (f : Jaune.Frame) (saved start : Devm)
+theorem enterFrom_legacy (f : Jaune.Legacy.Frame) (saved start : Devm)
     (h : Legacy.Frame.TopCoherent f saved) (dyna : Benv → Devm) (clean : start.error = none)
     (hd : ∀ benv, f.inner.benvAfterTransfer = .ok benv →
       dyna benv = (start.setWorld ⟨benv.state, f.inner.tenv.transientStorage,
@@ -185,7 +185,7 @@ theorem enterFrom_legacy (f : Jaune.Frame) (saved start : Devm)
     obtain ⟨e1, rest⟩ := e
     simp only at he
     subst he
-    simp only [Frame.Entry.ofLegacy, Jaune.Frame.settleMsg, processMessage.settle,
+    simp only [Frame.Entry.ofLegacy, Jaune.Legacy.Frame.settleMsg, processMessage.settle,
       processCreateMessage.settle, bind, Except.bind]
     split <;> rfl
   | ok benv =>
@@ -243,7 +243,7 @@ theorem initDevm_logs (msg : Msg) (isCreate : Bool) :
 
 /-- The inner message of a legacy frame reads like the outer one, except for its block
 environment. -/
-theorem inner_fields {f : Jaune.Frame}
+theorem inner_fields {f : Jaune.Legacy.Frame}
     (paired : f.inner = if f.isCreate then processCreateMessage.msg f.outer else f.outer) :
     Message.ofLegacy f.inner f.isCreate = Message.ofLegacy f.outer f.isCreate ∧
       f.inner.tenv = f.outer.tenv ∧ f.inner.benv.stat = f.outer.benv.stat ∧
@@ -253,7 +253,7 @@ theorem inner_fields {f : Jaune.Frame}
   rw [paired]; split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- **Enter, a spawned child.** -/
-theorem enter_legacy (f : Jaune.Frame) (rsm : Resume) (h : Legacy.Frame.Coherent f rsm.parent) :
+theorem enter_legacy (f : Jaune.Legacy.Frame) (rsm : Resume) (h : Legacy.Frame.Coherent f rsm.parent) :
     Frame.Entry.ofLegacy f.enter = enter (Frame.ofLegacy f rsm) := by
   rw [Legacy.Frame.enter_eq_enterFrom]
   apply enterFrom_legacy f rsm.parent _ h.toTopCoherent _ rfl
@@ -277,7 +277,7 @@ theorem enter_legacy (f : Jaune.Frame) (rsm : Resume) (h : Legacy.Frame.Coherent
 /-- **Enter, a top-level frame of today.** It starts from its message's `initDevm`. -/
 theorem enterWith_top (msg : Msg) (isCreate : Bool) :
     Frame.Entry.ofLegacy
-        (if isCreate then Jaune.Frame.ofCreate msg else Jaune.Frame.ofCall msg).enter
+        (if isCreate then Jaune.Legacy.Frame.ofCreate msg else Jaune.Legacy.Frame.ofCall msg).enter
       = enterWith (Frame.ofTop msg isCreate) (initDevm msg) := by
   cases isCreate <;> simp only [ite_true, Bool.false_eq_true, ite_false] <;>
     rw [Legacy.Frame.enter_eq_enterFrom] <;>
@@ -292,7 +292,7 @@ theorem enterWith_top (msg : Msg) (isCreate : Bool) :
 
 /-- **Enter, the prepared top frame.** It starts from the prepared state, which must store no
 error. -/
-theorem enterWith_prepared (frame : Jaune.Frame) (prepared : Devm)
+theorem enterWith_prepared (frame : Jaune.Legacy.Frame) (prepared : Devm)
     (h : Legacy.Frame.TopCoherent frame prepared) (clean : prepared.error = none) :
     Frame.Entry.ofLegacy (Legacy.preparedEntry frame prepared)
       = enterWith ⟨Message.ofLegacy frame.outer frame.isCreate, Frame.State.ofDevm prepared⟩

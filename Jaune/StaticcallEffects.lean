@@ -82,14 +82,14 @@ private theorem generic_call_effects {sevm : Sevm} {pre post : Devm} {gas reserv
     {caller target codeAddress : Address} {transfer static : Bool} {ii size oi os : Nat}
     {code : ByteArray} {disable charged insufficient : Bool} {xl : Xlot} (state : Option StateGasRules)
     (h : XStep.Run (match state with
-      | none => genericCall.step sevm pre gas value caller target codeAddress transfer static
+      | none => Legacy.genericCall.step sevm pre gas value caller target codeAddress transfer static
           ii size oi os code disable
-      | some state => genericCallAmsterdam.step sevm state pre gas reservoir value caller target codeAddress
+      | some state => Legacy.genericCallAmsterdam.step sevm state pre gas reservoir value caller target codeAddress
           transfer static ii size oi os code disable charged insufficient) xl (.ok post)) :
     CallEffects pre post oi os := by
   cases state with
   | none =>
-    simp only [genericCall.step] at h
+    simp only [Legacy.genericCall.step] at h
     split at h
     · simp only [bind, Except.bind] at h
       split at h
@@ -101,7 +101,7 @@ private theorem generic_call_effects {sevm : Sevm} {pre post : Devm} {gas reserv
     · obtain ⟨raw, _, resume⟩ := h
       exact resume_call_effects (parent := pre.withReturnData []) none false resume.symm
   | some state =>
-    simp only [genericCallAmsterdam.step] at h
+    simp only [Legacy.genericCallAmsterdam.step] at h
     split at h
     · simp only [bind, Except.bind] at h
       split at h
@@ -126,7 +126,7 @@ theorem NextOp.staticcall_run_effects {sevm : Sevm} {pre post : Devm}
   rcases pre with ⟨⟨operands, memory, gasLeft, stateGasLeft⟩, metadata, world⟩
   change operands = _ at stack
   subst operands
-  simp only [NextOp.StepRun, NextOp.step_exec, XStep.run_toStep, MessageOp.step] at run
+  simp only [NextOp.StepRun, Legacy.NextOp.step_exec, XStep.run_toStep, Legacy.MessageOp.step] at run
   cases stateGas : sevm.benvStat.rules.stateGas with
   | none =>
     simp only [stateGas, bind, Except.bind, Devm.popToNat_def, Devm.popToAdr_def,

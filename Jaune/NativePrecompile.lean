@@ -24,12 +24,12 @@ private theorem accessDelegation_direct {rules : ForkRules} {d : Devm} {target :
 
 private theorem genericCall_native_not_run
     {sevm : Sevm} {d : Devm} {target : Address} {gas ii isz oi osz : Nat} {code : ByteArray}
-    {frame : Frame} {resume : Resume} {child : Evm}
+    {frame : Legacy.Frame} {resume : Resume} {child : Evm}
     (active : decide (sevm.benvStat.rules.isPrecompile target) = true)
-    (spawn : genericCall.step sevm d gas 0 sevm.currentTarget target target true true
+    (spawn : Legacy.genericCall.step sevm d gas 0 sevm.currentTarget target target true true
       ii isz oi osz code false = .spawn frame resume)
     (enter : frame.enter = .run child) : False := by
-  unfold genericCall.step at spawn
+  unfold Legacy.genericCall.step at spawn
   split at spawn
   · simp only [bind, Except.bind, pure, Except.pure] at spawn
     repeat' split at spawn
@@ -38,9 +38,9 @@ private theorem genericCall_native_not_run
     obtain ⟨rfl, -⟩ := spawn
     let msg := callMsg sevm (d.withReturnData []) gas 0 sevm.currentTarget target target true true
       (Array.sliceD d.memory.data ii isz 0) code false
-    change (Frame.ofCall msg).enter = .run child at enter
-    unfold Frame.enter at enter
-    dsimp only [Frame.ofCall] at enter
+    change (Legacy.Frame.ofCall msg).enter = .run child at enter
+    unfold Legacy.Frame.enter at enter
+    dsimp only [Legacy.Frame.ofCall] at enter
     rw [Msg.benvAfterTransfer_of_value_zero (show msg.value = 0 from rfl)] at enter
     simp only [executeCode.enter, msg, Msg.withBenv, callMsg, Bool.not_false,
       Bool.true_and, active, ↓reduceIte] at enter
@@ -49,19 +49,19 @@ private theorem genericCall_native_not_run
 /-- The actual six-operand STATICCALL to an enabled, effectively direct native
 precompile cannot enter an interpreter child. The original no-state-gas lane,
 real spawn and real entry equations remain explicit; native errors are included. -/
-theorem MessageOp.step_staticcall_not_run_of_precompile
-    {sevm : Sevm} {pre : Devm} {frame : Frame} {resume : Resume} {child : Evm}
+theorem Legacy.MessageOp.step_staticcall_not_run_of_precompile
+    {sevm : Sevm} {pre : Devm} {frame : Legacy.Frame} {resume : Resume} {child : Evm}
     {g t ii size oi outSize : U256} {rest : List U256}
     (operands : pre.stack = g :: t :: ii :: size :: oi :: outSize :: rest)
     (stateGas : sevm.benvStat.rules.stateGas = none)
     (active : decide (sevm.benvStat.rules.isPrecompile t.toAddress) = true)
     (direct : sevm.benvStat.rules.delegatedCodeAddress (pre.getCode t.toAddress) = none)
-    (spawn : MessageOp.step sevm pre .staticcall = .spawn frame resume)
+    (spawn : Legacy.MessageOp.step sevm pre .staticcall = .spawn frame resume)
     (enter : frame.enter = .run child) : False := by
   rcases pre with ⟨⟨stack, memory, gasLeft, stateGasLeft⟩, metadata, world⟩
   change stack = _ at operands
   subst stack
-  simp only [MessageOp.step, stateGas, bind, Except.bind, Devm.popToNat_def,
+  simp only [Legacy.MessageOp.step, stateGas, bind, Except.bind, Devm.popToNat_def,
     Devm.popToAdr_def, Devm.pop_def, Prod.mapFst, Devm.stack, Devm.setMach,
     Functor.mapRev, Except.map_ok, Prod.map, id_eq] at spawn
   let d : Devm := ⟨⟨rest, memory, gasLeft, stateGasLeft⟩, metadata, world⟩

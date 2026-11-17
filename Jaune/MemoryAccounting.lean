@@ -159,9 +159,9 @@ theorem Resume.call_run_ok_memory {parent child resumed : Devm}
 interpreter's sufficiency proof rather than another recursive driver. -/
 theorem Exec.settledGasLe {pc : Nat} {sevm : Sevm} {devm : Devm} {raw : Execution}
     (h : Exec pc sevm devm raw) : raw.SettledGasLe devm.gasMeasure := by
-  have heq := (exec_iff_exec_eq pc sevm devm raw).mp ⟨h⟩
-  have hs := execFueled_settledGasLe (sufficientFuel devm.gasMeasure)
-    (⟨pc, sevm, devm⟩ : Evm) (execFueled_run_sufficientFuel ⟨pc, sevm, devm⟩)
+  have heq := (Legacy.exec_iff_exec_eq pc sevm devm raw).mp ⟨h⟩
+  have hs := Legacy.execFueled_settledGasLe (sufficientFuel devm.gasMeasure)
+    (⟨pc, sevm, devm⟩ : Evm) (Legacy.execFueled_run_sufficientFuel ⟨pc, sevm, devm⟩)
   rw [heq] at hs
   exact hs
 
@@ -172,17 +172,17 @@ theorem calculateMsgCallGas_zero_value_cost (gas gasLeft memoryCost extraGas cs 
   split <;> rfl
 
 /-- Invert the actual call spawn, retaining its caller and output window. -/
-theorem genericCall.step_spawn_call {sevm : Sevm} {parent : Devm} {gas : Nat}
+theorem Legacy.genericCall.step_spawn_call {sevm : Sevm} {parent : Devm} {gas : Nat}
     {value : U256} {caller target codeAddress : Address}
     {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat}
-    {code : ByteArray} {disablePrecompiles : Bool} {frame : Frame} {resume : Resume}
-    (h : genericCall.step sevm parent gas value caller target codeAddress
+    {code : ByteArray} {disablePrecompiles : Bool} {frame : Legacy.Frame} {resume : Resume}
+    (h : Legacy.genericCall.step sevm parent gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
       code disablePrecompiles = .spawn frame resume) :
     frame.inner.gas = gas ∧
       resume = .call (parent.withReturnData []) outputIndex outputSize := by
-  unfold genericCall.step at h
+  unfold Legacy.genericCall.step at h
   split at h
   · have hx := XStep.ofExcept_spawn h
     obtain ⟨_, _, hx⟩ := Except.bind_eq_ok hx
@@ -194,17 +194,17 @@ theorem genericCall.step_spawn_call {sevm : Sevm} {parent : Devm} {gas : Nat}
 
 /-- The spawned CALL frame receives exactly the caller's selected input
 window, including the zero-filled tail of a short memory read. -/
-theorem genericCall.step_spawn_data {sevm : Sevm} {parent : Devm} {gas : Nat}
+theorem Legacy.genericCall.step_spawn_data {sevm : Sevm} {parent : Devm} {gas : Nat}
     {value : U256} {caller target codeAddress : Address}
     {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat}
-    {code : ByteArray} {disablePrecompiles : Bool} {frame : Frame} {resume : Resume}
-    (h : genericCall.step sevm parent gas value caller target codeAddress
+    {code : ByteArray} {disablePrecompiles : Bool} {frame : Legacy.Frame} {resume : Resume}
+    (h : Legacy.genericCall.step sevm parent gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
       code disablePrecompiles = .spawn frame resume) :
     frame.inner.data =
       Jaune.Array.sliceD (parent.withReturnData []).memory.data inputIndex inputSize 0 := by
-  unfold genericCall.step at h
+  unfold Legacy.genericCall.step at h
   split at h
   · have hx := XStep.ofExcept_spawn h
     obtain ⟨_, _, hx⟩ := Except.bind_eq_ok hx
@@ -224,14 +224,14 @@ theorem zero_call_spawn_resume_accounting
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
+    {frame : Legacy.Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
     (hcharge : chargeGas
       ((calculateMsgCallGas 0 gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
         extraGas cs).1 +
         before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hspawn : genericCall.step sevm
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas 0 gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -253,13 +253,13 @@ theorem zero_call_spawn_resume_accounting
   let pairs := [(inputIndex, inputSize), (outputIndex, outputSize)]
   let costs := calculateMsgCallGas 0 gas.toNat before.gasLeft (before.extCost pairs) extraGas cs
   let parent := (charged.memExtends pairs).withReturnData []
-  obtain ⟨hf, hrsm⟩ := genericCall.step_spawn_call hspawn
+  obtain ⟨hf, hrsm⟩ := Legacy.genericCall.step_spawn_call hspawn
   change frame.inner.gas = costs.2 at hf
   change resume = .call parent outputIndex outputSize at hrsm
   have hs := hexec.settledGasLe
-  rw [Frame.enter_run_gasMeasure henter] at hs
+  rw [Legacy.Frame.enter_run_gasMeasure henter] at hs
   obtain ⟨child, hsettle, hgas⟩ := Resume.run_ok_gasMeasure hresume
-  have hchild := Frame.settle_gasLe hs hsettle
+  have hchild := Legacy.Frame.settle_gasLe hs hsettle
   rw [hf] at hchild
   have hcap := calculateMsgCallGas_zero_child_le gas.toNat before.gasLeft
     (before.extCost pairs) extraGas cs
@@ -318,16 +318,16 @@ private theorem memory_slice_length (xs : Array UInt8) (index size : Nat)
 
 /-- The real spawned CALL input has the requested length, even when reading
 beyond the caller's materialized memory. -/
-theorem genericCall.step_spawn_data_length {sevm : Sevm} {parent : Devm} {gas : Nat}
+theorem Legacy.genericCall.step_spawn_data_length {sevm : Sevm} {parent : Devm} {gas : Nat}
     {value : U256} {caller target codeAddress : Address}
     {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat}
-    {code : ByteArray} {disablePrecompiles : Bool} {frame : Frame} {resume : Resume}
-    (h : genericCall.step sevm parent gas value caller target codeAddress
+    {code : ByteArray} {disablePrecompiles : Bool} {frame : Legacy.Frame} {resume : Resume}
+    (h : Legacy.genericCall.step sevm parent gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
       code disablePrecompiles = .spawn frame resume) :
     frame.inner.data.length = inputSize := by
-  rw [genericCall.step_spawn_data h]
+  rw [Legacy.genericCall.step_spawn_data h]
   exact memory_slice_length _ _ _ _
 
 private theorem pop_memory_output (pre : Devm) :
@@ -613,14 +613,14 @@ theorem zero_call_spawn_resume_raw_accounting
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
+    {frame : Legacy.Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
     (hcharge : chargeGas
       ((calculateMsgCallGas 0 gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
         extraGas cs).1 +
         before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hspawn : genericCall.step sevm
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas 0 gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -639,7 +639,7 @@ theorem zero_call_spawn_resume_raw_accounting
   let pairs := [(inputIndex, inputSize), (outputIndex, outputSize)]
   let costs := calculateMsgCallGas 0 gas.toNat before.gasLeft (before.extCost pairs) extraGas cs
   let parent := (charged.memExtends pairs).withReturnData []
-  obtain ⟨hf, hrsm⟩ := genericCall.step_spawn_call hspawn
+  obtain ⟨hf, hrsm⟩ := Legacy.genericCall.step_spawn_call hspawn
   change frame.inner.gas = costs.2 at hf
   change resume = .call parent outputIndex outputSize at hrsm
   have hfields := charge_memory_output (costs.1 + before.extCost pairs) before
@@ -652,9 +652,9 @@ theorem zero_call_spawn_resume_raw_accounting
     dsimp only at ho ⊢
     refine ⟨?_, ho.2.trans hparentOutput⟩
     have hs := hexec.settledGasLe
-    rw [Frame.enter_run_gasMeasure henter, hf] at hs
+    rw [Legacy.Frame.enter_run_gasMeasure henter, hf] at hs
     have hg := Resume.run_gasLe (rsm := resume) (r := frame.settle raw)
-      (m := costs.2) (fun d hd => Frame.settle_gasLe hs hd)
+      (m := costs.2) (fun d hd => Legacy.Frame.settle_gasLe hs hd)
     rw [hresume, hrsm] at hg
     change failure.2.gasMeasure ≤ parent.gasMeasure + costs.2 at hg
     have hc : costs.1 = costs.2 + extraGas :=
@@ -1584,9 +1584,9 @@ private theorem genericCall_memory_allowance
     (caller target codeAddress : Address) (transfer staticCall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disable : Bool) :
-    xAccounting pre gas (genericCall.step sevm pre gas value caller target codeAddress
+    xAccounting pre gas (Legacy.genericCall.step sevm pre gas value caller target codeAddress
       transfer staticCall inputIndex inputSize outputIndex outputSize code disable) := by
-  unfold genericCall.step
+  unfold Legacy.genericCall.step
   split
   · apply xAccounting_ofExcept
     let refunded := (pre.withReturnData []).withGasLeft ((pre.withReturnData []).gasLeft + gas)
@@ -1631,8 +1631,8 @@ private theorem genericCreate_memory_accounting
     (sevm : Sevm) (pre : Devm) (endowment : U256)
     (newAddress : Address) (memoryIndex memorySize : Nat) :
     xAccounting pre 0
-      (genericCreate.step sevm pre endowment newAddress memoryIndex memorySize) := by
-  unfold genericCreate.step
+      (Legacy.genericCreate.step sevm pre endowment newAddress memoryIndex memorySize) := by
+  unfold Legacy.genericCreate.step
   apply xAccounting_ofExcept
   refine xResult_bind
     (nonspawn_assert (sevm.benvStat.rules.creation.initCodeLimit →
@@ -1766,8 +1766,8 @@ private theorem balance_refund_accounting (pre : Devm) (refund : Nat) :
 
 private theorem executable_memory_accounting (sevm : Sevm) (pre : Devm) (x : MessageOp)
     (hstate : sevm.benvStat.rules.stateGas = none) :
-    xAccounting pre 0 (MessageOp.step sevm pre x) := by
-  cases x <;> simp only [MessageOp.step, hstate]
+    xAccounting pre 0 (Legacy.MessageOp.step sevm pre x) := by
+  cases x <;> simp only [Legacy.MessageOp.step, hstate]
   case create =>
     apply xAccounting_ofExcept
     refine xResult_bind (nonspawn_pop pre) ?_
@@ -2078,20 +2078,20 @@ private def rawTerminalAccounted (pre : Devm) (raw : Execution) : Prop :=
   | .ok post => accountedTerminal pre post
   | .error failure => accountedTerminal pre failure.2
 
-private def stepAccounted (pre : Devm) : Step → Prop
+private def stepAccounted (pre : Devm) : Legacy.Step → Prop
   | .cont _ post => nonspawnPreserved pre post
   | .halt raw => rawTerminalAccounted pre raw
   | .spawn _ _ _ => True
 
 private theorem ofExecution_accounted (pc : Nat) {pre : Devm} {raw : Execution}
-    (h : nonspawnResult pre id raw) : stepAccounted pre (Step.ofExecution pc raw) := by
+    (h : nonspawnResult pre id raw) : stepAccounted pre (Legacy.Step.ofExecution pc raw) := by
   cases raw with
   | error failure => exact ⟨h.1, Or.inl h.2⟩
   | ok post => exact h
 
 private theorem ofJump_accounted {pre : Devm}
     {raw : Except (EvmError × Devm) (Nat × Devm)}
-    (h : nonspawnResult pre Prod.snd raw) : stepAccounted pre (Step.ofJump raw) := by
+    (h : nonspawnResult pre Prod.snd raw) : stepAccounted pre (Legacy.Step.ofJump raw) := by
   cases raw with
   | error failure => exact ⟨h.1, Or.inl h.2⟩
   | ok value => rcases value with ⟨pc, post⟩; exact h
@@ -2107,8 +2107,8 @@ private theorem ofXStep_accounted (pc : Nat) {pre : Devm} {step : XStep}
 
 private theorem nonterminal_memory_accounting (evm : Evm) (n : NextOp)
     (hstate : evm.sta.benvStat.rules.stateGas = none) :
-    stepAccounted evm.dyna (NextOp.step evm n) := by
-  cases n <;> simp only [NextOp.step]
+    stepAccounted evm.dyna (Legacy.NextOp.step evm n) := by
+  cases n <;> simp only [Legacy.NextOp.step]
   case plain r =>
     exact ofExecution_accounted _
       (regular_memory_accounting evm.pc evm.dyna evm.sta r hstate)
@@ -2174,14 +2174,14 @@ private theorem nonterminal_memory_accounting (evm : Evm) (n : NextOp)
 /-- Every actual nonspawn step preserves the memory/gas potential. Continued
 frames inherit output; terminal raw outcomes inherit it or account for its
 complete length through the charged terminal read. Spawn is accounted separately. -/
-theorem Evm.step_memory_accounting_output (evm : Evm)
+theorem Legacy.Evm.step_memory_accounting_output (evm : Evm)
     (hstate : evm.sta.benvStat.rules.stateGas = none) :
     let initial := evm.dyna.gasMeasure + calculateMemoryGasCost evm.dyna.memory.size
     let accounted := fun post : Devm =>
       post.gasMeasure + calculateMemoryGasCost post.memory.size ≤ initial ∧
         (post.output = evm.dyna.output ∨
           calculateMemoryGasCost post.output.length ≤ initial)
-    match Evm.step evm with
+    match Legacy.Evm.step evm with
     | .cont _ post =>
         post.gasMeasure + calculateMemoryGasCost post.memory.size ≤ initial ∧
           post.output = evm.dyna.output
@@ -2190,21 +2190,21 @@ theorem Evm.step_memory_accounting_output (evm : Evm)
         | .ok post => accounted post
         | .error failure => accounted failure.2
     | .spawn _ _ _ => True := by
-  change stepAccounted evm.dyna (Evm.step evm)
+  change stepAccounted evm.dyna (Legacy.Evm.step evm)
   cases hi : evm.getInst with
   | none =>
-      simp only [Evm.step, hi]
+      simp only [Legacy.Evm.step, hi]
       exact ⟨Nat.le_refl _, Or.inl rfl⟩
   | some instruction =>
       cases instruction with
       | next n =>
-          simp only [Evm.step, hi]
+          simp only [Legacy.Evm.step, hi]
           exact nonterminal_memory_accounting evm n hstate
       | jump j =>
-          simp only [Evm.step, hi]
+          simp only [Legacy.Evm.step, hi]
           exact ofJump_accounted (jump_memory_accounting evm.pc evm.dyna evm.sta j)
       | halt l =>
-          simp only [Evm.step, hi]
+          simp only [Legacy.Evm.step, hi]
           exact HaltOp.run_memory_accounting_output evm.sta evm.dyna l hstate
 
 
@@ -2408,9 +2408,9 @@ private theorem genericCall_spawn_allowance
     (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disable : Bool)
     (hwindow : outputSize ≠ 0 → outputIndex + outputSize ≤ pre.memory.size) :
-    spawnAccounting pre gas (genericCall.step sevm pre gas value caller target codeAddress
+    spawnAccounting pre gas (Legacy.genericCall.step sevm pre gas value caller target codeAddress
       transfer staticCall inputIndex inputSize outputIndex outputSize code disable) := by
-  unfold genericCall.step
+  unfold Legacy.genericCall.step
   split
   · apply spawnAccounting_ofExcept
     exact spawnResult_done_push 0
@@ -2423,8 +2423,8 @@ private theorem genericCreate_spawn_accounting
     (sevm : Sevm) (pre : Devm) (endowment : U256)
     (newAddress : Address) (memoryIndex memorySize : Nat) :
     spawnAccounting pre 0
-      (genericCreate.step sevm pre endowment newAddress memoryIndex memorySize) := by
-  unfold genericCreate.step
+      (Legacy.genericCreate.step sevm pre endowment newAddress memoryIndex memorySize) := by
+  unfold Legacy.genericCreate.step
   apply spawnAccounting_ofExcept
   refine spawnResult_bind
     (nonspawn_assert (sevm.benvStat.rules.creation.initCodeLimit →
@@ -2489,8 +2489,8 @@ private theorem call_output_window (charged : Devm)
 
 private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : MessageOp)
     (hstate : sevm.benvStat.rules.stateGas = none) :
-    spawnAccounting pre 0 (MessageOp.step sevm pre x) := by
-  cases x <;> simp only [MessageOp.step, hstate]
+    spawnAccounting pre 0 (Legacy.MessageOp.step sevm pre x) := by
+  cases x <;> simp only [Legacy.MessageOp.step, hstate]
   case create =>
     apply spawnAccounting_ofExcept
     refine spawnResult_bind (nonspawn_pop pre) ?_
@@ -2800,20 +2800,20 @@ private theorem executable_spawn_accounting (sevm : Sevm) (pre : Devm) (x : Mess
 
 private theorem step_spawn_resume_accounting
     (evm : Evm) (hstate : evm.sta.benvStat.rules.stateGas = none)
-    {frame : Frame} {resume : Resume} {pc' : Nat}
-    (hspawn : Evm.step evm = .spawn frame resume pc')
+    {frame : Legacy.Frame} {resume : Resume} {pc' : Nat}
+    (hspawn : Legacy.Evm.step evm = .spawn frame resume pc')
     (r : Except (EvmError × State × AdrSet × TransientStorage) Devm)
     (hchild : ∀ child, r = .ok child → child.gasMeasure ≤ frame.inner.gas) :
     nonspawnResult evm.dyna id (resume.run r) := by
   cases hi : evm.getInst with
   | none =>
-      simp only [Evm.step, hi] at hspawn
+      simp only [Legacy.Evm.step, hi] at hspawn
       cases hspawn
   | some instruction =>
       cases instruction with
       | next n =>
-          simp only [Evm.step, hi] at hspawn
-          obtain ⟨x, _, hs⟩ := NextOp.step_spawn_inv hspawn
+          simp only [Legacy.Evm.step, hi] at hspawn
+          obtain ⟨x, _, hs⟩ := Legacy.NextOp.step_spawn_inv hspawn
           have ha := executable_spawn_accounting evm.sta evm.dyna x hstate
           rw [hs] at ha
           have hr := ha r hchild
@@ -2825,10 +2825,10 @@ private theorem step_spawn_resume_accounting
               rw [hraw] at hr
               exact ⟨by simpa only [Nat.add_zero, id] using hr.1, hr.2⟩
       | jump j =>
-          simp only [Evm.step, hi] at hspawn
-          cases Step.ofJump_ne_spawn hspawn
+          simp only [Legacy.Evm.step, hi] at hspawn
+          cases Legacy.Step.ofJump_ne_spawn hspawn
       | halt l =>
-          simp only [Evm.step, hi] at hspawn
+          simp only [Legacy.Evm.step, hi] at hspawn
           cases hspawn
 
 
@@ -2862,25 +2862,25 @@ private theorem raw_accounting_gas_le {pre : Devm} {raw : Execution}
 
 private theorem spawned_child_stateGas_none (evm : Evm)
     (hstate : evm.sta.benvStat.rules.stateGas = none)
-    {frame : Frame} {resume : Resume} {pc' : Nat} {child : Evm}
-    (hspawn : Evm.step evm = .spawn frame resume pc')
+    {frame : Legacy.Frame} {resume : Resume} {pc' : Nat} {child : Evm}
+    (hspawn : Legacy.Evm.step evm = .spawn frame resume pc')
     (henter : frame.enter = .run child) :
     child.sta.benvStat.rules.stateGas = none := by
-  have hs := Evm.step_gasBound evm
+  have hs := Legacy.Evm.step_gasBound evm
   rw [hspawn] at hs
-  rw [Frame.enter_run_benvStat henter, hs.2]
+  rw [Legacy.Frame.enter_run_benvStat henter, hs.2]
   exact hstate
 
-private theorem entered_child_potential {frame : Frame} {child : Evm}
+private theorem entered_child_potential {frame : Legacy.Frame} {child : Evm}
     (henter : frame.enter = .run child) :
     child.dyna.gasMeasure + calculateMemoryGasCost child.dyna.memory.size = frame.inner.gas := by
-  obtain ⟨benv, _, hinit⟩ := Frame.enter_run_inv henter
+  obtain ⟨benv, _, hinit⟩ := Legacy.Frame.enter_run_inv henter
   have hm : child.dyna.memory.size = 0 := by
     rw [hinit]
     rfl
   have hz : calculateMemoryGasCost 0 = 0 := rfl
   rw [hm, hz, Nat.add_zero]
-  exact Frame.enter_run_gasMeasure henter
+  exact Legacy.Frame.enter_run_gasMeasure henter
 
 private theorem exec_memory_accounting :
     ∀ (pc : Nat) (sevm : Sevm) (pre : Devm) (raw : Execution),
@@ -2889,21 +2889,21 @@ private theorem exec_memory_accounting :
       rawTerminalAccounted pre raw := by
   apply Exec.rec
   · intro pc sevm pre raw hstep hstate
-    have hs := Evm.step_memory_accounting_output ⟨pc, sevm, pre⟩ hstate
+    have hs := Legacy.Evm.step_memory_accounting_output ⟨pc, sevm, pre⟩ hstate
     rw [hstep] at hs
     exact hs
   · intro pc sevm pre pc' middle raw hstep _ ih hstate
-    have hs := Evm.step_memory_accounting_output ⟨pc, sevm, pre⟩ hstate
+    have hs := Legacy.Evm.step_memory_accounting_output ⟨pc, sevm, pre⟩ hstate
     rw [hstep] at hs
     exact raw_accounting_trans hs (ih hstate)
   · intro pc sevm pre frame resume pc' r failure hstep henter hresume hstate
     have hs := step_spawn_resume_accounting ⟨pc, sevm, pre⟩ hstate hstep r
-      (fun child hchild => Frame.enter_done_gasLe henter hchild)
+      (fun child hchild => Legacy.Frame.enter_done_gasLe henter hchild)
     rw [hresume] at hs
     exact ⟨hs.1, Or.inl hs.2⟩
   · intro pc sevm pre frame resume pc' r middle raw hstep henter hresume _ ih hstate
     have hs := step_spawn_resume_accounting ⟨pc, sevm, pre⟩ hstate hstep r
-      (fun child hchild => Frame.enter_done_gasLe henter hchild)
+      (fun child hchild => Legacy.Frame.enter_done_gasLe henter hchild)
     rw [hresume] at hs
     exact raw_accounting_trans hs (ih hstate)
   · intro pc sevm pre frame resume pc' child childRaw failure
@@ -2913,7 +2913,7 @@ private theorem exec_memory_accounting :
     rw [entered_child_potential henter] at hgas
     have hsettled := Execution.settledGasLe_of_gasLe hgas
     have hs := step_spawn_resume_accounting ⟨pc, sevm, pre⟩ hstate hstep (frame.settle childRaw)
-      (fun settled hsettle => Frame.settle_gasLe hsettled hsettle)
+      (fun settled hsettle => Legacy.Frame.settle_gasLe hsettled hsettle)
     rw [hresume] at hs
     exact ⟨hs.1, Or.inl hs.2⟩
   · intro pc sevm pre frame resume pc' child childRaw middle raw
@@ -2923,7 +2923,7 @@ private theorem exec_memory_accounting :
     rw [entered_child_potential henter] at hgas
     have hsettled := Execution.settledGasLe_of_gasLe hgas
     have hs := step_spawn_resume_accounting ⟨pc, sevm, pre⟩ hstate hstep (frame.settle childRaw)
-      (fun settled hsettle => Frame.settle_gasLe hsettled hsettle)
+      (fun settled hsettle => Legacy.Frame.settle_gasLe hsettled hsettle)
     rw [hresume] at hs
     exact raw_accounting_trans hs (ihParent hstate)
 
@@ -2993,14 +2993,14 @@ theorem charged_call_input_length_lt_two_pow_160
       before.gasMeasure + calculateMemoryGasCost before.memory.size := by omega
   exact output_length_lt_two_pow_160 hcost hpotential
 
-private theorem entered_code_output_cost {frame : Frame} {child : Evm} {raw : Execution}
+private theorem entered_code_output_cost {frame : Legacy.Frame} {child : Evm} {raw : Execution}
     (henter : frame.enter = .run child)
     (hexec : Exec child.pc child.sta child.dyna raw)
     (hstate : child.sta.benvStat.rules.stateGas = none) :
     match raw with
     | .ok post => calculateMemoryGasCost post.output.length ≤ frame.inner.gas
     | .error failure => calculateMemoryGasCost failure.2.output.length ≤ frame.inner.gas := by
-  obtain ⟨benv, _, hinit⟩ := Frame.enter_run_inv henter
+  obtain ⟨benv, _, hinit⟩ := Legacy.Frame.enter_run_inv henter
   have hout : child.dyna.output = [] := by
     rw [hinit]
     rfl
@@ -3094,10 +3094,10 @@ private theorem create_settle_output_length_le {msg : Msg}
   · cases hrest
     exact Nat.le_refl _
 
-private theorem frame_settle_output_length_le {frame : Frame} {raw : Execution}
+private theorem frame_settle_output_length_le {frame : Legacy.Frame} {raw : Execution}
     {post : Devm} (h : frame.settle raw = .ok post) :
     post.output.length ≤ rawOutputLength raw := by
-  unfold Frame.settle Frame.settleMsg at h
+  unfold Legacy.Frame.settle Legacy.Frame.settleMsg at h
   split at h
   · obtain ⟨middle, hm, hpost⟩ := create_settle_output_length_le h
     obtain ⟨handled, hh, hmiddle⟩ := message_settle_output hm
@@ -3107,10 +3107,10 @@ private theorem frame_settle_output_length_le {frame : Frame} {raw : Execution}
     rw [hpost]
     exact handled_output_length_le _ _ hh
 
-private theorem frame_settleMsg_error (frame : Frame)
+private theorem frame_settleMsg_error (frame : Legacy.Frame)
     (failure : EvmError × State × AdrSet × TransientStorage) :
     frame.settleMsg (.error failure) = .error failure := by
-  simp only [Frame.settleMsg, processMessage.settle,
+  simp only [Legacy.Frame.settleMsg, processMessage.settle,
     processCreateMessage.settle, bind, Except.bind]
   split <;> rfl
 
@@ -3198,14 +3198,14 @@ theorem zero_call_spawn_code_reply_bound
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
+    {frame : Legacy.Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
     (hcharge : chargeGas
       ((calculateMsgCallGas 0 gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
         extraGas cs).1 +
         before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hspawn : genericCall.step sevm
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas 0 gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -3234,12 +3234,12 @@ theorem zero_call_spawn_code_reply_bound
   let pairs := [(inputIndex, inputSize), (outputIndex, outputSize)]
   let costs := calculateMsgCallGas 0 gas.toNat before.gasLeft (before.extCost pairs) extraGas cs
   let parent := (charged.memExtends pairs).withReturnData []
-  obtain ⟨hf, hrsm⟩ := genericCall.step_spawn_call hspawn
+  obtain ⟨hf, hrsm⟩ := Legacy.genericCall.step_spawn_call hspawn
   change frame.inner.gas = costs.2 at hf
   change resume = .call parent outputIndex outputSize at hrsm
-  have hstat := genericCall.step_spawn_stat hspawn
+  have hstat := Legacy.genericCall.step_spawn_stat hspawn
   have hchildState : childEvm.sta.benvStat.rules.stateGas = none := by
-    rw [Frame.enter_run_benvStat henter, hstat]
+    rw [Legacy.Frame.enter_run_benvStat henter, hstat]
     exact hstate
   have hcost : calculateMemoryGasCost (rawOutputLength raw) ≤ frame.inner.gas := by
     cases raw <;> exact entered_code_output_cost henter hexec hchildState
@@ -3302,8 +3302,8 @@ theorem call_spawn_code_reply_bound
     (gasLeft memoryCost extraGas inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
-    (hspawn : genericCall.step sevm parent
+    {frame : Legacy.Frame} {resume : Resume} {childEvm : Evm} {raw : Execution}
+    (hspawn : Legacy.genericCall.step sevm parent
       (calculateMsgCallGas value.toNat gas.toNat gasLeft memoryCost extraGas
         Gas.callStipend).2 value caller target codeAddress shouldTransferValue
       isStaticcall inputIndex inputSize outputIndex outputSize code
@@ -3318,13 +3318,13 @@ theorem call_spawn_code_reply_bound
       match resume.run (frame.settle raw) with
       | .ok post => post.returnData.length < 2 ^ 160
       | .error failure => failure.2.returnData.length < 2 ^ 160 := by
-  have hstat := genericCall.step_spawn_stat hspawn
+  have hstat := Legacy.genericCall.step_spawn_stat hspawn
   have hchildState : childEvm.sta.benvStat.rules.stateGas = none := by
-    rw [Frame.enter_run_benvStat henter, hstat]
+    rw [Legacy.Frame.enter_run_benvStat henter, hstat]
     exact hstate
   have hcost : calculateMemoryGasCost (rawOutputLength raw) ≤ frame.inner.gas := by
     cases raw <;> exact entered_code_output_cost henter hexec hchildState
-  have hframe := (genericCall.step_spawn_call hspawn).1
+  have hframe := (Legacy.genericCall.step_spawn_call hspawn).1
   have hgrant := calculateMsgCallGas_word_child_lt_with_stipend value gas gasLeft
     memoryCost extraGas
   have hlength : rawOutputLength raw < 2 ^ 160 := by
@@ -3335,7 +3335,7 @@ theorem call_spawn_code_reply_bound
       settled.output.length < 2 ^ 160 := by
     intro settled hs
     exact Nat.lt_of_le_of_lt (frame_settle_output_length_le hs) hlength
-  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+  obtain ⟨_, hrsm⟩ := Legacy.genericCall.step_spawn_call hspawn
   refine ⟨hlength, hsettled, ?_⟩
   rw [hrsm]
   exact call_resume_returnData_lt_two_pow_160 (parent.withReturnData [])
@@ -3349,9 +3349,9 @@ theorem call_spawn_transfer_error_reply_bound
     (inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume}
+    {frame : Legacy.Frame} {resume : Resume}
     {failure : EvmError × State × AdrSet × TransientStorage}
-    (hspawn : genericCall.step sevm parent grant value caller target codeAddress
+    (hspawn : Legacy.genericCall.step sevm parent grant value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
       code disablePrecompiles = .spawn frame resume)
     (htransfer : frame.inner.benvAfterTransfer = .error failure) :
@@ -3361,8 +3361,8 @@ theorem call_spawn_transfer_error_reply_bound
       | .error e => e.2.returnData.length < 2 ^ 160 := by
   have hsettle := frame_settleMsg_error frame failure
   have hentry : frame.enter = .done (.error failure) := by
-    simp only [Frame.enter, htransfer, hsettle]
-  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+    simp only [Legacy.Frame.enter, htransfer, hsettle]
+  obtain ⟨_, hrsm⟩ := Legacy.genericCall.step_spawn_call hspawn
   refine ⟨hentry, ?_⟩
   rw [hrsm]
   exact call_resume_returnData_lt_two_pow_160 (parent.withReturnData [])
@@ -3662,8 +3662,8 @@ theorem zero_call_spawn_modexp_reply_bound
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {benv : Benv} {post : Devm}
-    (hspawn : genericCall.step sevm
+    {frame : Legacy.Frame} {resume : Resume} {benv : Benv} {post : Devm}
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas 0 gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -3672,7 +3672,7 @@ theorem zero_call_spawn_modexp_reply_bound
         .spawn frame resume)
     (hmodexp : executePrecompile (initEvm (frame.inner.withBenv benv)) 5 = .ok post) :
     post.output.length < 2 ^ 160 := by
-  have hf := (genericCall.step_spawn_call hspawn).1
+  have hf := (Legacy.genericCall.step_spawn_call hspawn).1
   have hgrant := calculateMsgCallGas_zero_word_child_lt gas before.gasLeft
     (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas cs
   have hgas : (initEvm (frame.inner.withBenv benv)).dyna.gasLeft < 2 ^ 256 := by
@@ -3688,11 +3688,11 @@ theorem zero_call_spawn_id_reply_bound
     (baseCost gas inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {benv : Benv} {post : Devm}
+    {frame : Legacy.Frame} {resume : Resume} {benv : Benv} {post : Devm}
     (hcharge : chargeGas
       (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hspawn : genericCall.step sevm
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       gas 0 caller target codeAddress shouldTransferValue isStaticcall
       inputIndex inputSize outputIndex outputSize code disablePrecompiles =
@@ -3704,7 +3704,7 @@ theorem zero_call_spawn_id_reply_bound
   have hout := executePrecompile_id_ok_output hidentity
   rw [hout]
   change frame.inner.data.length < 2 ^ 160
-  rw [genericCall.step_spawn_data_length hspawn]
+  rw [Legacy.genericCall.step_spawn_data_length hspawn]
   exact charged_call_input_length_lt_two_pow_160
     baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
 
@@ -3991,11 +3991,11 @@ theorem zero_call_spawn_native_reply_bound
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {benv : Benv} {adr : Address} {post : Devm}
+    {frame : Legacy.Frame} {resume : Resume} {benv : Benv} {adr : Address} {post : Devm}
     (hcharge : chargeGas
       (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hspawn : genericCall.step sevm
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas 0 gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -4008,12 +4008,12 @@ theorem zero_call_spawn_native_reply_bound
     post.output.length < 2 ^ 160 := by
   have hdata : (initEvm (frame.inner.withBenv benv)).sta.data.length < 2 ^ 160 := by
     change frame.inner.data.length < 2 ^ 160
-    rw [genericCall.step_spawn_data_length hspawn]
+    rw [Legacy.genericCall.step_spawn_data_length hspawn]
     exact charged_call_input_length_lt_two_pow_160
       baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
   have hgas : (initEvm (frame.inner.withBenv benv)).dyna.gasLeft < 2 ^ 256 := by
     change frame.inner.gas < 2 ^ 256
-    rw [(genericCall.step_spawn_call hspawn).1]
+    rw [(Legacy.genericCall.step_spawn_call hspawn).1]
     exact calculateMsgCallGas_zero_word_child_lt gas before.gasLeft
       (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas cs
   exact executePrecompile_ok_output_length_lt_two_pow_160 hnative hdata (by omega)
@@ -4072,11 +4072,11 @@ theorem zero_call_spawn_native_enter_success
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {benv : Benv} {post : Devm}
+    {frame : Legacy.Frame} {resume : Resume} {benv : Benv} {post : Devm}
     (hcharge : chargeGas
       (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hspawn : genericCall.step sevm
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas 0 gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -4094,12 +4094,12 @@ theorem zero_call_spawn_native_enter_success
       | .error failure => failure.2.returnData.length < 2 ^ 160 := by
   have hdata : (frame.inner.withBenv benv).data.length < 2 ^ 160 := by
     change frame.inner.data.length < 2 ^ 160
-    rw [genericCall.step_spawn_data_length hspawn]
+    rw [Legacy.genericCall.step_spawn_data_length hspawn]
     exact charged_call_input_length_lt_two_pow_160
       baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
   have hgas : (frame.inner.withBenv benv).gas < 2 ^ 256 := by
     change frame.inner.gas < 2 ^ 256
-    rw [(genericCall.step_spawn_call hspawn).1]
+    rw [(Legacy.genericCall.step_spawn_call hspawn).1]
     exact calculateMsgCallGas_zero_word_child_lt gas before.gasLeft
       (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas cs
   have hraw := executeCode_enter_native_ok_output_length_lt_two_pow_160
@@ -4108,9 +4108,9 @@ theorem zero_call_spawn_native_enter_success
       settled.output.length < 2 ^ 160 := by
     intro settled hs
     exact Nat.lt_of_le_of_lt (frame_settle_output_length_le hs) hraw
-  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+  obtain ⟨_, hrsm⟩ := Legacy.genericCall.step_spawn_call hspawn
   refine ⟨?_, hraw, ?_⟩
-  · simp only [Frame.enter, htransfer, hdispatch]
+  · simp only [Legacy.Frame.enter, htransfer, hdispatch]
   · rw [hrsm]
     exact call_resume_returnData_lt_two_pow_160
       ((charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)]).withReturnData [])
@@ -4125,11 +4125,11 @@ private theorem call_spawn_native_enter_success_input_or_potential
     (extraGas inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {benv : Benv} {post : Devm}
+    {frame : Legacy.Frame} {resume : Resume} {benv : Benv} {post : Devm}
     (hcharge : chargeGas
       (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hspawn : genericCall.step sevm
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -4147,14 +4147,14 @@ private theorem call_spawn_native_enter_success_input_or_potential
       | .error failure => failure.2.returnData.length < 2 ^ 160 := by
   have hdata : (frame.inner.withBenv benv).data.length < 2 ^ 160 := by
     change frame.inner.data.length < 2 ^ 160
-    rw [genericCall.step_spawn_data_length hspawn]
+    rw [Legacy.genericCall.step_spawn_data_length hspawn]
     rcases hsource with hpotential | hinput
     · exact charged_call_input_length_lt_two_pow_160
         baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
     · exact hinput
   have hgas : (frame.inner.withBenv benv).gas < 2 ^ 256 + Gas.callStipend := by
     change frame.inner.gas < 2 ^ 256 + Gas.callStipend
-    rw [(genericCall.step_spawn_call hspawn).1]
+    rw [(Legacy.genericCall.step_spawn_call hspawn).1]
     exact calculateMsgCallGas_word_child_lt_with_stipend value gas before.gasLeft
       (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas
   have hraw := executeCode_enter_native_ok_output_length_lt_two_pow_160
@@ -4163,9 +4163,9 @@ private theorem call_spawn_native_enter_success_input_or_potential
       settled.output.length < 2 ^ 160 := by
     intro settled hs
     exact Nat.lt_of_le_of_lt (frame_settle_output_length_le hs) hraw
-  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+  obtain ⟨_, hrsm⟩ := Legacy.genericCall.step_spawn_call hspawn
   refine ⟨?_, hraw, ?_⟩
-  · simp only [Frame.enter, htransfer, hdispatch]
+  · simp only [Legacy.Frame.enter, htransfer, hdispatch]
   · rw [hrsm]
     exact call_resume_returnData_lt_two_pow_160
       ((charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)]).withReturnData [])
@@ -4177,11 +4177,11 @@ theorem call_spawn_native_enter_success
     (extraGas inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {benv : Benv} {post : Devm}
+    {frame : Legacy.Frame} {resume : Resume} {benv : Benv} {post : Devm}
     (hcharge : chargeGas
       (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hspawn : genericCall.step sevm
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -4209,9 +4209,9 @@ theorem call_spawn_native_enter_error
     (inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume} {benv : Benv}
+    {frame : Legacy.Frame} {resume : Resume} {benv : Benv}
     {failure : EvmError × Devm}
-    (hspawn : genericCall.step sevm parent grant value caller target codeAddress
+    (hspawn : Legacy.genericCall.step sevm parent grant value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
       code disablePrecompiles = .spawn frame resume)
     (htransfer : frame.inner.benvAfterTransfer = .ok benv)
@@ -4230,9 +4230,9 @@ theorem call_spawn_native_enter_error
     rw [hraw] at hle
     simp only [List.length_nil] at hle
     omega
-  obtain ⟨_, hrsm⟩ := genericCall.step_spawn_call hspawn
+  obtain ⟨_, hrsm⟩ := Legacy.genericCall.step_spawn_call hspawn
   constructor
-  · simp only [Frame.enter, htransfer, hdispatch]
+  · simp only [Legacy.Frame.enter, htransfer, hdispatch]
   · rw [hrsm]
     exact call_resume_returnData_lt_two_pow_160 (parent.withReturnData [])
       outputIndex outputSize (frame.settle (.error failure)) rfl hsettled
@@ -4248,11 +4248,11 @@ private theorem call_spawn_enter_reply_bound_input_or_potential
     (extraGas inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume}
+    {frame : Legacy.Frame} {resume : Resume}
     (hcharge : chargeGas
       (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hspawn : genericCall.step sevm
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -4285,7 +4285,7 @@ private theorem call_spawn_enter_reply_bound_input_or_potential
       cases hd : executeCode.enter (frame.inner.withBenv benv) with
       | inl child =>
           have he : frame.enter = .run child := by
-            simp only [Frame.enter, ht, hd]
+            simp only [Legacy.Frame.enter, ht, hd]
           rw [he]
           intro raw hexec
           exact (call_spawn_code_reply_bound gas value before.gasLeft
@@ -4315,11 +4315,11 @@ theorem call_spawn_enter_reply_bound
     (extraGas inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {code : ByteArray} {disablePrecompiles : Bool}
-    {frame : Frame} {resume : Resume}
+    {frame : Legacy.Frame} {resume : Resume}
     (hcharge : chargeGas
       (baseCost + before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
       before = .ok charged)
-    (hspawn : genericCall.step sevm
+    (hspawn : Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -4373,7 +4373,7 @@ private theorem charged_genericCall_reply_bound
     (hsource : before.gasMeasure + calculateMemoryGasCost before.memory.size < 2 ^ 256 ∨
       inputSize < 2 ^ 160)
     (hstate : sevm.benvStat.rules.stateGas = none) :
-    callStepReplyBound (genericCall.step sevm
+    callStepReplyBound (Legacy.genericCall.step sevm
       (charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)])
       (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
         (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -4386,7 +4386,7 @@ private theorem charged_genericCall_reply_bound
     extraGas Gas.callStipend).2
   intro xl post hfilled hrun
   by_cases depth : sevm.depth = 0
-  · simp only [genericCall.step, depth, ite_true] at hrun
+  · simp only [Legacy.genericCall.step, depth, ite_true] at hrun
     let refunded := (paid.withReturnData []).withGasLeft (paid.gasLeft + grant)
     cases hp : refunded.push 0 with
     | error failure =>
@@ -4403,19 +4403,19 @@ private theorem charged_genericCall_reply_bound
         rw [fields]
         change (0 : Nat) < 2 ^ 160
         decide
-  · have spawn : genericCall.step sevm paid grant value caller target codeAddress
+  · have spawn : Legacy.genericCall.step sevm paid grant value caller target codeAddress
         shouldTransferValue isStaticcall inputIndex inputSize outputIndex outputSize
         code disablePrecompiles =
-        .spawn (Frame.ofCall (callMsg sevm (paid.withReturnData []) grant value caller
+        .spawn (Legacy.Frame.ofCall (callMsg sevm (paid.withReturnData []) grant value caller
           target codeAddress shouldTransferValue isStaticcall
           (Jaune.Array.sliceD (paid.withReturnData []).memory.data inputIndex inputSize 0)
           code disablePrecompiles)) (.call (paid.withReturnData []) outputIndex outputSize) := by
-      simp only [genericCall.step, ite_eq_right depth]
+      simp only [Legacy.genericCall.step, ite_eq_right depth]
     have bounded := call_spawn_enter_reply_bound_input_or_potential baseCost gas value extraGas
       inputIndex inputSize outputIndex outputSize hcharge spawn hsource hstate
     rw [spawn] at hrun
     obtain ⟨settled, frameRun, resumed⟩ := hrun
-    cases enter : (Frame.ofCall (callMsg sevm (paid.withReturnData []) grant value caller
+    cases enter : (Legacy.Frame.ofCall (callMsg sevm (paid.withReturnData []) grant value caller
         target codeAddress shouldTransferValue isStaticcall
         (Jaune.Array.sliceD (paid.withReturnData []).memory.data inputIndex inputSize 0)
         code disablePrecompiles)).enter with
@@ -4440,8 +4440,8 @@ private theorem charged_genericCall_reply_bound
 private theorem xinst_call_reply_bound (sevm : Sevm) (pre : Devm)
     (hstate : sevm.benvStat.rules.stateGas = none)
     (hpotential : pre.gasMeasure + calculateMemoryGasCost pre.memory.size < 2 ^ 256) :
-    callStepReplyBound (MessageOp.step sevm pre .call) := by
-  simp only [MessageOp.step, hstate]
+    callStepReplyBound (Legacy.MessageOp.step sevm pre .call) := by
+  simp only [Legacy.MessageOp.step, hstate]
   refine callStepReplyBound_bind (nonspawn_pop pre) ?_ hpotential
   intro gas gasPotential
   refine callStepReplyBound_bind (nonspawn_popToAdr gas.2) ?_ gasPotential
@@ -4531,12 +4531,12 @@ private theorem xinst_call_reply_bound_of_input_size
     (hstack : pre.stack = gas :: callee :: value :: inputIndex :: inputSize :: outputIndex :: outputSize :: S)
     (hstate : sevm.benvStat.rules.stateGas = none)
     (hinput : inputSize.toNat < 2 ^ 160) :
-    callStepReplyBound (MessageOp.step sevm pre .call) := by
+    callStepReplyBound (Legacy.MessageOp.step sevm pre .call) := by
   rcases pre with ⟨⟨stack, memory, gasLeft, stateGas⟩, view, world⟩
   change stack = _ at hstack
   subst stack
   let base : Devm := ⟨⟨S, memory, gasLeft, stateGas⟩, view, world⟩
-  simp only [MessageOp.step, hstate, Devm.popToAdr_def, Devm.popToNat_def,
+  simp only [Legacy.MessageOp.step, hstate, Devm.popToAdr_def, Devm.popToNat_def,
     Devm.pop_def, Devm.stack, Devm.setMach, bind, Except.bind, Functor.mapRev, Functor.map, Except.map,
     Prod.mapFst, Prod.map, id_eq]
   -- The access step of either shape: a price `price` and a recorder `dA`.
@@ -4609,7 +4609,7 @@ theorem call_step_returnData_length_lt_two_pow_160
     (hstate : sevm.benvStat.rules.stateGas = none)
     (hpotential : pre.gasMeasure + calculateMemoryGasCost pre.memory.size < 2 ^ 256) :
     post.returnData.length < 2 ^ 160 := by
-  rw [NextOp.StepRun, NextOp.step_exec, XStep.run_toStep] at hrun
+  rw [NextOp.StepRun, Legacy.NextOp.step_exec, XStep.run_toStep] at hrun
   exact xinst_call_reply_bound sevm pre hstate hpotential xl post hfilled hrun
 
 /-- The instruction-run interface retains the same strong full-reply bound. -/
@@ -4635,7 +4635,7 @@ theorem call_step_returnData_length_lt_two_pow_160_of_input_size
     (hstate : sevm.benvStat.rules.stateGas = none)
     (hinput : inputSize.toNat < 2 ^ 160) :
     post.returnData.length < 2 ^ 160 := by
-  rw [NextOp.StepRun, NextOp.step_exec, XStep.run_toStep] at hrun
+  rw [NextOp.StepRun, Legacy.NextOp.step_exec, XStep.run_toStep] at hrun
   exact xinst_call_reply_bound_of_input_size sevm pre gas callee value
     inputIndex inputSize outputIndex outputSize S hstack hstate hinput xl post hfilled hrun
 

@@ -220,11 +220,11 @@ theorem processCreateMessage.settle_error {msg : Msg}
     · cases h
 
 /-- Today's settlement faults only with a cryptographic or internal reason. -/
-theorem Frame.settle_error_isFault (f : Jaune.Frame) (raw : Execution) {e : EvmError}
+theorem Frame.settle_error_isFault (f : Jaune.Legacy.Frame) (raw : Execution) {e : EvmError}
     {st : Jaune.State} {c : AdrSet} {t : TransientStorage}
     (h : f.settle raw = .error (e, st, c, t)) :
     (∃ r, e = .crypto r) ∨ (∃ r, e = .internal r) := by
-  simp only [Jaune.Frame.settle, Jaune.Frame.settleMsg] at h
+  simp only [Jaune.Legacy.Frame.settle, Jaune.Legacy.Frame.settleMsg] at h
   apply handleErrorWith_error (sg := f.inner.benv.stat.rules.stateGas) (raw := raw)
   split at h
   · exact processMessage.settle_error (processCreateMessage.settle_error h)
@@ -278,10 +278,10 @@ theorem processCreateMessage.settle_ok_halt {msg : Msg} {x d : Devm} {reason : E
     exact ⟨he, rfl, rfl⟩
 
 /-- A halt settled by today's settlement has no gas and no output, given a clean raw result. -/
-theorem Frame.settle_halted (f : Jaune.Frame) {raw : Execution} (clean : raw.Clean) {d : Devm}
+theorem Frame.settle_halted (f : Jaune.Legacy.Frame) {raw : Execution} (clean : raw.Clean) {d : Devm}
     {reason : ExceptionalHalt} (hs : f.settle raw = .ok d) (he : d.error = some (.halt reason)) :
     d.gasLeft = 0 ∧ d.output = [] := by
-  simp only [Jaune.Frame.settle, Jaune.Frame.settleMsg] at hs
+  simp only [Jaune.Legacy.Frame.settle, Jaune.Legacy.Frame.settleMsg] at hs
   have inner : ∀ {y : Devm}, processMessage.settle f.inner
       (executeCode.handleErrorWith f.inner.benv.stat.rules.stateGas raw) = .ok y →
       y.error = some (.halt reason) → y.gasLeft = 0 ∧ y.output = [] := by
@@ -302,7 +302,7 @@ theorem Frame.settle_halted (f : Jaune.Frame) {raw : Execution} (clean : raw.Cle
   · exact inner hs he
 
 /-- What today's settlement guarantees, for a child coherent with its saved caller. -/
-theorem settledFacts {f : Jaune.Frame} {parent : Devm} {rules : ForkRules}
+theorem settledFacts {f : Jaune.Legacy.Frame} {parent : Devm} {rules : ForkRules}
     (h : Frame.Coherent f parent) (hr : f.outer.benv.stat.rules = rules) {raw : Execution}
     (clean : raw.Clean) : SettledFacts parent rules (f.settle raw) where
   fault := Frame.settle_error_isFault f raw
@@ -335,7 +335,7 @@ theorem resume_of_facts {rsm : Resume} {rules : ForkRules} (hm : rsm.Matches rul
 /-- **Resume.** Today's resumption of a settled child, observed with a fault's state erased, is the
 staged `resume` of the child's result read by `ofSettled`, for every child coherent with its
 saved caller, every `Resume` the rules select, and every clean raw result. -/
-theorem resume_legacy {f : Jaune.Frame} {rsm : Resume} {rules : ForkRules}
+theorem resume_legacy {f : Jaune.Legacy.Frame} {rsm : Resume} {rules : ForkRules}
     (h : Legacy.Frame.Coherent f rsm.parent) (hm : rsm.Matches rules)
     (hr : f.outer.benv.stat.rules = rules) (raw : Execution) (clean : raw.Clean) :
     (rsm.run (f.settle raw)).observe

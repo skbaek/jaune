@@ -167,7 +167,7 @@ private def stackAccessGuardEvm (fork : Fork) (code : ByteArray)
 
 private def stackAccessGuard (fork : Fork) (code : List UInt8)
     (gasLeft : Nat) (stack : List Nat) : String × Nat × List Nat × Nat :=
-  match Evm.step (stackAccessGuardEvm fork ⟨code.toArray⟩ gasLeft
+  match Legacy.Evm.step (stackAccessGuardEvm fork ⟨code.toArray⟩ gasLeft
       (stack.map Nat.toU256)) with
   | .cont pc d => ("ok", d.gasLeft, d.stack.map U256.toNat, pc)
   | .halt (.error ⟨e, d⟩) => (e.render, d.gasLeft, d.stack.map U256.toNat, 0)
@@ -236,7 +236,7 @@ private def guardStackOf (n : Nat) : List Nat := List.range n
 -- an undefined instruction whatever the stack holds; with it an empty stack
 -- reaches the first pop instead (the gate passed, the stack failed).
 private def guardCreate2 (fork : Fork) : XStep :=
-  MessageOp.step
+  Legacy.MessageOp.step
     { (default : Sevm) with
       benvStat := { (default : BenvStat) with fork := fork } }
     default .create2
@@ -273,7 +273,7 @@ private def flattenGuardMsg (bytes : Bytes) (gas depth : Nat) : Msg :=
 -- Arithmetic loop: the driver spends one unit per instruction and exhausts.
 private def flattenGuardArithmeticLoop : Bool :=
   let msg := flattenGuardMsg [0x5B, 0x60, 0x00, 0x56] 1000 8
-  (execFueled (initEvm msg) 20).run.isNone
+  (Legacy.execFueled (initEvm msg) 20).run.isNone
 
 #guard flattenGuardArithmeticLoop
 
@@ -289,7 +289,7 @@ private def flattenGuardCreateCollision (code : Bool) : Bool :=
       benv := {(default : Benv) with state := state}
     }
   match
-      genericCreate.step (initSevm msg) (initDevm msg)
+      Legacy.genericCreate.step (initSevm msg) (initDevm msg)
         0 target 0 0 with
   | .done (.ok devm) => devm.stack.head? == some 0
   | _ => false
@@ -307,7 +307,7 @@ private def flattenGuardCreateAmsterdamCollision (code : Bool) : Bool :=
     {(flattenGuardMsg [] 100000 8) with
       benv := {base with state := state, stat := {base.stat with fork := .amsterdam}}
       stateGasGrant := 200000}
-  match genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
+  match Legacy.genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
       0 target 0 0 with
   | .done (.ok devm) => devm.stack.head? == some 0
   | _ => false
@@ -322,7 +322,7 @@ private def flattenGuardCreateStorageOnly : Bool :=
   let state := State.setStorVal .empty target 1 1
   let msg : Msg :=
     {(flattenGuardMsg [] 100000 8) with benv := {(default : Benv) with state := state}}
-  match genericCreate.step (initSevm msg) (initDevm msg) 0 target 0 0 with
+  match Legacy.genericCreate.step (initSevm msg) (initDevm msg) 0 target 0 0 with
   | .spawn _ _ => true
   | _ => false
 
@@ -334,7 +334,7 @@ private def flattenGuardCreateAmsterdamStorageOnly : Bool :=
     {(flattenGuardMsg [] 100000 8) with
       benv := {base with state := state, stat := {base.stat with fork := .amsterdam}}
       stateGasGrant := 200000}
-  match genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
+  match Legacy.genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
       0 target 0 0 with
   | .spawn _ _ => true
   | _ => false
@@ -352,7 +352,7 @@ private def flattenGuardPrecompileDispatch : Bool :=
       codeAddress := some 1
     }
   let disabled := {msg with disablePrecompiles := true}
-  match (Frame.ofCall msg).enter, (Frame.ofCall disabled).enter with
+  match (Legacy.Frame.ofCall msg).enter, (Legacy.Frame.ofCall disabled).enter with
   | .done _, .run _ => true
   | _, _ => false
 
@@ -362,7 +362,7 @@ private def flattenGuardPrecompileDispatch : Bool :=
 private def flattenGuardDepthZero : Bool :=
   let msg := flattenGuardMsg [] 100 0
   match
-      genericCall.step (initSevm msg) (initDevm msg) 17 0
+      Legacy.genericCall.step (initSevm msg) (initDevm msg) 17 0
         0 0 0 false false 0 0 0 0 .empty false with
   | .done (.ok devm) =>
     devm.stack.head? == some 0 && devm.gasLeft == 117
@@ -375,7 +375,7 @@ private def flattenGuardCallData
   let msg := flattenGuardMsg [] 100 8
   let devm := (initDevm msg).withMemory ⟨#[0xAA], 1⟩
   match
-      genericCall.step (initSevm msg) devm 17 0
+      Legacy.genericCall.step (initSevm msg) devm 17 0
         0 codeAddress codeAddress false false 0 1 0 0
         (flattenGuardCode codeBytes) disablePrecompiles with
   | .spawn frame _ => some frame.inner.data
@@ -510,7 +510,7 @@ private def meteringGuardCreateCharges
     (fork : Fork) (stateGasGrant : Nat) (x : MessageOp)
     (stack : List U256) : Option (Nat × Nat) :=
   let msg := meteringGuardMsg fork stateGasGrant
-  match MessageOp.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
+  match Legacy.MessageOp.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
   | .spawn frame resume =>
     let parent := meteringGuardResumeParent resume
     some
@@ -556,7 +556,7 @@ private def meteringGuardCallCharges
     (fork : Fork) (stateGasGrant : Nat) (x : MessageOp)
     (stack : List U256) : Option (Nat × Nat) :=
   let msg := meteringGuardMsg fork stateGasGrant
-  match MessageOp.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
+  match Legacy.MessageOp.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
   | .spawn frame resume =>
     let parent := meteringGuardResumeParent resume
     some
@@ -689,7 +689,7 @@ private def meteringGuardDelegatedCharge (gas : GasSchedule) (value : U256) : Na
 -- A PUSH with zero gas halts through the frozen OutOfGasError channel.
 private def flattenGuardOog : Bool :=
   let msg := flattenGuardMsg [0x60, 0x01, 0x00] 0 8
-  match (execFueled (initEvm msg) 10).run with
+  match (Legacy.execFueled (initEvm msg) 10).run with
   | .some (.error ⟨err, _⟩) => err == .halt (.outOfGas .none)
   | _ => false
 
@@ -703,7 +703,7 @@ private def flattenGuardOog : Bool :=
 private def flattenGuardJumpOob : Bool :=
   -- PUSH1 0xFF; JUMP — destination 255 is out of range for 3 bytes of code.
   let msg := flattenGuardMsg [0x60, 0xFF, 0x56] 100 8
-  match (execFueled (initEvm msg) 10).run with
+  match (Legacy.execFueled (initEvm msg) 10).run with
   | .some (.error ⟨err, _⟩) => err == .halt (.invalidJumpDest .none)
   | _ => false
 
@@ -713,7 +713,7 @@ private def flattenGuardJumpiOob : Bool :=
   -- PUSH1 0x01 (condition); PUSH1 0xFF (destination); JUMPI — taken branch,
   -- destination 255 is out of range for 5 bytes of code.
   let msg := flattenGuardMsg [0x60, 0x01, 0x60, 0xFF, 0x57] 100 8
-  match (execFueled (initEvm msg) 10).run with
+  match (Legacy.execFueled (initEvm msg) 10).run with
   | .some (.error ⟨err, _⟩) => err == .halt (.invalidJumpDest .none)
   | _ => false
 

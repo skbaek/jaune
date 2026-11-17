@@ -7,7 +7,7 @@ existing step result does not retain stay absent. No instruction is rerun.
 The separate lifecycle stream preserves run/frame identity without extending
 the comparator's instruction schema. Retention is bounded by active depth.
 -/
-namespace Jaune.TraceJson
+namespace Jaune.Legacy.TraceJson
 open Lean Jaune
 
 structure Config where
@@ -32,7 +32,7 @@ private def resumeParent : Resume → Devm
 /-- Non-spawning CALL/CREATE may already have returned or consumed a grant;
 exceptional steps can discard a failed charge. Neither is a reliable delta.
 Amsterdam's two-dimensional pricing needs its own observation convention. -/
-def gasCost? (before : Evm) (step : Step) : Option Nat :=
+def gasCost? (before : Evm) (step : Legacy.Step) : Option Nat :=
   if before.sta.benvStat.rules.stateGas.isSome then none else
   match step with
   | .cont _ after =>
@@ -49,8 +49,8 @@ def gasCost? (before : Evm) (step : Step) : Option Nat :=
 
 /-- Encode pre-operation state. The refund base is the sum of suspended
 ancestors' local counters, not the last emitted child's counter. -/
-def instruction (cfg : Config) (context : Trace.Context) (refundBase : Int)
-    (before : Evm) (step : Step) : Except String Json := do
+def instruction (cfg : Config) (context : Legacy.Trace.Context) (refundBase : Int)
+    (before : Evm) (step : Legacy.Step) : Except String Json := do
   if before.dyna.returnData.length > cfg.maxDataBytes then
     throw "return data exceeds maxDataBytes"
   if cfg.memory && before.dyna.memory.size > cfg.maxDataBytes then
@@ -91,12 +91,12 @@ structure State where
   started : Bool := false
   closed : Bool := false
 
-private def lifecycle (context : Trace.Context) (event : String)
+private def lifecycle (context : Legacy.Trace.Context) (event : String)
     (extra : List (String × Json) := []) : Json :=
   Json.mkObj ([("runId", .str context.runId), ("frame", number context.frame),
     ("depth", number context.depth), ("event", .str event)] ++ extra)
 
-private def current (cfg : Config) (state : State) (ctx : Trace.Context) :
+private def current (cfg : Config) (state : State) (ctx : Legacy.Trace.Context) :
     Except String OpenFrame := do
   if ctx.runId != cfg.runId then throw "event run identity differs"
   match state.frames with
@@ -106,7 +106,7 @@ private def current (cfg : Config) (state : State) (ctx : Trace.Context) :
       throw "event frame identity or depth differs"
     return frame
 
-private def rootSummary (cfg : Config) (frame : Frame) (result : Devm) :
+private def rootSummary (cfg : Config) (frame : Legacy.Frame) (result : Devm) :
     Except String Json := do
   if result.output.length > cfg.maxDataBytes then throw "output exceeds maxDataBytes"
   let some used := safeSub frame.inner.gas result.gasLeft
@@ -118,7 +118,7 @@ private def rootSummary (cfg : Config) (frame : Frame) (result : Devm) :
 
 /-- One event produces at most one trace row and one lifecycle row. Internal
 errors and exhausted fuel fail without a completing summary. -/
-def consume (cfg : Config) (state : State) (event : Trace.Event) :
+def consume (cfg : Config) (state : State) (event : Legacy.Trace.Event) :
     Except String (State × Option Json × Json) := do
   if cfg.runId.isEmpty then throw "runId must be nonempty"
   if state.closed then throw "event after root settlement"
@@ -173,7 +173,7 @@ def consume (cfg : Config) (state : State) (event : Trace.Event) :
 /-- The caller owns both handles. Lifecycle is written before its trace row;
 every write is flushed, and I/O/limit errors propagate through the driver. -/
 def sink (cfg : Config) (state : IO.Ref State)
-    (trace frames : IO.FS.Handle) : Trace.Sink IO := fun event => do
+    (trace frames : IO.FS.Handle) : Legacy.Trace.Sink IO := fun event => do
   let (next, row, frameRow) ← match consume cfg (← state.get) event with
     | .ok result => pure result
     | .error message => throw (IO.userError ("trace: " ++ message))
@@ -189,4 +189,4 @@ def sink (cfg : Config) (state : IO.Ref State)
     trace.flush
   state.set next
 
-end Jaune.TraceJson
+end Jaune.Legacy.TraceJson

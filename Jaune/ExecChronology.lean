@@ -54,9 +54,9 @@ def Exec.retainedNodesOfCommits
   | .runErr _ _ _ _ => by simp [Execution.commits] at committed
   | .runOk (f := frame) (raw := raw) _ _ child _ next =>
       root ::
-        ((if h : Frame.settlementCommits frame raw = true then
+        ((if h : Legacy.Frame.settlementCommits frame raw = true then
             Exec.retainedNodesOfCommits child
-              (Frame.raw_commits_of_settlementCommits h)
+              (Legacy.Frame.raw_commits_of_settlementCommits h)
           else []) ++
           Exec.retainedNodesOfCommits next committed)
 termination_by sizeOf run
@@ -86,34 +86,34 @@ def Exec.retainedNodes
 
 @[simp] theorem Exec.retainedNodes_runOk_of_settlementCommits
     {pc pc' : Nat} {sevm : Sevm} {pre devm' : Devm}
-    {frame : Jaune.Frame} {resume : Resume}
+    {frame : Jaune.Legacy.Frame} {resume : Resume}
     {childEvm : Evm} {raw out : Execution}
-    (hstep : Evm.step ⟨pc, sevm, pre⟩ = .spawn frame resume pc')
+    (hstep : Legacy.Evm.step ⟨pc, sevm, pre⟩ = .spawn frame resume pc')
     (henter : frame.enter = .run childEvm)
     (child : Exec childEvm.pc childEvm.sta childEvm.dyna raw)
     (hresume : resume.run (frame.settle raw) = .ok devm')
     (next : Exec pc' sevm devm' out)
     (rootCommits : Execution.commits out = true)
-    (childSettles : Frame.settlementCommits frame raw = true) :
+    (childSettles : Legacy.Frame.settlementCommits frame raw = true) :
     Exec.retainedNodes (.runOk hstep henter child hresume next) =
       ⟨pc, sevm, pre, out,
         Exec.runOk hstep henter child hresume next⟩ ::
         (Exec.retainedNodes child ++ Exec.retainedNodes next) := by
-  have childCommits := Frame.raw_commits_of_settlementCommits childSettles
+  have childCommits := Legacy.Frame.raw_commits_of_settlementCommits childSettles
   simp [Exec.retainedNodes, Exec.retainedNodesOfCommits, rootCommits,
     childSettles, childCommits]
 
 @[simp] theorem Exec.retainedNodes_runOk_of_not_settlementCommits
     {pc pc' : Nat} {sevm : Sevm} {pre devm' : Devm}
-    {frame : Jaune.Frame} {resume : Resume}
+    {frame : Jaune.Legacy.Frame} {resume : Resume}
     {childEvm : Evm} {raw out : Execution}
-    (hstep : Evm.step ⟨pc, sevm, pre⟩ = .spawn frame resume pc')
+    (hstep : Legacy.Evm.step ⟨pc, sevm, pre⟩ = .spawn frame resume pc')
     (henter : frame.enter = .run childEvm)
     (child : Exec childEvm.pc childEvm.sta childEvm.dyna raw)
     (hresume : resume.run (frame.settle raw) = .ok devm')
     (next : Exec pc' sevm devm' out)
     (rootCommits : Execution.commits out = true)
-    (childDoesNotSettle : Frame.settlementCommits frame raw ≠ true) :
+    (childDoesNotSettle : Legacy.Frame.settlementCommits frame raw ≠ true) :
     Exec.retainedNodes (.runOk hstep henter child hresume next) =
       ⟨pc, sevm, pre, out,
         Exec.runOk hstep henter child hresume next⟩ ::
@@ -127,16 +127,16 @@ parent continuation. -/
 inductive Exec.Deriv.ParentStep : Exec.Deriv → Exec.Deriv → Prop
   | cont {pc pc' : Nat} {sevm : Sevm} {pre post : Devm}
       {out : Execution}
-      (hstep : Evm.step ⟨pc, sevm, pre⟩ = .cont pc' post)
+      (hstep : Legacy.Evm.step ⟨pc, sevm, pre⟩ = .cont pc' post)
       (next : Exec pc' sevm post out) :
       ParentStep
         ⟨pc', sevm, post, out, next⟩
         ⟨pc, sevm, pre, out, .cont hstep next⟩
   | doneOk {pc pc' : Nat} {sevm : Sevm} {pre post : Devm}
-      {frame : Jaune.Frame} {resume : Resume}
+      {frame : Jaune.Legacy.Frame} {resume : Resume}
       {settled : Except (EvmError × State × AdrSet × TransientStorage) Devm}
       {out : Execution}
-      (hstep : Evm.step ⟨pc, sevm, pre⟩ = .spawn frame resume pc')
+      (hstep : Legacy.Evm.step ⟨pc, sevm, pre⟩ = .spawn frame resume pc')
       (henter : frame.enter = .done settled)
       (hresume : resume.run settled = .ok post)
       (next : Exec pc' sevm post out) :
@@ -144,9 +144,9 @@ inductive Exec.Deriv.ParentStep : Exec.Deriv → Exec.Deriv → Prop
         ⟨pc', sevm, post, out, next⟩
         ⟨pc, sevm, pre, out, .doneOk hstep henter hresume next⟩
   | runOk {pc pc' : Nat} {sevm : Sevm} {pre post : Devm}
-      {frame : Jaune.Frame} {resume : Resume} {childEvm : Evm}
+      {frame : Jaune.Legacy.Frame} {resume : Resume} {childEvm : Evm}
       {raw out : Execution}
-      (hstep : Evm.step ⟨pc, sevm, pre⟩ = .spawn frame resume pc')
+      (hstep : Legacy.Evm.step ⟨pc, sevm, pre⟩ = .spawn frame resume pc')
       (henter : frame.enter = .run childEvm)
       (child : Exec childEvm.pc childEvm.sta childEvm.dyna raw)
       (hresume : resume.run (frame.settle raw) = .ok post)
