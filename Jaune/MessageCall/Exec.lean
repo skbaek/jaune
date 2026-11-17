@@ -7,8 +7,9 @@ import Jaune.MessageCall.Driver
 `exec` does; the exhaustion branch is a typed internal invariant error. Staged under
 `Jaune.Staging` beside today's `exec`.
 
-It sits in its own module so that the cached twin of the driver, with its `@[csimp]` theorem, can
-be imported here before `exec` is compiled (`@[csimp]` rewrites only code compiled after it).
+It sits in its own module so that the cached twin of the driver, with its compiler-substitution
+theorem, can be imported here before `exec` is compiled: that substitution rewrites only code
+compiled after it.
 -/
 
 namespace Jaune
