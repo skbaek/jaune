@@ -20,7 +20,7 @@ kept type `World` carry their final names.
 
 The design is the W1/W3 design note, sections 2.1-2.4, as amended by its third revision.
 Until unit P, `CallContext` carries today's static records `TenvStat` and `BenvStat`;
-`TxContext` and `BlockContext` are the records they will be cut down to.
+`TransactionContext` and `BlockContext` are the records they will be cut down to.
 -/
 
 namespace Jaune
@@ -183,7 +183,7 @@ def BlockContext.rules (b : BlockContext) : ForkRules := Fork.ruleSet b.fork
 
 /-- What a frame reads of its transaction (decision 13): the four fields the interpreter reads.
 Introduced for unit P; until then `CallContext` carries `TenvStat`. -/
-structure TxContext : Type where
+structure TransactionContext : Type where
   /-- The transaction's sender (`ORIGIN`). -/
   origin : Address
   /-- The effective gas price (`GASPRICE`). -/
@@ -214,7 +214,7 @@ structure CallContext : Type where
   depthLeft : Nat
   /-- Whether state changes are forbidden (`STATICCALL`). -/
   isStatic : Bool
-  /-- The transaction's static record; cut down to `TxContext` at unit P. -/
+  /-- The transaction's static record; cut down to `TransactionContext` at unit P. -/
   tx : TenvStat
   /-- The block's static record; cut down to `BlockContext` at unit P. -/
   block : BenvStat
