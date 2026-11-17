@@ -7,7 +7,6 @@
 import Jaune.BLSGuards
 import Jaune.Check.BLS
 import Jaune.Check.Basic
-import Jaune.Check.BridgeEnter
 import Jaune.Check.Blake2Spec
 import Jaune.Check.EC
 import Jaune.Check.Execution

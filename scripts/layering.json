@@ -31,7 +31,6 @@
   "Jaune.ChainStore": "adapter",
   "Jaune.Check.BLS": "check",
   "Jaune.Check.Basic": "check",
-  "Jaune.Check.BridgeEnter": "check",
   "Jaune.Check.Blake2Spec": "check",
   "Jaune.Check.EC": "check",
   "Jaune.Check.Execution": "check",

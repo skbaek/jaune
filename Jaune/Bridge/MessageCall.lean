@@ -6,8 +6,8 @@ import Jaune.MessageCall
 
 The maps between today's message-call types and the staged ones of `Jaune.MessageCall`, used
 only in bridges. (`Frame.State.ofDevm` and `toDevm` sit in `Jaune.MessageCall` itself: the W1
-bodies of `enter` and `settle` use them.) They live in this bridge module with the old side and are deleted with it
-after the gate's tag (goal 3.1).
+bodies of `enter` and `settle` use them.) They live in this bridge module with the old side and
+are deleted with it after the gate's tag (goal 3.1).
 
 Also here, about today's definitions: `Resume.parent`, the saved caller every `Resume` carries,
 and `Execution.Clean`, the premise that a raw result stores no settled error (the W1 design note,

@@ -13,8 +13,9 @@ says it agrees with the staged `enterWith` whenever the start state, set on the 
 value transfer, is that `Devm`. The three statements of the design note follow.
 
 The prepared entry is defined in an adapter module, which a bridge may not import. It is
-restated here verbatim as `Legacy.preparedEntry`; `Jaune.Check.BridgeEnter` checks by `rfl` that
-the two are the same function.
+restated here verbatim as `Legacy.preparedEntry`; the two are the same function by `rfl`
+(`TraceTransaction.preparedEntry = Legacy.preparedEntry`), which unit K2, where the adapter moves,
+states where both are in scope.
 
 About today's definitions, and deleted with them after the gate's tag (the W1 design note,
 third revision, section 3.2, unit D).
@@ -225,7 +226,8 @@ theorem enterFrom_legacy (f : Jaune.Frame) (saved start : Devm)
 
 /-- The logs a frame starts with today are the staged `transferLogs`. -/
 theorem initDevm_logs (msg : Msg) (isCreate : Bool) :
-    (initDevm msg).meta.logs = transferLogs msg.benv.stat.rules (Message.ofLegacy msg isCreate) := by
+    (initDevm msg).meta.logs
+      = transferLogs msg.benv.stat.rules (Message.ofLegacy msg isCreate) := by
   unfold initDevm transferLogs
   cases msg.benv.stat.rules.stateGas with
   | none => rfl
@@ -272,7 +274,8 @@ theorem enter_legacy (f : Jaune.Frame) (rsm : Resume) (h : Legacy.Frame.Coherent
 
 /-- **Enter, a top-level frame of today.** It starts from its message's `initDevm`. -/
 theorem enterWith_top (msg : Msg) (isCreate : Bool) :
-    Frame.Entry.ofLegacy (if isCreate then Jaune.Frame.ofCreate msg else Jaune.Frame.ofCall msg).enter
+    Frame.Entry.ofLegacy
+        (if isCreate then Jaune.Frame.ofCreate msg else Jaune.Frame.ofCall msg).enter
       = enterWith (Frame.ofTop msg isCreate) (initDevm msg) := by
   cases isCreate <;> simp only [ite_true, Bool.false_eq_true, ite_false] <;>
     rw [Legacy.Frame.enter_eq_enterFrom] <;>

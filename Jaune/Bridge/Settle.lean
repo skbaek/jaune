@@ -209,7 +209,8 @@ theorem settle_legacy (f : Jaune.Frame) (saved : Devm) (h : Legacy.Frame.TopCohe
           Devm.rollback, Devm.setWorld, Devm.withStorageWrites, Devm.restoreStateGas,
           Devm.withRefundCounter, Devm.forfeitRemainingGas, Devm.output, Devm.gasLeft,
           Devm.stateGas, Devm.createdAccounts, Jaune.Frame.settle, settle, Jaune.Frame.settleMsg,
-          executeCode.handleErrorWith, executeCode.handleError, executeCode.handleErrorAmsterdam, processMessage.settle,
+          executeCode.handleErrorWith, executeCode.handleError, executeCode.handleErrorAmsterdam,
+          processMessage.settle,
           Frame.Result.ofSettled, Message.ofLegacy, hsg, Frame.enteredWorld, bind, Except.bind,
           recordTouch_self_contains_ripemd160, Frame.State.ofDevm, Devm.state, ← hstate]
       all_goals rfl
