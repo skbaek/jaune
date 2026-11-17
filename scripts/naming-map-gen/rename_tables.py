@@ -1,8 +1,14 @@
 """Decisions behind the execution-layer map rows (goal jaune-shape-and-names-v1).
 
-Each table entry is a naming decision with its rule and source.  Status codes:
-`B` accepted in goal Appendix B (decision 10); `M` added by this map under the
-same rules, for review (choices are named in the row's notes).
+Each table entry is a naming decision with its rule and source.  Status codes
+(appended to the map row's `source` as `[B]` / `[M]`; the map schema defines no
+status field and no checker reads them):
+`B` settled: accepted in goal Appendix B (decision 10), or decided by the user
+(a source that starts `user decision`: `Tx.gas`, `gasStorageUpdate`), or a
+rule-1 gas constant spelled as its EIP names it, or a row derived from such a
+decision (an instance or member that follows a settled rename); `M` added by
+this map under the same rules, for review (choices are named in the row's
+notes).
 """
 
 # Token -> (replacement, rule, source, status).  Applied to camelCase tokens of
