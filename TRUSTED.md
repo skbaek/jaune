@@ -202,7 +202,7 @@ scripts/check-integrity.sh
 ```
 
 Today: hygiene reports 1 occurrence, allowlisted (the `@[csimp]` row below);
-integrity reports 57 occurrences allowlisted, 0 pending, pending budget 0.
+integrity reports 56 occurrences allowlisted, 0 pending, pending budget 0.
 
 **The trust surface is now enforced, not merely reported.** `check-hygiene.sh`
 fails on any un-allowlisted `axiom`, `opaque`, `@[extern]`, `@[implemented_by]`,
@@ -271,13 +271,13 @@ axiom audit](scripts/GATES.md#destination-axiom-audit)). Blanc, which does use
 with a dedicated check (`scripts/check.sh`) that rejects `_native.` axioms by
 name.
 
-**57 retained allowlist rows, zero pending.** 43 R3 rows for explicitly
-justified optimized or reference operations and 14 R4 rows for legacy renderers
+**56 retained allowlist rows, zero pending.** 43 R3 rows for explicitly
+justified optimized or reference operations and 13 R4 rows for legacy renderers
 and external parser boundaries — and **no R2 rows at all**, so there is no
 `panic` anywhere in the closure. Every retained row is a reviewed `KEEP` naming
 its wrapper, theorem, adapter, or boundary; no `PENDING` row remains and the
 budget is 0. A retained row is a **scoped, mechanically checked exception**, not
-an unclassified defect — but it is an exception, and 57 of them is the honest
+an unclassified defect — but it is an exception, and 56 of them is the honest
 count of places where the strong reading of "no raw bang operations, no
 stringly-typed errors" does not literally hold.
 
@@ -400,7 +400,7 @@ the corpus it runs over. The last eight rows are the consensus layer's
 
 | Primitive | Reference (standard, section) | Transcription source | Proved (theorem names) | Tested only (corpora) |
 |---|---|---|---|---|
-| `Keccak-256` (KECCAK256 opcode, not a precompile) | NIST FIPS 202 §3 (`Keccak-p[1600,24]`), §4 (sponge), §5.1-5.2 (`pad10*1`, `KECCAK[c]`), Appendix B.1; Ethereum's KEC is `KECCAK[512](M, 256)` without SHA-3 domain bits | Port of the SHA3IUF C implementation (`Jaune/Hash.lean:281-283`); independent transcription `Jaune/KeccakSpec.lean` | `Bytes.keccak_eq_fips`, `ByteArray.keccak_eq_fips` and `ByteArray.keccak_eq_fips_of_le` (`Jaune/KeccakSpec.lean`), via `Keccak.FIPS.f1600_eq_keccakP` and the older `KECCAK.f1600_eq` (kernel equals its in-file port); opcode-side `PlainOp.runCore_keccak256_eq_reference` (`Jaune/Machine.lean:4711`) relates the opcode to `Bytes.keccak` | `Jaune/Check/KeccakSpec.lean` empty-string guard; `check-u256.sh` keccak/keccak_ba vectors vs pinned EELS (83 cases; they test the hash value, which the theorems now state); fixture suites |
+| `Keccak-256` (KECCAK256 opcode, not a precompile) | NIST FIPS 202 §3 (`Keccak-p[1600,24]`), §4 (sponge), §5.1-5.2 (`pad10*1`, `KECCAK[c]`), Appendix B.1; Ethereum's KEC is `KECCAK[512](M, 256)` without SHA-3 domain bits | Port of the SHA3IUF C implementation (`Jaune/Hash.lean:281-283`); independent transcription `Jaune/KeccakSpec.lean` | `Bytes.keccak_eq_fips`, `ByteArray.keccak_eq_fips` and `ByteArray.keccak_eq_fips_of_le` (`Jaune/KeccakSpec.lean`), via `Keccak.FIPS.f1600_eq_keccakP` and the older `KECCAK.f1600_eq` (kernel equals its in-file port); opcode-side `PlainOp.runCore_keccak256_eq_reference` (`Jaune/Machine.lean:4718`) relates the opcode to `Bytes.keccak` | `Jaune/Check/KeccakSpec.lean` empty-string guard; `check-u256.sh` keccak/keccak_ba vectors vs pinned EELS (83 cases; they test the hash value, which the theorems now state); fixture suites |
 | `SHA-256` (0x02) | NIST FIPS 180-4 §4.1.2, §4.2.2, §5.1.1, §5.2.1, §5.3.3, §6.2.2 | Port of Mosnier's C (`Jaune/Hash.lean:158-160`); independent transcription `Jaune/SHA256Spec.lean:14-16` | `Bytes.sha256_eq_fips` (`Jaune/SHA256Spec.lean:740`) | `scripts/vectors/sha256.json` (81 cases); `check-vectors.sh`; fixtures |
 | `RIPEMD-160` (0x03) | Dobbertin-Bosselaers-Preneel, FSE 1996 (Appendix A pseudo-code); ISO/IEC 10118-3:2004 (Dedicated Hash-Function 1); Yellow Paper Appendix E | Port of tiny-ripemd160 C (`Jaune/Hash.lean:11-12`); reference transcription `Jaune/RIPEMD160Spec.lean` | none (agreement shown by `#guard`s only) | `Jaune/Check/RIPEMD160Spec.lean` guards (8 published test values; kernel agreement on those plus 13 seam lengths); `scripts/vectors/ripemd160.json` (85 cases); fixtures |
 | `BLAKE2 F` (0x09) | RFC 7693 §3.2 (F), §3.1 (G), §2.6-2.7; EIP-152 (framing) | `bCompress` (`Jaune/Precompiles.lean:577`), source previously unstated; reference transcription `Jaune/Blake2Spec.lean` | none about values (`Blake2.roundVec_toArray`, `Blake2.roundsVec_toArray` relate the optimized rounds to the in-file readable rounds, not to the standard) | `Jaune/Check/Blake2Spec.lean` guards (EIP-152 vectors 4-7, four framing-failure classes, `BLAKE2b-512("abc")`, production agreement); `scripts/vectors/blake2F.json` (5 cases); fixtures |
