@@ -149,12 +149,14 @@ rg -n '^\s*@\[extern|^\s*axiom\s|^\s*opaque\s+\S+\s*:|\bsorry\b|^\s*partial\s+de
 ```
 
 Run the same scan unanchored — matching the bare words anywhere, comments
-included — and it returns twenty-four hits, all prose: thirteen where `extern`
-sits inside the English word "external" (opcode comments for `EXTCODESIZE` and
-its neighbours, and remarks about externally observed bytes and labels), ten
-uses of "opaque" in comments (mostly typed-envelope bytes that stay
-undecoded), and one comment about keeping axiom sets exact. No declaration of
-any of these kinds exists.
+included — and it returns twenty-nine hits, none of them a declaration of
+these kinds. Eighteen are `extern` inside the English word "external":
+fourteen in comments (opcode comments for `EXTCODESIZE` and its neighbours,
+and remarks about externally observed bytes and labels) and four in the name
+of the private lemma `nonspawn_external_copy` and its three uses. Ten are uses
+of "opaque" in comments (mostly typed-envelope bytes that stay undecoded), and
+one is a comment about keeping axiom sets exact. No declaration of any of
+these kinds exists.
 
 ```
 grep -rEn 'extern|axiom|opaque|sorry|partial def|implemented_by|native_decide|dbg_trace' Jaune/ Main.lean
@@ -215,7 +217,7 @@ fails on any un-allowlisted `axiom`, `opaque`, `@[extern]`, `@[implemented_by]`,
 the external-consumer smoke source, alongside the original `dbg_trace` and
 `sorry`. Every one of these counts is zero except one: the allowlist carries
 exactly one row, the proved `@[csimp]` substitution `execFueled_eq_cached`
-in `Jaune/Impl/CachedExec.lean`. It is a kernel-checked equality
+in `Jaune/Implementation/CachedDriver.lean`. It is a kernel-checked equality
 `execFueled = execFueledCached`, and it makes the compiled binary run the
 calldata-sharing implementation. The row's written justification is in the
 allowlist. So the claim this document makes about Jaune's trusted path is
@@ -285,13 +287,13 @@ an unclassified defect — but it is an exception, and 56 of them is the honest
 count of places where the strong reading of "no raw bang operations, no
 stringly-typed errors" does not literally hold.
 
-**Twenty-five `Jaune/` modules are outside the gate's closure.** None is in
+**Twenty-six `Jaune/` modules are outside the gate's closure.** None is in
 `Jaune.lean`'s transitive import closure, so R2 and R3 do not inventory them:
 the runner-side adapters (`Jaune/ChainStore.lean`, `Jaune/FixtureException.lean`,
-`Jaune/FixtureTransition.lean`, `Jaune/T8n.lean`, `Jaune/Trace.lean`,
-`Jaune/TraceJson.lean`, `Jaune/TraceTransaction.lean`, `Jaune/Adapter/Io.lean`),
-the executable checks (`Jaune/BLSGuards.lean` and the fifteen
-`Jaune/Check/*.lean` modules, library `JauneChecks`), and
+`Jaune/FixtureTransition.lean`, `Jaune/T8n.lean`, `Jaune/MessageCall/Trace.lean`,
+`Jaune/MessageCall/TraceJson.lean`, `Jaune/TraceTransaction.lean`,
+`Jaune/Adapter/IO.lean`), the executable checks (`Jaune/BLSGuards.lean` and the
+sixteen `Jaune/Check/*.lean` modules, library `JauneChecks`), and
 `Jaune/StaticcallEffects.lean`, a proof module only the axiom-audit union
 imports. `scripts/layering.json` classifies each. This is deliberate — none is
 consensus surface, and no module of the closure imports one — and R1 and the
