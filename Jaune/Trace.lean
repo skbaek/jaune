@@ -1,4 +1,5 @@
 import Jaune.Sufficiency
+import Jaune.MessageCall.Trace
 
 /-!
 Streaming observations over the existing fueled interpreter. This module is
@@ -10,14 +11,7 @@ return carries a kernel-checked execution projection; this says nothing about
 sink success, trace serialization, or gas-observation conventions.
 -/
 namespace Jaune.Legacy.Trace
-
-/-- Explicit run identity plus a unique frame number and observed call depth.
-The depth here counts entered frames, unlike Sevm.depth's remaining allowance. -/
-structure Context where
-  runId : String
-  frame : Nat
-  depth : Nat
-  deriving Repr
+open Jaune.Trace (Context CertifiedResult)
 
 /-- Events are delivered synchronously. The driver retains no event history.
 `instruction` supplies the pre-state and the actual step result; serializers
@@ -32,13 +26,6 @@ inductive Event where
   | resumed (parent : Context) (childFrame : Nat) (raw : Execution)
 
 abbrev Sink (m : Type → Type) := Event → m Unit
-
-/-- Proof fields are erased at runtime. `nextFrame` is the next unused number,
-threaded across child execution and subsequent parent execution. -/
-structure CertifiedResult (expected : Fueled (EvmError × Devm) Devm) where
-  value : Fueled (EvmError × Devm) Devm
-  nextFrame : Nat
-  erases : value = expected
 
 /-- Index by the expected result so proof transport erases to runtime identity. -/
 abbrev Result (evm : Evm) (fuel : Nat) := CertifiedResult (Jaune.Legacy.execFueled evm fuel)

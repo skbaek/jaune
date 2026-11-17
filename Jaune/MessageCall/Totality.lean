@@ -16,7 +16,7 @@ seeded with more fuel than the frame's gas measure, so the staged `exec`
   most `n`;
 * `resume` hands the caller back at most its checkpoint's measure plus the result's.
 
-Staged under `Jaune.Staging`; nothing outside the staged chain reads it.
+Staged under a namespace of its own until the switch commit, which gave it its final names.
 -/
 
 namespace Jaune

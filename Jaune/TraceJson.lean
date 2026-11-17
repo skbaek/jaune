@@ -1,4 +1,5 @@
 import Jaune.Trace
+import Jaune.MessageCall.TraceJson
 import Jaune.T8n
 
 /-!
@@ -9,21 +10,16 @@ the comparator's instruction schema. Retention is bounded by active depth.
 -/
 namespace Jaune.Legacy.TraceJson
 open Lean Jaune
+open Jaune.TraceJson (Config OpenFrame State opcode)
 
-structure Config where
-  runId : String
-  memory : Bool := false
-  deferSummary : Bool := false
-  maxDataBytes : Nat := 1048576
-  maxSteps : Option Nat := none
-  maxRowBytes : Nat := 1048576
+
 
 private def number (n : Nat) : Json := toJson n
 private def quantity (n : Nat) : Json := .str (T8n.hexQuantity n)
 private def bytes (bs : Bytes) : Json := .str (T8n.hexBytes bs)
 private def textBytes (s : String) : Json := bytes s.toUTF8.data.toList
 
-def opcode (before : Evm) : Nat := (before.sta.code.byteD before.pc).toNat
+
 
 private def resumeParent : Resume → Devm
   | .create parent _ | .call parent _ _ => parent
@@ -49,7 +45,7 @@ def gasCost? (before : Evm) (step : Legacy.Step) : Option Nat :=
 
 /-- Encode pre-operation state. The refund base is the sum of suspended
 ancestors' local counters, not the last emitted child's counter. -/
-def instruction (cfg : Config) (context : Legacy.Trace.Context) (refundBase : Int)
+def instruction (cfg : Config) (context : Trace.Context) (refundBase : Int)
     (before : Evm) (step : Legacy.Step) : Except String Json := do
   if before.dyna.returnData.length > cfg.maxDataBytes then
     throw "return data exceeds maxDataBytes"
@@ -79,24 +75,12 @@ def instruction (cfg : Config) (context : Legacy.Trace.Context) (refundBase : In
     fields := fields ++ [("error", textBytes error.render)]
   return Json.mkObj fields
 
-structure OpenFrame where
-  id : Nat
-  refundBase : Int
-
-structure State where
-  frames : List OpenFrame := []
-  childRefundBase : Option Int := none
-  rootRefund : Nat := 0
-  steps : Nat := 0
-  started : Bool := false
-  closed : Bool := false
-
-private def lifecycle (context : Legacy.Trace.Context) (event : String)
+private def lifecycle (context : Trace.Context) (event : String)
     (extra : List (String × Json) := []) : Json :=
   Json.mkObj ([("runId", .str context.runId), ("frame", number context.frame),
     ("depth", number context.depth), ("event", .str event)] ++ extra)
 
-private def current (cfg : Config) (state : State) (ctx : Legacy.Trace.Context) :
+private def current (cfg : Config) (state : Jaune.TraceJson.State) (ctx : Trace.Context) :
     Except String OpenFrame := do
   if ctx.runId != cfg.runId then throw "event run identity differs"
   match state.frames with
@@ -118,8 +102,8 @@ private def rootSummary (cfg : Config) (frame : Legacy.Frame) (result : Devm) :
 
 /-- One event produces at most one trace row and one lifecycle row. Internal
 errors and exhausted fuel fail without a completing summary. -/
-def consume (cfg : Config) (state : State) (event : Legacy.Trace.Event) :
-    Except String (State × Option Json × Json) := do
+def consume (cfg : Config) (state : Jaune.TraceJson.State) (event : Legacy.Trace.Event) :
+    Except String (Jaune.TraceJson.State × Option Json × Json) := do
   if cfg.runId.isEmpty then throw "runId must be nonempty"
   if state.closed then throw "event after root settlement"
   match event with
@@ -172,7 +156,7 @@ def consume (cfg : Config) (state : State) (event : Legacy.Trace.Event) :
 
 /-- The caller owns both handles. Lifecycle is written before its trace row;
 every write is flushed, and I/O/limit errors propagate through the driver. -/
-def sink (cfg : Config) (state : IO.Ref State)
+def sink (cfg : Config) (state : IO.Ref Jaune.TraceJson.State)
     (trace frames : IO.FS.Handle) : Legacy.Trace.Sink IO := fun event => do
   let (next, row, frameRow) ← match consume cfg (← state.get) event with
     | .ok result => pure result

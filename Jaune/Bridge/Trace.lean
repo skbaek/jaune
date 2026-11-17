@@ -1,5 +1,7 @@
 import Jaune.Bridge.Driver
+import Jaune.Bridge.Top
 import Jaune.MessageCall.TraceJson
+import Jaune.TraceJson
 
 /-!
 # The four-part message call: the trace bridge (goal `jaune-shape-and-names-v1`, W1 unit K1)
@@ -20,7 +22,6 @@ definitions, and deleted with them after the gate's tag (the W1 design note, sec
 namespace Jaune
 
 open Legacy
-open Jaune.Legacy.Trace (Context CertifiedResult)
 
 namespace Trace
 
@@ -396,73 +397,12 @@ end Trace
 
 end Jaune
 
-namespace Jaune
-
-namespace Legacy
-
-/-- What today's settlement guarantees, for a frame coherent with its top-level start. -/
-theorem settledFacts_top {f : Jaune.Legacy.Frame} {parent : Devm} {rules : ForkRules}
-    (h : Frame.TopCoherent f parent) (hr : f.outer.benv.stat.rules = rules) {raw : Execution}
-    (clean : raw.Clean) : SettledFacts parent rules (f.settle raw) where
-  fault := Frame.settle_error_isFault f raw
-  world := fun hs hf => by
-    rw [Frame.settle_failed_world f h.paired hs hf, h.state, h.transient, h.storageWrites]
-    rfl
-  refund := fun hs hf hsg => Frame.settle_failed_refund f h.paired (hr ▸ hsg) clean hs hf
-  halted := Frame.settle_halted f clean
-
-/-- `Frame.enter_done_facts` for a frame coherent with its top-level start. -/
-theorem Frame.enter_done_facts_top {f : Jaune.Legacy.Frame} {parent : Devm} {rules : ForkRules}
-    (h : Frame.TopCoherent f parent) (hr : f.outer.benv.stat.rules = rules)
-    {r : Except (EvmError × Jaune.State × AdrSet × TransientStorage) Devm}
-    (he : f.enter = .done r) : SettledFacts parent rules r := by
-  rw [Frame.enter_eq_enterFrom] at he
-  unfold Frame.enterFrom at he
-  split at he
-  · rename_i e hb
-    cases he
-    have hfault := Msg.benvAfterTransfer_error hb
-    have hs : f.settleMsg (.error e) = .error e := by
-      unfold Jaune.Legacy.Frame.settleMsg processMessage.settle processCreateMessage.settle
-      split <;> rfl
-    rw [hs]
-    refine ⟨?_, fun hs _ => (nomatch hs), fun hs _ _ => (nomatch hs), fun hs _ => (nomatch hs)⟩
-    intro e' st c t he'
-    cases he'
-    exact .inr ⟨_, hfault⟩
-  · dsimp only at he
-    split at he
-    · cases he
-    · split at he
-      · cases he
-        apply settledFacts_top h hr
-        show Execution.Clean _
-        cases hp : executePrecompile _ _ with
-        | error _ => trivial
-        | ok d => exact (executePrecompile_ok_error hp).trans rfl
-      · cases he
-
-/-- The top-level frames of today are coherent with their message's start. -/
-theorem Frame.top_topCoherent (msg : Msg) (isCreate : Bool) :
-    Frame.TopCoherent (if isCreate then Jaune.Legacy.Frame.ofCreate msg else Jaune.Legacy.Frame.ofCall msg)
-      (initDevm msg) := by
-  cases isCreate <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-end Legacy
-
-end Jaune
 
 namespace Jaune
 
 open Legacy
-open Jaune.Legacy.Trace (Context CertifiedResult)
 
 namespace Trace
-
-/-- A top-level frame's checkpoint, as a start state, is its message's `initDevm`. -/
-theorem ofTop_start (msg : Msg) (isCreate : Bool) :
-    (Frame.ofTop msg isCreate).checkpoint.toDevm = initDevm msg :=
-  Frame.State.toDevm_ofDevm _ rfl rfl
 
 /-- A total execution result of today is determined by its next frame number. -/
 theorem bind_execution_legacy {m : Type → Type} [Monad m] [LawfulMonad m] {evm : Evm} {β : Type}
@@ -499,7 +439,7 @@ theorem runFrame_trace_legacy (msg : Msg) (isCreate : Bool) (runId : String) :
     cases isCreate <;> rfl
   have hgas := congrArg Message.gas (inner_fields htop.paired).1
   have hE := enterWith_top msg isCreate
-  rw [← ofTop_start msg isCreate] at hE
+  rw [← Frame.ofTop_start msg isCreate] at hE
   generalize (if isCreate then Jaune.Legacy.Frame.ofCreate msg else Jaune.Legacy.Frame.ofCall msg) = F
     at htop hmsg hgas hE ⊢
   unfold Jaune.Legacy.Trace.runFrame runFrame
@@ -549,7 +489,6 @@ end Trace
 namespace TraceJson
 
 open Lean
-open Jaune.Legacy.TraceJson (Config)
 
 /-- The gas cost read from the staged step is today's, for the step of any machine. -/
 theorem gasCost?_legacy {before : Evm} {s : Jaune.Legacy.Step} (hs : Jaune.Legacy.Evm.step before = s) :
@@ -570,7 +509,7 @@ theorem gasCost?_legacy {before : Evm} {s : Jaune.Legacy.Step} (hs : Jaune.Legac
           Frame.State.ofDevm, Message.ofLegacy, Resume.parent]
 
 /-- The instruction row read from the staged step is today's, for the step of any machine. -/
-theorem instruction_legacy (cfg : Config) (context : Context) (refundBase : Int) {before : Evm}
+theorem instruction_legacy (cfg : Config) (context : Trace.Context) (refundBase : Int) {before : Evm}
     {s : Jaune.Legacy.Step} (hs : Jaune.Legacy.Evm.step before = s) :
     instruction cfg context refundBase before (Step.ofLegacy s)
       = Jaune.Legacy.TraceJson.instruction cfg context refundBase before s := by
@@ -601,7 +540,7 @@ theorem rootSummary_eq (cfg : Config) (f : Frame) (r : Frame.Result) {grant : Na
 
 /-- **The serialiser.** The staged `consume` gives today's rows and state on corresponding
 events. -/
-theorem consume_legacy (cfg : Config) (state : Jaune.Legacy.TraceJson.State) {eo : Jaune.Legacy.Trace.Event}
+theorem consume_legacy (cfg : Config) (state : TraceJson.State) {eo : Jaune.Legacy.Trace.Event}
     {en : Trace.Event} (h : Trace.Event.Corr eo en) :
     consume cfg state en = Jaune.Legacy.TraceJson.consume cfg state eo := by
   rcases eo with ⟨c, b, s⟩ | ⟨c, f, e⟩ | ⟨c, r⟩ | ⟨c, f, r⟩ | ⟨c, k, x⟩ <;>
@@ -676,7 +615,7 @@ instance instLawfulMonadIO : LawfulMonad IO :=
 
 /-- **The `IO` sink.** The staged sink performs today's reads, writes, flushes and state update
 on corresponding events. -/
-theorem sink_legacy (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJson.State)
+theorem sink_legacy (cfg : Config) (state : IO.Ref TraceJson.State)
     (trace frames : IO.FS.Handle) {eo : Jaune.Legacy.Trace.Event} {en : Trace.Event}
     (h : Trace.Event.Corr eo en) :
     sink cfg state trace frames en = Jaune.Legacy.TraceJson.sink cfg state trace frames eo := by
@@ -687,7 +626,7 @@ theorem sink_legacy (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJson.State)
 /-- **The tracer's message run.** With the serialiser's `IO` sink, today's top-level frame run
 (as `TraceMain` builds it) and the staged one perform the same `IO` actions, so they write the
 same bytes to the same handles, and return the same next frame number. -/
-theorem runFrame_json_legacy (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJson.State)
+theorem runFrame_json_legacy (cfg : Config) (state : IO.Ref TraceJson.State)
     (trace frames : IO.FS.Handle) (msg : Msg) (runId : String) :
     Jaune.Legacy.Trace.FrameResult.nextFrame <$> Jaune.Legacy.Trace.runFrame
         (Jaune.Legacy.TraceJson.sink cfg state trace frames)
@@ -704,8 +643,8 @@ theorem runFrame_json_legacy (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJs
 /-- **The tracer's total run.** With the serialiser's `IO` sink, today's `Trace.exec` (which the
 transaction tracer runs) and the staged one perform the same `IO` actions and return the same
 next frame number. -/
-theorem exec_json_legacy (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJson.State)
-    (trace frames : IO.FS.Handle) (evm : Evm) (context : Context) (nextFrame : Nat) :
+theorem exec_json_legacy (cfg : Config) (state : IO.Ref TraceJson.State)
+    (trace frames : IO.FS.Handle) (evm : Evm) (context : Trace.Context) (nextFrame : Nat) :
     Jaune.Legacy.Trace.ExecutionResult.nextFrame <$>
         Jaune.Legacy.Trace.exec (Jaune.Legacy.TraceJson.sink cfg state trace frames) evm context nextFrame
       = Trace.ExecutionResult.nextFrame <$>

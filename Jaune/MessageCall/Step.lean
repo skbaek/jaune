@@ -5,8 +5,7 @@ import Jaune.MessageCall
 # The four-part message call: `step` (goal `jaune-shape-and-names-v1`, W1 unit E)
 
 One step of a running frame, with call preparation handing the driver a staged child `Frame`
-and a `Pending` instead of today's two messages and `Resume`. Staged under `Jaune.Staging`
-beside today's `Evm.step`; nothing in today's interpreter reads it until the switch commit.
+and a `Pending` instead of today's two messages and `Resume`. Staged under a namespace of its own until the switch commit, which gave it its final names; nothing in today's interpreter reads it until the switch commit.
 
 The text is today's (`genericCreate.step` through `Evm.step` in `Jaune.Execution`) with three
 changes only:

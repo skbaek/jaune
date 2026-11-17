@@ -5,8 +5,7 @@ import Jaune.MessageCall
 
 `resume` hands a finished child's result back to the caller that spawned it: under Amsterdam's
 rules it first checks that the result is settled, then merges the result into the saved caller
-by lifetime and runs the calling opcode's push and output write. Staged under `Jaune.Staging`
-beside today's `Resume.run`; nothing in today's interpreter reads it until the switch commit.
+by lifetime and runs the calling opcode's push and output write. Staged under a namespace of its own until the switch commit, which gave it its final names; nothing in today's interpreter reads it until the switch commit.
 
 * The machine is the saved caller's, with the child's meters absorbed and its return data set
   (`absorbMeters`).

@@ -1,4 +1,5 @@
 import Jaune.Sufficiency
+import Jaune.MessageCall.Canonical
 -- `List.IsChain` itself is Batteries; its infix/suffix closure lemmas, which
 -- the retained-history predicate below reasons with, are Mathlib's.
 import Mathlib.Data.List.Chain
@@ -879,6 +880,120 @@ def Legacy.processMessageCall (msg : Msg) :
     Legacy.processMessageCall.create msg
   else
     Legacy.processMessageCall.call msg
+
+/-! ### The top-level message call on the four-part chain
+
+The pre-frame steps are kept: the pre-Amsterdam collision test for a creation, the ordinary
+authorization and delegation resolution for a call, and under Amsterdam the preparation with
+its failure settlement. The frame then runs by `Frame.runTop` and its `Frame.Result` is rendered
+by `Frame.output` or `Frame.outputAmsterdam`. -/
+
+/-- Ordinary top-level authorization follows the active fork's delegation rule. -/
+def processMessageCall.legacyAuthorization (msg : Msg) : Except EvmError (Msg × Nat) :=
+  if !msg.benv.stat.rules.delegationEnabled || msg.tenv.stat.auths.isEmpty then
+    .ok ⟨msg, 0⟩
+  else do
+    let ⟨delegated, refund⟩ ← setDelegation msg
+    .ok ⟨delegated, refund.toNat⟩
+
+theorem processMessageCall.legacyAuthorization_disabled (msg : Msg)
+    (h : msg.benv.stat.rules.delegationEnabled = false) :
+    legacyAuthorization msg = .ok ⟨msg, 0⟩ := by
+  simp only [legacyAuthorization, h, Bool.not_false, Bool.true_or, ↓reduceIte]
+
+theorem processMessageCall.legacyAuthorization_enabled (msg : Msg)
+    (h : msg.benv.stat.rules.delegationEnabled = true) :
+    legacyAuthorization msg =
+      (if msg.tenv.stat.auths.isEmpty then .ok ⟨msg, 0⟩ else do
+        let ⟨delegated, refund⟩ ← setDelegation msg
+        .ok ⟨delegated, refund.toNat⟩) := by
+  simp only [legacyAuthorization, h, Bool.not_true, Bool.false_or]
+
+theorem processMessageCall.legacyAuthorization_canonical {msg : Msg}
+    (h : msg.Canonical) {p} (hp : legacyAuthorization msg = .ok p) :
+    p.1.Canonical := by
+  unfold legacyAuthorization at hp
+  split at hp
+  · cases hp; exact h
+  · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
+    cases hp
+    exact setDelegation_canonical h hpair
+
+/-- Settle a top-level Amsterdam message call whose preparation failed before
+the interpreter was entered: a halt forfeits the remaining gas and reports the
+pre-call state with the reads preparation had already recorded, while every
+other error propagates unchanged. The machine's world is not read: the reported
+state is the message's. Amsterdam-only, and reached only from
+`processTopLevelAmsterdam`'s error branch. -/
+def settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
+    (devm : Devm) : Except EvmError (State × MsgCallOutput) :=
+  match error with
+  | .halt reason =>
+    let devm := (devm.restoreStateGasToEntry msg.stateGasGrant).forfeitRemainingGas
+    -- The reads the preparation recorded before it halted -- the authorities
+    -- of every processed tuple, the recipient once dispatch loaded it -- stay
+    -- in the block-level access list: `incorporate_tx_into_block` runs for a
+    -- halted transaction too, and a read survives the rollback (EIP-7928).
+    .ok ⟨msg.benv.state, {
+      accountReads := devm.meta.accountReads
+      storageReads := devm.meta.storageReads
+      storageWrites := msg.benv.storageWrites
+      gasLeft := devm.gasLeft
+      refundCounter := 0
+      logs := []
+      accountsToDelete := .emptyWithCapacity
+      error := some (.halt reason)
+      returnData := []
+      stateGasLeft := devm.stateGasLeft
+      stateGasUsed := 0
+    }⟩
+  | .revert => .error .revert
+  | .crypto reason => .error (.crypto reason)
+  | .internal reason => .error (.internal reason)
+
+/-- Run one top-level Amsterdam message call: prepare the machine, settle a
+preparation failure, or run the top frame whose checkpoint is the prepared state
+and render its result. Amsterdam-only. -/
+def processTopLevelAmsterdam (state : StateGasRules) (msg : Msg) (isCreate : Bool) :
+    Except EvmError (State × MsgCallOutput) :=
+  match prepareTopLevelAmsterdam state msg with
+  | .error ⟨error, devm⟩ => settleTopLevelPreparationFailure msg error devm
+  | .ok ⟨msg, devm⟩ => do
+    let f : Frame := ⟨Message.ofLegacy msg isCreate, Frame.State.ofDevm devm⟩
+    let r ← (Frame.runTop f).mapError Fault.toEvmError
+    f.outputAmsterdam r
+
+def processMessageCall.create (msg : Msg) :
+    Except EvmError (State × MsgCallOutput) := do
+  match msg.benv.stat.rules.stateGas with
+  | none =>
+    if accountHasCodeOrNonce msg.benv.state msg.currentTarget then
+      return ⟨msg.benv.state,
+        { gasLeft := 0, refundCounter := 0, logs := [],
+          accountsToDelete := .emptyWithCapacity,
+          error := .some (.halt (.addressCollision .none)), returnData := [] }⟩
+    else
+      let f := Frame.ofTop msg true
+      let r ← (Frame.runTop f).mapError Fault.toEvmError
+      f.output 0 r
+  | some state => processTopLevelAmsterdam state msg true
+
+def processMessageCall.call (msg : Msg) :
+    Except EvmError (State × MsgCallOutput) := do
+  match msg.benv.stat.rules.stateGas with
+  | none =>
+    let ⟨delegated, authorizationRefund⟩ ← processMessageCall.legacyAuthorization msg
+    let f := Frame.ofTop delegated.resolveCodeDelegation false
+    let r ← (Frame.runTop f).mapError Fault.toEvmError
+    f.output authorizationRefund r
+  | some state => processTopLevelAmsterdam state msg false
+
+def processMessageCall (msg : Msg) :
+    Except EvmError (State × MsgCallOutput) := do
+  if msg.target.isNone then
+    processMessageCall.create msg
+  else
+    processMessageCall.call msg
 
 def Transaction.isEip4844 (tx : Transaction) : Bool :=
   match tx.type with
@@ -1959,7 +2074,7 @@ def processTransaction
     }
   }
   let msg ← prepareMessage {benv with state := state} tenv tx
-  let ⟨state, txOutput⟩ ← Except.mapError TransitionError.vm (Legacy.processMessageCall msg)
+  let ⟨state, txOutput⟩ ← Except.mapError TransitionError.vm (processMessageCall msg)
   let refundCounter : Nat ←
     (Int.toNat? txOutput.refundCounter).toExcept
       (TransitionError.internal (.invariant (.text "refund counter is negative")))
@@ -2487,7 +2602,7 @@ def processSystemTransaction (benv : Benv)
   let txEnv : Tenv := processSystemTransactionTenv benv
   let systemTxMsg : Msg :=
     processSystemTransactionMsg benv txEnv target data code
-  Legacy.processMessageCall systemTxMsg
+  processMessageCall systemTxMsg
 
 def extractDepositData (data : Bytes) : Except BlockValidationError Bytes := do
   if data.length != depositEventLength then
@@ -5421,6 +5536,288 @@ theorem Legacy.processMessageCall_canonical {msg : Msg} (h : msg.Canonical)
   · exact Legacy.processMessageCall.create_canonical h hp
   · exact Legacy.processMessageCall.call_canonical h hp
 
+/-! ### The prepared top-level state -/
+
+private theorem liftMachExecution_ok_meta {core : Mach → Footprint.Outcome Mach Unit} {d d' : Devm}
+    (h : liftMachExecution core d = .ok d') : d'.meta = d.meta := by
+  simp only [liftMachExecution, liftMach, Footprint.toExecution, Footprint.liftOutcome] at h
+  rcases hc : core d.mach with ⟨err, view⟩ | ⟨u, view⟩ <;> rw [hc] at h <;>
+    simp only [Except.ok.injEq, reduceCtorEq] at h
+  · cases h; rfl
+
+/-- A machine whose output and stored error are a fresh frame's. -/
+private def Fresh (d : Devm) : Prop := d.meta.output = [] ∧ d.meta.error = none
+
+private theorem Fresh.of_meta {d d' : Devm} (h : Fresh d) (hm : d'.meta = d.meta) : Fresh d' := by
+  unfold Fresh; rw [hm]; exact h
+
+private theorem Fresh.chargeStateGas {a : Nat} {d d' : Devm} (h : Fresh d)
+    (hc : Jaune.chargeStateGas a d = .ok d') : Fresh d' := h.of_meta (liftMachExecution_ok_meta hc)
+
+private theorem Fresh.chargeGas {a : Nat} {d d' : Devm} (h : Fresh d)
+    (hc : Jaune.chargeGas a d = .ok d') : Fresh d' := h.of_meta (liftMachExecution_ok_meta hc)
+
+private theorem Fresh.balReadAccount {d : Devm} (h : Fresh d) (r : ForkRules) (a : Address) :
+    Fresh (d.balReadAccount r a) := by
+  unfold Devm.balReadAccount; split <;> exact h
+
+private theorem Fresh.addAccessedAddress {d : Devm} (h : Fresh d) (a : Address) :
+    Fresh (addAccessedAddress d a) := h
+
+private theorem Fresh.setCode {d : Devm} (h : Fresh d) (a : Address) (c : ByteArray) :
+    Fresh (d.setCode a c) := h
+
+private theorem Fresh.incrNonce {d : Devm} (h : Fresh d) (a : Address) : Fresh (d.incrNonce a) := h
+
+private theorem Fresh.commitStateGas {d : Devm} (h : Fresh d) : Fresh d.commitStateGas := h
+
+private theorem chargeNewAuthorityAmsterdam_fresh {state : StateGasRules} {a : Address} {d d' : Devm}
+    (h : Fresh d) (hc : chargeNewAuthorityAmsterdam state a d = .ok d') : Fresh d' := by
+  unfold chargeNewAuthorityAmsterdam at hc
+  split at hc
+  · exact h.chargeStateGas hc
+  · cases hc; exact h
+
+private theorem chargePaidAccountWriteAmsterdam_fresh {state : StateGasRules} {a : Address} {d : Devm}
+    {s : AdrSet} {p : Devm × AdrSet} (h : Fresh d)
+    (hc : chargePaidAccountWriteAmsterdam state a d s = .ok p) : Fresh p.1 := by
+  unfold chargePaidAccountWriteAmsterdam at hc
+  split at hc
+  · cases hc; exact h
+  · obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
+    cases hc; exact h.chargeGas h1
+
+private theorem chargeAuthBaseAmsterdam_fresh {state : StateGasRules} {msg : Msg} {a t : Address}
+    {d : Devm} {s : AdrSet} {p : Devm × AdrSet × ByteArray} (h : Fresh d)
+    (hc : chargeAuthBaseAmsterdam state msg a t d s = .ok p) : Fresh p.1 := by
+  unfold chargeAuthBaseAmsterdam at hc
+  split at hc
+  · cases hc; exact h
+  · dsimp only at hc
+    split at hc
+    · obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
+      cases hc; exact h.chargeStateGas h1
+    · obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
+      cases h1; cases hc; exact h
+
+private theorem applyValidatedDelegationAmsterdam_fresh {state : StateGasRules} {msg : Msg}
+    {a t : Address} {d : Devm} {s1 s2 : AdrSet} {p : AmsterdamDelegationResult} (h : Fresh d)
+    (hc : applyValidatedDelegationAmsterdam state msg a t d s1 s2 = .ok p) : Fresh p.1 := by
+  unfold applyValidatedDelegationAmsterdam at hc
+  obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
+  obtain ⟨⟨d2, w2⟩, h2, hc⟩ := Except.bind_eq_ok hc
+  obtain ⟨⟨d3, w3, c3⟩, h3, hc⟩ := Except.bind_eq_ok hc
+  cases hc
+  exact (((chargeAuthBaseAmsterdam_fresh (chargePaidAccountWriteAmsterdam_fresh
+    (chargeNewAuthorityAmsterdam_fresh h h1) h2) h3).setCode _ _).incrNonce _)
+
+private theorem setDelegationAmsterdamStep_fresh {state : StateGasRules} {msg : Msg}
+    {auth : Authorization} {d : Devm} {s1 s2 : AdrSet} {p : AmsterdamDelegationResult}
+    (h : Fresh d) (hc : setDelegationAmsterdamStep state msg auth d s1 s2 = .ok p) :
+    Fresh p.1 := by
+  unfold setDelegationAmsterdamStep at hc
+  split at hc
+  · cases hc; exact h
+  · split at hc
+    · cases hc; exact h
+    · split at hc
+      · cases hc; exact h
+      · simp only [reduceCtorEq] at hc
+      · rename_i authority _
+        have hD := (h.addAccessedAddress authority).balReadAccount msg.benv.stat.rules authority
+        dsimp only at hc
+        generalize Devm.balReadAccount msg.benv.stat.rules authority
+          (addAccessedAddress d authority) = D at hD hc
+        split at hc
+        · cases hc; exact hD
+        · split at hc
+          · cases hc; exact hD
+          · exact applyValidatedDelegationAmsterdam_fresh hD hc
+
+private theorem setDelegationAmsterdamLoop_fresh {state : StateGasRules} {msg : Msg} :
+    ∀ (auths : List Authorization) {d : Devm} {s1 s2 : AdrSet} {p : AmsterdamDelegationResult},
+      Fresh d → setDelegationAmsterdamLoop state msg auths d s1 s2 = .ok p → Fresh p.1
+  | [], _, _, _, _, h, hc => by cases hc; exact h
+  | auth :: auths, d, s1, s2, p, h, hc => by
+    unfold setDelegationAmsterdamLoop at hc
+    obtain ⟨⟨d1, w1, w2⟩, h1, hc⟩ := Except.bind_eq_ok hc
+    exact setDelegationAmsterdamLoop_fresh auths (setDelegationAmsterdamStep_fresh h h1) hc
+
+private theorem resolveTopLevelCallAmsterdam_fresh {msg : Msg} {d : Devm} {p : Msg × Devm} (h : Fresh d)
+    (hc : resolveTopLevelCallAmsterdam msg d = .ok p) : Fresh p.2 := by
+  unfold resolveTopLevelCallAmsterdam at hc
+  obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
+  cases hc
+  show Fresh (Devm.balReadAccount _ _ _)
+  refine Fresh.balReadAccount ?_ _ _
+  show Fresh (completeDelegationAccess _ _ _).2
+  unfold completeDelegationAccess
+  dsimp only
+  split
+  · exact (h.chargeGas h1).addAccessedAddress _
+  · exact h.chargeGas h1
+
+private theorem prepared_fresh {state : StateGasRules} {msg : Msg} {p : Msg × Devm}
+    (h : prepareTopLevelAmsterdam state msg = .ok p) : Fresh p.2 := by
+  have key : ∀ d1, Fresh d1 → finishTopLevelAmsterdam state msg d1 = .ok p → Fresh p.2 := by
+    intro d1 hd1 h
+    unfold finishTopLevelAmsterdam dispatchTopLevelAmsterdam at h
+    have hd2 : Fresh (if msg.tenv.stat.auths.isEmpty then d1 else d1.commitStateGas) := by
+      split
+      · exact hd1
+      · exact hd1.commitStateGas
+    generalize (if msg.tenv.stat.auths.isEmpty then d1 else d1.commitStateGas) = d2 at hd2 h
+    have hd3 := hd2.balReadAccount msg.benv.stat.rules msg.currentTarget
+    dsimp only at h
+    split at h
+    · split at h
+      · simp only [reduceCtorEq] at h
+      · split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;> cases h
+        · exact hd3.chargeStateGas h4
+        · cases h4; exact hd3
+    · split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h
+      · exact resolveTopLevelCallAmsterdam_fresh (hd3.chargeStateGas h4) h
+      · cases h4; exact resolveTopLevelCallAmsterdam_fresh hd3 h
+  have h0 : Fresh (initDevm msg) := ⟨rfl, rfl⟩
+  unfold prepareTopLevelAmsterdam at h
+  dsimp only at h
+  split at h
+  · obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
+    cases h1
+    exact key _ h0 h
+  · obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
+    unfold setDelegationAmsterdam at h1
+    obtain ⟨⟨d2, w1, w2⟩, h2, h1⟩ := Except.bind_eq_ok h1
+    cases h1
+    exact key _ (setDelegationAmsterdamLoop_fresh _ h0 h2) h
+
+
+/-- The prepared message carries its machine's world, created accounts and accessed sets. -/
+private def Coh (m : Msg) (d : Devm) : Prop :=
+  m.benv.state = d.state ∧ m.benv.storageWrites = d.world.storageWrites ∧
+    m.tenv.transientStorage = d.transientStorage ∧ m.benv.createdAccounts = d.createdAccounts ∧
+    m.accessedAddresses = d.accessedAddresses ∧ m.accessedStorageKeys = d.accessedStorageKeys
+
+private theorem prepared_coh {state : StateGasRules} {msg : Msg} {p : Msg × Devm}
+    (h : prepareTopLevelAmsterdam state msg = .ok p) : Coh p.1 p.2 := by
+  have hcall : ∀ {d : Devm} {p : Msg × Devm}, resolveTopLevelCallAmsterdam msg d = .ok p →
+      Coh p.1 p.2 := by
+    intro d p hc
+    unfold resolveTopLevelCallAmsterdam at hc
+    obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
+    cases hc
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have key : ∀ d1, finishTopLevelAmsterdam state msg d1 = .ok p → Coh p.1 p.2 := by
+    intro d1 h
+    unfold finishTopLevelAmsterdam dispatchTopLevelAmsterdam at h
+    generalize (if msg.tenv.stat.auths.isEmpty then d1 else d1.commitStateGas) = d2 at h
+    dsimp only at h
+    split at h
+    · split at h
+      · simp only [reduceCtorEq] at h
+      · split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;> cases h <;>
+          exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;> exact hcall h
+  unfold prepareTopLevelAmsterdam at h
+  dsimp only at h
+  split at h <;> obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h <;> exact key _ h
+
+/-- **The prepared top-level state.** What Amsterdam's preparation hands the top frame stores no
+output and no settled error, and the prepared message carries its world, created accounts and
+accessed sets. So the top frame over it, whose checkpoint is this state, starts from it exactly
+(`Frame.State.toDevm_ofDevm`), and today's prepared frame over the message is coherent with it. -/
+theorem prepareTopLevelAmsterdam_prepared {state : StateGasRules} {msg : Msg} {p : Msg × Devm}
+    (h : prepareTopLevelAmsterdam state msg = .ok p) :
+    p.2.output = [] ∧ p.2.error = none ∧ p.1.benv.state = p.2.state ∧
+      p.1.benv.storageWrites = p.2.world.storageWrites ∧
+      p.1.tenv.transientStorage = p.2.transientStorage ∧
+      p.1.benv.createdAccounts = p.2.createdAccounts ∧
+      p.1.accessedAddresses = p.2.accessedAddresses ∧
+      p.1.accessedStorageKeys = p.2.accessedStorageKeys :=
+  ⟨(prepared_fresh h).1, (prepared_fresh h).2, prepared_coh h⟩
+
+private theorem frameOutput_canonical {f : Frame} {a : Nat} {r : Frame.Result}
+    (hw : (f.worldAfter r).Canonical) {p} (hp : f.output a r = .ok p) : State.Canonical p.1 := by
+  unfold Frame.output at hp
+  obtain ⟨refund, _, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  exact hw.1
+
+private theorem frameOutputAmsterdam_canonical {f : Frame} {r : Frame.Result}
+    (hw : (f.worldAfter r).Canonical) {p} (hp : f.outputAmsterdam r = .ok p) :
+    State.Canonical p.1 := by
+  unfold Frame.outputAmsterdam at hp
+  obtain ⟨refund, _, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  exact hw.1
+
+private theorem runTopOutput_canonical {f : Frame} (hf : f.Canonical)
+    {k : Frame.Result → Except EvmError (State × MsgCallOutput)}
+    (hk : ∀ r, (f.worldAfter r).Canonical → ∀ p, k r = .ok p → State.Canonical p.1) {p}
+    (hp : ((Frame.runTop f).mapError Fault.toEvmError >>= k) = .ok p) :
+    State.Canonical p.1 := by
+  obtain ⟨r, hr, hp⟩ := Except.bind_eq_ok hp
+  cases hrun : Frame.runTop f with
+  | error e => rw [hrun] at hr; cases hr
+  | ok r' =>
+    rw [hrun] at hr
+    cases hr
+    exact hk r (Frame.runTop_canonical hf hrun) p hp
+
+private theorem processTopLevelAmsterdam_canonical {state : StateGasRules}
+    {msg : Msg} (hm : msg.Canonical) (isCreate : Bool) {p}
+    (hp : processTopLevelAmsterdam state msg isCreate = .ok p) :
+    State.Canonical p.1 := by
+  unfold processTopLevelAmsterdam at hp
+  have hprepare := prepareTopLevelAmsterdam_canonical (state := state) hm
+  cases hprep : prepareTopLevelAmsterdam state msg with
+  | error failure =>
+    rw [hprep] at hp
+    obtain ⟨error, devm⟩ := failure
+    cases error <;> simp only [settleTopLevelPreparationFailure] at hp <;> cases hp
+    exact hm.1.1
+  | ok prepared =>
+    rw [hprep] at hp hprepare
+    obtain ⟨preparedMsg, preparedDevm⟩ := prepared
+    exact runTopOutput_canonical
+      (Frame.prepared_canonical hprepare.2 hprepare.1 isCreate)
+      (fun _ hw _ hk => frameOutputAmsterdam_canonical hw hk) hp
+
+theorem processMessageCall.create_canonical {msg : Msg} (h : msg.Canonical)
+    {p} (hp : processMessageCall.create msg = .ok p) :
+    State.Canonical p.1 := by
+  unfold processMessageCall.create at hp
+  dsimp only at hp
+  split at hp
+  · split at hp
+    · cases hp; exact h.1.1
+    · exact runTopOutput_canonical (Frame.ofTop_canonical h true)
+        (fun _ hw _ hk => frameOutput_canonical hw hk) hp
+  · exact processTopLevelAmsterdam_canonical h true hp
+
+theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
+    {p} (hp : processMessageCall.call msg = .ok p) :
+    State.Canonical p.1 := by
+  unfold processMessageCall.call at hp
+  dsimp only at hp
+  split at hp
+  · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
+    obtain ⟨delegated, refund⟩ := pair
+    have hm := processMessageCall.legacyAuthorization_canonical h hpair
+    exact runTopOutput_canonical
+      (Frame.ofTop_canonical (Msg.resolveCodeDelegation_canonical hm) false)
+      (fun _ hw _ hk => frameOutput_canonical hw hk) hp
+  · exact processTopLevelAmsterdam_canonical h false hp
+
+/-- A successful message call leaves a canonical state, for both the create
+and the call route. -/
+theorem processMessageCall_canonical {msg : Msg} (h : msg.Canonical)
+    {p} (hp : processMessageCall msg = .ok p) : State.Canonical p.1 := by
+  unfold processMessageCall at hp
+  split at hp
+  · exact processMessageCall.create_canonical h hp
+  · exact processMessageCall.call_canonical h hp
+
 theorem prepareMessage_canonical {benv : Benv} {tenv : Tenv} {tx : Transaction}
     (hb : benv.Canonical) (ht : tenv.Canonical) {msg : Msg}
     (hm : prepareMessage benv tenv tx = .ok msg) : msg.Canonical := by
@@ -5487,7 +5884,7 @@ theorem processTransaction_canonical {benv : Benv} (h : benv.Canonical)
   have hmsgc : msg.Canonical :=
     prepareMessage_canonical (by exact ⟨hst1c, h.1⟩)
       (by exact TransientStorage.canonical_empty) hmsg
-  have hqc := Legacy.processMessageCall_canonical hmsgc (Except.mapError_eq_ok_iff.mp hq)
+  have hqc := processMessageCall_canonical hmsgc (Except.mapError_eq_ok_iff.mp hq)
   exact State.Canonical.sweepTouchedAccounts (State.Canonical.settleSelfdestructs
     (State.Canonical.addBal (State.Canonical.addBal hqc _ _) _ _) _ _) _ _
 
@@ -5504,7 +5901,7 @@ theorem processSystemTransaction_canonical {benv : Benv} (h : benv.Canonical)
     (hp : processSystemTransaction benv target code data = .ok p) :
     State.Canonical p.1 := by
   unfold processSystemTransaction at hp
-  exact Legacy.processMessageCall_canonical
+  exact processMessageCall_canonical
     (by exact ⟨⟨h.1, h.1⟩, TransientStorage.canonical_empty⟩) hp
 
 theorem processUncheckedSystemTransaction_canonical {benv : Benv}

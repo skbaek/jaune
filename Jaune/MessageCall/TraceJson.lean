@@ -1,11 +1,10 @@
 import Jaune.MessageCall.Trace
-import Jaune.TraceJson
+import Jaune.T8n
 
 /-!
 # The four-part message call: the trace serialiser (goal `jaune-shape-and-names-v1`, W1 unit K1)
 
-Today's readers (`Jaune.TraceJson`) over the staged events of `Jaune.MessageCall.Trace`. Staged
-under `Jaune.Staging.TraceJson`; nothing reads it until the switch (unit K2).
+Today's readers (`Jaune.TraceJson`) over the staged events of `Jaune.MessageCall.Trace`. Staged under a namespace of its own until the switch commit, which gave it its final names; the switch (unit K2) moved the tracer onto it.
 
 What changes is where each value is read (the W1 design note, second revision, §6.5):
 
@@ -23,7 +22,29 @@ namespace Jaune
 namespace TraceJson
 
 open Lean Jaune
-open Jaune.Legacy.TraceJson (Config OpenFrame opcode)
+
+structure Config where
+  runId : String
+  memory : Bool := false
+  deferSummary : Bool := false
+  maxDataBytes : Nat := 1048576
+  maxSteps : Option Nat := none
+  maxRowBytes : Nat := 1048576
+
+def opcode (before : Evm) : Nat := (before.sta.code.byteD before.pc).toNat
+
+structure OpenFrame where
+  id : Nat
+  refundBase : Int
+
+structure State where
+  frames : List OpenFrame := []
+  childRefundBase : Option Int := none
+  rootRefund : Nat := 0
+  steps : Nat := 0
+  started : Bool := false
+  closed : Bool := false
+
 
 def number (n : Nat) : Json := toJson n
 def quantity (n : Nat) : Json := .str (T8n.hexQuantity n)
@@ -48,7 +69,7 @@ def gasCost? (before : Evm) (step : Step) : Option Nat :=
       safeSub before.dyna.gasLeft (child.checkpoint.machine.gasLeft + child.message.gas)
 
 /-- Today's pre-operation row over the staged step. -/
-def instruction (cfg : Config) (context : Jaune.Legacy.Trace.Context) (refundBase : Int)
+def instruction (cfg : Config) (context : Trace.Context) (refundBase : Int)
     (before : Evm) (step : Step) : Except String Json := do
   if before.dyna.returnData.length > cfg.maxDataBytes then
     throw "return data exceeds maxDataBytes"
@@ -76,12 +97,12 @@ def instruction (cfg : Config) (context : Jaune.Legacy.Trace.Context) (refundBas
     fields := fields ++ [("error", textBytes error.render)]
   return Json.mkObj fields
 
-def lifecycle (context : Jaune.Legacy.Trace.Context) (event : String)
+def lifecycle (context : Trace.Context) (event : String)
     (extra : List (String × Json) := []) : Json :=
   Json.mkObj ([("runId", .str context.runId), ("frame", number context.frame),
     ("depth", number context.depth), ("event", .str event)] ++ extra)
 
-def current (cfg : Config) (state : Jaune.Legacy.TraceJson.State) (ctx : Jaune.Legacy.Trace.Context) :
+def current (cfg : Config) (state : State) (ctx : Trace.Context) :
     Except String OpenFrame := do
   if ctx.runId != cfg.runId then throw "event run identity differs"
   match state.frames with
@@ -104,8 +125,8 @@ def rootSummary (cfg : Config) (frame : Frame) (result : Frame.Result) :
     ("pass", .bool !result.failed)]
 
 /-- Today's `consume` over the staged events. -/
-def consume (cfg : Config) (state : Jaune.Legacy.TraceJson.State) (event : Trace.Event) :
-    Except String (Jaune.Legacy.TraceJson.State × Option Json × Json) := do
+def consume (cfg : Config) (state : State) (event : Trace.Event) :
+    Except String (State × Option Json × Json) := do
   if cfg.runId.isEmpty then throw "runId must be nonempty"
   if state.closed then throw "event after root settlement"
   match event with
@@ -155,7 +176,7 @@ def consume (cfg : Config) (state : Jaune.Legacy.TraceJson.State) (event : Trace
       lifecycle ctx "settled" [("root", .bool tail.isEmpty)])
 
 /-- Today's `IO` sink over the staged events: the same writes, flushes and limits. -/
-def sink (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJson.State)
+def sink (cfg : Config) (state : IO.Ref State)
     (trace frames : IO.FS.Handle) : Trace.Sink IO := fun event => do
   let (next, row, frameRow) ← match consume cfg (← state.get) event with
     | .ok result => pure result

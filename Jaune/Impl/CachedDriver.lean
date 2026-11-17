@@ -4,11 +4,11 @@ import Jaune.MessageCall.Driver
 # The cached twin of the staged driver (goal `jaune-shape-and-names-v1`, W1 unit H)
 
 Implementation module (see `scripts/layering.json`). `execFueledCached` is a second
-implementation of the staged driver `Staging.execFueled`, kept for speed: it threads a cache
+implementation of the staged driver `execFueled`, kept for speed: it threads a cache
 that shares one physical copy of an identical calldata slice across a deep call path. Its
-semantic component is proved equal to `Staging.execFueled` (`execFueledCachedCore_fst`), and
+semantic component is proved equal to `execFueled` (`execFueledCachedCore_fst`), and
 the compiled-code substitution theorem `execFueled_eq_cached` makes the compiled code run it in
-place of `Staging.execFueled`.
+place of `execFueled`.
 
 This is today's `Jaune.Impl.CachedExec` over the staged `Step`: the same cache, the same
 coverage (the four legacy call arms cached; the Amsterdam arms and the creation opcodes take
@@ -404,7 +404,7 @@ private theorem Evm.stepCached_fst
     | halt l => rfl
 
 /-- Cache-threaded staged driver. Its semantic component is proved below to be exactly
-`Staging.execFueled`; the extra component only retains a shareable physical representative of
+`execFueled`; the extra component only retains a shareable physical representative of
 an exact calldata slice, threaded through a child's run into its caller's continuation. -/
 private def execFueledCachedCore :
     Evm → Nat → Option CalldataCache →

@@ -1,4 +1,4 @@
-import Jaune.Sufficiency
+import Jaune.MessageCall.Top
 
 /-!
 # Bounded call-depth / calldata-size memory probe
@@ -129,12 +129,16 @@ def probeMsg (family : Family) (depth inputSize : Nat) : Msg :=
 
 def run (family : Family) (depth inputSize : Nat) :
     Except ProbeError (Nat × Nat × U256) :=
-  match processMessage (probeMsg family depth inputSize) with
-  | .error _ => .error .frameSettlement
-  | .ok devm =>
-    if devm.error.isSome then
-      .error .settledHalt
-    else
+  -- The top frame's raw result: enter it from its checkpoint, run `exec`, and read the final
+  -- machine's memory. A settled `Frame.Result` carries no memory.
+  let frame := Frame.ofTop (probeMsg family depth inputSize) false
+  match enterWith frame frame.checkpoint.toDevm with
+  | .done _ => .error .frameSettlement
+  | .run evm =>
+    match exec evm with
+    | .error (.halt _, _) | .error (.revert, _) => .error .settledHalt
+    | .error _ => .error .frameSettlement
+    | .ok devm =>
       let success := Bytes.toU256 (devm.memory.data.sliceD 32 32 0)
       .ok (devm.memory.size, devm.memory.data.size, success)
 

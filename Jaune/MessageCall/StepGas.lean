@@ -14,7 +14,7 @@ caller's `Pending` continuation. This module ports today's step-level gas corpus
 The measure a spawn leaves its caller is now its checkpoint's (`Frame.parentGas`, today's
 `Resume.parentGas`). Everything that does not mention the step type -- the pricing walks, the
 `HaltLe` combinators, the non-call instruction corpus -- is reused from `Jaune.Sufficiency`
-unchanged. Staged under `Jaune.Staging`; nothing outside the staged chain reads it.
+unchanged. Staged under a namespace of its own until the switch commit, which gave it its final names.
 -/
 
 namespace Jaune
@@ -176,7 +176,7 @@ theorem MessageOp.step_call_gasDecreasing_legacy (sevm : Sevm) (devm : Devm)
       rw [ForkRules.accessDelegation_gasMeasure, hdA]
       omega
     -- `extra_gas` strictly covers the stipend: a warm access alone costs 100, and
-    -- a value-bearing call pays `gasCallValue` against a `gCallStipend` stipend.
+    -- a value-bearing call pays the call-value charge against the call stipend.
     have hstip :
         (if value.toNat = 0 then 0 else Gas.callStipend) <
           ((pre +

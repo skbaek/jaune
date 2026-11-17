@@ -7,8 +7,7 @@ import Jaune.MessageCall.Resume
 
 `execFueled` runs a frame's machine step by step. A step that spawns a child enters it
 (`enter`), runs it if it has code to run, settles its raw result (`settle`), and resumes the
-caller with the settled result (`resume`). Staged under `Jaune.Staging` beside today's
-`execFueled`; nothing in today's interpreter reads it until the switch commit.
+caller with the settled result (`resume`). Staged under a namespace of its own until the switch commit, which gave it its final names; nothing in today's interpreter reads it until the switch commit.
 
 This is the W1 form: the driver keeps today's type and returns the frame's raw result, so it
 consumes fuel exactly as today does. A fault still carries a `Devm` in W1; the driver puts the

@@ -14,7 +14,7 @@ frame fails:
 * `Trail` is kept on failure: the caller takes the child's.
 
 This module only adds declarations. Nothing in the present interpreter reads them yet; the new
-chain is staged under the namespace `Jaune.Staging` until the switch commit relocates it, so that
+chain was staged under its own namespace until the switch commit relocated it, so that
 `Frame` and `Step` can sit beside today's definitions of the same names. Helpers on the
 kept type `World` carry their final names.
 

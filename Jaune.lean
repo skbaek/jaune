@@ -24,6 +24,8 @@ import Jaune.MessageCall.Step
 import Jaune.MessageCall.Resume
 import Jaune.MessageCall.Driver
 import Jaune.MessageCall.Exec
+import Jaune.MessageCall.Top
+import Jaune.MessageCall.Canonical
 import Jaune.DevmProjections
 import Jaune.Precompiles
 import Jaune.Execution
@@ -49,6 +51,7 @@ import Jaune.Bridge.Enter
 import Jaune.Bridge.Step
 import Jaune.Bridge.Resume
 import Jaune.Bridge.Driver
+import Jaune.Bridge.Top
 
 namespace Jaune
 

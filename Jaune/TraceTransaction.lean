@@ -1,66 +1,14 @@
-import Jaune.Trace
+import Jaune.MessageCall.Trace
 import Jaune.Transaction
 
 /-!
 Transaction-side tracing, kept outside the core executor's import closure.
-The local pure frame boundary exposes the existing private operation through
-a public definitional equation. It is the specification for the traced
-prepared-frame driver, not a second execution used to certify its result.
+Each traced message operation runs the top frame with `Trace.runFrame` and
+renders its settled result exactly as `processMessageCall` does, so its
+certificate is the public operation itself.
 -/
 namespace Jaune.TraceTransaction
 open Jaune
-
-def preparedFrame (frame : Legacy.Frame) (prepared : Devm) :
-    Except (EvmError × State × AdrSet × TransientStorage) Devm :=
-  match frame.inner.benvAfterTransfer with
-  | .error e => frame.settleMsg (.error e)
-  | .ok benv =>
-    let inner := frame.inner.withBenv benv
-    let dyna :=
-      ((prepared.withState benv.state).withStorageWrites benv.storageWrites).withCreatedAccounts
-        benv.createdAccounts
-    let evm : Evm := {pc := 0, sta := initSevm inner, dyna := dyna}
-    let raw :=
-      match inner.codeAddress with
-      | none => Legacy.exec evm
-      | some adr =>
-        if !inner.disablePrecompiles && inner.benv.stat.rules.isPrecompile adr then
-          executePrecompile evm adr
-        else Legacy.exec evm
-    frame.settle raw
-
-/-- Prepared entry has already performed the transaction's authorization and
-state-gas setup. It must not go through ordinary `Frame.enter` again. -/
-def preparedEntry (frame : Legacy.Frame) (prepared : Devm) : FrameEntry :=
-  match frame.inner.benvAfterTransfer with
-  | .error e => .done (frame.settleMsg (.error e))
-  | .ok benv =>
-    let inner := frame.inner.withBenv benv
-    let dyna :=
-      ((prepared.withState benv.state).withStorageWrites benv.storageWrites).withCreatedAccounts
-        benv.createdAccounts
-    let evm : Evm := {pc := 0, sta := initSevm inner, dyna := dyna}
-    match inner.codeAddress with
-    | none => .run evm
-    | some adr =>
-      if !inner.disablePrecompiles && inner.benv.stat.rules.isPrecompile adr then
-        .done (frame.settle (executePrecompile evm adr))
-      else .run evm
-
-theorem preparedFrame_eq (frame : Legacy.Frame) (prepared : Devm) :
-    preparedFrame frame prepared =
-      match preparedEntry frame prepared with
-      | .done result => result
-      | .run evm => frame.settle (Jaune.Legacy.exec evm) := by
-  cases hb : frame.inner.benvAfterTransfer with
-  | error error => simp only [preparedFrame, preparedEntry, hb]
-  | ok benv =>
-    simp only [preparedFrame, preparedEntry, hb]
-    cases hc : (frame.inner.withBenv benv).codeAddress with
-    | none => rfl
-    | some adr =>
-      simp only
-      split <;> rfl
 
 /-- Successful monadic observations carry the value of the existing pure
 boundary. The expected value appears only in a type and an erased proof. -/
@@ -68,190 +16,92 @@ structure Certified {α : Type} (expected : α) where
   value : α
   erases : value = expected
 
-/-- The actual prepared-frame production driver. Precompiles and transfer
-failures emit zero-instruction entry/settlement pairs; code uses `Trace.exec`.
-Only the traced execution runs. -/
-def runPreparedFrame {m : Type → Type} [Monad m] (sink : Legacy.Trace.Sink m)
-    (frame : Legacy.Frame) (prepared : Devm) (runId : String) :
-    m (Certified (preparedFrame frame prepared)) := do
-  let context : Legacy.Trace.Context := ⟨runId, 0, 1⟩
-  match hentry : preparedEntry frame prepared with
-  | .done settled =>
-    sink (.entered context frame (.done settled))
-    sink (.settled context frame settled)
-    pure ⟨settled, by simp only [preparedFrame_eq, hentry]⟩
-  | .run evm =>
-    sink (.entered context frame (.run evm))
-    let result ← Legacy.Trace.exec sink evm context 1
-    let settled := frame.settle result.value
-    sink (.settled context frame settled)
-    pure ⟨settled, by simp only [preparedFrame_eq, hentry, settled, result.erases]⟩
-
-def messageOutputAmsterdam (msg : Msg) (evm : Devm) :
-    Except EvmError (State × MsgCallOutput) := do
-  let refundCounter ←
-    if evm.error.isNone then
-      (Int.toNat? evm.refundCounter).toExcept
-        (EvmError.internal (.invariant (.text "refund counter is negative")))
-    else .ok 0
-  let logs := if evm.error.isNone then evm.logs else []
-  let accountsToDelete :=
-    if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
-  let stateGasUsed :=
-    Int.ofNat msg.stateGasGrant - Int.ofNat evm.stateGasLeft +
-      Int.ofNat evm.mach.stateGas.spilled +
-      Int.ofNat evm.mach.stateGas.committedSpill
-  .ok ⟨evm.state, {
-    accountReads := evm.meta.accountReads
-    storageReads := evm.meta.storageReads
-    storageWrites := evm.world.storageWrites
-    gasLeft := evm.gasLeft
-    refundCounter := refundCounter
-    logs := logs
-    accountsToDelete := accountsToDelete
-    error := evm.error
-    returnData := evm.output
-    stateGasLeft := evm.stateGasLeft
-    stateGasUsed := stateGasUsed
-  }⟩
-
-def topLevelAmsterdam (state : StateGasRules) (msg : Msg)
-    (frameOf : Msg → Legacy.Frame) : Except EvmError (State × MsgCallOutput) :=
-  match prepareTopLevelAmsterdam state msg with
-  | .error ⟨error, devm⟩ =>
-    Legacy.settleTopLevelPreparationFailure msg error devm
-  | .ok ⟨msg, devm⟩ => do
-    let evm ← Except.bimap Prod.fst id
-      (preparedFrame (frameOf msg) devm)
-    messageOutputAmsterdam msg evm
-
-/-- This equation checks the private prepared-frame and output boundary
-through the public API without depending on generated private names. -/
-theorem topLevelAmsterdam_eq (state : StateGasRules) (msg : Msg)
-    (frameOf : Msg → Legacy.Frame) :
-    topLevelAmsterdam state msg frameOf =
-      Jaune.Legacy.processTopLevelAmsterdam state msg frameOf := rfl
-
 /-- Trace the public Amsterdam top-level message operation. Preparation
 failure returns its existing result without inventing an entered code frame;
-transaction routing must still record that run's terminal outcome. -/
-def runTopLevelAmsterdam {m : Type → Type} [Monad m] (sink : Legacy.Trace.Sink m)
-    (state : StateGasRules) (msg : Msg) (frameOf : Msg → Legacy.Frame) (runId : String) :
-    m (Certified (Jaune.Legacy.processTopLevelAmsterdam state msg frameOf)) := do
+transaction routing must still record that run's terminal outcome. The prepared
+frame is traced like any top-level frame: its checkpoint is the prepared state. -/
+def runTopLevelAmsterdam {m : Type → Type} [Monad m] (sink : Trace.Sink m)
+    (state : StateGasRules) (msg : Msg) (isCreate : Bool) (runId : String) :
+    m (Certified (processTopLevelAmsterdam state msg isCreate)) := do
   match hprep : prepareTopLevelAmsterdam state msg with
   | .error ⟨error, devm⟩ =>
-    pure ⟨Legacy.settleTopLevelPreparationFailure msg error devm, by
-      simp only [← topLevelAmsterdam_eq, topLevelAmsterdam, hprep]⟩
+    pure ⟨settleTopLevelPreparationFailure msg error devm, by
+      simp only [processTopLevelAmsterdam, hprep]⟩
   | .ok ⟨preparedMsg, devm⟩ =>
-    let result ← runPreparedFrame sink (frameOf preparedMsg) devm runId
+    let frame : Frame := ⟨Message.ofLegacy preparedMsg isCreate, Frame.State.ofDevm devm⟩
+    let result ← Trace.runFrame sink frame runId
     let value : Except EvmError (State × MsgCallOutput) := do
-      let evm ← Except.bimap Prod.fst id result.value
-      messageOutputAmsterdam preparedMsg evm
-    pure ⟨value, by
-      simp only [← topLevelAmsterdam_eq, topLevelAmsterdam, hprep, value,
-        result.erases]⟩
+      let r ← result.value.mapError Fault.toEvmError
+      frame.outputAmsterdam r
+    pure ⟨value, by simp only [processTopLevelAmsterdam, hprep, value, result.erases]; rfl⟩
 
 /-- The successful return of the actual monadic driver projects to the public
 operation, including preparation errors and precompile/transfer boundaries. -/
-theorem runTopLevelAmsterdam_erasure {state : StateGasRules} {msg : Msg}
-    {frameOf : Msg → Legacy.Frame}
-    (result : Certified (Jaune.Legacy.processTopLevelAmsterdam state msg frameOf)) :
-    result.value = Jaune.Legacy.processTopLevelAmsterdam state msg frameOf := result.erases
+theorem runTopLevelAmsterdam_erasure {state : StateGasRules} {msg : Msg} {isCreate : Bool}
+    (result : Certified (processTopLevelAmsterdam state msg isCreate)) :
+    result.value = processTopLevelAmsterdam state msg isCreate := result.erases
 
-/-- Shared rendering of the pre-Amsterdam settled message result. The
-transaction's authorization refund is separate from the frame-local counter. -/
-def legacyOutput (authorizationRefund : Nat)
-    (result : Except (EvmError × State × AdrSet × TransientStorage) Devm) :
-    Except EvmError (State × MsgCallOutput) := do
-  let evm ← Except.bimap Prod.fst id result
-  let refund ←
-    if evm.error.isNone then
-      (Int.toNat? evm.refundCounter).toExcept
-        (EvmError.internal (.invariant (.text "refund counter is negative")))
-    else .ok 0
-  let logs := if evm.error.isNone then evm.logs else []
-  let accountsToDelete :=
-    if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
-  let touchedAccounts :=
-    if evm.error.isNone then evm.meta.touchedAccounts else .emptyWithCapacity
-  pure ⟨evm.state, {
-    gasLeft := evm.gasLeft, refundCounter := authorizationRefund + refund,
-    logs := logs, accountsToDelete := accountsToDelete,
-    error := evm.error, returnData := evm.output,
-    touchedAccounts := touchedAccounts }⟩
-
-def runMessageCreate {m : Type → Type} [Monad m] (sink : Legacy.Trace.Sink m)
+def runMessageCreate {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (msg : Msg) (runId : String) :
-    m (Certified (Jaune.Legacy.processMessageCall.create msg)) := do
+    m (Certified (processMessageCall.create msg)) := do
   match hfork : msg.benv.stat.rules.stateGas with
   | some state =>
-    let result ← runTopLevelAmsterdam sink state msg Legacy.Frame.ofCreate runId
+    let result ← runTopLevelAmsterdam sink state msg true runId
     pure ⟨result.value, by
-      simpa only [Jaune.Legacy.processMessageCall.create, hfork] using result.erases⟩
+      simpa only [processMessageCall.create, hfork] using result.erases⟩
   | none =>
     if hcollision : accountHasCodeOrNonce msg.benv.state msg.currentTarget then
       pure ⟨.ok ⟨msg.benv.state, {
         gasLeft := 0, refundCounter := 0, logs := [],
         accountsToDelete := .emptyWithCapacity,
         error := some (.halt (.addressCollision .none)), returnData := [] }⟩, by
-          simp only [Jaune.Legacy.processMessageCall.create, hfork, hcollision, ↓reduceIte]
+          simp only [processMessageCall.create, hfork, hcollision, ↓reduceIte]
           rfl⟩
     else
-      let result ← Legacy.Trace.runFrame sink (Legacy.Frame.ofCreate msg) runId
-      pure ⟨legacyOutput 0 result.value, by
-        simp [legacyOutput, result.erases, Jaune.Legacy.processMessageCall.create,
-          hfork, hcollision, Jaune.processCreateMessage]
+      let frame := Frame.ofTop msg true
+      let result ← Trace.runFrame sink frame runId
+      let value : Except EvmError (State × MsgCallOutput) := do
+        let r ← result.value.mapError Fault.toEvmError
+        frame.output 0 r
+      pure ⟨value, by
+        simp only [processMessageCall.create, hfork, hcollision, value, result.erases, frame]
         rfl⟩
 
-/-- Authorization processing before the ordinary call frame. -/
-def legacyAuthorization (msg : Msg) : Except EvmError (Msg × Nat) :=
-  Jaune.Legacy.processMessageCall.legacyAuthorization msg
-
-def resolveLegacyDelegation (msg : Msg) : Msg :=
-  msg.resolveCodeDelegation
-
-theorem legacyCall_eq (msg : Msg) (hfork : msg.benv.stat.rules.stateGas = none) :
-    Jaune.Legacy.processMessageCall.call msg =
-      (legacyAuthorization msg >>= fun pair =>
-        legacyOutput pair.2 (Jaune.processMessage (resolveLegacyDelegation pair.1))) := by
-  simp only [Jaune.Legacy.processMessageCall.call, hfork, legacyAuthorization,
-    legacyOutput, resolveLegacyDelegation]
-  cases Jaune.Legacy.processMessageCall.legacyAuthorization msg <;> rfl
-
-def runMessageCall {m : Type → Type} [Monad m] (sink : Legacy.Trace.Sink m)
+def runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (msg : Msg) (runId : String) :
-    m (Certified (Jaune.Legacy.processMessageCall.call msg)) := do
+    m (Certified (processMessageCall.call msg)) := do
   match hfork : msg.benv.stat.rules.stateGas with
   | some state =>
-    let result ← runTopLevelAmsterdam sink state msg Legacy.Frame.ofCall runId
+    let result ← runTopLevelAmsterdam sink state msg false runId
     pure ⟨result.value, by
-      simpa only [Jaune.Legacy.processMessageCall.call, hfork] using result.erases⟩
+      simpa only [processMessageCall.call, hfork] using result.erases⟩
   | none =>
-    match hauth : legacyAuthorization msg with
+    match hauth : processMessageCall.legacyAuthorization msg with
     | .error error =>
-      pure ⟨.error error, by
-        rw [legacyCall_eq msg hfork, hauth]
-        rfl⟩
+      pure ⟨.error error, by simp only [processMessageCall.call, hfork, hauth]; rfl⟩
     | .ok ⟨delegated, refund⟩ =>
       authorizationRefund refund
-      let result ← Legacy.Trace.runFrame sink (Legacy.Frame.ofCall (resolveLegacyDelegation delegated)) runId
-      pure ⟨legacyOutput refund result.value, by
-        rw [legacyCall_eq msg hfork, hauth]
-        simp only [result.erases, Jaune.processMessage]
+      let frame := Frame.ofTop delegated.resolveCodeDelegation false
+      let result ← Trace.runFrame sink frame runId
+      let value : Except EvmError (State × MsgCallOutput) := do
+        let r ← result.value.mapError Fault.toEvmError
+        frame.output refund r
+      pure ⟨value, by
+        simp only [processMessageCall.call, hfork, hauth, value, result.erases, frame]
         rfl⟩
 
 /-- Trace the exact message operation invoked by `processTransaction`. -/
-def runMessage {m : Type → Type} [Monad m] (sink : Legacy.Trace.Sink m)
+def runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (msg : Msg) (runId : String) :
-    m (Certified (Jaune.Legacy.processMessageCall msg)) := do
+    m (Certified (processMessageCall msg)) := do
   if htarget : msg.target.isNone then
     let result ← runMessageCreate sink msg runId
     pure ⟨result.value, by
-      simpa [Jaune.Legacy.processMessageCall, htarget] using result.erases⟩
+      simpa [processMessageCall, htarget] using result.erases⟩
   else
     let result ← runMessageCall sink authorizationRefund msg runId
     pure ⟨result.value, by
-      simpa [Jaune.Legacy.processMessageCall, htarget] using result.erases⟩
+      simpa [processMessageCall, htarget] using result.erases⟩
 
 /-- Values crossing the existing transaction's execution boundary. -/
 structure PreparedTransaction where
@@ -371,7 +221,7 @@ def finishTransaction (prepared : PreparedTransaction) (tx : Transaction) (index
 theorem processTransaction_eq (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
     Jaune.processTransaction benv bout tx index = (do
       let prepared ← prepareTransaction benv bout tx index
-      let ⟨state, output⟩ ← Except.mapError TransitionError.vm (Jaune.Legacy.processMessageCall prepared.msg)
+      let ⟨state, output⟩ ← Except.mapError TransitionError.vm (Jaune.processMessageCall prepared.msg)
       finishTransaction prepared tx index state output) := by
   simp only [Jaune.processTransaction, prepareTransaction, finishTransaction,
     bind_assoc, pure_bind]
@@ -387,7 +237,7 @@ structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction
 Validation, fee/nonce preparation, message execution, gas/receipt settlement,
 SELFDESTRUCT and block-access bookkeeping are connected to the public pipeline
 by the certificate. The original transaction executor is never run a second time. -/
-def runTransaction {m : Type → Type} [Monad m] (sink : Legacy.Trace.Sink m)
+def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) (runId : String) :
     m (TransactionResult benv bout tx index) := do
   match hprep : prepareTransaction benv bout tx index with
@@ -419,7 +269,7 @@ theorem runTransaction_erasure {benv : Benv} {bout : BlockOutput} {tx : Transact
     (result : TransactionResult benv bout tx index) :
     result.value = Jaune.processTransaction benv bout tx index := result.erases
 
-theorem runTransaction_id_erasure (sink : Legacy.Trace.Sink Id)
+theorem runTransaction_id_erasure (sink : Trace.Sink Id)
     (authorizationRefund : Nat → Id Unit) (benv : Benv)
     (bout : BlockOutput) (tx : Transaction) (index : Nat) (runId : String) :
     (runTransaction sink authorizationRefund benv bout tx index runId).value =

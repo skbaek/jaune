@@ -5,8 +5,7 @@ import Jaune.Precompiles
 # The four-part message call: `enter` (goal `jaune-shape-and-names-v1`, W1 unit D)
 
 `enter` starts a frame: it moves the value, and either hands back a machine to run or, for a
-precompile or a failed value transfer, the frame's result at once. Staged under `Jaune.Staging`
-beside today's `Frame.enter`; nothing in today's interpreter reads it until the switch commit.
+precompile or a failed value transfer, the frame's result at once. Staged under a namespace of its own until the switch commit, which gave it its final names; nothing in today's interpreter reads it until the switch commit.
 
 This is the W1 form: the running machine is still today's `Evm`, built through
 `Message.sevm` and `Frame.State.toDevm`.

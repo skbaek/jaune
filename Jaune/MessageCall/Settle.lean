@@ -4,7 +4,7 @@ import Jaune.MessageCall
 # The four-part message call: `settle` (goal `jaune-shape-and-names-v1`, W1 unit C)
 
 `settle` turns a frame's raw result into what the frame hands back to its caller, a
-`Frame.Result`, or a fault. It is staged under `Jaune.Staging` beside today's `Frame.settle`, and
+`Frame.Result`, or a fault. It was staged until the switch commit gave it its final name, and
 nothing in today's interpreter reads it until the switch commit.
 
 This is the W1 form: the raw result is still today's `Execution`, over `Devm`. The final form,

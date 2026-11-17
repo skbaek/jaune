@@ -1,28 +1,40 @@
-import Jaune.Trace
-import Jaune.MessageCall.Exec
+import Jaune.MessageCall.Top
 
 /-!
 # The four-part message call: the trace driver (goal `jaune-shape-and-names-v1`, W1 unit K1)
 
 Today's streaming driver (`Jaune.Trace`) over the staged `Step`, `Frame`, `Frame.Entry` and
-settled `Frame.Result`. Staged under `Jaune.Staging.Trace`; nothing reads it until the switch
-(units I and K2). Like today's, this module sits outside `Jaune.lean`'s import closure.
+settled `Frame.Result`. Staged under a namespace of its own until the switch commit, which gave it its final names; the switch
+(units I and K2) moved the tracer onto it. Like today's, this module sits outside `Jaune.lean`'s import closure.
 
 The driver delivers the same events in the same order as today's, with the staged payloads. A
 caller's raw result after its child (`resumedRaw`) is the staged driver's own tail: a settlement
 fault, a resumption fault, a halt or the resumed machine. Each successful return carries a
-kernel-checked projection onto the staged driver, `Staging.execFueled`, as today's does onto
+kernel-checked projection onto the staged driver, `execFueled`, as today's does onto
 today's.
 
-The run identity `Context` and the certificate `CertifiedResult` are today's: neither mentions a
-message-call type. They move here with the switch.
+The run identity `Context` and the certificate `CertifiedResult` mention no message-call type;
+the switch moved them here from today's tracer, which now reads them from this module.
 -/
 
 namespace Jaune
 
 namespace Trace
 
-open Jaune.Legacy.Trace (Context CertifiedResult)
+/-- Explicit run identity plus a unique frame number and observed call depth.
+The depth here counts entered frames, unlike Sevm.depth's remaining allowance. -/
+structure Context where
+  runId : String
+  frame : Nat
+  depth : Nat
+  deriving Repr
+
+/-- Proof fields are erased at runtime. `nextFrame` is the next unused number,
+threaded across child execution and subsequent parent execution. -/
+structure CertifiedResult (expected : Fueled (EvmError × Devm) Devm) where
+  value : Fueled (EvmError × Devm) Devm
+  nextFrame : Nat
+  erases : value = expected
 
 /-- Today's events with the staged payloads. `instruction` carries the pre-state and the staged
 step; `entered` the staged frame and entry; `settled` the staged settled result. -/
@@ -191,18 +203,10 @@ def exec {m : Type → Type} [Monad m] (sink : Sink m) (evm : Evm)
 theorem exec_erasure {evm : Evm} (result : ExecutionResult evm) :
     result.value = Jaune.exec evm := result.erases
 
-/-- A top-level frame's settled result: entered from its checkpoint, run if it has code, and
-settled. The W1 form of the design note's `Frame.runTop` (second revision, §2.5), for the tracer's
-certificate; unit I's definition replaces it. -/
-def topResult (frame : Frame) : Except Fault Frame.Result :=
-  match enterWith frame frame.checkpoint.toDevm with
-  | .done result => result
-  | .run evm => settle frame (Jaune.exec evm)
-
 structure FrameResult (frame : Frame) where
   value : Except Fault Frame.Result
   nextFrame : Nat
-  erases : value = topResult frame
+  erases : value = Frame.runTop frame
 
 /-- The top-level frame boundary. A root precompile or failed transfer has no instruction
 events, but still has entry and settlement events. One invocation represents one identified
@@ -214,18 +218,18 @@ def runFrame {m : Type → Type} [Monad m] (sink : Sink m) (frame : Frame)
   | .done settled =>
     sink (.entered context frame (.done settled))
     sink (.settled context frame settled)
-    pure ⟨settled, 1, by simp only [topResult, hentry]⟩
+    pure ⟨settled, 1, by simp only [Frame.runTop, hentry]⟩
   | .run evm =>
     sink (.entered context frame (.run evm))
     let result ← exec sink evm context 1
     let settled := settle frame result.value
     sink (.settled context frame settled)
     pure ⟨settled, result.nextFrame, by
-      simp only [topResult, hentry, settled, result.erases]⟩
+      simp only [Frame.runTop, hentry, settled, result.erases]⟩
 
 /-- Exact connection to the top-level frame's settled result. -/
 theorem runFrame_erasure {frame : Frame} (result : FrameResult frame) :
-    result.value = topResult frame := result.erases
+    result.value = Frame.runTop frame := result.erases
 
 end Trace
 
