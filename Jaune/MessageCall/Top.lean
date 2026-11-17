@@ -8,7 +8,7 @@ on: `initDevm` of the message, or under Amsterdam's rules the state `prepareTopL
 returns. `Frame.runTop` enters it from that checkpoint, runs `exec` and settles. The transaction
 reads the settled `Frame.Result` through `Frame.output` and `Frame.outputAmsterdam`.
 
-W1 form: today's `Msg` is still the top-level message type, so `Message.ofLegacy` builds the
+W1 form: today's `Msg` is still the top-level message type, so `Message.ofTop` builds the
 frame's message from it.
 -/
 
@@ -18,7 +18,7 @@ open Jaune
 
 /-- Today's message as a frame message. `isCreate` gives the kind; today it is the frame's
 flag, not the message's. -/
-def Message.ofLegacy (msg : Msg) (isCreate : Bool) : Message :=
+def Message.ofTop (msg : Msg) (isCreate : Bool) : Message :=
   { context :=
       { caller := msg.caller, recipient := msg.currentTarget, value := msg.value
         calldata := msg.data, code := msg.code, depthLeft := msg.depth
@@ -33,7 +33,7 @@ def Message.ofLegacy (msg : Msg) (isCreate : Bool) : Message :=
 
 /-- A top-level frame: the checkpoint is the state its message starts on. -/
 def Frame.ofTop (msg : Msg) (isCreate : Bool) : Frame :=
-  ⟨Message.ofLegacy msg isCreate, Frame.State.ofDevm (initDevm msg)⟩
+  ⟨Message.ofTop msg isCreate, Frame.State.ofDevm (initDevm msg)⟩
 
 /-- Run a top-level frame: enter it from its checkpoint, run the code, settle. -/
 def Frame.runTop (f : Frame) : Except Fault Frame.Result :=

@@ -28,7 +28,7 @@ def runTopLevelAmsterdam {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     pure ⟨settleTopLevelPreparationFailure msg error devm, by
       simp only [processTopLevelAmsterdam, hprep]⟩
   | .ok ⟨preparedMsg, devm⟩ =>
-    let frame : Frame := ⟨Message.ofLegacy preparedMsg isCreate, Frame.State.ofDevm devm⟩
+    let frame : Frame := ⟨Message.ofTop preparedMsg isCreate, Frame.State.ofDevm devm⟩
     let result ← Trace.runFrame sink frame runId
     let value : Except EvmError (State × MsgCallOutput) := do
       let r ← result.value.mapError Fault.toEvmError

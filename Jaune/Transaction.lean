@@ -768,7 +768,7 @@ def processTopLevelAmsterdam (state : StateGasRules) (msg : Msg) (isCreate : Boo
   match prepareTopLevelAmsterdam state msg with
   | .error ⟨error, devm⟩ => settleTopLevelPreparationFailure msg error devm
   | .ok ⟨msg, devm⟩ => do
-    let f : Frame := ⟨Message.ofLegacy msg isCreate, Frame.State.ofDevm devm⟩
+    let f : Frame := ⟨Message.ofTop msg isCreate, Frame.State.ofDevm devm⟩
     let r ← (Frame.runTop f).mapError Fault.toEvmError
     f.outputAmsterdam r
 

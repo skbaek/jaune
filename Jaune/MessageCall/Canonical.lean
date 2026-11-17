@@ -697,7 +697,7 @@ theorem Frame.ofTop_canonical {msg : Msg} (h : msg.Canonical) (isCreate : Bool) 
 
 theorem Frame.prepared_canonical {msg : Msg} {d : Devm} (hd : d.Canonical)
     (hm : msg.Canonical) (isCreate : Bool) :
-    Frame.Canonical ⟨Message.ofLegacy msg isCreate, Frame.State.ofDevm d⟩ :=
+    Frame.Canonical ⟨Message.ofTop msg isCreate, Frame.State.ofDevm d⟩ :=
   ⟨hd, hm.1.2⟩
 
 

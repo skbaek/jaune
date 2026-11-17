@@ -8,7 +8,7 @@ and 8)
   and no code address; one built by a call tail has kind `.call` and a code address. So every
   message `Evm.step` spawns satisfies `Message.KindCoherent`: `kind = .create ↔ codeAddress = none`
   (`Evm.step_spawn_kindCoherent`). A top-level frame's message is coherent exactly when its
-  creation flag agrees with its `Msg`'s code address (`Message.ofLegacy_kindCoherent_iff`);
+  creation flag agrees with its `Msg`'s code address (`Message.ofTop_kindCoherent_iff`);
   `prepareMessage` builds a `Msg` whose code address is absent exactly when its target is
   (`prepareMessage_codeAddress_eq_none_iff`), and the creation flag `processMessageCall` passes is
   `msg.target.isNone`; top-level delegation resolution only ever sets a code address
@@ -273,9 +273,9 @@ theorem MessageOp.step_spawn_call_checkpoint {sevm : Sevm} {devm : Devm} {x : Me
 
 /-- A top-level frame's message is coherent exactly when its creation flag agrees with its
 `Msg`'s code address. -/
-theorem Message.ofLegacy_kindCoherent_iff (msg : Msg) (isCreate : Bool) :
-    (Message.ofLegacy msg isCreate).KindCoherent ↔ (isCreate = true ↔ msg.codeAddress = none) := by
-  unfold Message.KindCoherent Message.ofLegacy
+theorem Message.ofTop_kindCoherent_iff (msg : Msg) (isCreate : Bool) :
+    (Message.ofTop msg isCreate).KindCoherent ↔ (isCreate = true ↔ msg.codeAddress = none) := by
+  unfold Message.KindCoherent Message.ofTop
   cases isCreate <;> simp
 
 /-- `prepareMessage` gives a creation (no target) exactly no code address. -/
@@ -299,14 +299,14 @@ coherent. -/
 theorem prepareMessage_create_kindCoherent {benv : Benv} {tenv : Tenv} {tx : Transaction}
     {msg : Msg} (h : prepareMessage benv tenv tx = .ok msg) (hc : msg.target = none) :
     (Frame.ofTop msg true).message.KindCoherent := by
-  refine (Message.ofLegacy_kindCoherent_iff msg true).mpr ?_
+  refine (Message.ofTop_kindCoherent_iff msg true).mpr ?_
   exact iff_of_true rfl ((prepareMessage_codeAddress_eq_none_iff h).mpr hc)
 
 /-- The top-level call frame `processMessageCall.call` runs (pre-Amsterdam, on a message with a
 target and after delegation resolution) is coherent. -/
 theorem resolveCodeDelegation_call_kindCoherent {msg : Msg} (h : msg.codeAddress ≠ none) :
     (Frame.ofTop msg.resolveCodeDelegation false).message.KindCoherent := by
-  refine (Message.ofLegacy_kindCoherent_iff _ false).mpr ?_
+  refine (Message.ofTop_kindCoherent_iff _ false).mpr ?_
   exact iff_of_false (by simp) (fun e => h (Msg.resolveCodeDelegation_codeAddress_eq_none e))
 
 /-- The top frame `processMessageCall msg` runs, when it runs one. Without state gas: a creation's
@@ -323,7 +323,7 @@ inductive processMessageCall.TopFrame (msg : Msg) : Frame → Prop
   | amsterdam {state : StateGasRules} (hs : msg.benv.stat.rules.stateGas = some state)
       {p : Msg × Devm} (hp : prepareTopLevelAmsterdam state msg = .ok p) :
       processMessageCall.TopFrame msg
-        ⟨Message.ofLegacy p.1 msg.target.isNone, Frame.State.ofDevm p.2⟩
+        ⟨Message.ofTop p.1 msg.target.isNone, Frame.State.ofDevm p.2⟩
 
 /-- **Every top-level frame is kind-coherent.** For a message a transaction prepares, the top
 frame `processMessageCall` runs has kind `.create` exactly when it has no code address: the
@@ -340,7 +340,7 @@ theorem processMessageCall.topFrame_kindCoherent {benv : Benv} {tenv : Tenv} {tx
       (processMessageCall.authorize_codeAddress ha (fun e => ht (hca.mp e)))
   | amsterdam _ hp =>
     obtain ⟨htarget, hcreate, hcall⟩ := prepareTopLevelAmsterdam_message hp
-    refine (Message.ofLegacy_kindCoherent_iff _ _).mpr ?_
+    refine (Message.ofTop_kindCoherent_iff _ _).mpr ?_
     cases ht : msg.target with
     | none => simp [hcreate ht, hca.mpr ht]
     | some a =>
