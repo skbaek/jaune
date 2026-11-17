@@ -33,6 +33,8 @@ import Jaune.NativePrecompile
 import Jaune.Sufficiency
 import Jaune.MessageCall.StepGas
 import Jaune.MessageCall.Totality
+import Jaune.MessageCall.StateGasZero
+import Jaune.MessageCall.MemoryAccounting
 import Jaune.ExecFrame
 import Jaune.ExecFrameRel
 import Jaune.Exec

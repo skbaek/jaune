@@ -219,7 +219,7 @@ The successful charge prepays the same input/output windows that the actual
 spawn retains. The same child derivation supplies its settlement gas bound;
 resumption copies exactly its truncated output without expanding parent memory.
 This is a local clause, not the recursive child memory/output invariant. -/
-theorem zero_call_spawn_resume_accounting
+theorem Legacy.zero_call_spawn_resume_accounting
     {sevm : Sevm} {before charged resumed : Devm} (gas : U256)
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
@@ -608,7 +608,7 @@ private theorem call_run_memory_output (parent : Devm) (outputIndex outputSize :
 
 /-- The same actual zero-value CALL charge/spawn/child derivation accounts for
 both raw resume outcomes, with enclosing output inherited from the caller. -/
-theorem zero_call_spawn_resume_raw_accounting
+theorem Legacy.zero_call_spawn_resume_raw_accounting
     {sevm : Sevm} {before charged : Devm} (gas : U256)
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
@@ -672,7 +672,7 @@ theorem zero_call_spawn_resume_raw_accounting
   · rw [hresume] at ho
     dsimp only at ho ⊢
     obtain ⟨child, hsettle, hchild, hmem, hsize, haccount⟩ :=
-      zero_call_spawn_resume_accounting gas extraGas cs inputIndex inputSize outputIndex
+      Legacy.zero_call_spawn_resume_accounting gas extraGas cs inputIndex inputSize outputIndex
         outputSize hcharge hspawn henter hexec hresume
     exact ⟨haccount, ho.trans hparentOutput⟩
 
@@ -3193,7 +3193,7 @@ private theorem call_resume_returnData_lt_two_pow_160
 /-- The same initialized code child of an actual zero-value CALL has a paid
 full output and a natural reply length below (2^160). Settlement and both raw
 resume outcomes retain that full return-data bound, including push failure. -/
-theorem zero_call_spawn_code_reply_bound
+theorem Legacy.zero_call_spawn_code_reply_bound
     {sevm : Sevm} {before charged : Devm} (gas : U256)
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
@@ -3283,7 +3283,7 @@ theorem zero_call_spawn_code_reply_bound
           dsimp only at hfields ⊢
           rw [hfields]
           exact hl
-  have haccount := zero_call_spawn_resume_raw_accounting gas extraGas cs inputIndex inputSize
+  have haccount := Legacy.zero_call_spawn_resume_raw_accounting gas extraGas cs inputIndex inputSize
     outputIndex outputSize hcharge hspawn henter hexec
   refine ⟨hcost, hlength, hsettled, ?_⟩
   rcases hr : resume.run (frame.settle raw) with failure | post
@@ -3297,7 +3297,7 @@ both raw channels, including the value-bearing stipend case. Settlement can
 only shorten that output, and either parent resume channel receives bounded
 return data. The recursive execution's memory potential supplies the bound;
 the caller's output window is not used as a substitute for the full reply. -/
-theorem call_spawn_code_reply_bound
+theorem Legacy.call_spawn_code_reply_bound
     {sevm : Sevm} {parent : Devm} (gas value : U256)
     (gasLeft memoryCost extraGas inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
@@ -3344,7 +3344,7 @@ theorem call_spawn_code_reply_bound
 /-- A failed value transfer never enters code or a precompile. Its actual
 CALL resume inherits the empty return-data buffer installed at spawn, even
 when the parent's stack push itself fails. -/
-theorem call_spawn_transfer_error_reply_bound
+theorem Legacy.call_spawn_transfer_error_reply_bound
     {sevm : Sevm} {parent : Devm} (grant : Nat) (value : U256)
     (inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
@@ -3657,7 +3657,7 @@ theorem executePrecompile_id_ok_output {evm : Evm} {post : Devm}
 
 /-- The real zero-value CALL grant is a word-bounded MODEXP gas reservoir;
 its selected native reply therefore meets the full return-data bound. -/
-theorem zero_call_spawn_modexp_reply_bound
+theorem Legacy.zero_call_spawn_modexp_reply_bound
     {sevm : Sevm} {before charged : Devm} (gas : U256)
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
@@ -3683,7 +3683,7 @@ theorem zero_call_spawn_modexp_reply_bound
 
 /-- An identity reply from the real spawned zero-value CALL frame is bounded
 by the caller's paid input memory, even if the precompile returns all input. -/
-theorem zero_call_spawn_id_reply_bound
+theorem Legacy.zero_call_spawn_id_reply_bound
     {sevm : Sevm} {before charged : Devm}
     (baseCost gas inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
@@ -3985,7 +3985,7 @@ theorem executePrecompile_ok_output_length_lt_two_pow_160
 
 /-- The real zero-value CALL spawn supplies both physical premises needed by
 every selected native precompile, including identity and MODEXP. -/
-theorem zero_call_spawn_native_reply_bound
+theorem Legacy.zero_call_spawn_native_reply_bound
     {sevm : Sevm} {before charged : Devm}
     (baseCost : Nat) (gas : U256)
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
@@ -4066,7 +4066,7 @@ theorem executeCode_enter_native_error_output_nil
 
 /-- A successful native branch of the actual zero-value CALL frame enters as
 a settled result, and its full raw reply satisfies the natural size bound. -/
-theorem zero_call_spawn_native_enter_success
+theorem Legacy.zero_call_spawn_native_enter_success
     {sevm : Sevm} {before charged : Devm}
     (baseCost : Nat) (gas : U256)
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
@@ -4171,7 +4171,7 @@ private theorem call_spawn_native_enter_success_input_or_potential
       ((charged.memExtends [(inputIndex, inputSize), (outputIndex, outputSize)]).withReturnData [])
       outputIndex outputSize (frame.settle (.ok post)) rfl hsettled
 
-theorem call_spawn_native_enter_success
+theorem Legacy.call_spawn_native_enter_success
     {sevm : Sevm} {before charged : Devm}
     (baseCost : Nat) (gas value : U256)
     (extraGas inputIndex inputSize outputIndex outputSize : Nat)
@@ -4204,7 +4204,7 @@ theorem call_spawn_native_enter_success
 /-- A rejected native precompile starts with empty output. Even when its
 settlement fails or the parent's stack push fails, CALL return data stays
 strictly below the natural width. This clause also covers nonzero-value CALL. -/
-theorem call_spawn_native_enter_error
+theorem Legacy.call_spawn_native_enter_error
     {sevm : Sevm} {parent : Devm} (grant : Nat) (value : U256)
     (inputIndex inputSize outputIndex outputSize : Nat)
     {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
@@ -4274,7 +4274,7 @@ private theorem call_spawn_enter_reply_bound_input_or_potential
         | .error failure => failure.2.returnData.length < 2 ^ 160 := by
   cases ht : frame.inner.benvAfterTransfer with
   | error transferFailure =>
-      have hf := call_spawn_transfer_error_reply_bound
+      have hf := Legacy.call_spawn_transfer_error_reply_bound
         (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
           (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
           extraGas Gas.callStipend).2 value inputIndex inputSize outputIndex outputSize
@@ -4288,7 +4288,7 @@ private theorem call_spawn_enter_reply_bound_input_or_potential
             simp only [Legacy.Frame.enter, ht, hd]
           rw [he]
           intro raw hexec
-          exact (call_spawn_code_reply_bound gas value before.gasLeft
+          exact (Legacy.call_spawn_code_reply_bound gas value before.gasLeft
             (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
             extraGas inputIndex inputSize outputIndex outputSize
             hspawn he hexec hstate).2.2
@@ -4301,7 +4301,7 @@ private theorem call_spawn_enter_reply_bound_input_or_potential
               rw [hf.1]
               exact hf.2.2
           | error failure =>
-              have hf := call_spawn_native_enter_error
+              have hf := Legacy.call_spawn_native_enter_error
                 (calculateMsgCallGas value.toNat gas.toNat before.gasLeft
                   (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
                   extraGas Gas.callStipend).2 value inputIndex inputSize outputIndex
@@ -4309,7 +4309,7 @@ private theorem call_spawn_enter_reply_bound_input_or_potential
               rw [hf.1]
               exact hf.2
 
-theorem call_spawn_enter_reply_bound
+theorem Legacy.call_spawn_enter_reply_bound
     {sevm : Sevm} {before charged : Devm}
     (baseCost : Nat) (gas value : U256)
     (extraGas inputIndex inputSize outputIndex outputSize : Nat)
