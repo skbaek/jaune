@@ -46,9 +46,22 @@ outcome. `interpreter` reads the total `Jaune.exec` result through adequacy.
 `Jaune.SymbolicArith` covers `ADD`, `SUB` and `MUL` (the `Op` family) with a
 success rule, an out-of-gas rule and a stack-underflow rule, plus `prepend` for
 composing a decoded instruction with a continuation. Other binary opcodes are
-not family members. Two `#guard_msgs` checks at the end of the example keep the
-build red if a gas premise one short, or the `ADD` rule applied to `DIV`, ever
-elaborates.
+not family members. Two `#guard_msgs` checks keep the build red if the `ADD`
+rule applied to `DIV` (after the final-state observations), or a gas premise
+one short (at the end of the file), ever elaborates.
+
+## Message calls in four parts
+
+[ShapePilot.lean](ShapePilot.lean) runs two message calls through `enter`,
+`exec`, `Frame.runTop` and `processMessageCall`. A Prague caller CALLs a child
+that writes storage and a log and then reverts with the byte `0xAA`; the caller
+receives the byte and keeps neither the slot nor the log. An Amsterdam caller
+CREATEs a child whose code deposit runs out of gas; the caller keeps its
+incremented nonce and the warmed new address, loses the deployment and is
+refunded the new account's state gas. Two `#guard` checks pin these
+observations. The theorems `call_return_survival` and `create_return_survival`
+derive the caller's state after each failed child from the `resume` lemmas, at
+any spawn a top-level frame's run reaches, without unfolding a concrete state.
 
 ## Transaction entry
 

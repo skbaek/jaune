@@ -215,7 +215,7 @@ fails on any un-allowlisted `axiom`, `opaque`, `@[extern]`, `@[implemented_by]`,
 the external-consumer smoke source, alongside the original `dbg_trace` and
 `sorry`. Every one of these counts is zero except one: the allowlist carries
 exactly one row, the proved `@[csimp]` substitution `execFueled_eq_cached`
-in `Jaune/Impl/CachedExec.lean`. It is a kernel-checked equality
+in `Jaune/Implementation/CachedDriver.lean`. It is a kernel-checked equality
 `execFueled = execFueledCached`, and it makes the compiled binary run the
 calldata-sharing implementation. The row's written justification is in the
 allowlist. So the claim this document makes about Jaune's trusted path is
@@ -285,13 +285,13 @@ an unclassified defect — but it is an exception, and 56 of them is the honest
 count of places where the strong reading of "no raw bang operations, no
 stringly-typed errors" does not literally hold.
 
-**Twenty-five `Jaune/` modules are outside the gate's closure.** None is in
+**Twenty-six `Jaune/` modules are outside the gate's closure.** None is in
 `Jaune.lean`'s transitive import closure, so R2 and R3 do not inventory them:
 the runner-side adapters (`Jaune/ChainStore.lean`, `Jaune/FixtureException.lean`,
-`Jaune/FixtureTransition.lean`, `Jaune/T8n.lean`, `Jaune/Trace.lean`,
-`Jaune/TraceJson.lean`, `Jaune/TraceTransaction.lean`, `Jaune/Adapter/Io.lean`),
-the executable checks (`Jaune/BLSGuards.lean` and the fifteen
-`Jaune/Check/*.lean` modules, library `JauneChecks`), and
+`Jaune/FixtureTransition.lean`, `Jaune/T8n.lean`, `Jaune/MessageCall/Trace.lean`,
+`Jaune/MessageCall/TraceJson.lean`, `Jaune/TraceTransaction.lean`,
+`Jaune/Adapter/IO.lean`), the executable checks (`Jaune/BLSGuards.lean` and the
+sixteen `Jaune/Check/*.lean` modules, library `JauneChecks`), and
 `Jaune/StaticcallEffects.lean`, a proof module only the axiom-audit union
 imports. `scripts/layering.json` classifies each. This is deliberate — none is
 consensus surface, and no module of the closure imports one — and R1 and the

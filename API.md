@@ -26,9 +26,9 @@ individual declarations one by one.
 
 | class | meaning | what it covers |
 |---|---|---|
-| **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The eight canonical execution modules: `Jaune.ExecFrame`, `Jaune.Exec`, `Jaune.ExecDeriv`, `Jaune.ExecSettlement`, `Jaune.ExecChronology`, `Jaune.MessageExecution`, `Jaune.SymbolicPush`, `Jaune.SymbolicArith`. Also the entry-point families named in sections 3–5, such as `exec`, `processMessage`, `processTransaction`, the checked chain types, and `State`/`Storage` access, and the lemma families and modules named in section 6. |
-| **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration (section 6 lifts named families out of this class) in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.Sufficiency`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Also the `Fueled` residue lemmas in `Jaune.Fuel`, and the cached driver `Jaune.Impl.CachedExec` (an implementation module, reached through `Jaune.Sufficiency`). Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.FixtureTransition`, `Jaune.Trace`, `Jaune.TraceJson`, `Jaune.TraceTransaction`, `Jaune.Adapter.Io`, `Main`, `MemoryProbe`, `TraceMain`) are adapters, and the executable checks (`Jaune.BLSGuards` and the `Jaune.Check.*` modules, library `JauneChecks`) are checks; neither is proof surface. `scripts/layering.json` classifies every module. `Jaune.Bridge.*` modules hold a convergence gate's old definitions and their bridge theorems until the gate's tagged commit, and are deleted in the commit after it. |
-| **experimental** | Implemented and gated, but expected to change as its upstream target moves. | The Amsterdam lane: `amsterdamRules`, the `StateGasRules` / `stateGas` dimension, `genericCallAmsterdam` / `genericCreateAmsterdam` and their lemmas, `executeCode.handleErrorAmsterdam`, and the `BlockAccessList` / `BlockAccessList*` family. Also the reusable axiom-audit command `#expect_axioms` (`scripts/AxiomAudit.lean`, library `Assurance`). |
+| **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The eight canonical execution modules: `Jaune.ExecFrame`, `Jaune.Exec`, `Jaune.ExecDeriv`, `Jaune.ExecSettlement`, `Jaune.ExecChronology`, `Jaune.MessageExecution`, `Jaune.SymbolicPush`, `Jaune.SymbolicArith`. Also the entry-point families named in sections 3–5, such as `exec`, `Frame.runTop`, `processMessageCall`, `processTransaction`, the checked chain types, and `State`/`Storage` access, and the lemma families and modules named in section 6. |
+| **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration (section 6 lifts named families out of this class) in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.Sufficiency`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Also the `Fueled` residue lemmas in `Jaune.Fuel`, and the cached driver `Jaune.Implementation.CachedDriver` (an implementation module whose declarations are private, reached through `Jaune.MessageCall.Exec`). Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.FixtureTransition`, `Jaune.MessageCall.Trace`, `Jaune.MessageCall.TraceJson`, `Jaune.TraceTransaction`, `Jaune.Adapter.IO`, `Main`, `MemoryProbe`, `TraceMain`) are adapters, and the executable checks (`Jaune.BLSGuards` and the `Jaune.Check.*` modules, library `JauneChecks`) are checks; neither is proof surface. `scripts/layering.json` classifies every module. `Jaune.Bridge.*` modules hold a convergence gate's old definitions and their bridge theorems until the gate's tagged commit, and are deleted in the commit after it. |
+| **experimental** | Implemented and gated, but expected to change as its upstream target moves. | The Amsterdam lane: `amsterdamRules`, the `StateGasRules` / `stateGas` dimension, `genericCallAmsterdam` / `genericCreateAmsterdam` and their lemmas, the state-gas arms of `settle` and `resume`, and the `BlockAccessList` / `BlockAccessList*` family. Also the reusable axiom-audit command `#expect_axioms` (`scripts/AxiomAudit.lean`, library `Assurance`). |
 
 A module's class applies to all of its declarations unless this guide says
 otherwise. `private` declarations are never API.
@@ -63,8 +63,10 @@ Each imports `Jaune.Exec`.
 **Decoding.** The decode predicates are `NextOp.At`, `HaltOp.At`, `JumpOp.At`,
 `PlainOp.At` and `MessageOp.At` (in `Jaune.ExecFrame`). Each says that
 `code.getOp pc` returns the named instruction. To turn a decode fact into the
-step equation that the `Exec` constructors take, use `Evm.step_next`,
-`Evm.step_last` or `Evm.step_jump`. The examples decode concrete bytecode
+step equation that the `Exec` constructors take, use `Evm.step_of_next` (a
+decoded `NextOp` steps by `NextOp.step`) or `Evm.step_of_halt` (a decoded
+`HaltOp` halts with its own result), both in `Jaune.Exec`. There is no such
+lemma for a decoded jump. The examples decode concrete bytecode
 with one `simp` lemma list followed by `rfl`
 ([`Examples/Execution.lean#L14`](Examples/Execution.lean#L14)); reuse that list.
 
@@ -75,7 +77,9 @@ the program counter are all variables.
 - `step_outOfGas` returns the input state unchanged.
 - `step_stackOverflow` keeps the gas charge in the raw error.
 
-The gas check comes before the stack-capacity check. `prepend` composes a
+The gas check comes before the stack-capacity check. These three, and the
+arithmetic rules below, are equations about `NextOp.step`; `Evm.step_of_next`
+turns each into an `Evm.step` equation. `prepend` composes a
 decoded PUSH with any complete continuation. `cost`, `post` and `afterCharge`
 name the charged quantities.
 
@@ -87,9 +91,9 @@ name the charged quantities.
 - `step_stackUnderflow` fires before any gas is charged.
 
 `prepend` composes as for PUSH. Other binary opcodes (`DIV`, `MOD`, shifts,
-comparisons) are **not** members of `Op`. The second negative check in
-`Examples/Arithmetic.lean` keeps it that way: the `ADD` rule applied to `DIV`
-must fail to elaborate.
+comparisons) are **not** members of `Op`. The first negative check in
+`Examples/Arithmetic.lean` (line 121) keeps it that way: the `ADD` rule
+applied to `DIV` must fail to elaborate.
 
 These are direct-frame step equations. They make no claim about transaction
 validity or message settlement, and they are not an all-opcodes rule set.
@@ -97,15 +101,15 @@ validity or message settlement, and they are not an all-opcodes rule set.
 ## 2. Complete raw-frame execution
 
 **Demonstrated task.** Compose a multi-step run by inversion.
-[`Examples.Arithmetic.result`](Examples/Arithmetic.lean#L133) takes an
+[`Examples.Arithmetic.result`](Examples/Arithmetic.lean#L192) takes an
 *arbitrary* `Exec` derivation from the start state. It peels off the three
-continuing steps with the example-local inversion `next` (line 120), then
+continuing steps with the example-local inversion `next` (line 180), then
 settles `STOP` with `Exec.halt_inv`. So every derivation has the stated
 outcome, not just the one that was built.
-[`interpreter`](Examples/Arithmetic.lean#L143) reads the answer of the total
-interpreter `exec` through adequacy. [`concrete`](Examples/Arithmetic.lean#L177)
-shows that the premises can be met, at `g = 9` and `s = []`. The first negative
-check (line 193) keeps the build red if eight gas were ever accepted.
+[`interpreter`](Examples/Arithmetic.lean#L202) reads the answer of the total
+interpreter `exec` through adequacy. [`concrete`](Examples/Arithmetic.lean#L208)
+shows that the premises can be met, at `g = 9` and `s = []`. The second negative
+check (line 219) keeps the build red if eight gas were ever accepted.
 
 **Imports.** `import Jaune.Exec` gives the type, the constructors, inversion
 and adequacy. Add `Jaune.ExecDeriv` for induction and subderivation order,
@@ -125,10 +129,13 @@ It has six constructors:
 | `runErr` / `runOk` | the spawned frame ran a child derivation that is kept as a premise |
 
 Every premise other than a sub-derivation is an equation about a
-non-recursive function (`Evm.step`, `Frame.enter`, `Resume.run`,
-`Frame.settle`). Child results, settlement, gas and the resumed parent state
-all stay visible in the derivation. `Xlot.Filled` and `NextOp.Run` package an
-optional child derivation for frame-level statements.
+non-recursive function of the four-part message call (section 3): `Evm.step`,
+`enter`, `settle`, and `resumeCaller`, which runs `resume` and ends the run on a
+fault or a halted caller. Child results, settlement, gas and the resumed parent
+state all stay visible in the derivation. For frame-level statements,
+`Frame.Returns child r` says that `r` is a result the driver hands back from
+`child`, and `NextOp.Run` packages one nonterminal instruction with any child it
+spawns (both in `Jaune.MessageCall.DriverInvariants`).
 
 **Inversion.** `Exec.halt_inv` says the root step's halt value is the outcome.
 `Exec.last_inv` does the same from a `HaltOp.At` decode. For a continuing step,
@@ -138,9 +145,11 @@ in the example, not the library.
 **Adequacy.** `exec_iff_exec_eq pc sevm devm out` states
 `Nonempty (Exec pc sevm devm out) ↔ exec ⟨pc, sevm, devm⟩ = out`. It is
 fuel-free: `exec` is total, and the sufficiency proof discharges the fuel bound
-once. `Xlot.filled_exec` gives a closed derivation for any `exec` result.
-`of_runFrame`, `of_processMessage` and `of_processCreateMessage` produce the
-frame-level witnesses.
+once (`execFueled_run_sufficientFuel`). `Exec.nonempty evm` gives a closed
+derivation of `exec evm` for any machine. At frame level,
+`Frame.Returns.of_exec` names the result of a child entered and run through
+`exec`, and `MessageExecution.runTop_eq_settle_exec_of_enter` gives
+`Frame.runTop f = settle f (exec evm)` for a frame entered into the interpreter.
 
 **Traversal and observations.**
 
@@ -171,43 +180,94 @@ already complete.
 
 ## 3. Frame, message and transaction execution
 
-**Demonstrated task.** The transaction-entry example is finite and checked. It
-is not a theorem. The checked-in `transfer-blockchain` case selects Prague,
-sends one wei to a contract, runs that contract's `SSTORE`, and compares the
-full result and post-state allocation against registered goldens:
+**Demonstrated task.** [`Examples/ShapePilot.lean`](Examples/ShapePilot.lean)
+runs two message calls through `enter`, `exec`, `Frame.runTop` and
+`processMessageCall` and checks what they leave with `#guard`: a Prague CALL
+whose child writes storage and a log and then reverts with one byte, and an
+Amsterdam CREATE whose code deposit runs out of gas. Its theorems
+`call_return_survival` and `create_return_survival` apply the `resume` lemmas
+below at any spawn that a top-level frame's run reaches, without unfolding a
+concrete state.
+
+The transaction-entry example is finite and checked. It is not a theorem. The
+checked-in `transfer-blockchain` case selects Prague, sends one wei to a
+contract, runs that contract's `SSTORE`, and compares the full result and
+post-state allocation against registered goldens:
 
 ```sh
 scripts/check-t8n.sh --case transfer-blockchain
 ```
 
 See [Examples/README.md, Transaction entry](Examples/README.md#transaction-entry).
-No example in this repository composes the message-settlement theorems below;
-they are proved, but no checked example exercises them yet.
 
-**Imports.** Use `import Jaune.MessageExecution` for raw-to-settled message
-bridges. `import Jaune.ExecFrame` gives the frame relations; `Jaune.Exec`
-already imports it. Use `import Jaune.Transaction` for transaction and block
-processing.
+**Imports.** Use `import Jaune.MessageExecution` for the adapters between
+`exec` and a settled top-level frame, `import Jaune.MessageCall.ResumeFacts` for
+what `resume` does with a child's result, and
+`import Jaune.MessageCall.DriverInvariants` for the same facts at a spawn a run
+reaches. `Jaune.Exec` already imports the definitions of the message call. Use
+`import Jaune.Transaction` for transaction and block processing.
 
-**Frames and messages.**
+**The message call in four parts.** The types are in `Jaune.MessageCall`, each
+part in a module of its own below it.
 
-- `processMessage` and `processCreateMessage` (defined in `Jaune.Sufficiency`)
-  are the total message functions. `runFrame` is the shared frame driver
-  beneath them.
-- `RunFrame`, `ProcessMessage` and `ProcessCreateMessage` are their relational
-  forms over an optional child derivation (`Xlot`). `RunFrame.iff_settleMsg`
-  and `ProcessMessage.iff_body` unfold them.
-- `Jaune.MessageExecution` connects `exec (initEvm msg)` to `processMessage msg`:
-  - `processMessage_eq_settle_exec` and its `afterTransfer`, `of_enter` and
-    `of_notPrecompile` variants give the equation.
-  - `processMessage_clean_of_exec`, `processMessage_revert_of_exec` and
-    `processMessage_halt_of_exec` give the outcome cases. `settledRevert` and
-    `settledHalt` name the settled machines and come with `@[simp]`
-    projections.
+- A `Frame` is one `Message` and one checkpoint: the `Frame.State` a failed
+  frame falls back to. The checkpoint is the saved caller after call
+  preparation, or for a top-level frame the state its message was prepared
+  on. `Frame.State` groups a frame's dynamic state by what happens to it when
+  the frame fails: the `Machine` is local to the frame, the `World` and the
+  `Substate` are dropped, and the `Trail` is kept. Call versus create is the
+  message's `kind`.
+- `Evm.step` (`Jaune.MessageCall.Step`) runs one instruction. It halts with a
+  raw `Execution`, goes on at a new program counter, or spawns a child `Frame`
+  with a `Pending` continuation.
+- `enter` (`Jaune.MessageCall.Enter`) transfers the value. It then hands back
+  a machine to run, or a result at once: a precompile's, or a fault from a
+  failed transfer.
+- `settle` (`Jaune.MessageCall.Settle`) turns a frame's raw `Execution` into a
+  `Frame.Result` (`success`, `revert` or `halt`), or into a `Fault`, a
+  cryptographic or internal error that ends the run. A creation deposits its
+  code here.
+- `resume` (`Jaune.MessageCall.Resume`) hands the result back to the saved
+  caller. It merges the child's state into the caller's by lifetime, then runs
+  the calling opcode's push and output write.
+- `execFueled` (`Jaune.MessageCall.Driver`) is the fuel-bounded driver over
+  these four, and `exec` (`Jaune.MessageCall.Exec`) is the total interpreter
+  over it. The compiled code runs a cached twin of the driver,
+  `Jaune.Implementation.CachedDriver`, through a proved `@[csimp]` equation;
+  see [TRUSTED.md](TRUSTED.md).
+- `Frame.runTop` (`Jaune.MessageCall.Top`) runs a top-level frame: it enters
+  the frame from its checkpoint, runs `exec`, and settles. `Frame.ofTop msg
+  isCreate` builds a top-level frame from a `Msg`.
+
+**What is proved about it.**
+
+- `Jaune.MessageExecution` connects `exec` to `Frame.runTop`, in namespace
+  `MessageExecution`:
+  - `runTop_eq_settle_exec_of_enter` gives the equation.
+  - `enterWith_eq_run_of_notPrecompile`, `enterWith_eq_run_of_noCodeAddress`
+    and `enterWith_eq_run_of_disablePrecompiles` discharge the entry.
+  - `settle_ok_call`, `settle_revert` and `settle_halt` give the outcome
+    cases, and `worldAfter_of_failed` says that a failed result leaves the
+    checkpoint's world.
+- `Jaune.MessageCall.ResumeFacts` says what `resume` does, relative to the
+  saved caller and with no induction over the interpreter. `resume_failed`: a
+  failed child leaves the caller's world and substate as saved, except the
+  one touch of RIPEMD-160's address that a rule keeps, and the caller takes
+  the child's trail. `returnedMachine_failed_call` and
+  `returnedMachine_failed_create` give the calling opcode's effect on the
+  caller's machine. `resume_success` covers a successful child.
+  `Evm.Reaches.resume_failed` and `Evm.Reaches.resume_success` restate them at
+  a spawn a run reaches, with their stack-room and state-gas premises
+  discharged by run invariants.
 - `Jaune.ExecSettlement` gives commitment: `Execution.commits`,
   `Frame.settlementCommits` and `Frame.raw_commits_of_settlementCommits`.
 
-**Transactions.** `processMessageCall` is the top-level message dispatch.
+**Transactions.** `processMessageCall` is the top-level message dispatch. It
+runs the steps before the frame (without state gas, the collision test for a
+creation and the authorization and delegation resolution for a call; under
+Amsterdam's rules, `prepareTopLevelAmsterdam`), then the frame by
+`Frame.runTop`, and renders its
+result for the transaction with `Frame.output` or `Frame.outputAmsterdam`.
 `processTransaction benv bout tx index` validates and applies one transaction.
 The command-line entry for transactions is `lake exe jaune t8n`; see
 [README.md](README.md#the-t8n-transition-tool). `jaune t8n --forks` prints the
@@ -317,9 +377,9 @@ public codec meant for concrete evidence gets a structural twin and a
 | comparison flags and literal arithmetic | `Jaune.WordFacts` | `U256.{eq,lt,gt}Check_{ne,eq}_zero_iff`, `U256.eq_of_eqCheck_ne_zero`, `U256.not_lt_of_ltCheck_eq_zero`, `U256.lt_of_{lt,gt}Check_ne_zero`, `U256.{lt,gt}Check_eq_zero_of_toNat_le`, `U256.{lt,gt}Check_ne_zero_of_toNat_lt`, `Nat.toU256_{add,mul}_toU256`, `Nat.toU256_sub_toU256`, `U256.toNat_add_toU256_of_lt` | a branch flag (`EQ`, `LT`, `GT`, `ISZERO` of `EQ`) is discharged by one citation |
 | multiplicative arithmetic | `Jaune.MulDiv` | floor/ceiling `a * b / d` bounds, rounding direction, monotonicity, round-trip loss, and the guarded `U256` bridges (`U256.toNat_mul_mod`, `U256.toNat_mul_eq_of_mul_no_overflow`, `U256.toNat_div`, `U256.toNat_mulmod`, `U256.toNat_addmod`, …) | ratio pricing in token and vault contracts; every word statement is explicit about `% 2 ^ 256` or carries a no-overflow premise |
 | iterated rounded multiplication | `Jaune.RPow` | `mulRounded`, `rpow` and their error surface, with guarded `U256` bridges (`U256.toNat_mulRounded`, …) | Maker-shaped `rpow` loops; no word theorem hides wraparound |
-| memory charged before a CALL | `Jaune.MemoryAccounting` | the `calculateMsgCallGas_*` bounds and the per-kind memory accounting facts | exact gas accounting across a call boundary; these facts do not bound arbitrary parent gas or complete the recursive memory/output invariant |
+| memory charged before a CALL | `Jaune.MemoryAccounting`, `Jaune.MessageCall.MemoryAccounting` | the `calculateMsgCallGas_*` bounds and the per-kind memory accounting facts; across a spawn and the driver, `Evm.step_memory_accounting_output`, `exec_memory_accounting_output` and the call-spawn reply bounds in `Jaune.MessageCall.MemoryAccounting` | exact gas accounting across a call boundary; these facts do not bound arbitrary parent gas or complete the recursive memory/output invariant |
 | original-run STATICCALL stack and output-memory effects | `Jaune.StaticcallEffects` | `NextOp.staticcall_run_effects` | from the actual six-operand instruction run, on every fork including state gas: one status word replaces the operands; the output is a write of at most the requested byte count over both prepaid memory windows. No child-success or precompile premise; no gas or whole-world preservation claim |
-| excluding an interpreter child from an enabled native STATICCALL | `Jaune.NativePrecompile` | `MessageOp.step_staticcall_not_run_of_precompile` | from the actual six-operand stack, `rules.stateGas = none`, enabled `rules.isPrecompile` and effective direct code designation, the actual `MessageOp.step` spawn and `Frame.enter = .run child` equations imply `False`; native failure outcomes are included, with no native-success premise |
+| excluding an interpreter child from an enabled native STATICCALL | `Jaune.NativePrecompile` | `MessageOp.step_staticcall_not_run_of_precompile` | from the actual six-operand stack, `rules.stateGas = none`, enabled `rules.isPrecompile` and effective direct code designation, the actual `MessageOp.step` spawn and `enter child = .run c` equations imply `False`; native failure outcomes are included, with no native-success premise |
 | evaluating concrete RLP in the kernel | `Jaune.RlpEval` | `Bytes.toRlpItem?_eq_toRlpItemS`, `Bytes.toRlpItemDiff?_eq_toRlpItemDiffS`, `Bytes.toRlpItems?_eq_toRlpItemsS`, `Rlp.Item.toBytes_eq_toBytesS`, `Rlp.Items.toBytes_eq_toBytesS`, `Nat.toBytes_eq_toBytesS`, and `DecidableEq Rlp.Item` | see below |
 
 **Native STATICCALL entry.** `MessageOp.step_staticcall_not_run_of_precompile`
@@ -383,14 +443,14 @@ sibling path or symlink.
   them with `def`, traverse them (`Exec.rawNodes`) and invert them with
   `cases`. Adequacy wraps the type in `Nonempty`.
 - The `Exec` constructors take step equations, not decode facts. Bridge with
-  `Evm.step_next` / `step_last` / `step_jump`, as `SymbolicPush.prepend` and
+  `Evm.step_of_next` / `Evm.step_of_halt`, as `SymbolicPush.prepend` and
   `SymbolicArith.prepend` do.
 - The symbolic `cost`, `post`, `afterCharge`, `popped`, `Op.eval` and `Op.cost`
   are plain definitions with no `@[simp]`. Unfold them by name, as the
   examples do. Final-state projections such as `final_stack` close by `rfl`.
 - `@[simp]` is set on:
-  - the `settledRevert_*` / `settledHalt_*` projections and `Msg.initDevm_*` /
-    `Msg.initSevm_*` in `Jaune.MessageExecution`;
+  - the `Msg.initDevm_*` / `Msg.initSevm_*` projections in
+    `Jaune.MessageExecution`;
   - `Exec.descendantFrames_runOk_*` and
     `Exec.committedFrames_eq_nil_of_not_commits` in `Jaune.ExecSettlement`;
   - `Exec.retainedNodes_*` in `Jaune.ExecChronology`.
@@ -407,19 +467,16 @@ sibling path or symlink.
   gas, stack and execution premises; this is not an unconditional theorem for
   every opcode or every specialization. Frame spawn lemmas have distinct
   ordinary and Amsterdam CALL/CREATE forms; use their stated hypotheses.
-- **Conditional settlement.** The revert and exceptional-halt theorems in
-  `Jaune.MessageExecution` (`processMessage_revert_of_exec*`,
-  `processMessage_halt_of_exec*`) require both
-  `msg.benv.stat.rules.stateGas = none` and
-  `msg.benv.stat.rules.settlement.touchedSweep = false`, together with their
-  entry/transfer and execution premises. The usual forms require
-  `msg.disablePrecompiles = true`; the REVERT variant
-  `processMessage_revert_of_exec_afterTransfer_of_noCodeAddress` instead
-  requires `msg.codeAddress = none`, without disabling precompiles. Both rule
-  conditions hold for the declared Paris, Shanghai, Cancun, Prague, Osaka,
-  BPO1 and BPO2 presets. The pre-Paris touched-account sweep and Amsterdam's
-  state-gas dimension prevent applying these forms unchanged. No Amsterdam
-  revert/exceptional-halt settlement form is claimed here.
+- **Conditional settlement.** The revert and exceptional-halt forms in
+  `Jaune.MessageExecution` (`MessageExecution.settle_revert`,
+  `MessageExecution.settle_halt`) require
+  `f.message.context.block.rules.stateGas = none`, and they leave the settled
+  trail unstated. The entry forms each require a successful value transfer,
+  and either a code address that is not a precompile, no code address, or
+  `f.message.disablePrecompiles = true`. The rule condition holds for every
+  declared preset except Amsterdam, whose state-gas dimension prevents
+  applying these forms unchanged. No Amsterdam revert/exceptional-halt
+  settlement form is claimed here.
 - **What the theorems are about.** They are statements about Jaune's model.
   How faithfully that model follows each fork is evidence from testing, not
   proof. Amsterdam support is a snapshot at `tests@v21.0.2` of a fork still
