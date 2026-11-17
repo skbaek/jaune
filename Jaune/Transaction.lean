@@ -178,7 +178,6 @@ inductive BlockValidationError : Type
   | blobGasUsed (detail : ErrorDetail)
   | requestsHash (detail : ErrorDetail)
   | depositEventLayout (detail : ErrorDetail)
-  | systemContractCallFailed (detail : ErrorDetail)
   /-- A mandatory request-producing system call to `target` settled with
   `halt` (an exceptional halt or a revert). The pinned
   `process_checked_system_transaction` raises `InvalidBlock`; the corpus names
@@ -248,7 +247,6 @@ def BlockValidationError.tag : BlockValidationError → String
   | .blobGasUsed _ => blobGasUsedTag
   | .requestsHash _ => requestsHashTag
   | .depositEventLayout _ => depositEventLayoutTag
-  | .systemContractCallFailed _ => systemContractCallFailedTag
   | .systemContractCallHalted _ _ => systemContractCallFailedTag
   | .systemContractEmpty _ => systemContractEmptyTag
   | .blockRlpSizeExceeded _ => blockRlpSizeExceededTag
@@ -270,7 +268,7 @@ def BlockValidationError.detail : BlockValidationError → ErrorDetail
   | .stateRoot d | .transactionsRoot d | .receiptsRoot d | .logBloom d
   | .withdrawalsRoot d | .headerNonce d | .excessBlobGas d
   | .blobGasUsed d | .requestsHash d | .depositEventLayout d
-  | .systemContractCallFailed d | .systemContractEmpty d | .blockRlpSizeExceeded d
+  | .systemContractEmpty d | .blockRlpSizeExceeded d
   | .headerFieldPresence d
   | .blockAccessListContent d | .blockAccessListFormat d
   | .blockAccessListGasLimit d => d
@@ -287,8 +285,7 @@ def BlockValidationError.render (e : BlockValidationError) : String :=
 
 /-- Every block-rejection reason, for the completeness guards: one
 representative per tag. `invalidOmmerHeader` renders under the `invalidOmmers`
-tag and `systemContractCallHalted` under the `systemContractCallFailed` tag, so
-neither is listed again. -/
+tag, so it is not listed again. -/
 def BlockValidationError.all : List BlockValidationError :=
   [ .gasLimitTooBig .none, .gasLimitAdjustment .none, .gasUsedOverflow .none,
     .gasUsedMismatch .none, .timestampOlderThanParent .none,
@@ -299,7 +296,7 @@ def BlockValidationError.all : List BlockValidationError :=
     .receiptsRoot .none, .logBloom .none, .withdrawalsRoot .none,
     .headerNonce .none, .excessBlobGas .none, .blobGasUsed .none,
     .requestsHash .none, .depositEventLayout .none,
-    .systemContractCallFailed .none, .systemContractEmpty .none,
+    .systemContractCallHalted default .revert, .systemContractEmpty .none,
     .blockRlpSizeExceeded .none,
     .headerFieldPresence .none, .blockAccessListHash emptyOmmerHash .none,
     .blockAccessListContent .none, .blockAccessListFormat .none,
@@ -3552,7 +3549,7 @@ of the ommer headers. `emptyOmmerHash` is its value on the empty list. -/
 def ommersListHash (ommers : List Header) : U256 :=
   (Rlp.Item.list (ommers.map Header.toRlpItem)).toBytes.keccak
 
-def ommersFail (msg : String) : Except TransitionError Unit :=
+private def ommersFail (msg : String) : Except TransitionError Unit :=
   .error <| .block <| .invalidOmmers <| .text msg
 
 /-- Number and retained canonical parent checks precede ommer rule lookup.

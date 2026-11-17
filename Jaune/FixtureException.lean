@@ -456,7 +456,6 @@ def ofBlockValidationError : BlockValidationError → Option FixtureException
   | .blobGasUsed _ => some blockInvalidGasUsed
   | .requestsHash _ => some blockInvalidRequests
   | .depositEventLayout _ => some blockInvalidDepositEventLayout
-  | .systemContractCallFailed _ => some blockSystemContractCallFailed
   | .systemContractCallHalted _ _ => some blockSystemContractCallFailed
   -- Goal D (DP-2): the empty-contract rejection was a fail-closed internal
   -- invariant with no identity; the transition corpus names one.

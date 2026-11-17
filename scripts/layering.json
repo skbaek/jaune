@@ -8,7 +8,7 @@
   "adapter: runner, fixture and tracer front ends; they may import anything.",
   "implementation: a second implementation kept for speed; a specification module imports one only where listed in implementation_imports.",
   "bridge: old and new definitions side by side at a convergence gate (3.1), with the bridge theorems; deleted after the gate's tagged commit.",
-  "fixture_vocabulary_residue: rejection tags and renderers that still sit in specification modules. evm_halt_kinds stay by decision (the tracer prints them; a failed checked system call puts them in the block's rejection text). called_by_specification are reached by specification functions that return rendered text (stateTransitionAt, stateTransitionUsing, rlpToBlock, ImportOutcome.renderLegacy, processCheckedSystemTransaction, validateOmmerWithParent); they leave with the structured-cause cuts and chain-transition variants (S6c) and the list only shrinks."
+  "fixture_vocabulary_residue: rejection tags and renderers that still sit in specification modules. evm_halt_kinds stay by decision (the tracer prints them; a failed checked system call puts them in the block's rejection text). called_by_specification are reached by specification functions that return rendered text (stateTransitionAt, stateTransitionUsing, rlpToBlock, ImportOutcome.renderLegacy); since the G0b structured-cause cut, processCheckedSystemTransaction and validateOmmerWithParent return systemContractCallHalted and invalidOmmerHeader and call no renderer, and BlockValidationError.detail writes their text. The list leaves with the chain-transition variants (S6c) and only shrinks."
  ],
  "umbrellas": [
   "Jaune",
@@ -24,7 +24,6 @@
   "Jaune.BLSGuards": "check",
   "Jaune.Basic": "specification",
   "Jaune.Blake2Spec": "specification",
-  "Jaune.Bridge.G0b": "bridge",
   "Jaune.ChainStore": "adapter",
   "Jaune.Check.BLS": "check",
   "Jaune.Check.Basic": "check",
