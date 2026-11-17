@@ -27,6 +27,7 @@ import Jaune.Check.MessageCall
 import Jaune.StaticcallEffects
 -- Standalone tracer modules, outside the production umbrella.
 import Jaune.TraceTransaction
+import Jaune.MessageCall.TraceJson
 -- The staged tracer and its bridge (goal jaune-shape-and-names-v1, W1 unit K1).
 
 /-!
