@@ -149,12 +149,14 @@ rg -n '^\s*@\[extern|^\s*axiom\s|^\s*opaque\s+\S+\s*:|\bsorry\b|^\s*partial\s+de
 ```
 
 Run the same scan unanchored — matching the bare words anywhere, comments
-included — and it returns twenty-four hits, all prose: thirteen where `extern`
-sits inside the English word "external" (opcode comments for `EXTCODESIZE` and
-its neighbours, and remarks about externally observed bytes and labels), ten
-uses of "opaque" in comments (mostly typed-envelope bytes that stay
-undecoded), and one comment about keeping axiom sets exact. No declaration of
-any of these kinds exists.
+included — and it returns twenty-nine hits, none of them a declaration of
+these kinds. Eighteen are `extern` inside the English word "external":
+fourteen in comments (opcode comments for `EXTCODESIZE` and its neighbours,
+and remarks about externally observed bytes and labels) and four in the name
+of the private lemma `nonspawn_external_copy` and its three uses. Ten are uses
+of "opaque" in comments (mostly typed-envelope bytes that stay undecoded), and
+one is a comment about keeping axiom sets exact. No declaration of any of
+these kinds exists.
 
 ```
 grep -rEn 'extern|axiom|opaque|sorry|partial def|implemented_by|native_decide|dbg_trace' Jaune/ Main.lean
