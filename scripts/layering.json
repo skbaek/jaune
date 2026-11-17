@@ -107,6 +107,7 @@
    "EvmError.render",
    "ForkCriterion.render",
    "ImportFailure.render",
+   "ImportOutcome.renderLegacy",
    "InternalError.render",
    "RawImportFailure.render",
    "RulesLookupError.render",
