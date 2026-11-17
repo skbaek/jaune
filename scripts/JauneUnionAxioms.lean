@@ -22,6 +22,7 @@ import Jaune.Check.RlpEval
 import Jaune.Check.Sufficiency
 import Jaune.Check.Transaction
 import Jaune.Check.Types
+import Jaune.Check.MessageCall
 -- Standalone proof facts, outside the production umbrella.
 import Jaune.StaticcallEffects
 -- Standalone tracer modules, outside the production umbrella.
