@@ -29,6 +29,8 @@ import Jaune.Precompiles
 import Jaune.Execution
 import Jaune.NativePrecompile
 import Jaune.Sufficiency
+import Jaune.MessageCall.StepGas
+import Jaune.MessageCall.Totality
 import Jaune.ExecFrame
 import Jaune.ExecFrameRel
 import Jaune.Exec

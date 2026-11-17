@@ -72,6 +72,8 @@
   "Jaune.MessageCall.Resume": "specification",
   "Jaune.MessageCall.Settle": "specification",
   "Jaune.MessageCall.Step": "specification",
+  "Jaune.MessageCall.StepGas": "proof",
+  "Jaune.MessageCall.Totality": "proof",
   "Jaune.MessageExecution": "proof",
   "Jaune.MulDiv": "proof",
   "Jaune.NativePrecompile": "proof",
