@@ -215,4 +215,100 @@ example (evm : Evm) (x y : U256) (rest : List U256)
       .cont (evm.pc + 1) (SymbolicArith.post .add x y rest evm.dyna) :=
   SymbolicArith.step_success evm .add x y rest stack gas room
 
+/-! ## On the four-part message call
+
+The same three steps, derivation, inversion and adequacy, over `Evm.step`, `Exec` and `exec` of
+the four-part chain. -/
+
+section StepsExec
+
+variable (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
+
+theorem stepExec0 (gas : 9 ≤ g) (room : s.length < 1023) :
+    Evm.step ⟨0, sevm env a b, initial base g s⟩ = .next 2 (afterFirst base a g s) :=
+  (Evm.step_of_next (first a b)).trans <|
+    SymbolicPush.nextOp_step_success _ [a] (by simp)
+      (by simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]; omega)
+      (by simp [initial, Devm.stack, Devm.setMach]; omega)
+      (Or.inl (by simp))
+
+theorem stepExec2 (gas : 9 ≤ g) (room : s.length < 1023) :
+    Evm.step ⟨2, sevm env a b, afterFirst base a g s⟩ = .next 4 (afterSecond base a b g s) :=
+  (Evm.step_of_next (second a b)).trans <|
+    SymbolicPush.nextOp_step_success _ [b] (by simp)
+      (by simp [SymbolicPush.cost, SymbolicPush.post, afterFirst, initial, Devm.gasLeft,
+            Devm.setMach, Gas.veryLow]; omega)
+      (by simp [SymbolicPush.post, afterFirst, initial, Devm.stack, Devm.setMach]; omega)
+      (Or.inl (by simp))
+
+theorem stepExec4 (gas : 9 ≤ g) (room : s.length < 1023) :
+    Evm.step ⟨4, sevm env a b, afterSecond base a b g s⟩ = .next 5 (finalState base a b g s) :=
+  (Evm.step_of_next (pc := 4) (sevm := sevm env a b)
+    (n := .plain SymbolicArith.Op.add.rinst) (third a b)).trans <|
+    SymbolicArith.nextOp_step_success _ .add _ _ s rfl
+      (by simp [SymbolicArith.Op.cost, SymbolicPush.cost, SymbolicPush.post, afterSecond,
+            afterFirst, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]; omega)
+      (by omega)
+
+theorem stepExec5 :
+    Evm.step ⟨5, sevm env a b, finalState base a b g s⟩ = .halt (.ok (finalState base a b g s)) :=
+  Evm.step_of_halt (l := .stop) (last a b)
+
+end StepsExec
+
+/-- One derivation on the four-part chain. -/
+def executionExec (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
+    (gas : 9 ≤ g) (room : s.length < 1023) :
+    Exec 0 (sevm env a b) (initial base g s) (.ok (finalState base a b g s)) :=
+  .cont (stepExec0 env base a b g s gas room) <|
+  .cont (stepExec2 env base a b g s gas room) <|
+  .cont (stepExec4 env base a b g s gas room) <|
+  .halt (stepExec5 env base a b g s)
+
+/-- Inversion at a continuing step, on the four-part chain. -/
+def nextExec {pc pc' : Nat} {sevm : Sevm} {devm devm' : Devm} {out : Execution}
+    (d : Exec pc sevm devm out) (h : Evm.step ⟨pc, sevm, devm⟩ = .next pc' devm') :
+    Exec pc' sevm devm' out := by
+  cases d with
+  | halt h' => cases h.symm.trans h'
+  | cont h' d' => cases h.symm.trans h'; exact d'
+  | doneErr h' _ _ => cases h.symm.trans h'
+  | doneOk h' _ _ _ => cases h.symm.trans h'
+  | runErr h' _ _ _ => cases h.symm.trans h'
+  | runOk h' _ _ _ _ => cases h.symm.trans h'
+
+/-- Every derivation on the four-part chain from this start state ends in `finalState`. -/
+theorem resultExec (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
+    (gas : 9 ≤ g) (room : s.length < 1023) {out : Execution}
+    (d : Exec 0 (sevm env a b) (initial base g s) out) :
+    out = .ok (finalState base a b g s) :=
+  let d2 := nextExec d (stepExec0 env base a b g s gas room)
+  let d4 := nextExec d2 (stepExec2 env base a b g s gas room)
+  let d5 := nextExec d4 (stepExec4 env base a b g s gas room)
+  d5.halt_inv (stepExec5 env base a b g s)
+
+/-- Adequacy on the four-part chain connects the derivation to `exec`. -/
+theorem interpreterExec (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
+    (gas : 9 ≤ g) (room : s.length < 1023) :
+    exec ⟨0, sevm env a b, initial base g s⟩ = .ok (finalState base a b g s) :=
+  (exec_iff_exec_eq _ _ _ _).mp ⟨executionExec env base a b g s gas room⟩
+
+/-- The premises are satisfiable on the four-part chain: exactly nine gas and an empty stack. -/
+theorem concreteExec (env : Sevm) (base : Devm) (a b : UInt8) :
+    exec ⟨0, sevm env a b, initial base 9 []⟩ = .ok (finalState base a b 9 []) ∧
+      (finalState base a b 9 []).gasLeft = 0 :=
+  ⟨interpreterExec env base a b 9 [] (by decide) (by decide), final_gas base a b 9 []⟩
+
+-- Eight gas is one short of the three static charges: the gas premise is rejected on the
+-- four-part chain too.
+/--
+error: Tactic `decide` proved that the proposition
+  9 ≤ 8
+is false
+-/
+#guard_msgs in
+example (env : Sevm) (base : Devm) (a b : UInt8) :
+    exec ⟨0, sevm env a b, initial base 8 []⟩ = .ok (finalState base a b 8 []) :=
+  interpreterExec env base a b 8 [] (by decide) (by decide)
+
 end Examples.Arithmetic

@@ -14,6 +14,7 @@ import Jaune.Check.Fork
 import Jaune.Check.Hash
 import Jaune.Check.KeccakSpec
 import Jaune.Check.Machine
+import Jaune.Check.MessageCall
 import Jaune.Check.Precompiles
 import Jaune.Check.RIPEMD160Spec
 import Jaune.Check.RlpEval

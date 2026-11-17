@@ -1,4 +1,5 @@
 import Jaune.Exec
+import Jaune.MessageCall.Step
 
 /-!
 Symbolic PUSH rules with explicit gas and stack-capacity premises.
@@ -74,5 +75,81 @@ def prepend {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
     Legacy.Exec pc sevm pre out :=
   .cont ((Legacy.Evm.step_next decoded).trans
     (step_success ⟨pc, sevm, pre⟩ bytes width gas room hgate)) next
+
+/-! ## On the four-part message call's `NextOp.step` -/
+
+private theorem nextOp_step_push {evm : Evm} {xs : Bytes} {le : xs.length ≤ 32} :
+    NextOp.step evm (.push xs le) =
+      if xs = [] && !evm.sta.benvStat.rules.opcodes.push0 then
+        Step.ofExecution (evm.pc + xs.length + 1)
+          (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)
+      else
+        Step.ofExecution (evm.pc + xs.length + 1) (do
+          let devm ← chargeGas (if xs = [] then Gas.base else Gas.veryLow) evm.dyna
+          devm.push xs.toU256) := rfl
+
+/-- Success charges the selected PUSH cost and prepends the operand word. -/
+theorem nextOp_step_success (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
+    (gas : cost bytes ≤ evm.dyna.gasLeft)
+    (room : evm.dyna.stack.length < 1024)
+    (hgate : bytes ≠ [] ∨ evm.sta.benvStat.rules.opcodes.push0) :
+    NextOp.step evm (.push bytes width) =
+      .next (evm.pc + bytes.length + 1) (post bytes evm.dyna) := by
+  dsimp [cost] at gas
+  dsimp [Devm.stack] at room
+  rw [nextOp_step_push, pushGate_false evm bytes hgate]
+  simp [chargeGas_def, safeSub, gas, Devm.push_def, Except.assert,
+    Devm.stack, Devm.setMach, room, post, cost, bind, Except.bind, Step.ofExecution]
+
+/-- Gas exhaustion is checked before stack capacity and leaves the input state. -/
+theorem nextOp_step_outOfGas (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
+    (gas : evm.dyna.gasLeft < cost bytes)
+    (hgate : bytes ≠ [] ∨ evm.sta.benvStat.rules.opcodes.push0) :
+    NextOp.step evm (.push bytes width) =
+      .halt (.error ⟨.halt (.outOfGas .none), evm.dyna⟩) := by
+  dsimp [cost] at gas
+  rw [nextOp_step_push, pushGate_false evm bytes hgate]
+  simp [chargeGas_def, safeSub, Nat.not_le_of_lt gas,
+    bind, Except.bind, Step.ofExecution]
+
+/-- With gas available, stack overflow retains the gas charge in the raw error. -/
+theorem nextOp_step_stackOverflow (evm : Evm) (bytes : Bytes) (width : bytes.length ≤ 32)
+    (gas : cost bytes ≤ evm.dyna.gasLeft)
+    (full : 1024 ≤ evm.dyna.stack.length)
+    (hgate : bytes ≠ [] ∨ evm.sta.benvStat.rules.opcodes.push0) :
+    NextOp.step evm (.push bytes width) =
+      .halt (.error ⟨.halt (.stackOverflow .none), afterCharge bytes evm.dyna⟩) := by
+  dsimp [cost] at gas
+  dsimp [Devm.stack] at full
+  rw [nextOp_step_push, pushGate_false evm bytes hgate]
+  simp [chargeGas_def, safeSub, gas, Devm.push_def, Except.assert,
+    Devm.stack, Devm.setMach, afterCharge, cost, bind, Except.bind,
+    Step.ofExecution, Nat.not_lt_of_ge full]
+
+/-- On the four-part message call, a decoded next-op instruction steps through `NextOp.step`. -/
+theorem _root_.Jaune.Evm.step_of_next {pc : Nat} {sevm : Sevm} {devm : Devm} {n : NextOp}
+    (h : NextOp.At sevm.code pc n) :
+    Evm.step ⟨pc, sevm, devm⟩ = NextOp.step ⟨pc, sevm, devm⟩ n := by
+  unfold Evm.step
+  rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.next n) from h]
+
+/-- On the four-part message call, a decoded halting instruction halts with its own result. -/
+theorem _root_.Jaune.Evm.step_of_halt {pc : Nat} {sevm : Sevm} {devm : Devm} {l : HaltOp}
+    (h : HaltOp.At sevm.code pc l) :
+    Evm.step ⟨pc, sevm, devm⟩ = .halt (l.run sevm devm) := by
+  unfold Evm.step
+  rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.halt l) from h]
+
+/-- `prepend` on the four-part message call: prepend a decoded PUSH to a complete continuation,
+preserving its outcome. -/
+def prependExec {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
+    (bytes : Bytes) (width : bytes.length ≤ 32)
+    (decoded : NextOp.At sevm.code pc (.push bytes width))
+    (gas : cost bytes ≤ pre.gasLeft) (room : pre.stack.length < 1024)
+    (hgate : bytes ≠ [] ∨ sevm.benvStat.rules.opcodes.push0)
+    (next : Exec (pc + bytes.length + 1) sevm (post bytes pre) out) :
+    Exec pc sevm pre out :=
+  .cont ((Evm.step_of_next decoded).trans
+    (nextOp_step_success ⟨pc, sevm, pre⟩ bytes width gas room hgate)) next
 
 end Jaune.SymbolicPush
