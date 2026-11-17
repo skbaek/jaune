@@ -52,6 +52,7 @@ import Jaune.Bridge.Step
 import Jaune.Bridge.Resume
 import Jaune.Bridge.Driver
 import Jaune.Bridge.Top
+import Jaune.Bridge.Exec
 
 namespace Jaune
 

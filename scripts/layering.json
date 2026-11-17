@@ -32,6 +32,7 @@
   "Jaune.Bridge.Settle": "bridge",
   "Jaune.Bridge.Step": "bridge",
   "Jaune.Bridge.Top": "bridge",
+  "Jaune.Bridge.Exec": "bridge",
   "Jaune.Bridge.Trace": "adapter",
   "Jaune.ChainStore": "adapter",
   "Jaune.Check.BLS": "check",
