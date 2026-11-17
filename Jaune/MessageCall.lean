@@ -52,7 +52,9 @@ def World.subtractBalance (w : World) (a : Address) (v : U256) : Option World :=
 def World.addBalance (w : World) (a : Address) (v : U256) : World :=
   ({ w with state := w.state.addBal a v }).clearStorageWritesIfEmpty a
 
-namespace Staging
+end Jaune
+
+namespace Jaune.Staging
 
 /-! ### Lifetime records -/
 
@@ -438,6 +440,5 @@ def Substate.keepTouch (s : Substate) (child : Trail) : Substate :=
       if child.touchedRIPEMD160 then s.touchedAccounts.insert ripemd160Address
       else s.touchedAccounts }
 
-end Staging
+end Jaune.Staging
 
-end Jaune

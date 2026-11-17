@@ -21,11 +21,9 @@ module and today's `Jaune.Impl.CachedExec` stand until the delete commit removes
 chain.
 -/
 
-namespace Jaune
+namespace Jaune.Staging
 
 open Jaune
-
-namespace Staging
 
 /-! The cache: one exact calldata slice kept available for structural sharing. The key is the
 compact backing array plus the requested range; the padded `Bytes` value is allocated once and
@@ -493,6 +491,5 @@ private def execFueledCached
   symm
   exact execFueledCachedCore_fst fuel evm none
 
-end Staging
+end Jaune.Staging
 
-end Jaune

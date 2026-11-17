@@ -26,7 +26,9 @@ def Resume.Matches : Resume → ForkRules → Prop
   | .createAmsterdam state .., rules => rules.stateGas = some state
   | .callAmsterdam state .., rules => rules.stateGas = some state
 
-namespace Staging
+end Jaune
+
+namespace Jaune.Staging
 
 /-! ### Reading today's results as staged ones -/
 
@@ -300,6 +302,5 @@ theorem step_spawn_coherent {evm : Evm} {f : Jaune.Frame} {rsm : Resume} {pc : N
   obtain ⟨x, -, hx, -⟩ := Evm.step_spawn_inv h
   exact MessageOp.step_spawn_coherent hx
 
-end Staging
+end Jaune.Staging
 
-end Jaune

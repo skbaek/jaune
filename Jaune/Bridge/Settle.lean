@@ -50,7 +50,9 @@ structure Frame.Coherent (f : Jaune.Frame) (saved : Devm) : Prop
 
 end Legacy
 
-namespace Staging
+end Jaune
+
+namespace Jaune.Staging
 
 /-- RIPEMD-160's address after recording a touch of `t`. -/
 theorem recordTouch_contains_ripemd160 (rules : ForkRules) (cond : Bool) (t : Address) (d : Devm) :
@@ -260,7 +262,9 @@ theorem settle_legacy (f : Jaune.Frame) (saved : Devm) (h : Legacy.Frame.TopCohe
           Devm.setMeta, Devm.withGasLeft, Devm.setMach, Devm.restoreStateGas,
           Devm.withRefundCounter, Devm.forfeitRemainingGas]
 
-end Staging
+end Jaune.Staging
+
+namespace Jaune
 
 namespace Legacy
 

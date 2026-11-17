@@ -18,9 +18,7 @@ The run identity `Context` and the certificate `CertifiedResult` are today's: ne
 message-call type. They move here with the switch.
 -/
 
-namespace Jaune
-
-namespace Staging
+namespace Jaune.Staging
 
 namespace Trace
 
@@ -231,6 +229,5 @@ theorem runFrame_erasure {frame : Frame} (result : FrameResult frame) :
 
 end Trace
 
-end Staging
+end Jaune.Staging
 
-end Jaune

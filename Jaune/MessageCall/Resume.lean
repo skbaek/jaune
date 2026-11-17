@@ -19,9 +19,7 @@ This is the W1 form: the caller comes back as today's `Devm`, rebuilt from the m
 the caller's `output` and `error`, which `Pending` passes through unchanged.
 -/
 
-namespace Jaune
-
-namespace Staging
+namespace Jaune.Staging
 
 /-- `credit_state_gas_refund` on a staged machine: today's `Mach.creditStateGasRefund`. -/
 def Machine.creditStateGasRefund (amount : Nat) (m : Machine) : Machine :=
@@ -111,6 +109,5 @@ def resume (rules : ForkRules) (p : Pending) (saved : Frame.State) (r : Frame.Re
     pure (.ok (p.restore { merged with machine := p.target.finish r merged.machine }))
   else pure (.error (.stackOverflow .none, p.restore merged))
 
-end Staging
+end Jaune.Staging
 
-end Jaune

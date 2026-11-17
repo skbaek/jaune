@@ -17,11 +17,9 @@ The measure a spawn leaves its caller is now its checkpoint's (`Frame.parentGas`
 unchanged. Staged under `Jaune.Staging`; nothing outside the staged chain reads it.
 -/
 
-namespace Jaune
+namespace Jaune.Staging
 
 open Jaune
-
-namespace Staging
 
 /-! ## The measures a spawn and a result carry -/
 
@@ -1436,7 +1434,6 @@ theorem MessageOp.step_halt (sevm : Sevm) (devm : Devm) (x : MessageOp)
           (by simpa only [Devm.drainStateGasReservoir_gasMeasure,
             Devm.memExtends_gasMeasure] using h7)
 
-
 /-- What one step of the driver owes, measured against the frame's gas at the
 start of the step. -/
 def Step.GasBound (sevm : Sevm) (n : Nat) : Step → Prop
@@ -1460,7 +1457,6 @@ theorem Step.ofJump_gasBound {sevm : Sevm} {n : Nat}
   cases x with
   | error e => exact Execution.settledGasLe_of_gasLe hle
   | ok p => exact hok p rfl
-
 
 theorem MessageOp.Outcome.toStep_gasBound {sevm : Sevm} {pc n : Nat} {step : MessageOp.Outcome}
     (hdec : step.GasDecreasing sevm n) (hh : step.Halt n) :
@@ -1584,6 +1580,5 @@ theorem Evm.step_gasBound (evm : Evm) :
   · rename_i l _
     exact Execution.settledGasLe_of_gasLe (HaltOp.run_gasLe evm.sta evm.dyna l)
 
-end Staging
+end Jaune.Staging
 
-end Jaune

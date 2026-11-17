@@ -19,11 +19,9 @@ seeded with more fuel than the frame's gas measure, so the staged `exec`
 Staged under `Jaune.Staging`; nothing outside the staged chain reads it.
 -/
 
-namespace Jaune
+namespace Jaune.Staging
 
 open Jaune
-
-namespace Staging
 
 /-! ## Settling a finished frame -/
 
@@ -565,6 +563,5 @@ theorem exec_eq_of_run {evm : Evm} {fuel : Nat} {raw : Execution}
   rw [execFueled_run_of_lt hlt] at h
   exact Option.some.inj h
 
-end Staging
+end Jaune.Staging
 
-end Jaune

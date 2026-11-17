@@ -17,9 +17,7 @@ definitions, and deleted with them after the gate's tag (the W1 design note, sec
 §6.5 and §3.2, unit K1).
 -/
 
-namespace Jaune
-
-namespace Staging
+namespace Jaune.Staging
 
 open Legacy
 open Jaune.Trace (Context CertifiedResult)
@@ -396,7 +394,9 @@ end Simulation
 
 end Trace
 
-end Staging
+end Jaune.Staging
+
+namespace Jaune
 
 namespace Legacy
 
@@ -450,7 +450,9 @@ theorem Frame.top_topCoherent (msg : Msg) (isCreate : Bool) :
 
 end Legacy
 
-namespace Staging
+end Jaune
+
+namespace Jaune.Staging
 
 open Legacy
 open Jaune.Trace (Context CertifiedResult)
@@ -713,6 +715,5 @@ theorem exec_json_legacy (cfg : Config) (state : IO.Ref Jaune.TraceJson.State)
 
 end TraceJson
 
-end Staging
+end Jaune.Staging
 
-end Jaune

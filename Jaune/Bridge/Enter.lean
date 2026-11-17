@@ -109,7 +109,9 @@ theorem Msg.benvAfterTransfer_ok {msg : Msg} {benv : Benv} (h : msg.benvAfterTra
 
 end Legacy
 
-namespace Staging
+end Jaune
+
+namespace Jaune.Staging
 
 /-- Today's entry result as a staged one: a machine stays a machine, a settled result is read
 by `Frame.Result.ofSettled`. -/
@@ -303,6 +305,5 @@ theorem enterWith_prepared (frame : Jaune.Frame) (prepared : Devm)
   simp only [Devm.withState, Devm.withStorageWrites, Devm.setWorld, htenv, ht,
     Devm.transientStorage]
 
-end Staging
+end Jaune.Staging
 
-end Jaune

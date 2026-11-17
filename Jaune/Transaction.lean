@@ -843,7 +843,7 @@ def processMessageCall.call (msg : Msg) :
   Except EvmError (State × MsgCallOutput) := do
   match msg.benv.stat.rules.stateGas with
   | none =>
-    let ⟨msgDelegation, refundDelegation⟩ ← legacyAuthorization msg
+    let ⟨msgDelegation, refundDelegation⟩ ← processMessageCall.legacyAuthorization msg
     let msgPc := msgDelegation.resolveCodeDelegation
     let evm ← Except.bimap Prod.fst id (processMessage msgPc)
     let refundProcessMessage ←

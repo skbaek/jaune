@@ -68,7 +68,9 @@ theorem Frame.enter_done_facts {f : Jaune.Frame} {parent : Devm} {rules : ForkRu
 
 end Legacy
 
-namespace Staging
+end Jaune
+
+namespace Jaune.Staging
 
 open Legacy
 
@@ -195,6 +197,5 @@ theorem exec_legacy (evm : Evm) :
     rw [hN]
     exact ho.symm
 
-end Staging
+end Jaune.Staging
 
-end Jaune

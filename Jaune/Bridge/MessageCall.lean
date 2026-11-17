@@ -28,7 +28,9 @@ def Execution.Clean : Execution → Prop
   | .ok d => d.error = none
   | .error _ => True
 
-namespace Staging
+end Jaune
+
+namespace Jaune.Staging
 
 /-- Grouping by lifetime and back loses nothing of a state with no output and no stored error. -/
 theorem Frame.State.toDevm_ofDevm (d : Devm) (hout : d.output = []) (herr : d.error = none) :
@@ -74,6 +76,5 @@ def Frame.ofLegacy (f : Jaune.Frame) (rsm : Resume) : Frame :=
 def Frame.ofTop (msg : Msg) (isCreate : Bool) : Frame :=
   ⟨Message.ofLegacy msg isCreate, Frame.State.ofDevm (initDevm msg)⟩
 
-end Staging
+end Jaune.Staging
 
-end Jaune

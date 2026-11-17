@@ -18,9 +18,7 @@ The total `exec` over this driver is in `Jaune.MessageCall.Exec`, a separate mod
 cached twin of this driver can be imported before `exec` is compiled.
 -/
 
-namespace Jaune
-
-namespace Staging
+namespace Jaune.Staging
 
 /-- The fuel-bounded driver over the staged `Step`. Each step consumes one unit of fuel; a
 child's run and its caller's continuation each get the fuel that remains. -/
@@ -45,6 +43,5 @@ def execFueled : Evm → Nat → Fueled (EvmError × Devm) Devm
         | .ok (.error (reason, devm)) => Fueled.ofExcept (.error (.halt reason, devm))
         | .ok (.ok devm) => execFueled ⟨pc, evm.sta, devm⟩ fuel
 
-end Staging
+end Jaune.Staging
 
-end Jaune

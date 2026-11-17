@@ -16,9 +16,7 @@ frame ended. Today's interpreter never stores an error before settlement, so the
 every raw result it produces (the bridge's premise `Execution.Clean`).
 -/
 
-namespace Jaune
-
-namespace Staging
+namespace Jaune.Staging
 
 /-- Charge execution gas, failing only by running out: today's `chargeGas` with a halt-only error
 type. -/
@@ -122,6 +120,5 @@ def settle (f : Frame) (raw : Execution) : Except Fault Frame.Result :=
       | .ok s => .ok (Frame.Result.ofSuccess d.output s)
       | .error (reason, s) => .ok (.halt reason (halted s).stateGas (depositTrail s))
 
-end Staging
+end Jaune.Staging
 
-end Jaune

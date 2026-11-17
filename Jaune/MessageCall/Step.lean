@@ -20,11 +20,9 @@ changes only:
 This is the W1 form: the running machine is still today's `Evm` over `Devm`.
 -/
 
-namespace Jaune
+namespace Jaune.Staging
 
 open Jaune
-
-namespace Staging
 
 /-! ### Building a child's message -/
 
@@ -720,6 +718,5 @@ def Evm.step (evm : Evm) : Step :=
   | .some (.jump j) => Step.ofJump (j.run evm)
   | .some (.halt l) => .halt (l.run evm.sta evm.dyna)
 
-end Staging
+end Jaune.Staging
 
-end Jaune

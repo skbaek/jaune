@@ -18,9 +18,7 @@ The configuration, the serialiser state and the rendering helpers are today's or
 today's private ones; they move here with the switch.
 -/
 
-namespace Jaune
-
-namespace Staging
+namespace Jaune.Staging
 
 namespace TraceJson
 
@@ -176,6 +174,5 @@ def sink (cfg : Config) (state : IO.Ref Jaune.TraceJson.State)
 
 end TraceJson
 
-end Staging
+end Jaune.Staging
 
-end Jaune
