@@ -8,7 +8,7 @@ Today's interpreter writes `Meta.error` only at settlement. So a frame entered w
 error never yields a raw `.ok d` that stores one: every instruction, every spawn's saved caller
 and every resume keep the field as they found it. The bridges of units C, D and E take this as
 their premise `Execution.Clean`; this module proves it, about the old definitions, and is deleted
-with them after the gate's tag (`note-rev3-delta.md` section 3.2, F0).
+with them after the gate's tag (the W1 design note, third revision, section 3.2, unit F0).
 
 The walk is over every instruction arm under both rule shapes. It follows the shape of the
 state-gas-zero family in `Jaune.Execution`, with one difference: only the success channel is

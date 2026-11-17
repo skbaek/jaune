@@ -9,7 +9,7 @@ only in bridges. They live in this bridge module with the old side and are delet
 after the gate's tag (goal 3.1).
 
 Also here, about today's definitions: `Resume.parent`, the saved caller every `Resume` carries,
-and `Execution.Clean`, the premise that a raw result stores no settled error (`note-rev3-delta.md`
+and `Execution.Clean`, the premise that a raw result stores no settled error (the W1 design note,
 section 3.1).
 -/
 

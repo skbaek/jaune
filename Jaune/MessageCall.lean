@@ -18,7 +18,7 @@ chain is staged under the namespace `Jaune.Staging` until the switch commit relo
 `Frame` and `Step` can sit beside today's definitions of the same names. Helpers on the
 kept type `World` carry their final names.
 
-The design is `w1w3-design/note-rev2.md` sections 2.1-2.4 as replaced by `note-rev3-delta.md`.
+The design is the W1/W3 design note, sections 2.1-2.4, as amended by its third revision.
 Until unit P, `CallContext` carries today's static records `TenvStat` and `BenvStat`;
 `TxContext` and `BlockContext` are the records they will be cut down to.
 -/
