@@ -21,9 +21,10 @@ the interpreter:
 Both invariants are carried by one walk over every instruction (`Inv c n`: committed spill `c`,
 and room for `n` more words), on both result channels.
 
-Status (W1 unit L-b checkpoint): the instruction-level walk is here (register, jump and halting
-instructions, the four message-opcode tails with their spawn obligation). The message-opcode
-dispatch, `Evm.step`, `resume`, the driver induction and the client theorems named above follow.
+This module is the instruction-level walk (register, jump and halting instructions, and the four
+message-opcode tails with their spawn obligation); `Jaune.MessageCall.DriverInvariants` carries
+it through the message-opcode dispatch, `Evm.step`, `resume` and the driver, and states the
+client theorems named above.
 -/
 
 namespace Jaune

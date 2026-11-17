@@ -1,5 +1,6 @@
 import Jaune.Transaction
 import Jaune.MessageCall.ResumeFacts
+import Jaune.MessageCall.DriverInvariants
 
 /-!
 # The shape pilot's two executions, on the four-part message call
@@ -199,5 +200,86 @@ def observeCreate : Option CreateObservation := do
   childNonce := 1, depositHalted := true, callerStack := [42, 0], creatorNonce := 2,
   destinationWarm := true, deployedNonce := 0, deployedCodeSize := 0,
   refundedStateGas := 183600, topLevelCreatorNonce := 2, topLevelDeployedCodeSize := 0 }
+
+/-! ## The two runs as applications of the S3 lemmas
+
+The pilot's `Runs.lean` applied the resume equation to a result returned by its driver. Here
+the same two steps are applications of `resume_failed` (through `Evm.Reaches.resume_failed`) and
+the (b) equations (`returnedMachine_failed_call`, `returnedMachine_failed_create`) to a result
+named by a driver premise (`Frame.Returns`), at any spawn the run of a top frame reaches.
+`room`, and for the Amsterdam creation `settled`, are discharged by the run invariants
+(`Jaune.MessageCall.DriverInvariants`), not by these theorems' premises; no concrete state is
+unfolded. -/
+
+/-- A top frame is entered with an empty stack. -/
+theorem entered_stack {msg : Msg} {isCreate : Bool} {start : Evm}
+    (h : entered (Frame.ofTop msg isCreate) = some start) : start.dyna.stack.length ≤ 1024 := by
+  unfold entered at h
+  split at h
+  · rename_i evm he
+    cases h
+    have hm := RunInvariants.enterWith_run_mach he
+    show start.dyna.mach.stack.length ≤ 1024
+    rw [hm]
+    exact Nat.zero_le _
+  · cases h
+
+/-- The call execution's return: a Prague caller resumed after a reverted child keeps its own
+world and substate (with the child's RIPEMD-160 touch), pushes 0, receives the output in its
+window and its return data, and takes back the child's remaining gas. -/
+theorem call_return_survival {msg : Msg} {start evm : Evm}
+    (hstart : entered (Frame.ofTop msg false) = some start) (hrun : start.Reaches evm)
+    {child : Frame} {p : Pending} {pc : Nat} (hspawn : Evm.step evm = .spawn child p pc)
+    {outputIndex outputSize : Nat} (target : p.target = .call outputIndex outputSize)
+    (prague : evm.sta.benvStat.rules.stateGas = none)
+    {output : Bytes} {gasLeft : Nat} {meter : StateGasMeter} {trail : Trail}
+    (childRan : Frame.Returns child (.revert output gasLeft meter trail)) :
+    resume evm.sta.benvStat.rules p child.checkpoint (.revert output gasLeft meter trail) =
+      .ok (.ok (p.restore
+        { machine :=
+            { stack := 0 :: child.checkpoint.machine.stack
+              memory := child.checkpoint.machine.memory.write outputIndex (output.take outputSize)
+              gasLeft := child.checkpoint.machine.gasLeft + gasLeft
+              stateGas := child.checkpoint.machine.stateGas
+              returnData := output }
+          world := child.checkpoint.world
+          substate := child.checkpoint.substate.keepTouch trail
+          trail := child.checkpoint.trail.absorb trail })) := by
+  rw [Evm.Reaches.resume_failed (entered_stack hstart) hrun hspawn childRan rfl,
+    returnedMachine_failed_call _ _ _ _ target rfl]
+  simp only [prague]
+  rfl
+
+/-- The creation execution's return: an Amsterdam caller resumed after a child whose deposit
+halted keeps its own world and substate, pushes 0, keeps its memory, takes the child's output
+as return data, takes back the child's reservoir and spill, and is refunded a charged new
+account's state gas. -/
+theorem create_return_survival {msg : Msg} {start evm : Evm}
+    (hstart : entered (Frame.ofTop msg false) = some start) (hrun : start.Reaches evm)
+    {child : Frame} {p : Pending} {pc : Nat} (hspawn : Evm.step evm = .spawn child p pc)
+    {address : Address} (target : p.target = .create address)
+    {state : StateGasRules} (amsterdam : evm.sta.benvStat.rules.stateGas = some state)
+    {reason : ExceptionalHalt} {meter : StateGasMeter} {trail : Trail}
+    (childRan : Frame.Returns child (.halt reason meter trail)) :
+    resume evm.sta.benvStat.rules p child.checkpoint (.halt reason meter trail) =
+      .ok (.ok (p.restore
+        { machine :=
+            let m : Machine :=
+              { stack := 0 :: child.checkpoint.machine.stack
+                memory := child.checkpoint.machine.memory
+                gasLeft := child.checkpoint.machine.gasLeft
+                stateGas :=
+                  { child.checkpoint.machine.stateGas with
+                    left := child.checkpoint.machine.stateGas.left + meter.left
+                    spilled := child.checkpoint.machine.stateGas.spilled + meter.spilled }
+                returnData := [] }
+            if p.newAccountCharged then m.creditStateGasRefund state.newAccount else m
+          world := child.checkpoint.world
+          substate := child.checkpoint.substate
+          trail := child.checkpoint.trail.absorb trail })) := by
+  rw [Evm.Reaches.resume_failed (entered_stack hstart) hrun hspawn childRan rfl,
+    returnedMachine_failed_create _ _ _ _ target rfl]
+  simp only [amsterdam]
+  rfl
 
 end Examples.ShapePilot
