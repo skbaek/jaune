@@ -70,8 +70,8 @@ def prepend {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
     (decoded : NextOp.At sevm.code pc (.push bytes width))
     (gas : cost bytes ≤ pre.gasLeft) (room : pre.stack.length < 1024)
     (hgate : bytes ≠ [] ∨ sevm.benvStat.rules.opcodes.push0)
-    (next : Exec (pc + bytes.length + 1) sevm (post bytes pre) out) :
-    Exec pc sevm pre out :=
+    (next : Legacy.Exec (pc + bytes.length + 1) sevm (post bytes pre) out) :
+    Legacy.Exec pc sevm pre out :=
   .cont ((Legacy.Evm.step_next decoded).trans
     (step_success ⟨pc, sevm, pre⟩ bytes width gas room hgate)) next
 

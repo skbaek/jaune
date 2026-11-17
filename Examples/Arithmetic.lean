@@ -109,7 +109,7 @@ end Steps
 /-- One derivation, from the canonical constructors. -/
 def execution (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) :
-    Exec 0 (sevm env a b) (initial base g s) (.ok (finalState base a b g s)) :=
+    Legacy.Exec 0 (sevm env a b) (initial base g s) (.ok (finalState base a b g s)) :=
   .cont (step0 env base a b g s gas room) <|
   .cont (step2 env base a b g s gas room) <|
   .cont (step4 env base a b g s gas room) <|
@@ -118,8 +118,8 @@ def execution (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
 /-- Inversion at a continuing step: a derivation whose root step continues
 contains a derivation of the same outcome from the successor state. -/
 def next {pc pc' : Nat} {sevm : Sevm} {devm devm' : Devm} {out : Execution}
-    (d : Exec pc sevm devm out) (h : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .cont pc' devm') :
-    Exec pc' sevm devm' out := by
+    (d : Legacy.Exec pc sevm devm out) (h : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .cont pc' devm') :
+    Legacy.Exec pc' sevm devm' out := by
   cases d with
   | halt h' => cases h.symm.trans h'
   | cont h' d' => cases h.symm.trans h'; exact d'
@@ -132,7 +132,7 @@ def next {pc pc' : Nat} {sevm : Sevm} {devm devm' : Devm} {out : Execution}
 forced by inverting the three continuing steps and the final `STOP`. -/
 theorem result (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) {out : Execution}
-    (d : Exec 0 (sevm env a b) (initial base g s) out) :
+    (d : Legacy.Exec 0 (sevm env a b) (initial base g s) out) :
     out = .ok (finalState base a b g s) :=
   let d2 := next d (step0 env base a b g s gas room)
   let d4 := next d2 (step2 env base a b g s gas room)

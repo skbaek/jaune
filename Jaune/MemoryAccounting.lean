@@ -157,8 +157,8 @@ theorem Resume.call_run_ok_memory {parent child resumed : Devm}
 
 /-- Gas settlement for the same child derivation, using the existing total
 interpreter's sufficiency proof rather than another recursive driver. -/
-theorem Exec.settledGasLe {pc : Nat} {sevm : Sevm} {devm : Devm} {raw : Execution}
-    (h : Exec pc sevm devm raw) : raw.SettledGasLe devm.gasMeasure := by
+theorem Legacy.Exec.settledGasLe {pc : Nat} {sevm : Sevm} {devm : Devm} {raw : Execution}
+    (h : Legacy.Exec pc sevm devm raw) : raw.SettledGasLe devm.gasMeasure := by
   have heq := (Legacy.exec_iff_exec_eq pc sevm devm raw).mp ⟨h⟩
   have hs := Legacy.execFueled_settledGasLe (sufficientFuel devm.gasMeasure)
     (⟨pc, sevm, devm⟩ : Evm) (Legacy.execFueled_run_sufficientFuel ⟨pc, sevm, devm⟩)
@@ -239,7 +239,7 @@ theorem zero_call_spawn_resume_accounting
       inputIndex inputSize outputIndex outputSize code disablePrecompiles =
         .spawn frame resume)
     (henter : frame.enter = .run childEvm)
-    (hexec : Exec childEvm.pc childEvm.sta childEvm.dyna raw)
+    (hexec : Legacy.Exec childEvm.pc childEvm.sta childEvm.dyna raw)
     (hresume : resume.run (frame.settle raw) = .ok resumed) :
     ∃ child : Devm, frame.settle raw = .ok child ∧
       child.gasMeasure ≤ gas.toNat ∧
@@ -628,7 +628,7 @@ theorem zero_call_spawn_resume_raw_accounting
       inputIndex inputSize outputIndex outputSize code disablePrecompiles =
         .spawn frame resume)
     (henter : frame.enter = .run childEvm)
-    (hexec : Exec childEvm.pc childEvm.sta childEvm.dyna raw) :
+    (hexec : Legacy.Exec childEvm.pc childEvm.sta childEvm.dyna raw) :
     let accounted := fun post : Devm =>
       post.gasMeasure + extraGas + calculateMemoryGasCost post.memory.size ≤
           before.gasMeasure + calculateMemoryGasCost before.memory.size ∧
@@ -2884,10 +2884,10 @@ private theorem entered_child_potential {frame : Legacy.Frame} {child : Evm}
 
 private theorem exec_memory_accounting :
     ∀ (pc : Nat) (sevm : Sevm) (pre : Devm) (raw : Execution),
-      Exec pc sevm pre raw →
+      Legacy.Exec pc sevm pre raw →
       sevm.benvStat.rules.stateGas = none →
       rawTerminalAccounted pre raw := by
-  apply Exec.rec
+  apply Legacy.Exec.rec
   · intro pc sevm pre raw hstep hstate
     have hs := Legacy.Evm.step_memory_accounting_output ⟨pc, sevm, pre⟩ hstate
     rw [hstep] at hs
@@ -2929,9 +2929,9 @@ private theorem exec_memory_accounting :
 
 /-- Complete actual execution preserves the memory/gas potential, and its full
 raw output is inherited or paid by that initial potential on both channels. -/
-theorem Exec.memory_accounting_output
+theorem Legacy.Exec.memory_accounting_output
     {pc : Nat} {sevm : Sevm} {pre : Devm} {raw : Execution}
-    (h : Exec pc sevm pre raw) (hstate : sevm.benvStat.rules.stateGas = none) :
+    (h : Legacy.Exec pc sevm pre raw) (hstate : sevm.benvStat.rules.stateGas = none) :
     let initial := pre.gasMeasure + calculateMemoryGasCost pre.memory.size
     let accounted := fun post : Devm =>
       post.gasMeasure + calculateMemoryGasCost post.memory.size ≤ initial ∧
@@ -2995,7 +2995,7 @@ theorem charged_call_input_length_lt_two_pow_160
 
 private theorem entered_code_output_cost {frame : Legacy.Frame} {child : Evm} {raw : Execution}
     (henter : frame.enter = .run child)
-    (hexec : Exec child.pc child.sta child.dyna raw)
+    (hexec : Legacy.Exec child.pc child.sta child.dyna raw)
     (hstate : child.sta.benvStat.rules.stateGas = none) :
     match raw with
     | .ok post => calculateMemoryGasCost post.output.length ≤ frame.inner.gas
@@ -3213,7 +3213,7 @@ theorem zero_call_spawn_code_reply_bound
       inputIndex inputSize outputIndex outputSize code disablePrecompiles =
         .spawn frame resume)
     (henter : frame.enter = .run childEvm)
-    (hexec : Exec childEvm.pc childEvm.sta childEvm.dyna raw)
+    (hexec : Legacy.Exec childEvm.pc childEvm.sta childEvm.dyna raw)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     let grant := (calculateMsgCallGas 0 gas.toNat before.gasLeft
       (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)])
@@ -3309,7 +3309,7 @@ theorem call_spawn_code_reply_bound
       isStaticcall inputIndex inputSize outputIndex outputSize code
       disablePrecompiles = .spawn frame resume)
     (henter : frame.enter = .run childEvm)
-    (hexec : Exec childEvm.pc childEvm.sta childEvm.dyna raw)
+    (hexec : Legacy.Exec childEvm.pc childEvm.sta childEvm.dyna raw)
     (hstate : sevm.benvStat.rules.stateGas = none) :
     (fun result : Execution => match result with
       | .ok post => post.output.length
@@ -4264,7 +4264,7 @@ private theorem call_spawn_enter_reply_bound_input_or_potential
     (hstate : sevm.benvStat.rules.stateGas = none) :
     match frame.enter with
     | .run child =>
-        ∀ raw : Execution, Exec child.pc child.sta child.dyna raw →
+        ∀ raw : Execution, Legacy.Exec child.pc child.sta child.dyna raw →
           match resume.run (frame.settle raw) with
           | .ok post => post.returnData.length < 2 ^ 160
           | .error failure => failure.2.returnData.length < 2 ^ 160
@@ -4331,7 +4331,7 @@ theorem call_spawn_enter_reply_bound
     (hstate : sevm.benvStat.rules.stateGas = none) :
     match frame.enter with
     | .run child =>
-        ∀ raw : Execution, Exec child.pc child.sta child.dyna raw →
+        ∀ raw : Execution, Legacy.Exec child.pc child.sta child.dyna raw →
           match resume.run (frame.settle raw) with
           | .ok post => post.returnData.length < 2 ^ 160
           | .error failure => failure.2.returnData.length < 2 ^ 160

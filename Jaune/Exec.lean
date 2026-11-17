@@ -20,42 +20,42 @@ open Jaune
    in it.  The relation is the generic derivation tree over the flattened
    driver's step outcomes: every premise other than a sub-derivation is an
    equation about a non-recursive function. -/
-inductive Exec : Nat → Sevm → Devm → Execution → Type
+inductive Legacy.Exec : Nat → Sevm → Devm → Execution → Type
   | halt {pc sevm devm ex} :
     Legacy.Evm.step ⟨pc, sevm, devm⟩ = .halt ex →
-    Exec pc sevm devm ex
+    Legacy.Exec pc sevm devm ex
   | cont {pc sevm devm pc' devm' ex} :
     Legacy.Evm.step ⟨pc, sevm, devm⟩ = .cont pc' devm' →
-    Exec pc' sevm devm' ex →
-    Exec pc sevm devm ex
+    Legacy.Exec pc' sevm devm' ex →
+    Legacy.Exec pc sevm devm ex
   | doneErr {pc sevm devm f rsm pc' r e} :
     Legacy.Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc' →
     f.enter = .done r →
     rsm.run r = .error e →
-    Exec pc sevm devm (.error e)
+    Legacy.Exec pc sevm devm (.error e)
   | doneOk {pc sevm devm f rsm pc' r devm' ex} :
     Legacy.Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc' →
     f.enter = .done r →
     rsm.run r = .ok devm' →
-    Exec pc' sevm devm' ex →
-    Exec pc sevm devm ex
+    Legacy.Exec pc' sevm devm' ex →
+    Legacy.Exec pc sevm devm ex
   | runErr {pc sevm devm f rsm pc' cevm raw e} :
     Legacy.Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc' →
     f.enter = .run cevm →
-    Exec cevm.pc cevm.sta cevm.dyna raw →
+    Legacy.Exec cevm.pc cevm.sta cevm.dyna raw →
     rsm.run (f.settle raw) = .error e →
-    Exec pc sevm devm (.error e)
+    Legacy.Exec pc sevm devm (.error e)
   | runOk {pc sevm devm f rsm pc' cevm raw devm' ex} :
     Legacy.Evm.step ⟨pc, sevm, devm⟩ = .spawn f rsm pc' →
     f.enter = .run cevm →
-    Exec cevm.pc cevm.sta cevm.dyna raw →
+    Legacy.Exec cevm.pc cevm.sta cevm.dyna raw →
     rsm.run (f.settle raw) = .ok devm' →
-    Exec pc' sevm devm' ex →
-    Exec pc sevm devm ex
+    Legacy.Exec pc' sevm devm' ex →
+    Legacy.Exec pc sevm devm ex
 
 def Xlot.Filled : Xlot → Prop
   | .none => True
-  | .some ⟨evm, exn⟩ => Nonempty (Exec evm.pc evm.sta evm.dyna exn)
+  | .some ⟨evm, exn⟩ => Nonempty (Legacy.Exec evm.pc evm.sta evm.dyna exn)
 
 /-! ### Inversion against the step outcome.
 
@@ -65,8 +65,8 @@ replaces the old "wrong instruction kind" branches of every `cases` on `Exec`:
 where a proof knows the instruction at `pc` halts, the derivation's result is
 that halt value. -/
 
-lemma Exec.halt_inv {pc sevm devm exn ex}
-    (cr : Exec pc sevm devm exn)
+lemma Legacy.Exec.halt_inv {pc sevm devm exn ex}
+    (cr : Legacy.Exec pc sevm devm exn)
     (h : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .halt ex) : exn = ex := by
   cases cr with
   | halt h' => cases h.symm.trans h'; rfl
@@ -77,8 +77,8 @@ lemma Exec.halt_inv {pc sevm devm exn ex}
   | runOk h' _ _ _ _ => cases h.symm.trans h'
 
 /-- A `Linst` at the program counter settles the whole derivation. -/
-lemma Exec.last_inv {pc sevm devm exn l}
-    (cr : Exec pc sevm devm exn) (h : HaltOp.At sevm.code pc l) :
+lemma Legacy.Exec.last_inv {pc sevm devm exn l}
+    (cr : Legacy.Exec pc sevm devm exn) (h : HaltOp.At sevm.code pc l) :
     exn = l.run sevm devm :=
   cr.halt_inv (Legacy.Evm.step_last h)
 
@@ -285,11 +285,11 @@ lemma Legacy.Step.spawn_depth_lt {pc : Nat} {sevm : Sevm} {devm : Devm}
 
 /-! ### Adequacy: the relational and executable semantics agree. -/
 
-lemma of_exec' :
+lemma Legacy.of_exec' :
     ∀ (pc : Nat) (sevm : Sevm) (devm : Devm) (exn : Execution),
-      Exec pc sevm devm exn →
+      Legacy.Exec pc sevm devm exn →
       ∃ fuel, ∀ fuel' > fuel, (Legacy.execFueled ⟨pc, sevm, devm⟩ fuel' = Fueled.ofExcept exn) := by
-  apply Exec.rec
+  apply Legacy.Exec.rec
   · intro pc sevm devm ex hstep
     refine ⟨0, fun fuel' gt => ?_⟩
     rcases fuel' with _ | fuel'
@@ -336,10 +336,10 @@ lemma of_exec' :
     exact ih fuel' (by omega)
 
 set_option linter.defProp false in
-@[reducible] def of_exec :
+@[reducible] def Legacy.of_exec :
     ∀ (fuel : Nat) (pc : Nat) (sevm : Sevm) (devm : Devm) (exn : Execution),
       (Legacy.execFueled ⟨pc, sevm, devm⟩ fuel = Fueled.ofExcept exn) →
-      Nonempty (Exec pc sevm devm exn) := by
+      Nonempty (Legacy.Exec pc sevm devm exn) := by
   apply Nat.strongRec
   intro fuel ih pc sevm devm exn exec_eq
   cases fuel with
@@ -351,17 +351,17 @@ set_option linter.defProp false in
     rcases hstep : Legacy.Evm.step ⟨pc, sevm, devm⟩ with ex | ⟨pc', devm'⟩ | ⟨f, rsm, pc'⟩ <;>
       rw [hstep] at exec_eq <;> simp only [] at exec_eq
     · rw [← Fueled.ofExcept_inj.mp exec_eq]
-      exact ⟨Exec.halt hstep⟩
+      exact ⟨Legacy.Exec.halt hstep⟩
     · rcases ih fuel (Nat.lt_succ_self _) pc' sevm devm' exn exec_eq with ⟨exc⟩
-      exact ⟨Exec.cont hstep exc⟩
+      exact ⟨Legacy.Exec.cont hstep exc⟩
     · rcases henter : f.enter with r | cevm <;>
         rw [henter] at exec_eq <;> simp only [] at exec_eq
       · rcases hr : rsm.run r with e | devm' <;>
           rw [hr] at exec_eq <;> simp only [] at exec_eq
         · rw [← Fueled.ofExcept_inj.mp exec_eq]
-          exact ⟨Exec.doneErr hstep henter hr⟩
+          exact ⟨Legacy.Exec.doneErr hstep henter hr⟩
         · rcases ih fuel (Nat.lt_succ_self _) pc' sevm devm' exn exec_eq with ⟨exc⟩
-          exact ⟨Exec.doneOk hstep henter hr exc⟩
+          exact ⟨Legacy.Exec.doneOk hstep henter hr exc⟩
       · rcases hrun : (Legacy.execFueled cevm fuel).run with _ | raw <;>
           rw [hrun] at exec_eq <;> simp only [] at exec_eq
         · cases Fueled.exhausted_ne_ofExcept exec_eq
@@ -371,9 +371,9 @@ set_option linter.defProp false in
           rcases hr : rsm.run (f.settle raw) with e | devm' <;>
             rw [hr] at exec_eq <;> simp only [] at exec_eq
           · rw [← Fueled.ofExcept_inj.mp exec_eq]
-            exact ⟨Exec.runErr hstep henter excChild hr⟩
+            exact ⟨Legacy.Exec.runErr hstep henter excChild hr⟩
           · rcases ih fuel (Nat.lt_succ_self _) pc' sevm devm' exn exec_eq with ⟨exc⟩
-            exact ⟨Exec.runOk hstep henter excChild hr exc⟩
+            exact ⟨Legacy.Exec.runOk hstep henter excChild hr exc⟩
 
 /-- **Adequacy, fuel-free.**  A closed derivation is exactly a total-`exec`
 equation.  Forward: `of_exec'` produces the driver equation at every budget
@@ -382,10 +382,10 @@ that also exceeds the frame's gas measure.  Backward: the sufficiency bridge
 `execFueled_run_sufficientFuel` turns the total result into the driver equation
 `of_exec` recurses over. -/
 lemma Legacy.exec_iff_exec_eq (pc : Nat) (sevm : Sevm) (devm : Devm) (exn : Execution) :
-    Nonempty (Exec pc sevm devm exn) ↔ Legacy.exec ⟨pc, sevm, devm⟩ = exn := by
+    Nonempty (Legacy.Exec pc sevm devm exn) ↔ Legacy.exec ⟨pc, sevm, devm⟩ = exn := by
   constructor
   · intro ⟨exc⟩
-    rcases of_exec' _ _ _ _ exc with ⟨fuel, eq⟩
+    rcases Legacy.of_exec' _ _ _ _ exc with ⟨fuel, eq⟩
     have hlt : devm.gasMeasure < max (fuel + 1) (devm.gasMeasure + 1) :=
       Nat.lt_of_lt_of_le (Nat.lt_succ_self _) (Nat.le_max_right _ _)
     refine Legacy.exec_eq_of_run hlt ?_
@@ -394,14 +394,14 @@ lemma Legacy.exec_iff_exec_eq (pc : Nat) (sevm : Sevm) (devm : Devm) (exn : Exec
   · intro heq
     have h := Legacy.execFueled_run_sufficientFuel ⟨pc, sevm, devm⟩
     rw [heq] at h
-    exact of_exec _ _ _ _ _ (Fueled.ext h)
+    exact Legacy.of_exec _ _ _ _ _ (Fueled.ext h)
 
 /-- The driver at the child's seeded budget reaches exactly the total `exec`
 result, so every entered frame carries a closed derivation for it.  This is the
 bridge from the total wrappers to the relational layer: no threshold obligation
 survives, because sufficiency discharges it once and for all. -/
 lemma Xlot.filled_exec (evm : Evm) : Xlot.Filled (.some ⟨evm, Legacy.exec evm⟩) :=
-  of_exec (sufficientFuel evm.dyna.gasMeasure) evm.pc evm.sta evm.dyna (Legacy.exec evm)
+  Legacy.of_exec (sufficientFuel evm.dyna.gasMeasure) evm.pc evm.sta evm.dyna (Legacy.exec evm)
     (Fueled.ext (Legacy.execFueled_run_sufficientFuel evm))
 
 lemma of_runFrame {f : Legacy.Frame}
