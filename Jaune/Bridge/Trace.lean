@@ -672,7 +672,7 @@ instance instLawfulMonadEST (ε σ : Type) : LawfulMonad (EST ε σ) := LawfulMo
 
 /-- `IO` is a lawful monad: it is `EST` over the real world. -/
 instance instLawfulMonadIO : LawfulMonad IO :=
-  inferInstanceAs (LawfulMonad (EST IO.Error IO.RealWorld))
+  instLawfulMonadEST IO.Error IO.RealWorld
 
 /-- **The `IO` sink.** The staged sink performs today's reads, writes, flushes and state update
 on corresponding events. -/
