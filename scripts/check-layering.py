@@ -59,7 +59,10 @@ ALLOWED = {
 UMBRELLA_ALLOWED = {"Jaune": {"specification", "proof", "bridge"}}
 FORBIDDEN_COMMANDS = ("#guard", "#guard_msgs", "#eval", "#reduce", "#synth", "example")
 HELPER_NAME = re.compile(r"Guard|guard[A-Z]|[Ff]ixture|[Gg]olden|[Pp]robe")
-VOCAB_NAME = re.compile(r"(?:Tags?|\.tag|\.render|^render\w*)$")
+# A renderer is `render` or a camel-case `renderThing`, at the top level or as
+# the last component of a namespaced name; `Foo.render_lemma` is a statement
+# about a renderer, not vocabulary.
+VOCAB_NAME = re.compile(r"(?:Tags?|\.tag|^render\w*|\.render(?:[A-Z]\w*)?)$")
 # What may precede a command or declaration keyword on its line or the lines
 # before it: indentation, `set_option ... in` / `open ... in`, attributes and
 # modifiers. Comments (doc comments included) are already blanked by source_text.

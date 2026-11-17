@@ -208,6 +208,13 @@ class LayeringTests(unittest.TestCase):
         self.assertProblem("fixture vocabulary not in fixture_vocabulary_residue: fooTag")
         self.assertProblem("test helper in a specification module: barGuard")
 
+    def test_namespaced_renderer_fails(self):
+        self.write("Jaune/Base.lean",
+                   "namespace Jaune\nnamespace Foo\ndef renderThing : String := \"\"\nend Foo\nend Jaune\n")
+        self.assertProblem("fixture vocabulary not in fixture_vocabulary_residue: Foo.renderThing")
+        self.write("Jaune/Base.lean", "theorem Foo.render_split : True := trivial\n")
+        self.assertEqual(self.problems(), [])
+
     def test_tracked_data_and_tree_pass_the_classification_rules(self):
         data = json.loads((ROOT / "scripts" / "layering.json").read_text(encoding="utf-8"))
         self.assertEqual(set(data["modules"].values()) - set(MODULE.CLASSES), set())
