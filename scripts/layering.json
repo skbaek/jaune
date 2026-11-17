@@ -61,6 +61,7 @@
   "Jaune.Fork": "specification",
   "Jaune.Fuel": "specification",
   "Jaune.Hash": "specification",
+  "Jaune.Impl.CachedDriver": "implementation",
   "Jaune.Impl.CachedExec": "implementation",
   "Jaune.KeccakSpec": "specification",
   "Jaune.Machine": "specification",
