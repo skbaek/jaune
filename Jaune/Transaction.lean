@@ -132,6 +132,13 @@ through the hex `ToString`, which is how every hash prints elsewhere. -/
 instance : Repr U256 where
   reprPrec h _ := .text (toString h)
 
+/-- `Address` carries no `Repr` of its own either; the block-rejection type
+below derives one, and its `systemContractCallHalted` reason carries the
+contract's address as data. Rendered through the hex `ToString`, which is how
+every address prints elsewhere. -/
+instance : Repr Address where
+  reprPrec a _ := .text (toString a)
+
 /-- Why a header or a post-transition check rejects a block.
 
 One constructor per reason in the block-rejection vocabulary. A bare
@@ -152,6 +159,12 @@ inductive BlockValidationError : Type
   | invalidDifficulty (detail : ErrorDetail)
   /-- Before Paris: the block's ommers break a rule of `validateOmmers`. -/
   | invalidOmmers (detail : ErrorDetail)
+  /-- Before Paris: an ommer's own header fails `validateHeader` against its
+  retained parent, for `reason`. Rendered under the `invalidOmmers` tag, with
+  the ommer's reason rendered in the detail text, by `detail` below: the
+  specification returns the cause and only the renderer writes text (goal
+  `jaune-shape-and-names-v1`, 3.2). -/
+  | invalidOmmerHeader (reason : BlockValidationError)
   | extraDataTooBig (detail : ErrorDetail)
   | unknownParent (detail : ErrorDetail)
   | unknownParentZero (detail : ErrorDetail)
@@ -166,6 +179,14 @@ inductive BlockValidationError : Type
   | requestsHash (detail : ErrorDetail)
   | depositEventLayout (detail : ErrorDetail)
   | systemContractCallFailed (detail : ErrorDetail)
+  /-- A mandatory request-producing system call to `target` settled with
+  `halt` (an exceptional halt or a revert). The pinned
+  `process_checked_system_transaction` raises `InvalidBlock`; the corpus names
+  it `BlockException.SYSTEM_CONTRACT_CALL_FAILED`, and it renders under the
+  `systemContractCallFailed` tag, with the address and the halt written by
+  `detail` below: the specification returns the cause and only the renderer
+  writes text (goal `jaune-shape-and-names-v1`, 3.2). -/
+  | systemContractCallHalted (target : Address) (halt : SettledHalt)
   /-- A mandatory request-producing system contract holds no code when the
   block must call it. The pinned `process_checked_system_transaction` raises
   `InvalidBlock` before attempting the call; the corpus names it
@@ -213,6 +234,7 @@ def BlockValidationError.tag : BlockValidationError → String
   | .ommersOverParis _ => ommersOverParisTag
   | .invalidDifficulty _ => invalidDifficultyTag
   | .invalidOmmers _ => invalidOmmersTag
+  | .invalidOmmerHeader _ => invalidOmmersTag
   | .extraDataTooBig _ => extraDataTooBigTag
   | .unknownParent _ => unknownParentTag
   | .unknownParentZero _ => unknownParentZeroTag
@@ -227,6 +249,7 @@ def BlockValidationError.tag : BlockValidationError → String
   | .requestsHash _ => requestsHashTag
   | .depositEventLayout _ => depositEventLayoutTag
   | .systemContractCallFailed _ => systemContractCallFailedTag
+  | .systemContractCallHalted _ _ => systemContractCallFailedTag
   | .systemContractEmpty _ => systemContractEmptyTag
   | .blockRlpSizeExceeded _ => blockRlpSizeExceededTag
   | .headerFieldPresence _ => headerFieldPresenceTag
@@ -235,7 +258,9 @@ def BlockValidationError.tag : BlockValidationError → String
   | .blockAccessListFormat _ => blockAccessListFormatTag
   | .blockAccessListGasLimit _ => blockAccessListGasLimitTag
 
-/-- The diagnostic payload of a block-rejection reason. -/
+/-- The diagnostic payload of a block-rejection reason. The two structured
+causes are written out here, and nowhere in the specification functions that
+return them. -/
 def BlockValidationError.detail : BlockValidationError → ErrorDetail
   | .gasLimitTooBig d | .gasLimitAdjustment d | .gasUsedOverflow d
   | .gasUsedMismatch d | .timestampOlderThanParent d | .blockNumber d
@@ -250,12 +275,20 @@ def BlockValidationError.detail : BlockValidationError → ErrorDetail
   | .blockAccessListContent d | .blockAccessListFormat d
   | .blockAccessListGasLimit d => d
   | .blockAccessListHash _ d => d
+  | .invalidOmmerHeader reason =>
+    .text s!"ommer header is invalid: {renderTagged reason.tag reason.detail}"
+  | .systemContractCallHalted target halt =>
+    .text s!"system contract ({target.toHex}) call failed: \
+      {halt.render}"
 
 /-- The one renderer for `BlockValidationError`. -/
 def BlockValidationError.render (e : BlockValidationError) : String :=
   renderTagged e.tag e.detail
 
-/-- Every block-rejection reason, for the completeness guards. -/
+/-- Every block-rejection reason, for the completeness guards: one
+representative per tag. `invalidOmmerHeader` renders under the `invalidOmmers`
+tag and `systemContractCallHalted` under the `systemContractCallFailed` tag, so
+neither is listed again. -/
 def BlockValidationError.all : List BlockValidationError :=
   [ .gasLimitTooBig .none, .gasLimitAdjustment .none, .gasUsedOverflow .none,
     .gasUsedMismatch .none, .timestampOlderThanParent .none,
@@ -2533,13 +2566,11 @@ def processCheckedSystemTransaction
   let ⟨state, systemTxOutput⟩ ←
     Except.mapError TransitionError.vm
       (processSystemTransaction benv target systemContractCode data)
-  -- P0.6 item 3: the failure text is extracted by the total match, never by a
-  -- partial projection out of the optional error field.
+  -- P0.6 item 3: the halt is extracted by the total match, never by a partial
+  -- projection out of the optional error field. The rejection carries the
+  -- halt itself; `BlockValidationError.detail` writes its text (3.2).
   match systemTxOutput.error with
-  | some err =>
-    .error <| .block <| .systemContractCallFailed <| .text
-      s!"system contract ({target.toHex}) call failed: \
-      {err.render}"
+  | some halt => .error <| .block <| .systemContractCallHalted target halt
   | none => .ok ⟨state, systemTxOutput⟩
 
 /-- Call each request-producing system contract in turn, threading the state.
@@ -3521,7 +3552,7 @@ of the ommer headers. `emptyOmmerHash` is its value on the empty list. -/
 def ommersListHash (ommers : List Header) : U256 :=
   (Rlp.Item.list (ommers.map Header.toRlpItem)).toBytes.keccak
 
-private def ommersFail (msg : String) : Except TransitionError Unit :=
+def ommersFail (msg : String) : Except TransitionError Unit :=
   .error <| .block <| .invalidOmmers <| .text msg
 
 /-- Number and retained canonical parent checks precede ommer rule lookup.
@@ -3537,12 +3568,14 @@ def ommerParent (chain : BlockChain) (header ommer : Header) :
       s!"ommer number = {ommer.number} has no retained parent")
 
 /-- Validate an ommer against its retained parent, preserving the existing
-ommer diagnostic and internal-error channels. -/
+ommer diagnostic and internal-error channels. A block-rejection reason of the
+ommer's own header is returned as the cause of `invalidOmmerHeader`, not
+rendered here (3.2). -/
 def validateOmmerWithParent (rules : ForkRules) (chain : BlockChain)
     (ommer : Header) (parent : Block) : Except TransitionError Unit :=
   match validateHeader rules { chain with blocks := [parent] } ommer with
   | .ok () => .ok ()
-  | .error (.block e) => ommersFail s!"ommer header is invalid: {e.render}"
+  | .error (.block e) => .error <| .block <| .invalidOmmerHeader e
   | .error e => .error e
 
 /-- Static ommer validation: the caller's explicit rules govern every header. -/

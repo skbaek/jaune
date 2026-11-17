@@ -1494,6 +1494,7 @@ private def guardPowChain : BlockChain :=
 
 private def ommersRejected : Except TransitionError Unit → Bool
   | .error (.block (.invalidOmmers _)) => true
+  | .error (.block (.invalidOmmerHeader _)) => true
   | _ => false
 
 #guard ommersListHash [] = emptyOmmerHash

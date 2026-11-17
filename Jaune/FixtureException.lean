@@ -442,6 +442,7 @@ def ofBlockValidationError : BlockValidationError → Option FixtureException
   -- vocabulary, so both fail closed, as `.headerNonce` does.
   | .invalidDifficulty _ => none
   | .invalidOmmers _ => none
+  | .invalidOmmerHeader _ => none
   | .extraDataTooBig _ => some blockExtraDataTooBig
   | .unknownParent _ => some blockUnknownParent
   | .unknownParentZero _ => some blockUnknownParentZero
@@ -456,6 +457,7 @@ def ofBlockValidationError : BlockValidationError → Option FixtureException
   | .requestsHash _ => some blockInvalidRequests
   | .depositEventLayout _ => some blockInvalidDepositEventLayout
   | .systemContractCallFailed _ => some blockSystemContractCallFailed
+  | .systemContractCallHalted _ _ => some blockSystemContractCallFailed
   -- Goal D (DP-2): the empty-contract rejection was a fail-closed internal
   -- invariant with no identity; the transition corpus names one.
   | .systemContractEmpty _ => some blockSystemContractEmpty

@@ -33,6 +33,7 @@ import Jaune.SymbolicPush
 import Jaune.SymbolicArith
 import Jaune.MessageExecution
 import Jaune.Transaction
+import Jaune.Bridge.G0b
 
 namespace Jaune
 
