@@ -35,6 +35,7 @@ import Jaune.SymbolicArith
 import Jaune.MessageExecution
 import Jaune.Transaction
 import Jaune.Bridge.MessageCall
+import Jaune.Bridge.CleanResult
 
 namespace Jaune
 

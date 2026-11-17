@@ -15,7 +15,7 @@ frame fails:
 
 This module only adds declarations. Nothing in the present interpreter reads them yet; the new
 chain is staged under the namespace `Jaune.Staging` until the switch commit relocates it, so that
-`Frame`, `Step` and `XStep` can sit beside today's definitions of the same names. Helpers on the
+`Frame` and `Step` can sit beside today's definitions of the same names. Helpers on the
 kept type `World` carry their final names.
 
 The design is `w1w3-design/note-rev2.md` sections 2.1-2.4 as replaced by `note-rev3-delta.md`.
@@ -44,12 +44,12 @@ def World.createSetUp (w : World) (a : Address) : World :=
   ({ w with state := w.state.incrNonce a }).clearStorageWritesIfEmpty a
 
 /-- Debit a balance, or nothing if it is too small: `Benv.subBal` on the world. -/
-def World.subBal (w : World) (a : Address) (v : U256) : Option World := do
+def World.subtractBalance (w : World) (a : Address) (v : U256) : Option World := do
   let state ← w.state.subBal a v
   some (({ w with state }).clearStorageWritesIfEmpty a)
 
 /-- Credit a balance: `Benv.addBal` on the world. -/
-def World.addBal (w : World) (a : Address) (v : U256) : World :=
+def World.addBalance (w : World) (a : Address) (v : U256) : World :=
   ({ w with state := w.state.addBal a v }).clearStorageWritesIfEmpty a
 
 namespace Staging
@@ -98,7 +98,7 @@ structure Trail : Type where
   /-- Whether RIPEMD-160's address was touched in a failed frame: the one touch that survives a
   failure under rules with the touched-account sweep. `false` in a running frame; set only by
   `settle` in a failed result and read only by `resume`. -/
-  ripemd160Touched : Bool := false
+  touchedRIPEMD160 : Bool := false
 
 /-- A frame's dynamic state, grouped by lifetime. -/
 structure Frame.State : Type where
@@ -313,8 +313,9 @@ structure Pending : Type where
   /-- W1 only: the caller's `Meta.error`, passed through so `resume` can rebuild its `Devm`. -/
   legacyError : Option SettledHalt
 
-/-- The result of a message opcode: finished in place, or a child frame to run. -/
-inductive XStep : Type
+/-- The result of a message opcode: finished in place, or a child frame to run. Today's `XStep`;
+the old name carries a retired token. -/
+inductive MessageOp.Outcome : Type
   /-- The opcode finished without opening a frame. -/
   | done (ex : Execution)
   /-- The opcode opens a child frame. -/
@@ -324,8 +325,8 @@ inductive XStep : Type
 inductive Step : Type
   /-- The frame stopped, with its raw result. -/
   | halt (ex : Execution)
-  /-- The frame goes on at `pc`. -/
-  | cont (pc : Nat) (devm : Devm)
+  /-- The frame goes on at `pc`. Today's `cont`. -/
+  | next (pc : Nat) (devm : Devm)
   /-- The frame opens a child, and goes on at `pc` when the child is resumed. -/
   | spawn (child : Frame) (pending : Pending) (pc : Nat)
 
@@ -343,9 +344,9 @@ inductive Frame.Entry : Type
 small to pay is an internal fault: call preparation has already checked it. -/
 def Message.transfer (m : Message) (w : World) : Except Fault World :=
   if m.transfersValue ∧ m.context.value ≠ 0 then
-    match w.subBal m.context.caller m.context.value with
+    match w.subtractBalance m.context.caller m.context.value with
     | none => .error (.internal (.assertion .none))
-    | some w => .ok (w.addBal m.context.recipient m.context.value)
+    | some w => .ok (w.addBalance m.context.recipient m.context.value)
   else .ok w
 
 /-- The world the frame's code is entered on, before the value transfer. It is recomputed from
@@ -394,13 +395,13 @@ def Trail.absorb (saved child : Trail) : Trail :=
   { createdAccounts := child.createdAccounts
     accountReads := saved.accountReads.union child.accountReads
     storageReads := saved.storageReads.union child.storageReads
-    ripemd160Touched := saved.ripemd160Touched }
+    touchedRIPEMD160 := saved.touchedRIPEMD160 }
 
 /-- The one touch a failed child leaves in its caller: RIPEMD-160's address, when the child's
 trail records it. -/
 def Substate.keepTouch (s : Substate) (child : Trail) : Substate :=
   { s with touchedAccounts :=
-      if child.ripemd160Touched then s.touchedAccounts.insert ripemd160Address
+      if child.touchedRIPEMD160 then s.touchedAccounts.insert ripemd160Address
       else s.touchedAccounts }
 
 end Staging

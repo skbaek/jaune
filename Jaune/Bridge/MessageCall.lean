@@ -42,7 +42,7 @@ def Frame.State.ofDevm (d : Devm) : Frame.State :=
         touchedAccounts := d.meta.touchedAccounts }
     trail :=
       { createdAccounts := d.createdAccounts, accountReads := d.meta.accountReads
-        storageReads := d.meta.storageReads, ripemd160Touched := false } }
+        storageReads := d.meta.storageReads, touchedRIPEMD160 := false } }
 
 /-- A lifetime-grouped state as today's dynamic state, with no output and no stored error. -/
 def Frame.State.toDevm (s : Frame.State) : Devm :=

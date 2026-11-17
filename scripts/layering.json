@@ -24,6 +24,7 @@
   "Jaune.BLSGuards": "check",
   "Jaune.Basic": "specification",
   "Jaune.Blake2Spec": "specification",
+  "Jaune.Bridge.CleanResult": "bridge",
   "Jaune.Bridge.MessageCall": "bridge",
   "Jaune.ChainStore": "adapter",
   "Jaune.Check.BLS": "check",
