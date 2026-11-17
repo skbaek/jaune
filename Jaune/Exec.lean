@@ -672,4 +672,121 @@ theorem exec_iff_exec_eq (pc : Nat) (sevm : Sevm) (devm : Devm) (exn : Execution
 theorem Exec.nonempty (evm : Evm) : Nonempty (Exec evm.pc evm.sta evm.dyna (exec evm)) :=
   (exec_iff_exec_eq evm.pc evm.sta evm.dyna (exec evm)).mpr rfl
 
+/-- On the four-part message call, a decoded next-op instruction steps through `NextOp.step`. -/
+theorem Evm.step_of_next {pc : Nat} {sevm : Sevm} {devm : Devm} {n : NextOp}
+    (h : NextOp.At sevm.code pc n) :
+    Evm.step ⟨pc, sevm, devm⟩ = NextOp.step ⟨pc, sevm, devm⟩ n := by
+  unfold Evm.step
+  rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.next n) from h]
+
+/-- On the four-part message call, a decoded halting instruction halts with its own result. -/
+theorem Evm.step_of_halt {pc : Nat} {sevm : Sevm} {devm : Devm} {l : HaltOp}
+    (h : HaltOp.At sevm.code pc l) :
+    Evm.step ⟨pc, sevm, devm⟩ = .halt (l.run sevm devm) := by
+  unfold Evm.step
+  rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.halt l) from h]
+
+/-! ### Block statics across a frame boundary, on the four-part message call
+
+The restated forms of the `Legacy.*` facts above: a spawned child's message carries its caller's
+block statics, and entering a frame runs a machine under its message's. -/
+
+/-- A CALL-family spawn hands the parent's block statics to the child frame. -/
+theorem genericCall.step_spawn_benvStat
+    {sevm : Sevm} {devm : Devm} {gas : Nat} {value : U256}
+    {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
+    {inputIndex inputSize outputIndex outputSize : Nat} {code : ByteArray}
+    {disablePrecompiles : Bool} {child : Frame} {pending : Pending}
+    (hs : genericCall.step sevm devm gas value caller target codeAddress
+      shouldTransferValue isStaticcall inputIndex inputSize outputIndex
+      outputSize code disablePrecompiles = .spawn child pending) :
+    child.message.context.block = sevm.benvStat := by
+  simp only [genericCall.step, Bind.bind, Except.bind, Pure.pure, Except.pure] at hs
+  repeat' split at hs
+  all_goals simp only [MessageOp.Outcome.ofExcept, MessageOp.Outcome.spawn.injEq,
+    reduceCtorEq] at hs
+  obtain ⟨rfl, -⟩ := hs
+  rfl
+
+/-- A CREATE-family spawn hands the parent's block statics to the child frame. -/
+theorem genericCreate.step_spawn_benvStat
+    {sevm : Sevm} {devm : Devm} {endowment : U256} {newAddress : Address}
+    {memoryIndex memorySize : Nat} {child : Frame} {pending : Pending}
+    (hs : genericCreate.step sevm devm endowment newAddress memoryIndex memorySize
+      = .spawn child pending) :
+    child.message.context.block = sevm.benvStat := by
+  simp only [genericCreate.step, Bind.bind, Except.bind, Except.assert,
+    assertDynamic, Pure.pure, Except.pure] at hs
+  repeat' split at hs
+  all_goals simp only [MessageOp.Outcome.ofExcept, MessageOp.Outcome.spawn.injEq,
+    reduceCtorEq] at hs
+  all_goals obtain ⟨rfl, -⟩ := hs
+  all_goals rfl
+
+/-- An Amsterdam CALL-family spawn hands the parent's block statics to the child. -/
+theorem genericCallAmsterdam.step_spawn_benvStat
+    {sevm : Sevm} {state : StateGasRules} {devm : Devm}
+    {gas reservoir : Nat} {value : U256}
+    {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
+    {inputIndex inputSize outputIndex outputSize : Nat} {code : ByteArray}
+    {disablePrecompiles newAccountCharged insufficientBalance : Bool}
+    {child : Frame} {pending : Pending}
+    (hs : genericCallAmsterdam.step sevm state devm gas reservoir value
+      caller target codeAddress shouldTransferValue isStaticcall inputIndex
+      inputSize outputIndex outputSize code disablePrecompiles
+      newAccountCharged insufficientBalance = .spawn child pending) :
+    child.message.context.block = sevm.benvStat := by
+  simp only [genericCallAmsterdam.step, Bind.bind, Except.bind, Pure.pure,
+    Except.pure] at hs
+  repeat' split at hs
+  all_goals simp only [MessageOp.Outcome.ofExcept, MessageOp.Outcome.spawn.injEq,
+    reduceCtorEq] at hs
+  obtain ⟨rfl, -⟩ := hs
+  rfl
+
+/-- An Amsterdam CREATE-family spawn hands the parent's block statics to the child. -/
+theorem genericCreateAmsterdam.step_spawn_benvStat
+    {sevm : Sevm} {state : StateGasRules} {devm : Devm} {endowment : U256}
+    {newAddress : Address} {memoryIndex memorySize : Nat} {child : Frame} {pending : Pending}
+    (hs : genericCreateAmsterdam.step sevm state devm endowment newAddress
+      memoryIndex memorySize = .spawn child pending) :
+    child.message.context.block = sevm.benvStat := by
+  simp only [genericCreateAmsterdam.step, Bind.bind, Except.bind, Pure.pure,
+    Except.pure] at hs
+  repeat' split at hs
+  all_goals simp only [MessageOp.Outcome.ofExcept, MessageOp.Outcome.spawn.injEq,
+    reduceCtorEq] at hs
+  all_goals obtain ⟨rfl, -⟩ := hs
+  all_goals rfl
+
+/-- Every spawning instruction hands the parent's block statics to the child. -/
+theorem MessageOp.step_spawn_benvStat {sevm : Sevm} {devm : Devm} {x : MessageOp}
+    {child : Frame} {pending : Pending} (hs : MessageOp.step sevm devm x = .spawn child pending) :
+    child.message.context.block = sevm.benvStat := by
+  cases x <;>
+    simp only [MessageOp.step, Bind.bind, Except.bind, Except.assert,
+      Pure.pure, Except.pure] at hs <;>
+    repeat' split at hs
+  all_goals simp only [MessageOp.Outcome.ofExcept, reduceCtorEq] at hs
+  all_goals
+    first
+      | exact genericCreate.step_spawn_benvStat hs
+      | exact genericCall.step_spawn_benvStat hs
+      | exact genericCreateAmsterdam.step_spawn_benvStat hs
+      | exact genericCallAmsterdam.step_spawn_benvStat hs
+
+/-- Entering a frame runs a machine under the block statics its message carries: `enter` moves
+value on the world only, and the machine's static environment is `Message.sevm`. -/
+theorem Frame.enter_run_benvStat {f : Frame} {cevm : Evm}
+    (h : enter f = .run cevm) : cevm.sta.benvStat = f.message.context.block := by
+  unfold enter enterWith at h
+  rcases ht : f.message.transfer f.enteredWorld with fault | world <;>
+    simp only [ht] at h
+  · cases h
+  · rcases hc : f.message.codeAddress with _ | address <;> simp only [hc] at h
+    · cases h; rfl
+    · split at h
+      · cases h
+      · cases h; rfl
+
 end Jaune

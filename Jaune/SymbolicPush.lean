@@ -126,20 +126,6 @@ theorem nextOp_step_stackOverflow (evm : Evm) (bytes : Bytes) (width : bytes.len
     Devm.stack, Devm.setMach, afterCharge, cost, bind, Except.bind,
     Step.ofExecution, Nat.not_lt_of_ge full]
 
-/-- On the four-part message call, a decoded next-op instruction steps through `NextOp.step`. -/
-theorem _root_.Jaune.Evm.step_of_next {pc : Nat} {sevm : Sevm} {devm : Devm} {n : NextOp}
-    (h : NextOp.At sevm.code pc n) :
-    Evm.step ⟨pc, sevm, devm⟩ = NextOp.step ⟨pc, sevm, devm⟩ n := by
-  unfold Evm.step
-  rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.next n) from h]
-
-/-- On the four-part message call, a decoded halting instruction halts with its own result. -/
-theorem _root_.Jaune.Evm.step_of_halt {pc : Nat} {sevm : Sevm} {devm : Devm} {l : HaltOp}
-    (h : HaltOp.At sevm.code pc l) :
-    Evm.step ⟨pc, sevm, devm⟩ = .halt (l.run sevm devm) := by
-  unfold Evm.step
-  rw [show (Evm.getInst ⟨pc, sevm, devm⟩) = some (.halt l) from h]
-
 /-- `prepend` on the four-part message call: prepend a decoded PUSH to a complete continuation,
 preserving its outcome. -/
 def prependExec {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
