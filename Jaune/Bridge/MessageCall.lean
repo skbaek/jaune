@@ -5,7 +5,8 @@ import Jaune.MessageCall
 # The four-part message call: maps from today's definitions (W1 unit B, bridge)
 
 The maps between today's message-call types and the staged ones of `Jaune.MessageCall`, used
-only in bridges. They live in this bridge module with the old side and are deleted with it
+only in bridges. (`Frame.State.ofDevm` and `toDevm` sit in `Jaune.MessageCall` itself: the W1
+bodies of `enter` and `settle` use them.) They live in this bridge module with the old side and are deleted with it
 after the gate's tag (goal 3.1).
 
 Also here, about today's definitions: `Resume.parent`, the saved caller every `Resume` carries,
@@ -28,35 +29,6 @@ def Execution.Clean : Execution → Prop
   | .error _ => True
 
 namespace Staging
-
-/-- Today's dynamic state grouped by lifetime. It forgets `output` and `error`; the trail's
-RIPEMD-160 flag is `false`, as in every running frame. -/
-def Frame.State.ofDevm (d : Devm) : Frame.State :=
-  { machine :=
-      { stack := d.stack, memory := d.memory, gasLeft := d.gasLeft, stateGas := d.stateGas
-        returnData := d.returnData }
-    world := d.world
-    substate :=
-      { logs := d.logs, refund := d.refundCounter, selfDestructs := d.accountsToDelete
-        accessedAddresses := d.accessedAddresses, accessedStorageKeys := d.accessedStorageKeys
-        touchedAccounts := d.meta.touchedAccounts }
-    trail :=
-      { createdAccounts := d.createdAccounts, accountReads := d.meta.accountReads
-        storageReads := d.meta.storageReads, touchedRIPEMD160 := false } }
-
-/-- A lifetime-grouped state as today's dynamic state, with no output and no stored error. -/
-def Frame.State.toDevm (s : Frame.State) : Devm :=
-  { mach :=
-      { stack := s.machine.stack, memory := s.machine.memory, gasLeft := s.machine.gasLeft
-        stateGas := s.machine.stateGas }
-    «meta» :=
-      { logs := s.substate.logs, refundCounter := s.substate.refund, output := []
-        accountsToDelete := s.substate.selfDestructs, returnData := s.machine.returnData
-        error := none, accessedAddresses := s.substate.accessedAddresses
-        accessedStorageKeys := s.substate.accessedStorageKeys
-        createdAccounts := s.trail.createdAccounts, accountReads := s.trail.accountReads
-        storageReads := s.trail.storageReads, touchedAccounts := s.substate.touchedAccounts }
-    world := s.world }
 
 /-- Grouping by lifetime and back loses nothing of a state with no output and no stored error. -/
 theorem Frame.State.toDevm_ofDevm (d : Devm) (hout : d.output = []) (herr : d.error = none) :

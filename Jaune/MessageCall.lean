@@ -111,6 +111,40 @@ structure Frame.State : Type where
   /-- Kept on failure. -/
   trail : Trail
 
+/-! ### Today's dynamic state and the lifetime groups
+
+The W1 bodies of `enter`, `settle` and `resume` still run over today's `Devm`, so they convert
+between it and `Frame.State`. Both maps go at unit N, when `Devm` becomes `Frame.State`. -/
+
+/-- Today's dynamic state grouped by lifetime. It forgets `output` and `error`; the trail's
+RIPEMD-160 flag is `false`, as in every running frame. -/
+def Frame.State.ofDevm (d : Devm) : Frame.State :=
+  { machine :=
+      { stack := d.stack, memory := d.memory, gasLeft := d.gasLeft, stateGas := d.stateGas
+        returnData := d.returnData }
+    world := d.world
+    substate :=
+      { logs := d.logs, refund := d.refundCounter, selfDestructs := d.accountsToDelete
+        accessedAddresses := d.accessedAddresses, accessedStorageKeys := d.accessedStorageKeys
+        touchedAccounts := d.meta.touchedAccounts }
+    trail :=
+      { createdAccounts := d.createdAccounts, accountReads := d.meta.accountReads
+        storageReads := d.meta.storageReads, touchedRIPEMD160 := false } }
+
+/-- A lifetime-grouped state as today's dynamic state, with no output and no stored error. -/
+def Frame.State.toDevm (s : Frame.State) : Devm :=
+  { mach :=
+      { stack := s.machine.stack, memory := s.machine.memory, gasLeft := s.machine.gasLeft
+        stateGas := s.machine.stateGas }
+    «meta» :=
+      { logs := s.substate.logs, refundCounter := s.substate.refund, output := []
+        accountsToDelete := s.substate.selfDestructs, returnData := s.machine.returnData
+        error := none, accessedAddresses := s.substate.accessedAddresses
+        accessedStorageKeys := s.substate.accessedStorageKeys
+        createdAccounts := s.trail.createdAccounts, accountReads := s.trail.accountReads
+        storageReads := s.trail.storageReads, touchedAccounts := s.substate.touchedAccounts }
+    world := s.world }
+
 /-! ### Static records -/
 
 /-- The block a frame runs in: today's `BenvStat` without the transaction's original state. The
