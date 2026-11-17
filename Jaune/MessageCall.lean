@@ -54,7 +54,7 @@ def World.addBalance (w : World) (a : Address) (v : U256) : World :=
 
 end Jaune
 
-namespace Jaune.Staging
+namespace Jaune
 
 /-! ### Lifetime records -/
 
@@ -440,5 +440,5 @@ def Substate.keepTouch (s : Substate) (child : Trail) : Substate :=
       if child.touchedRIPEMD160 then s.touchedAccounts.insert ripemd160Address
       else s.touchedAccounts }
 
-end Jaune.Staging
+end Jaune
 

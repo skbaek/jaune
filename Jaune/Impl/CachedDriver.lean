@@ -21,7 +21,7 @@ module and today's `Jaune.Impl.CachedExec` stand until the delete commit removes
 chain.
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 open Jaune
 
@@ -109,10 +109,10 @@ private theorem genericCall.stepCached_fst
     (genericCall.stepCached sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles cache).1 =
-    Staging.genericCall.step sevm devm gas value caller target codeAddress
+    genericCall.step sevm devm gas value caller target codeAddress
       shouldTransferValue isStaticcall inputIndex inputSize outputIndex
       outputSize code disablePrecompiles := by
-  unfold genericCall.stepCached Staging.genericCall.step
+  unfold genericCall.stepCached genericCall.step
   dsimp only
   split
   · rfl
@@ -155,7 +155,7 @@ private def MessageOp.stepCached
     MessageOp → MessageOp.Outcome × Option CalldataCache
   | .call =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (Staging.MessageOp.step sevm devm .call, cache)
+    | some _ => (MessageOp.step sevm devm .call, cache)
     | none =>
     MessageOp.Outcome.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -206,7 +206,7 @@ private def MessageOp.stepCached
       Except (EvmError × Devm) (MessageOp.Outcome × Option CalldataCache))
   | .callcode =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (Staging.MessageOp.step sevm devm .callcode, cache)
+    | some _ => (MessageOp.step sevm devm .callcode, cache)
     | none =>
     MessageOp.Outcome.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -255,7 +255,7 @@ private def MessageOp.stepCached
       Except (EvmError × Devm) (MessageOp.Outcome × Option CalldataCache))
   | .delegatecall =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (Staging.MessageOp.step sevm devm .delegatecall, cache)
+    | some _ => (MessageOp.step sevm devm .delegatecall, cache)
     | none =>
     MessageOp.Outcome.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -293,7 +293,7 @@ private def MessageOp.stepCached
       Except (EvmError × Devm) (MessageOp.Outcome × Option CalldataCache))
   | .staticcall =>
     match sevm.benvStat.rules.stateGas with
-    | some _ => (Staging.MessageOp.step sevm devm .staticcall, cache)
+    | some _ => (MessageOp.step sevm devm .staticcall, cache)
     | none =>
     MessageOp.Outcome.ofExceptCached cache (do
       let ⟨gas, devm⟩ ← devm.pop
@@ -328,12 +328,12 @@ private def MessageOp.stepCached
         true true inputIndex inputSize outputIndex outputSize code
         disablePrecompiles cache :
       Except (EvmError × Devm) (MessageOp.Outcome × Option CalldataCache))
-  | x => (Staging.MessageOp.step sevm devm x, cache)
+  | x => (MessageOp.step sevm devm x, cache)
 
 private theorem MessageOp.stepCached_fst
     (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) (x : MessageOp) :
-    (MessageOp.stepCached sevm devm cache x).1 = Staging.MessageOp.step sevm devm x := by
-  cases x <;> simp only [MessageOp.stepCached, Staging.MessageOp.step]
+    (MessageOp.stepCached sevm devm cache x).1 = MessageOp.step sevm devm x := by
+  cases x <;> simp only [MessageOp.stepCached, MessageOp.step]
   case call =>
     rcases hs : sevm.benvStat.rules.stateGas with _ | state
     · refine MessageOp.Outcome.ofExceptCached_fst cache ?_
@@ -373,13 +373,13 @@ private def NextOp.stepCached
   | .message x =>
     let result := MessageOp.stepCached evm.sta evm.dyna cache x
     (MessageOp.Outcome.toStep pc result.1, result.2)
-  | _ => (Staging.NextOp.step evm n, cache)
+  | _ => (NextOp.step evm n, cache)
 
 private theorem NextOp.stepCached_fst
     (evm : Evm) (cache : Option CalldataCache) (n : NextOp) :
-    (NextOp.stepCached evm cache n).1 = Staging.NextOp.step evm n := by
+    (NextOp.stepCached evm cache n).1 = NextOp.step evm n := by
   cases n <;>
-    simp [NextOp.stepCached, Staging.NextOp.step, MessageOp.stepCached_fst]
+    simp [NextOp.stepCached, NextOp.step, MessageOp.stepCached_fst]
 
 private def Evm.stepCached
     (evm : Evm) (cache : Option CalldataCache) :
@@ -393,8 +393,8 @@ private def Evm.stepCached
 
 private theorem Evm.stepCached_fst
     (evm : Evm) (cache : Option CalldataCache) :
-    (Evm.stepCached evm cache).1 = Staging.Evm.step evm := by
-  unfold Evm.stepCached Staging.Evm.step
+    (Evm.stepCached evm cache).1 = Evm.step evm := by
+  unfold Evm.stepCached Evm.step
   cases h : evm.getInst with
   | none => rfl
   | some inst =>
@@ -435,16 +435,16 @@ private def execFueledCachedCore :
 
 private theorem execFueledCachedCore_fst :
     ∀ fuel evm cache,
-      (execFueledCachedCore evm fuel cache).1 = Staging.execFueled evm fuel := by
+      (execFueledCachedCore evm fuel cache).1 = execFueled evm fuel := by
   intro fuel
   induction fuel with
   | zero => intro evm cache; rfl
   | succ fuel ih =>
     intro evm cache
     rcases hstep : Evm.stepCached evm cache with ⟨step, cache'⟩
-    have hs : step = Staging.Evm.step evm := by
+    have hs : step = Evm.step evm := by
       simpa [hstep] using Evm.stepCached_fst evm cache
-    simp only [execFueledCachedCore, hstep, Staging.execFueled, ← hs]
+    simp only [execFueledCachedCore, hstep, execFueled, ← hs]
     cases step with
     | halt ex => rfl
     | next pc devm => exact ih ⟨pc, evm.sta, devm⟩ cache'
@@ -464,11 +464,11 @@ private theorem execFueledCachedCore_fst :
       | run childEvm =>
         dsimp only
         rcases hchild : execFueledCachedCore childEvm fuel cache' with ⟨childResult, cache''⟩
-        have hc : childResult = Staging.execFueled childEvm fuel := by
+        have hc : childResult = execFueled childEvm fuel := by
           simpa [hchild] using ih childEvm cache'
         subst hc
         dsimp only
-        cases (Staging.execFueled childEvm fuel).run with
+        cases (execFueled childEvm fuel).run with
         | none => rfl
         | some raw =>
           simp only [Option.map]
@@ -486,10 +486,10 @@ private def execFueledCached
   (execFueledCachedCore evm fuel none).1
 
 @[csimp] private theorem execFueled_eq_cached :
-    Staging.execFueled = execFueledCached := by
+    execFueled = execFueledCached := by
   funext evm fuel
   symm
   exact execFueledCachedCore_fst fuel evm none
 
-end Jaune.Staging
+end Jaune
 

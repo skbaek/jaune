@@ -111,7 +111,7 @@ end Legacy
 
 end Jaune
 
-namespace Jaune.Staging
+namespace Jaune
 
 /-- Today's entry result as a staged one: a machine stays a machine, a settled result is read
 by `Frame.Result.ofSettled`. -/
@@ -305,5 +305,5 @@ theorem enterWith_prepared (frame : Jaune.Legacy.Frame) (prepared : Devm)
   simp only [Devm.withState, Devm.withStorageWrites, Devm.setWorld, htenv, ht,
     Devm.transientStorage]
 
-end Jaune.Staging
+end Jaune
 

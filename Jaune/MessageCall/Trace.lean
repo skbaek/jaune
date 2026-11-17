@@ -18,7 +18,7 @@ The run identity `Context` and the certificate `CertifiedResult` are today's: ne
 message-call type. They move here with the switch.
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 namespace Trace
 
@@ -36,7 +36,7 @@ inductive Event where
 abbrev Sink (m : Type → Type) := Event → m Unit
 
 /-- Index by the staged driver's result, so that proof transport erases to runtime identity. -/
-abbrev Result (evm : Evm) (fuel : Nat) := CertifiedResult (Staging.execFueled evm fuel)
+abbrev Result (evm : Evm) (fuel : Nat) := CertifiedResult (Jaune.execFueled evm fuel)
 
 /-- The caller's raw result once its child has settled: the staged driver's tail. A fault, in
 settlement or in resumption, carries the child's checkpoint as its (unread) state. -/
@@ -59,11 +59,11 @@ theorem execFueled_tail (rules : ForkRules) (child : Frame) (pending : Pending) 
         match (generalizing := false) resume rules pending child.checkpoint result with
         | .error fault => Fueled.ofExcept (.error (fault.toEvmError, child.checkpoint.toDevm))
         | .ok (.error (reason, devm)) => Fueled.ofExcept (.error (.halt reason, devm))
-        | .ok (.ok devm) => Staging.execFueled ⟨pc, sta, devm⟩ fuel :
+        | .ok (.ok devm) => Jaune.execFueled ⟨pc, sta, devm⟩ fuel :
         Fueled (EvmError × Devm) Devm)
       = match resumedRaw rules child pending settled with
         | .error error => Fueled.ofExcept (.error error)
-        | .ok devm => Staging.execFueled ⟨pc, sta, devm⟩ fuel := by
+        | .ok devm => Jaune.execFueled ⟨pc, sta, devm⟩ fuel := by
   rcases settled with fault | result
   · rfl
   · simp only [resumedRaw]
@@ -71,23 +71,23 @@ theorem execFueled_tail (rules : ForkRules) (child : Frame) (pending : Pending) 
 
 /-- The staged driver at a spawn, read through `resumedRaw`. -/
 theorem execFueled_spawn {evm : Evm} {fuel : Nat} {child : Frame} {pending : Pending} {pc : Nat}
-    (hstep : Staging.Evm.step evm = .spawn child pending pc) :
-    Staging.execFueled evm (fuel + 1)
+    (hstep : Evm.step evm = .spawn child pending pc) :
+    Jaune.execFueled evm (fuel + 1)
       = match (match enter child with
           | .done result => some result
-          | .run childEvm => ((Staging.execFueled childEvm fuel).run).map (settle child)) with
+          | .run childEvm => ((Jaune.execFueled childEvm fuel).run).map (settle child)) with
         | none => Fueled.exhausted
         | some settled =>
           match resumedRaw evm.sta.benvStat.rules child pending settled with
           | .error error => Fueled.ofExcept (.error error)
-          | .ok devm => Staging.execFueled ⟨pc, evm.sta, devm⟩ fuel := by
-  rw [Staging.execFueled, hstep]
+          | .ok devm => Jaune.execFueled ⟨pc, evm.sta, devm⟩ fuel := by
+  rw [Jaune.execFueled, hstep]
   dsimp only
   cases enter child with
   | done r => exact execFueled_tail _ child pending pc evm.sta fuel r
   | run childEvm =>
     dsimp only
-    cases (Staging.execFueled childEvm fuel).run with
+    cases (Jaune.execFueled childEvm fuel).run with
     | none => rfl
     | some raw => exact execFueled_tail _ child pending pc evm.sta fuel _
 
@@ -99,17 +99,17 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
     (evm : Evm) → (fuel : Nat) → Context → Nat → m (Result evm fuel)
   | evm, 0, context, nextFrame => do
     sink (.exited context none)
-    pure ⟨Fueled.exhausted, nextFrame, by simp only [Staging.execFueled]⟩
+    pure ⟨Fueled.exhausted, nextFrame, by simp only [Jaune.execFueled]⟩
   | evm, fuel + 1, context, nextFrame => do
-    match hstep : Staging.Evm.step evm with
+    match hstep : Evm.step evm with
     | .halt raw =>
       sink (.instruction context evm (.halt raw))
       sink (.exited context (some raw))
-      pure ⟨Fueled.ofExcept raw, nextFrame, by simp only [Staging.execFueled, hstep]⟩
+      pure ⟨Fueled.ofExcept raw, nextFrame, by simp only [Jaune.execFueled, hstep]⟩
     | .next pc devm =>
       sink (.instruction context evm (.next pc devm))
       cast (congrArg (fun expected => m (CertifiedResult expected)) (by
-        simp only [Staging.execFueled, hstep]))
+        simp only [Jaune.execFueled, hstep]))
         (execFueled sink ⟨pc, evm.sta, devm⟩ fuel context nextFrame)
     | .spawn child pending pc =>
       sink (.instruction context evm (.spawn child pending pc))
@@ -150,7 +150,7 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
               rw [← childResult.erases, hchild, Option.map_some]; dsimp only
               exact (congrArg (fun r : Execution => (match r with
                 | .error error => Fueled.ofExcept (.error error)
-                | .ok devm => Staging.execFueled ⟨pc, evm.sta, devm⟩ fuel :
+                | .ok devm => Jaune.execFueled ⟨pc, evm.sta, devm⟩ fuel :
                   Fueled (EvmError × Devm) Devm)) hresume).symm⟩
           | .ok devm =>
             sink (.resumed context nextFrame (.ok devm))
@@ -159,20 +159,20 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
               rw [← childResult.erases, hchild, Option.map_some]; dsimp only
               exact (congrArg (fun r : Execution => (match r with
                 | .error error => Fueled.ofExcept (.error error)
-                | .ok devm => Staging.execFueled ⟨pc, evm.sta, devm⟩ fuel :
+                | .ok devm => Jaune.execFueled ⟨pc, evm.sta, devm⟩ fuel :
                   Fueled (EvmError × Devm) Devm)) hresume).symm))
               (execFueled sink ⟨pc, evm.sta, devm⟩ fuel context childResult.nextFrame)
   termination_by _ fuel _ _ => fuel
 
 /-- The exact execution projection of every successfully returned staged result. -/
 theorem execFueled_erasure {evm : Evm} {fuel : Nat} (result : Result evm fuel) :
-    result.value = Staging.execFueled evm fuel := result.erases
+    result.value = Jaune.execFueled evm fuel := result.erases
 
 /-- Successful total executions agree with the staged total interpreter. -/
 structure ExecutionResult (evm : Evm) where
   value : Execution
   nextFrame : Nat
-  erases : value = Staging.exec evm
+  erases : value = Jaune.exec evm
 
 /-- Seed exactly the same sufficient fuel as the staged total interpreter. Exhaustion gives the
 interpreter's own internal invariant error, with no further event. -/
@@ -182,14 +182,14 @@ def exec {m : Type → Type} [Monad m] (sink : Sink m) (evm : Evm)
   match hrun : result.value.run with
   | some raw =>
     pure ⟨raw, result.nextFrame, by
-      simp only [Staging.exec, ← result.erases, hrun]⟩
+      simp only [Jaune.exec, ← result.erases, hrun]⟩
   | none =>
     pure ⟨.error ⟨.internal (.invariant .none), evm.dyna⟩, result.nextFrame, by
-      simp only [Staging.exec, ← result.erases, hrun]⟩
+      simp only [Jaune.exec, ← result.erases, hrun]⟩
 
 /-- The total driver returns exactly the staged total interpreter's result. -/
 theorem exec_erasure {evm : Evm} (result : ExecutionResult evm) :
-    result.value = Staging.exec evm := result.erases
+    result.value = Jaune.exec evm := result.erases
 
 /-- A top-level frame's settled result: entered from its checkpoint, run if it has code, and
 settled. The W1 form of the design note's `Frame.runTop` (second revision, §2.5), for the tracer's
@@ -197,7 +197,7 @@ certificate; unit I's definition replaces it. -/
 def topResult (frame : Frame) : Except Fault Frame.Result :=
   match enterWith frame frame.checkpoint.toDevm with
   | .done result => result
-  | .run evm => settle frame (Staging.exec evm)
+  | .run evm => settle frame (Jaune.exec evm)
 
 structure FrameResult (frame : Frame) where
   value : Except Fault Frame.Result
@@ -229,5 +229,5 @@ theorem runFrame_erasure {frame : Frame} (result : FrameResult frame) :
 
 end Trace
 
-end Jaune.Staging
+end Jaune
 

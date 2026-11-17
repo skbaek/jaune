@@ -17,7 +17,7 @@ definitions, and deleted with them after the gate's tag (the W1 design note, sec
 §6.5 and §3.2, unit K1).
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 open Legacy
 open Jaune.Legacy.Trace (Context CertifiedResult)
@@ -31,7 +31,7 @@ today's, and its entry and settled result are read by `Frame.Entry.ofLegacy` and
 erased state. -/
 def Event.Corr : Jaune.Legacy.Trace.Event → Event → Prop
   | .instruction c b s, .instruction c' b' s' =>
-    c = c' ∧ b = b' ∧ s = Jaune.Legacy.Evm.step b ∧ s' = Staging.Evm.step b
+    c = c' ∧ b = b' ∧ s = Jaune.Legacy.Evm.step b ∧ s' = Evm.step b
   | .entered c f e, .entered c' f' e' =>
     c = c' ∧ f'.message = Message.ofLegacy f.outer f.isCreate ∧ e' = Frame.Entry.ofLegacy e
   | .exited c r, .exited c' r' =>
@@ -143,7 +143,7 @@ def stagedSpawn (sink : Sink m) (evm : Evm) (fuel : Nat) (context : Context)
     sink (.entered childContext child (.run childEvm))
     let k ← CertifiedResult.nextFrame <$>
       execFueled sink childEvm fuel childContext (nextFrame + 1)
-    match (Staging.execFueled childEvm fuel).run with
+    match (Jaune.execFueled childEvm fuel).run with
     | none => do
       sink (.exited context none)
       pure k
@@ -203,7 +203,7 @@ theorem legacy_spawn (sinkOld : Jaune.Legacy.Trace.Sink m) {evm : Evm} {fuel pc 
     simp only [Jaune.Legacy.execFueled, hs, he, hc, hr]
 
 theorem staged_halt (sink : Sink m) {evm : Evm} {fuel : Nat} {raw : Execution}
-    (hs : Staging.Evm.step evm = .halt raw) (context : Context) (nextFrame : Nat) :
+    (hs : Evm.step evm = .halt raw) (context : Context) (nextFrame : Nat) :
     CertifiedResult.nextFrame <$> execFueled sink evm (fuel + 1) context nextFrame
       = (do sink (.instruction context evm (.halt raw)); sink (.exited context (some raw))
             pure nextFrame) := by
@@ -212,7 +212,7 @@ theorem staged_halt (sink : Sink m) {evm : Evm} {fuel : Nat} {raw : Execution}
   simp only [map_bind, map_pure]
 
 theorem staged_next (sink : Sink m) {evm : Evm} {fuel pc : Nat} {devm : Devm}
-    (hs : Staging.Evm.step evm = .next pc devm) (context : Context) (nextFrame : Nat) :
+    (hs : Evm.step evm = .next pc devm) (context : Context) (nextFrame : Nat) :
     CertifiedResult.nextFrame <$> execFueled sink evm (fuel + 1) context nextFrame
       = (do sink (.instruction context evm (.next pc devm))
             CertifiedResult.nextFrame <$>
@@ -221,10 +221,10 @@ theorem staged_next (sink : Sink m) {evm : Evm} {fuel pc : Nat} {devm : Devm}
   split <;> rename_i hs' <;> rw [hs] at hs' <;> cases hs'
   simp only [map_bind]
   rw [map_cast_nextFrame]
-  simp only [Staging.execFueled, hs]
+  simp only [Jaune.execFueled, hs]
 
 theorem staged_spawn (sink : Sink m) {evm : Evm} {fuel pc : Nat} {child : Frame}
-    {pending : Pending} (hs : Staging.Evm.step evm = .spawn child pending pc) (context : Context)
+    {pending : Pending} (hs : Evm.step evm = .spawn child pending pc) (context : Context)
     (nextFrame : Nat) :
     CertifiedResult.nextFrame <$> execFueled sink evm (fuel + 1) context nextFrame
       = (do sink (.instruction context evm (.spawn child pending pc))
@@ -394,7 +394,7 @@ end Simulation
 
 end Trace
 
-end Jaune.Staging
+end Jaune
 
 namespace Jaune
 
@@ -452,7 +452,7 @@ end Legacy
 
 end Jaune
 
-namespace Jaune.Staging
+namespace Jaune
 
 open Legacy
 open Jaune.Legacy.Trace (Context CertifiedResult)
@@ -474,7 +474,7 @@ theorem bind_execution_legacy {m : Type → Type} [Monad m] [LawfulMonad m] {evm
 /-- A staged total execution result is determined by its next frame number. -/
 theorem bind_execution {m : Type → Type} [Monad m] [LawfulMonad m] {evm : Evm} {β : Type}
     (x : m (ExecutionResult evm)) (g : ExecutionResult evm → m β) :
-    x >>= g = (ExecutionResult.nextFrame <$> x) >>= fun k => g ⟨Staging.exec evm, k, rfl⟩ := by
+    x >>= g = (ExecutionResult.nextFrame <$> x) >>= fun k => g ⟨Jaune.exec evm, k, rfl⟩ := by
   rw [bind_map_left]; congr 1; funext r; rcases r with ⟨v, k, h⟩; subst h; rfl
 
 section Top
@@ -533,7 +533,7 @@ theorem runFrame_trace_legacy (msg : Msg) (isCreate : Bool) (runId : String) :
     have hf : Frame.ofTop msg isCreate
         = ⟨Message.ofLegacy F.outer F.isCreate, Frame.State.ofDevm (initDevm msg)⟩ := by
       rw [← hmsg]; rfl
-    have hset : settle (Frame.ofTop msg isCreate) (Staging.exec child)
+    have hset : settle (Frame.ofTop msg isCreate) (Jaune.exec child)
         = Frame.Result.ofSettled (F.settle (Jaune.Legacy.exec child)) := by
       rw [settle_observe (exec_legacy child).symm, hf,
         settle_legacy F (initDevm msg) htop _ hclean]
@@ -715,5 +715,5 @@ theorem exec_json_legacy (cfg : Config) (state : IO.Ref Jaune.Legacy.TraceJson.S
 
 end TraceJson
 
-end Jaune.Staging
+end Jaune
 

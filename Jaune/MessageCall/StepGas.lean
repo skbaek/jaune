@@ -17,7 +17,7 @@ The measure a spawn leaves its caller is now its checkpoint's (`Frame.parentGas`
 unchanged. Staged under `Jaune.Staging`; nothing outside the staged chain reads it.
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 open Jaune
 
@@ -1568,7 +1568,7 @@ theorem NextOp.step_gasBound (evm : Evm) (n : NextOp) :
       · simp
 
 theorem Evm.step_gasBound (evm : Evm) :
-    (Staging.Evm.step evm).GasBound evm.sta evm.dyna.gasMeasure := by
+    (Evm.step evm).GasBound evm.sta evm.dyna.gasMeasure := by
   unfold Evm.step
   split
   · exact Execution.settledGasLe_of_gasLe (Nat.le_of_eq rfl)
@@ -1580,5 +1580,5 @@ theorem Evm.step_gasBound (evm : Evm) :
   · rename_i l _
     exact Execution.settledGasLe_of_gasLe (HaltOp.run_gasLe evm.sta evm.dyna l)
 
-end Jaune.Staging
+end Jaune
 

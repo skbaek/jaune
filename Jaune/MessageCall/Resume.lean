@@ -19,7 +19,7 @@ This is the W1 form: the caller comes back as today's `Devm`, rebuilt from the m
 the caller's `output` and `error`, which `Pending` passes through unchanged.
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 /-- `credit_state_gas_refund` on a staged machine: today's `Mach.creditStateGasRefund`. -/
 def Machine.creditStateGasRefund (amount : Nat) (m : Machine) : Machine :=
@@ -48,7 +48,7 @@ def absorbMeters (rules : ForkRules) (p : Pending) (saved : Machine) (r : Frame.
     | .create _, false => []
     | _, _ => r.output
   match rules.stateGas with
-  | none => { saved with gasLeft := saved.gasLeft + r.gasLeft, returnData }
+  | none => { saved with gasLeft := saved.gasLeft + r.gasLeft, returnData := returnData }
   | some state =>
     let m : Machine :=
       { saved with
@@ -56,7 +56,7 @@ def absorbMeters (rules : ForkRules) (p : Pending) (saved : Machine) (r : Frame.
         stateGas := { saved.stateGas with
           left := saved.stateGas.left + r.stateGas.left
           spilled := saved.stateGas.spilled + r.stateGas.spilled }
-        returnData }
+        returnData := returnData }
     if r.failed then
       if p.newAccountCharged then m.creditStateGasRefund state.newAccount else m
     else m.repayStateGasSpill
@@ -109,5 +109,5 @@ def resume (rules : ForkRules) (p : Pending) (saved : Frame.State) (r : Frame.Re
     pure (.ok (p.restore { merged with machine := p.target.finish r merged.machine }))
   else pure (.error (.stackOverflow .none, p.restore merged))
 
-end Jaune.Staging
+end Jaune
 

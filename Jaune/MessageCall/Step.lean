@@ -20,7 +20,7 @@ changes only:
 This is the W1 form: the running machine is still today's `Evm` over `Devm`.
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 open Jaune
 
@@ -32,15 +32,15 @@ def callMessage (sevm : Sevm) (gas : Nat) (value : U256) (caller target codeAddr
     (transfersValue isStaticcall : Bool) (calldata : Bytes) (code : ByteArray)
     (disablePrecompiles : Bool) : Message :=
   { context :=
-      { caller, recipient := target, value, calldata, code, depthLeft := sevm.depth - 1
+      { caller := caller, recipient := target, value := value, calldata := calldata, code := code, depthLeft := sevm.depth - 1
         isStatic := isStaticcall || sevm.isStatic, tx := sevm.tenvStat, block := sevm.benvStat }
     kind := .call
     codeAddress := some codeAddress
     target := some target
-    gas
+    gas := gas
     stateGasGrant := 0
-    transfersValue
-    disablePrecompiles }
+    transfersValue := transfersValue
+    disablePrecompiles := disablePrecompiles }
 
 /-- The message a creation opcode sends its child (today's `createMsg`, without the world). The
 initcode is the code run; the calldata is empty. -/
@@ -718,5 +718,5 @@ def Evm.step (evm : Evm) : Step :=
   | .some (.jump j) => Step.ofJump (j.run evm)
   | .some (.halt l) => .halt (l.run evm.sta evm.dyna)
 
-end Jaune.Staging
+end Jaune
 

@@ -70,7 +70,7 @@ end Legacy
 
 end Jaune
 
-namespace Jaune.Staging
+namespace Jaune
 
 open Legacy
 
@@ -197,5 +197,5 @@ theorem exec_legacy (evm : Evm) :
     rw [hN]
     exact ho.symm
 
-end Jaune.Staging
+end Jaune
 

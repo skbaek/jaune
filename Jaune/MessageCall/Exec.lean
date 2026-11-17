@@ -14,7 +14,7 @@ compiled after it. The import of `Jaune.Impl.CachedDriver` above is that one; dr
 compiles `exec` against the uncached driver.
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 /-- The total interpreter over the staged driver. -/
 def exec (evm : Evm) : Except (EvmError × Devm) Devm :=
@@ -22,5 +22,5 @@ def exec (evm : Evm) : Except (EvmError × Devm) Devm :=
   | some r => r
   | none => .error ⟨.internal (.invariant .none), evm.dyna⟩
 
-end Jaune.Staging
+end Jaune
 

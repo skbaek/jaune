@@ -52,7 +52,7 @@ end Legacy
 
 end Jaune
 
-namespace Jaune.Staging
+namespace Jaune
 
 /-- RIPEMD-160's address after recording a touch of `t`. -/
 theorem recordTouch_contains_ripemd160 (rules : ForkRules) (cond : Bool) (t : Address) (d : Devm) :
@@ -262,7 +262,7 @@ theorem settle_legacy (f : Jaune.Legacy.Frame) (saved : Devm) (h : Legacy.Frame.
           Devm.setMeta, Devm.withGasLeft, Devm.setMach, Devm.restoreStateGas,
           Devm.withRefundCounter, Devm.forfeitRemainingGas]
 
-end Jaune.Staging
+end Jaune
 
 namespace Jaune
 
@@ -297,19 +297,19 @@ theorem processCreateMessage.settle_failed_world {msg : Msg}
     simp only [processCreateMessage.settle, bind, Except.bind] at hs
     split at hs
     · rename_i hn
-      rw [Staging.chargeCodeGas_legacy] at hs
-      cases hc : Staging.chargeDeposit msg.benv.stat.rules evm.output evm with
+      rw [chargeCodeGas_legacy] at hs
+      cases hc : chargeDeposit msg.benv.stat.rules evm.output evm with
       | ok e =>
         rw [hc] at hs
         cases hs
-        have hm := Staging.chargeDeposit_ok_meta hc
+        have hm := chargeDeposit_ok_meta hc
         simp only [Devm.error, Devm.setCode, Devm.clearStorageWritesIfEmpty, Devm.withState,
           Devm.withStorageWrites, Devm.setWorld, hm] at hf
         simp_all [Devm.error]
       | error p =>
         obtain ⟨reason, e⟩ := p
         rw [hc] at hs
-        simp only [Staging.ofHalting] at hs
+        simp only [ofHalting] at hs
         cases hs
         cases msg.benv.stat.rules.stateGas <;> rfl
     · cases hs; rfl
@@ -367,19 +367,19 @@ theorem processCreateMessage.settle_failed_refund {msg : Msg} {sg : StateGasRule
   simp only [processCreateMessage.settle, bind, Except.bind] at hs
   split at hs
   · rename_i hn
-    rw [Staging.chargeCodeGas_legacy] at hs
-    cases hc : Staging.chargeDeposit msg.benv.stat.rules evm.output evm with
+    rw [chargeCodeGas_legacy] at hs
+    cases hc : chargeDeposit msg.benv.stat.rules evm.output evm with
     | ok e =>
       rw [hc] at hs
       cases hs
-      have hm := Staging.chargeDeposit_ok_meta hc
+      have hm := chargeDeposit_ok_meta hc
       simp only [Devm.error, Devm.setCode, Devm.clearStorageWritesIfEmpty, Devm.withState,
         Devm.withStorageWrites, Devm.setWorld, hm] at hf
       simp_all [Devm.error]
     | error p =>
       obtain ⟨reason, e⟩ := p
       rw [hc] at hs
-      simp only [Staging.ofHalting, hsg] at hs
+      simp only [ofHalting, hsg] at hs
       cases hs
       rfl
   · rename_i hn

@@ -20,7 +20,7 @@ revision, section 3.2, unit E).
 namespace Jaune
 
 /-- Today's raw result with a fault's state erased: what the staged driver can reproduce. -/
-def Execution.observe : Execution → Except Staging.Fault Execution
+def Execution.observe : Execution → Except Fault Execution
   | .error (.crypto reason, _) => .error (.crypto reason)
   | .error (.internal reason, _) => .error (.internal reason)
   | ex => .ok ex
@@ -44,7 +44,7 @@ end Legacy
 
 end Jaune
 
-namespace Jaune.Staging
+namespace Jaune
 open Legacy
 
 /-- `throw` in `Except`. -/
@@ -176,7 +176,7 @@ theorem resume_core_createAmsterdam (state : StateGasRules) (parent : Devm) (a :
             (Frame.State.ofDevm parent)).map ofHalting := by
   resume_walk_ams hf
 
-end Jaune.Staging
+end Jaune
 
 namespace Jaune.Legacy
 
@@ -214,9 +214,9 @@ theorem processCreateMessage.settle_error {msg : Msg}
   | ok evm =>
     simp only [processCreateMessage.settle, bind, Except.bind] at h
     split at h
-    · rw [Staging.chargeCodeGas_legacy] at h
-      rcases hc : Staging.chargeDeposit msg.benv.stat.rules evm.output evm with ⟨r, e⟩ | e <;>
-        simp [hc, Staging.ofHalting] at h
+    · rw [chargeCodeGas_legacy] at h
+      rcases hc : chargeDeposit msg.benv.stat.rules evm.output evm with ⟨r, e⟩ | e <;>
+        simp [hc, ofHalting] at h
     · cases h
 
 /-- Today's settlement faults only with a cryptographic or internal reason. -/
@@ -261,15 +261,15 @@ theorem processCreateMessage.settle_ok_halt {msg : Msg} {x d : Devm} {reason : E
   simp only [processCreateMessage.settle, bind, Except.bind] at h
   split at h
   · rename_i hn
-    rw [Staging.chargeCodeGas_legacy] at h
-    rcases hc : Staging.chargeDeposit msg.benv.stat.rules x.output x with ⟨r, e⟩ | e
+    rw [chargeCodeGas_legacy] at h
+    rcases hc : chargeDeposit msg.benv.stat.rules x.output x with ⟨r, e⟩ | e
     · rw [hc] at h
       right
-      cases hsg : msg.benv.stat.rules.stateGas <;> simp [Staging.ofHalting, hsg] at h <;>
+      cases hsg : msg.benv.stat.rules.stateGas <;> simp [ofHalting, hsg] at h <;>
         subst h <;> exact ⟨rfl, rfl⟩
     · rw [hc] at h
       cases h
-      have hm := Staging.chargeDeposit_ok_meta hc
+      have hm := chargeDeposit_ok_meta hc
       simp only [Devm.error, Devm.setCode, Devm.clearStorageWritesIfEmpty, Devm.withState,
         Devm.withStorageWrites, Devm.setWorld, hm] at he
       simp [Devm.error, he] at hn
@@ -314,7 +314,7 @@ theorem settledFacts {f : Jaune.Legacy.Frame} {parent : Devm} {rules : ForkRules
 
 end Jaune.Legacy
 
-namespace Jaune.Staging
+namespace Jaune
 
 /-- Today's resumption, observed, is the staged `resume` of the result read by `ofSettled`, for
 every settled result with today's settlement guarantees. -/
@@ -343,4 +343,4 @@ theorem resume_legacy {f : Jaune.Legacy.Frame} {rsm : Resume} {rules : ForkRules
           resume rules (Pending.ofLegacy rsm) (Frame.State.ofDevm rsm.parent)).map ofHalting :=
   resume_of_facts hm (Legacy.settledFacts h hr clean)
 
-end Jaune.Staging
+end Jaune

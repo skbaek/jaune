@@ -28,7 +28,7 @@ def Resume.Matches : Resume → ForkRules → Prop
 
 end Jaune
 
-namespace Jaune.Staging
+namespace Jaune
 
 /-! ### Reading today's results as staged ones -/
 
@@ -302,5 +302,5 @@ theorem step_spawn_coherent {evm : Evm} {f : Jaune.Legacy.Frame} {rsm : Resume} 
   obtain ⟨x, -, hx, -⟩ := Legacy.Evm.step_spawn_inv h
   exact MessageOp.step_spawn_coherent hx
 
-end Jaune.Staging
+end Jaune
 

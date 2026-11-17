@@ -19,7 +19,7 @@ seeded with more fuel than the frame's gas measure, so the staged `exec`
 Staged under `Jaune.Staging`; nothing outside the staged chain reads it.
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 open Jaune
 
@@ -345,7 +345,7 @@ theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution}
     intro evm raw h
     have hstep := Evm.step_gasBound evm
     rw [execFueled] at h
-    rcases hs : Staging.Evm.step evm with ex | ⟨pc, devm⟩ | ⟨child, pending, pc⟩
+    rcases hs : Evm.step evm with ex | ⟨pc, devm⟩ | ⟨child, pending, pc⟩
     · rw [hs] at h hstep
       simp only [Fueled.ofExcept_run, Option.some.injEq] at h
       rw [← h]
@@ -416,7 +416,7 @@ theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
     intro evm h
     have hstep := Evm.step_gasBound evm
     rw [execFueled]
-    rcases hs : Staging.Evm.step evm with ex | ⟨pc, devm⟩ | ⟨child, pending, pc⟩ <;>
+    rcases hs : Evm.step evm with ex | ⟨pc, devm⟩ | ⟨child, pending, pc⟩ <;>
       rw [hs] at hstep <;> simp only [Step.GasBound] at hstep <;> dsimp only
     · exact ⟨ex, rfl⟩
     · exact ih _ (show devm.gasMeasure < fuel by omega)
@@ -536,7 +536,7 @@ theorem execFueled_run_mono :
     have hle' : fuel ≤ m := by omega
     rw [execFueled] at h
     rw [execFueled]
-    rcases hs : Staging.Evm.step evm with ex | ⟨pc, devm⟩ | ⟨child, pending, pc⟩ <;>
+    rcases hs : Evm.step evm with ex | ⟨pc, devm⟩ | ⟨child, pending, pc⟩ <;>
       rw [hs] at h <;> dsimp only at h ⊢
     · exact h
     · exact ih _ hle' h
@@ -563,5 +563,5 @@ theorem exec_eq_of_run {evm : Evm} {fuel : Nat} {raw : Execution}
   rw [execFueled_run_of_lt hlt] at h
   exact Option.some.inj h
 
-end Jaune.Staging
+end Jaune
 

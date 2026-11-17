@@ -17,7 +17,7 @@ from `Frame.start`, which seeds its deletions from its caller's only under rules
 self-destruct refund; a top-level frame starts from its checkpoint, ungated.
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 /-- A spawned child's initial state: today's `initDevm` of the child's message. The machine is
 empty with the message's gas and state-gas grant; the world is the checkpoint's; the logs are the
@@ -75,5 +75,5 @@ def enterWith (f : Frame) (start : Devm) : Frame.Entry :=
 /-- Enter a spawned child frame. -/
 def enter (f : Frame) : Frame.Entry := enterWith f f.start
 
-end Jaune.Staging
+end Jaune
 
