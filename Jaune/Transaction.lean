@@ -133,7 +133,7 @@ instance : Repr U256 where
   reprPrec h _ := .text (toString h)
 
 /-- `Address` carries no `Repr` of its own either; the block-rejection type
-below derives one, and its `systemContractCallHalted` reason carries the
+below derives one, and its `systemContractCallFailed` reason carries the
 contract's address as data. Rendered through the hex `ToString`, which is how
 every address prints elsewhere. -/
 instance : Repr Address where
@@ -185,7 +185,7 @@ inductive BlockValidationError : Type
   `systemContractCallFailed` tag, with the address and the halt written by
   `detail` below: the specification returns the cause and only the renderer
   writes text (goal `jaune-shape-and-names-v1`, 3.2). -/
-  | systemContractCallHalted (target : Address) (halt : SettledHalt)
+  | systemContractCallFailed (target : Address) (halt : SettledHalt)
   /-- A mandatory request-producing system contract holds no code when the
   block must call it. The pinned `process_checked_system_transaction` raises
   `InvalidBlock` before attempting the call; the corpus names it
@@ -247,7 +247,7 @@ def BlockValidationError.tag : BlockValidationError → String
   | .blobGasUsed _ => blobGasUsedTag
   | .requestsHash _ => requestsHashTag
   | .depositEventLayout _ => depositEventLayoutTag
-  | .systemContractCallHalted _ _ => systemContractCallFailedTag
+  | .systemContractCallFailed _ _ => systemContractCallFailedTag
   | .systemContractEmpty _ => systemContractEmptyTag
   | .blockRlpSizeExceeded _ => blockRlpSizeExceededTag
   | .headerFieldPresence _ => headerFieldPresenceTag
@@ -275,7 +275,7 @@ def BlockValidationError.detail : BlockValidationError → ErrorDetail
   | .blockAccessListHash _ d => d
   | .invalidOmmerHeader reason =>
     .text s!"ommer header is invalid: {renderTagged reason.tag reason.detail}"
-  | .systemContractCallHalted target halt =>
+  | .systemContractCallFailed target halt =>
     .text s!"system contract ({target.toHex}) call failed: \
       {halt.render}"
 
@@ -296,7 +296,7 @@ def BlockValidationError.all : List BlockValidationError :=
     .receiptsRoot .none, .logBloom .none, .withdrawalsRoot .none,
     .headerNonce .none, .excessBlobGas .none, .blobGasUsed .none,
     .requestsHash .none, .depositEventLayout .none,
-    .systemContractCallHalted default .revert, .systemContractEmpty .none,
+    .systemContractCallFailed default .revert, .systemContractEmpty .none,
     .blockRlpSizeExceeded .none,
     .headerFieldPresence .none, .blockAccessListHash emptyOmmerHash .none,
     .blockAccessListContent .none, .blockAccessListFormat .none,
@@ -2567,7 +2567,7 @@ def processCheckedSystemTransaction
   -- projection out of the optional error field. The rejection carries the
   -- halt itself; `BlockValidationError.detail` writes its text (3.2).
   match systemTxOutput.error with
-  | some halt => .error <| .block <| .systemContractCallHalted target halt
+  | some halt => .error <| .block <| .systemContractCallFailed target halt
   | none => .ok ⟨state, systemTxOutput⟩
 
 /-- Call each request-producing system contract in turn, threading the state.
