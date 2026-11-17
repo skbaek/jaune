@@ -316,6 +316,22 @@ end Jaune.Legacy
 
 namespace Jaune.Staging
 
+/-- Today's resumption, observed, is the staged `resume` of the result read by `ofSettled`, for
+every settled result with today's settlement guarantees. -/
+theorem resume_of_facts {rsm : Resume} {rules : ForkRules} (hm : rsm.Matches rules)
+    {s : Except (EvmError × Jaune.State × AdrSet × TransientStorage) Devm}
+    (hf : Legacy.SettledFacts rsm.parent rules s) :
+    (rsm.run s).observe
+      = (Frame.Result.ofSettled s >>=
+          resume rules (Pending.ofLegacy rsm) (Frame.State.ofDevm rsm.parent)).map ofHalting := by
+  cases rsm with
+  | create parent a => exact resume_core_create parent a rules hm _ hf
+  | call parent oi os => exact resume_core_call parent oi os rules hm _ hf
+  | createAmsterdam state parent a charged =>
+    exact resume_core_createAmsterdam state parent a charged rules hm _ hf
+  | callAmsterdam state parent oi os charged =>
+    exact resume_core_callAmsterdam state parent oi os charged rules hm _ hf
+
 /-- **Resume.** Today's resumption of a settled child, observed with a fault's state erased, is the
 staged `resume` of the child's result read by `ofSettled`, for every child coherent with its
 saved caller, every `Resume` the rules select, and every clean raw result. -/
@@ -324,14 +340,7 @@ theorem resume_legacy {f : Jaune.Frame} {rsm : Resume} {rules : ForkRules}
     (hr : f.outer.benv.stat.rules = rules) (raw : Execution) (clean : raw.Clean) :
     (rsm.run (f.settle raw)).observe
       = (Frame.Result.ofSettled (f.settle raw) >>=
-          resume rules (Pending.ofLegacy rsm) (Frame.State.ofDevm rsm.parent)).map ofHalting := by
-  have hf := Legacy.settledFacts h hr clean
-  cases rsm with
-  | create parent a => exact resume_core_create parent a rules hm _ hf
-  | call parent oi os => exact resume_core_call parent oi os rules hm _ hf
-  | createAmsterdam state parent a charged =>
-    exact resume_core_createAmsterdam state parent a charged rules hm _ hf
-  | callAmsterdam state parent oi os charged =>
-    exact resume_core_callAmsterdam state parent oi os charged rules hm _ hf
+          resume rules (Pending.ofLegacy rsm) (Frame.State.ofDevm rsm.parent)).map ofHalting :=
+  resume_of_facts hm (Legacy.settledFacts h hr clean)
 
 end Jaune.Staging
