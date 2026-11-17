@@ -1,33 +1,5 @@
 {
  "schema_version": 1,
- "description": "Reviewed sites of the unit J relocation plan (jsn-u30): three uses of the □p notation in Jaune/ExecDeriv.lean, decided unchanged. Retired after the relocation consumes them.",
- "sites": [
-  {
-   "path": "Jaune/ExecDeriv.lean",
-   "sha256": "7627bd50ee23b7d4d97c7ab4c4695f0cc7584c6c09830ee0ebb917318ccf85de",
-   "line": 172,
-   "column": 10,
-   "token": "□p",
-   "decision": "unchanged",
-   "reason": "notation use: '□p' is defined by `notation \"□p\" => Exec.Deriv.Fa` in this file, whose right-hand side the plan respells to Legacy.Exec.Deriv.Fa; the use expands to the renamed constant with no source change (jsn-u30, unit J relocation)"
-  },
-  {
-   "path": "Jaune/ExecDeriv.lean",
-   "sha256": "7627bd50ee23b7d4d97c7ab4c4695f0cc7584c6c09830ee0ebb917318ccf85de",
-   "line": 174,
-   "column": 54,
-   "token": "□p",
-   "decision": "unchanged",
-   "reason": "notation use: '□p' is defined by `notation \"□p\" => Exec.Deriv.Fa` in this file, whose right-hand side the plan respells to Legacy.Exec.Deriv.Fa; the use expands to the renamed constant with no source change (jsn-u30, unit J relocation)"
-  },
-  {
-   "path": "Jaune/ExecDeriv.lean",
-   "sha256": "7627bd50ee23b7d4d97c7ab4c4695f0cc7584c6c09830ee0ebb917318ccf85de",
-   "line": 174,
-   "column": 73,
-   "token": "□p",
-   "decision": "unchanged",
-   "reason": "notation use: '□p' is defined by `notation \"□p\" => Exec.Deriv.Fa` in this file, whose right-hand side the plan respells to Legacy.Exec.Deriv.Fa; the use expands to the renamed constant with no source change (jsn-u30, unit J relocation)"
-  }
- ]
+ "description": "Reviewed sites of the next whole-tree plan. Empty: the 3 unit J relocation sites (jsn-u30, uses of the □p notation in Jaune/ExecDeriv.lean) were consumed by the relocation c48a96a6 and are retired with the restatement (jsn-u34). They remain in Git history at c48a96a6.",
+ "sites": []
 }
