@@ -19,6 +19,7 @@ import Jaune.Fuel
 import Jaune.Machine
 import Jaune.MessageCall
 import Jaune.MessageCall.Settle
+import Jaune.MessageCall.Enter
 import Jaune.DevmProjections
 import Jaune.Precompiles
 import Jaune.Execution
@@ -38,6 +39,7 @@ import Jaune.Transaction
 import Jaune.Bridge.MessageCall
 import Jaune.Bridge.CleanResult
 import Jaune.Bridge.Settle
+import Jaune.Bridge.Enter
 
 namespace Jaune
 
