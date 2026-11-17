@@ -1,5 +1,6 @@
 import Jaune.MemoryAccounting
 import Jaune.MessageCall.Totality
+import Jaune.Exec
 
 /-!
 # Memory accounting on the four-part chain (goal `jaune-shape-and-names-v1`, W1 unit L)
@@ -3733,5 +3734,37 @@ theorem MessageOp.step_call_returnData_length_lt_two_pow_160_of_input_size
   cases step with
   | done ex => exact h
   | spawn child pending => exact h
+
+/-! ### Over the derivation -/
+
+/-- A closed derivation's raw result settles within the frame's gas measure: the counterpart of
+the old chain's `Exec.settledGasLe`, through adequacy. -/
+theorem Exec.settledGasLe {pc : Nat} {sevm : Sevm} {devm : Devm} {raw : Execution}
+    (h : Exec pc sevm devm raw) : raw.SettledGasLe devm.gasMeasure := by
+  have heq := (exec_iff_exec_eq pc sevm devm raw).mp ⟨h⟩
+  have hs := execFueled_settledGasLe _ (⟨pc, sevm, devm⟩ : Evm)
+    (execFueled_run_sufficientFuel ⟨pc, sevm, devm⟩)
+  rw [heq] at hs
+  exact hs
+
+/-- A complete derivation preserves the memory/gas potential, and its full raw output is
+inherited or paid by the initial potential on both channels: the counterpart of the old chain's
+`Exec.memory_accounting_output`, through adequacy from `exec_memory_accounting_output`. -/
+theorem Exec.memory_accounting_output
+    {pc : Nat} {sevm : Sevm} {pre : Devm} {raw : Execution}
+    (h : Exec pc sevm pre raw) (hstate : sevm.benvStat.rules.stateGas = none) :
+    let initial := pre.gasMeasure + calculateMemoryGasCost pre.memory.size
+    let accounted := fun post : Devm =>
+      post.gasMeasure + calculateMemoryGasCost post.memory.size ≤ initial ∧
+        (post.output = pre.output ∨ calculateMemoryGasCost post.output.length ≤ initial)
+    match raw with
+    | .ok post => accounted post
+    | .error failure => accounted failure.2 := by
+  have heq := (exec_iff_exec_eq pc sevm pre raw).mp ⟨h⟩
+  have hc := exec_memory_accounting_output (evm := ⟨pc, sevm, pre⟩) hstate
+  rw [heq] at hc
+  cases raw with
+  | error failure => exact hc
+  | ok post => exact hc
 
 end Jaune
