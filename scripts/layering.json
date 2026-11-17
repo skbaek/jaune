@@ -77,6 +77,7 @@
   "Jaune.MessageCall.Exec": "specification",
   "Jaune.MessageCall.Resume": "specification",
   "Jaune.MessageCall.ResumeFacts": "proof",
+  "Jaune.MessageCall.RunInvariants": "proof",
   "Jaune.MessageCall.Settle": "specification",
   "Jaune.MessageCall.Step": "specification",
   "Jaune.MessageCall.StepGas": "proof",
