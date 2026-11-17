@@ -16,7 +16,7 @@ asserted peak. This file is built by the ordinary `lake build` (it is a Lake
 `scripts/check-integrity.sh`'s scanned scope, so it cannot rot unnoticed.
 
 Two call families are covered. `STATICCALL` is the family the original
-pathological fixture uses and the family `Xinst.stepCached` specializes; `CALL`
+pathological fixture uses and the family `MessageOp.stepCached` specializes; `CALL`
 is the analogue that shares the same `genericCall.step` retention mechanism and
 takes the unspecialized path. Measuring both alone is what distinguishes "the
 corpus passes" from "this code path is cheap".
@@ -31,7 +31,7 @@ namespace Jaune.MemoryProbe
 stack operand (`CALL` carries a value) and therefore in the program's length. -/
 inductive Family where
   /-- `0xfa` — the family of the original `static_Call1MB1024Calldepth` fixture,
-  and the one `Xinst.stepCached` specializes. -/
+  and the one `MessageOp.stepCached` specializes. -/
   | staticcall
   /-- `0xf1` — the unspecialized analogue, shape-matched to
   `call1_mb1024_calldepth`. -/

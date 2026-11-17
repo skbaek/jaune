@@ -11,10 +11,10 @@ open Jaune
 /-!
 # Transaction, block, and chain processing
 
-This module holds every declaration that consumes the interpreter driver
-defined in `Jaune.Execution`, starting at `processMessageCall.create`, together
-with the transaction, block, and chain-level machinery built on top of it. It
-was split out of `Jaune.Execution` verbatim so that `Jaune.Sufficiency` can sit
+This module holds every declaration that consumes the message-call driver
+(`Frame.runTop`, `Jaune.MessageCall`), starting at `processMessageCall.create`,
+together with the transaction, block, and chain-level machinery built on top of
+it. It was split out of `Jaune.Execution` so that `Jaune.Sufficiency` could sit
 between the driver and its first consumer.
 -/
 
@@ -5419,7 +5419,7 @@ private theorem prepared_coh {state : StateGasRules} {msg : Msg} {p : Msg × Dev
 /-- **The prepared top-level state.** What Amsterdam's preparation hands the top frame stores no
 output and no settled error, and the prepared message carries its world, created accounts and
 accessed sets. So the top frame over it, whose checkpoint is this state, starts from it exactly
-(`Frame.State.toDevm_ofDevm`), and today's prepared frame over the message is coherent with it. -/
+(`Frame.State.toDevm_ofDevm`), and the prepared message is coherent with it. -/
 theorem prepareTopLevelAmsterdam_prepared {state : StateGasRules} {msg : Msg} {p : Msg × Devm}
     (h : prepareTopLevelAmsterdam state msg = .ok p) :
     p.2.output = [] ∧ p.2.error = none ∧ p.1.benv.state = p.2.state ∧

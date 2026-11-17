@@ -5,17 +5,15 @@ import Jaune.Exec
 /-!
 # Memory accounting on the four-part chain (goal `jaune-shape-and-names-v1`, W1 unit L)
 
-The theorems of `Jaune.MemoryAccounting` that speak of the old chain, restated over `Evm.step`,
-its four tails, `enter`, `settle`, `resume` and the driver `execFueled`/`exec`. The
-chain-independent part (gas arithmetic, memory extension, the per-instruction walks of the
-plain, jump and halt instructions, the precompile output bounds) stays in
-`Jaune.MemoryAccounting` and is used from there where it is public.
+Memory accounting over `Evm.step`, its four tails, `enter`, `settle`, `resume` and the driver
+`execFueled`/`exec`. The chain-independent part (gas arithmetic, memory extension, the
+per-instruction walks of the plain, jump and halt instructions, the precompile output bounds)
+stays in `Jaune.MemoryAccounting` and is used from there where it is public.
 
-The non-spawning instruction walks are a mechanical port: `MessageOp.step`, `NextOp.step` and
-the four tails are textually today's apart from their result type, so the private walks of
-`Jaune.MemoryAccounting` are copied with `XStep` read as `MessageOp.Outcome` and `cont` as
-`next`. The spawn accounting and the driver induction are written for `resume` and `settle`.
-After the delete commit the private originals in `Jaune.MemoryAccounting` have no user left.
+The non-spawning instruction walks over `MessageOp.step`, `NextOp.step` and the four tails
+follow the private walks of `Jaune.MemoryAccounting`, with `MessageOp.Outcome` as the result type
+and `next` for a step that goes on. The spawn accounting and the driver induction are written
+for `resume` and `settle`.
 -/
 
 namespace Jaune
@@ -1760,8 +1758,8 @@ private theorem resume_fields {rules : ForkRules} {p : Pending} {saved : Frame.S
       change s.machine.memory = _
       rw [hs, absorbMeters_memory]
 
-/-- A pushed call writes the child's output into the caller's output window: the counterpart of
-the old chain's `Resume.call_run_ok_memory`. It holds under every rule set. -/
+/-- A pushed call writes the child's output into the caller's output window. It holds under every
+rule set. -/
 theorem resume_call_ok_memory {rules : ForkRules} {p : Pending} {saved : Frame.State}
     {r : Frame.Result} {resumed : Devm} {outputIndex outputSize : Nat}
     (htarget : p.target = .call outputIndex outputSize)
@@ -2472,8 +2470,7 @@ private theorem execFueled_memory_accounting :
           · exact hcont r (enter_done_gasLe he) hrun
 
 /-- A run of the driver preserves the memory/gas potential, and its full raw output is
-inherited or paid by the initial potential on both channels: the counterpart, over the
-driver, of the old chain's `Exec.memory_accounting_output`. A fault carries the spawning
+inherited or paid by the initial potential on both channels. A fault carries the spawning
 frame's checkpoint, which has no output. -/
 theorem execFueled_memory_accounting_output {fuel : Nat} {evm : Evm} {raw : Execution}
     (hrun : (execFueled evm fuel).run = some raw)
@@ -2548,9 +2545,7 @@ theorem enter_precompile {f : Frame} {world : World} {adr : Address}
       adr)) := by
   simp only [enter, enterWith, htransfer, hcode, hdispatch, ite_true]
 
-/-- The precompile dispatch at entry keeps the native output bound on success: the counterpart
-of the old chain's `executeCode_enter_native_ok_output_length_lt_two_pow_160`, whose
-`executeCode.enter` is folded into `enter`. -/
+/-- The precompile dispatch at entry keeps the native output bound on success. -/
 theorem enter_native_ok_output_length_lt_two_pow_160 {f : Frame} {world : World}
     {adr : Address} {post : Devm}
     (hrun : executePrecompile
@@ -2561,8 +2556,7 @@ theorem enter_native_ok_output_length_lt_two_pow_160 {f : Frame} {world : World}
     post.output.length < 2 ^ 160 :=
   executePrecompile_ok_output_length_lt_two_pow_160 hrun hdata hgas
 
-/-- A rejected precompile at entry carries the empty initial output: the counterpart of the old
-chain's `executeCode_enter_native_error_output_nil`. -/
+/-- A rejected precompile at entry carries the empty initial output. -/
 theorem enter_native_error_output_nil {f : Frame} {world : World} {adr : Address}
     {failure : EvmError × Devm}
     (hrun : executePrecompile
@@ -2652,8 +2646,8 @@ private theorem call_resume_returnData {rules : ForkRules} {p : Pending} {saved 
 
 /-- The resumed caller of a real zero-value `CALL` whose child ran code: the child's settled
 result is within the requested gas, the output window is written into the paid memory, and the
-caller's potential, less the call's extra gas, is not raised. The counterpart of the old
-chain's `zero_call_spawn_resume_accounting`; the child's derivation is its run by `exec`. -/
+caller's potential, less the call's extra gas, is not raised. The child's derivation is its run
+by `exec`. -/
 theorem zero_call_spawn_resume_accounting
     {sevm : Sevm} {before charged resumed : Devm} (gas : U256)
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
@@ -2740,9 +2734,8 @@ theorem zero_call_spawn_resume_accounting
   omega
 
 /-- The same zero-value `CALL` accounts for both of the caller's resumed channels, a pushed
-caller and one halted by a full stack, with the caller's output kept. The counterpart of the
-old chain's `zero_call_spawn_resume_raw_accounting`. A fault is not a caller channel on the
-four-part chain: it ends the run, and the state it carries is the child's checkpoint. -/
+caller and one halted by a full stack, with the caller's output kept. A fault is not a caller
+channel: it ends the run, and the state it carries is the child's checkpoint. -/
 theorem zero_call_spawn_resume_raw_accounting
     {sevm : Sevm} {before charged : Devm} (gas : U256)
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
@@ -2843,7 +2836,7 @@ private theorem output_length_lt_two_pow_160_with_stipend {n grant : Nat}
 
 /-- The child of a real zero-value `CALL` that ran code has a paid full output below `2^160`;
 settling only shortens it, and either resumed channel of the caller has return data below
-`2^160`. The counterpart of the old chain's `zero_call_spawn_code_reply_bound`. -/
+`2^160`. -/
 theorem zero_call_spawn_code_reply_bound
     {sevm : Sevm} {before charged : Devm} (gas : U256)
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
@@ -2919,7 +2912,7 @@ theorem zero_call_spawn_code_reply_bound
 
 /-- A word-sized `CALL`'s child that ran code, with or without value, has a full output below
 `2^160`; settling only shortens it, and either resumed channel of the caller has return data
-below `2^160`. The counterpart of the old chain's `call_spawn_code_reply_bound`. -/
+below `2^160`. -/
 theorem call_spawn_code_reply_bound
     {sevm : Sevm} {parent : Devm} (gas value : U256)
     (gasLeft memoryCost extraGas inputIndex inputSize outputIndex outputSize : Nat)
@@ -2971,8 +2964,7 @@ theorem call_spawn_code_reply_bound
 
 /-- A failed value transfer never enters code or a precompile: the child settles at entry as a
 fault, which ends the run, and the checkpoint the fault carries has the empty return data the
-spawn installed. The counterpart of the old chain's `call_spawn_transfer_error_reply_bound`,
-whose caller resumed on the failure; on the four-part chain a fault does not resume its caller. -/
+spawn installed. A fault does not resume its caller. -/
 theorem call_spawn_transfer_error_reply_bound
     {sevm : Sevm} {parent : Devm} (grant : Nat) (value : U256)
     (inputIndex inputSize outputIndex outputSize : Nat)
@@ -2992,8 +2984,7 @@ theorem call_spawn_transfer_error_reply_bound
 /-! ### Native precompile replies -/
 
 /-- The real zero-value `CALL` grant is a word-bounded MODEXP gas reservoir; its native reply
-therefore meets the full return-data bound. The counterpart of the old chain's
-`zero_call_spawn_modexp_reply_bound`. -/
+therefore meets the full return-data bound. -/
 theorem zero_call_spawn_modexp_reply_bound
     {sevm : Sevm} {before charged : Devm} (gas : U256)
     (extraGas cs inputIndex inputSize outputIndex outputSize : Nat)
@@ -3023,7 +3014,7 @@ theorem zero_call_spawn_modexp_reply_bound
     omega)
 
 /-- An identity reply from the real spawned zero-value `CALL` frame is bounded by the caller's
-paid input memory. The counterpart of the old chain's `zero_call_spawn_id_reply_bound`. -/
+paid input memory. -/
 theorem zero_call_spawn_id_reply_bound
     {sevm : Sevm} {before charged : Devm}
     (baseCost gas inputIndex inputSize outputIndex outputSize : Nat)
@@ -3053,7 +3044,7 @@ theorem zero_call_spawn_id_reply_bound
     baseCost inputIndex inputSize outputIndex outputSize hcharge hpotential
 
 /-- The real zero-value `CALL` spawn supplies both physical premises every native precompile
-needs. The counterpart of the old chain's `zero_call_spawn_native_reply_bound`. -/
+needs. -/
 theorem zero_call_spawn_native_reply_bound
     {sevm : Sevm} {before charged : Devm}
     (baseCost : Nat) (gas : U256)
@@ -3168,10 +3159,8 @@ private theorem call_spawn_native_enter_success_input_or_potential
     (raw := .ok post) (by rw [hpending])
     (fun r hs => Nat.lt_of_le_of_lt (settle_output_length_le hs) hraw)
 
-/-- A native success of a word-sized `CALL`: the counterpart of the old chain's
-`call_spawn_native_enter_success`. The old dispatch premise `executeCode.enter … = .inr (.ok
-post)` is the value transfer, the precompile dispatch and the precompile's run, stated
-separately. -/
+/-- A native success of a word-sized `CALL`. The value transfer, the precompile dispatch and the
+precompile's run are stated separately. -/
 theorem call_spawn_native_enter_success
     {sevm : Sevm} {before charged : Devm}
     (baseCost : Nat) (gas value : U256)
@@ -3210,8 +3199,7 @@ theorem call_spawn_native_enter_success
     inputIndex inputSize outputIndex outputSize hcharge hspawn (Or.inl hpotential)
     htransfer hcode hdispatch hrun
 
-/-- A native success of a real zero-value `CALL`: the counterpart of the old chain's
-`zero_call_spawn_native_enter_success`. -/
+/-- A native success of a real zero-value `CALL`. -/
 theorem zero_call_spawn_native_enter_success
     {sevm : Sevm} {before charged : Devm}
     (baseCost : Nat) (gas : U256)
@@ -3257,8 +3245,7 @@ theorem zero_call_spawn_native_enter_success
     (fun r hs => Nat.lt_of_le_of_lt (settle_output_length_le hs) hraw)
 
 /-- A rejected native precompile starts with empty output, so the caller's return data on
-either resumed channel is below `2^160`. The counterpart of the old chain's
-`call_spawn_native_enter_error`. -/
+either resumed channel is below `2^160`. -/
 theorem call_spawn_native_enter_error
     {sevm : Sevm} {parent : Devm} (grant : Nat) (value : U256)
     (inputIndex inputSize outputIndex outputSize : Nat)
@@ -3378,8 +3365,7 @@ private theorem call_spawn_enter_reply_bound_input_or_potential
             exact hcodeRun _ he
 
 /-- Every word-sized `CALL` spawn leaves the caller bounded return data on either resumed
-channel: the counterpart of the old chain's `call_spawn_enter_reply_bound`. The child's
-derivation is its run by `exec`. -/
+channel. The child's derivation is its run by `exec`. -/
 theorem call_spawn_enter_reply_bound
     {sevm : Sevm} {before charged : Devm}
     (baseCost : Nat) (gas value : U256)
@@ -3690,9 +3676,7 @@ private theorem xinst_call_reply_bound_of_input_size
 
 /-- A `CALL` that finishes in place or whose caller is resumed on its child's result leaves the
 caller return data below `2^160`, under rules without state gas and a word-bounded caller
-potential. The child's result is its settled entry or its settled run by `exec`. This is the
-four-part form of the old chain's `call_step_returnData_length_lt_two_pow_160`, whose filled
-slot and `XStep.Run` relation are the child run named here. -/
+potential. The child's result is its settled entry or its settled run by `exec`. -/
 theorem MessageOp.step_call_returnData_length_lt_two_pow_160 {sevm : Sevm} {pre : Devm}
     (hstate : sevm.benvStat.rules.stateGas = none)
     (hpotential : pre.gasMeasure + calculateMemoryGasCost pre.memory.size < 2 ^ 256) :
@@ -3711,8 +3695,7 @@ theorem MessageOp.step_call_returnData_length_lt_two_pow_160 {sevm : Sevm} {pre 
   | spawn child pending => exact h
 
 /-- The same bound from fixed `CALL` operands with a bounded input size, independent of the
-caller's potential: the four-part form of the old chain's
-`call_step_returnData_length_lt_two_pow_160_of_input_size`. -/
+caller's potential. -/
 theorem MessageOp.step_call_returnData_length_lt_two_pow_160_of_input_size
     {sevm : Sevm} {pre : Devm}
     {gas callee value inputIndex inputSize outputIndex outputSize : U256} {S : List U256}
@@ -3737,8 +3720,8 @@ theorem MessageOp.step_call_returnData_length_lt_two_pow_160_of_input_size
 
 /-! ### Over the derivation -/
 
-/-- A closed derivation's raw result settles within the frame's gas measure: the counterpart of
-the old chain's `Exec.settledGasLe`, through adequacy. -/
+/-- A closed derivation's raw result settles within the frame's gas measure, through
+adequacy. -/
 theorem Exec.settledGasLe {pc : Nat} {sevm : Sevm} {devm : Devm} {raw : Execution}
     (h : Exec pc sevm devm raw) : raw.SettledGasLe devm.gasMeasure := by
   have heq := (exec_iff_exec_eq pc sevm devm raw).mp ⟨h⟩
@@ -3748,8 +3731,8 @@ theorem Exec.settledGasLe {pc : Nat} {sevm : Sevm} {devm : Devm} {raw : Executio
   exact hs
 
 /-- A complete derivation preserves the memory/gas potential, and its full raw output is
-inherited or paid by the initial potential on both channels: the counterpart of the old chain's
-`Exec.memory_accounting_output`, through adequacy from `exec_memory_accounting_output`. -/
+inherited or paid by the initial potential on both channels, through adequacy from
+`exec_memory_accounting_output`. -/
 theorem Exec.memory_accounting_output
     {pc : Nat} {sevm : Sevm} {pre : Devm} {raw : Execution}
     (h : Exec pc sevm pre raw) (hstate : sevm.benvStat.rules.stateGas = none) :

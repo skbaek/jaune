@@ -4,21 +4,20 @@ import Jaune.MessageCall
 # The four-part message call: `settle` (goal `jaune-shape-and-names-v1`, W1 unit C)
 
 `settle` turns a frame's raw result into what the frame hands back to its caller, a
-`Frame.Result`, or a fault. It was staged until the switch commit gave it its final name, and
-nothing in today's interpreter reads it until the switch commit.
+`Frame.Result`, or a fault.
 
-This is the W1 form: the raw result is still today's `Execution`, over `Devm`. The final form,
-over `Frame.State` and `Frame.Exit`, is the same text without the two fault arms and the
-conversions through `Frame.State.ofDevm`.
+The raw result is an `Execution`, over `Devm`. The planned form over `Frame.State` and
+`Frame.Exit` is the same text without the two fault arms and the conversions through
+`Frame.State.ofDevm`.
 
 `settle` never reads `Meta.error` of a raw `.ok`: the constructor of the raw result says how the
-frame ended. Today's interpreter never stores an error before settlement, so the two agree on
-every raw result it produces (the bridge's premise `Execution.Clean`).
+frame ended. The interpreter never stores an error before settlement, so the two agree on
+every raw result it produces.
 -/
 
 namespace Jaune
 
-/-- Charge execution gas, failing only by running out: today's `chargeGas` with a halt-only error
+/-- Charge execution gas, failing only by running out: `chargeGas` with a halt-only error
 type. -/
 def Devm.chargeGas (cost : Nat) (d : Devm) : Except (ExceptionalHalt × Devm) Devm :=
   match safeSub d.gasLeft cost with
@@ -26,7 +25,7 @@ def Devm.chargeGas (cost : Nat) (d : Devm) : Except (ExceptionalHalt × Devm) De
   | some gas => .ok (d.withGasLeft gas)
 
 /-- Charge state gas, reservoir first and then spilling into execution gas, failing only by
-running out: today's `chargeStateGas` with a halt-only error type. -/
+running out: `chargeStateGas` with a halt-only error type. -/
 def Devm.chargeStateGas (amount : Nat) (d : Devm) : Except (ExceptionalHalt × Devm) Devm :=
   if amount ≤ d.mach.stateGas.left then
     .ok (d.setMach { d.mach with
@@ -40,10 +39,9 @@ def Devm.chargeStateGas (amount : Nat) (d : Devm) : Except (ExceptionalHalt × D
   else
     .error (.outOfGas .none, d)
 
-/-- The charge for a creation's code deposit: today's `processCreateMessage.chargeCodeGas` with a
-halt-only error type. Without state gas the code is charged per byte before its size is checked,
-so a size failure carries the charged state; with state gas the prefix and the size are checked
-before either charge. -/
+/-- The charge for a creation's code deposit, with a halt-only error type. Without state gas the
+code is charged per byte before its size is checked, so a size failure carries the charged
+state; with state gas the prefix and the size are checked before either charge. -/
 def chargeDeposit (rules : ForkRules) (code : Bytes) (d : Devm) :
     Except (ExceptionalHalt × Devm) Devm :=
   match rules.stateGas with

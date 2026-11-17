@@ -23,7 +23,7 @@ theorem Frame.canonical_mk {m : Message} {d : Devm} (hd : d.Canonical)
   ⟨hd, hb⟩
 
 /-- What one extended step must preserve. The spawn arm carries only the
-frame: `Resume.run_canonical` shows the parent machine is not needed. -/
+frame: `resume_canonical` shows the parent machine is not needed. -/
 def MessageOp.Outcome.Canonical : MessageOp.Outcome → Prop
   | .done ex => Execution.Canonical ex
   | .spawn child _ => child.Canonical

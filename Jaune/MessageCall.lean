@@ -13,13 +13,10 @@ frame fails:
   own;
 * `Trail` is kept on failure: the caller takes the child's.
 
-This module only adds declarations. Nothing in the present interpreter reads them yet; the new
-chain was staged under its own namespace until the switch commit relocated it, so that
-`Frame` and `Step` can sit beside today's definitions of the same names. Helpers on the
-kept type `World` carry their final names.
+Helpers on the kept type `World` carry their final names.
 
 The design is the W1/W3 design note, sections 2.1-2.4, as amended by its third revision.
-Until unit P, `CallContext` carries today's static records `TenvStat` and `BenvStat`;
+Until W3's unit P, `CallContext` carries the static records `TenvStat` and `BenvStat`;
 `TransactionContext` and `BlockContext` are the records they will be cut down to.
 -/
 
@@ -113,12 +110,12 @@ structure Frame.State : Type where
   /-- Kept on failure. -/
   trail : Trail
 
-/-! ### Today's dynamic state and the lifetime groups
+/-! ### `Devm` and the lifetime groups
 
-The W1 bodies of `enter`, `settle` and `resume` still run over today's `Devm`, so they convert
-between it and `Frame.State`. Both maps go at unit N, when `Devm` becomes `Frame.State`. -/
+The bodies of `enter`, `settle` and `resume` run over `Devm`, so they convert between it and
+`Frame.State`. Both maps go at W3's unit N, when `Devm` becomes `Frame.State`. -/
 
-/-- Today's dynamic state grouped by lifetime. It forgets `output` and `error`; the trail's
+/-- A `Devm` grouped by lifetime. It forgets `output` and `error`; the trail's
 RIPEMD-160 flag is `false`, as in every running frame. -/
 def Frame.State.ofDevm (d : Devm) : Frame.State :=
   { machine :=
@@ -133,7 +130,7 @@ def Frame.State.ofDevm (d : Devm) : Frame.State :=
       { createdAccounts := d.createdAccounts, accountReads := d.meta.accountReads
         storageReads := d.meta.storageReads, touchedRIPEMD160 := false } }
 
-/-- A lifetime-grouped state as today's dynamic state, with no output and no stored error. -/
+/-- A lifetime-grouped state as a `Devm`, with no output and no stored error. -/
 def Frame.State.toDevm (s : Frame.State) : Devm :=
   { mach :=
       { stack := s.machine.stack, memory := s.machine.memory, gasLeft := s.machine.gasLeft
@@ -149,9 +146,9 @@ def Frame.State.toDevm (s : Frame.State) : Devm :=
 
 /-! ### Static records -/
 
-/-- The block a frame runs in: today's `BenvStat` without the transaction's original state. The
-two fields `timestamp` and `gasLimit` are named as the header names them. Introduced for unit P;
-until then `CallContext` carries `BenvStat`. -/
+/-- The block a frame runs in: `BenvStat` without the transaction's original state. The
+two fields `timestamp` and `gasLimit` are named as the header names them. Not yet used:
+`CallContext` carries `BenvStat` until W3's unit P. -/
 structure BlockContext : Type where
   /-- The fork this block runs under; the rules derive from it. -/
   fork : Fork
@@ -182,7 +179,7 @@ structure BlockContext : Type where
 def BlockContext.rules (b : BlockContext) : ForkRules := Fork.ruleSet b.fork
 
 /-- What a frame reads of its transaction (decision 13): the four fields the interpreter reads.
-Introduced for unit P; until then `CallContext` carries `TenvStat`. -/
+Not yet used: `CallContext` carries `TenvStat` until W3's unit P. -/
 structure TransactionContext : Type where
   /-- The transaction's sender (`ORIGIN`). -/
   origin : Address
@@ -190,22 +187,22 @@ structure TransactionContext : Type where
   gasPrice : Nat
   /-- EIP-4844's versioned hashes (`BLOBHASH`). -/
   blobVersionedHashes : List U256
-  /-- The state the transaction started on, which `SSTORE` compares against; today's
+  /-- The state the transaction started on, which `SSTORE` compares against;
   `BenvStat.origState`. -/
   originalState : State
 
-/-- What `step` reads of the message a frame runs. The other fields of today's `Sevm` (`target`,
+/-- What `step` reads of the message a frame runs. The other fields of `Sevm` (`target`,
 `gas`, `codeAddress`, `disablePrecompiles`, the value-transfer flag) are read only at `enter`
 and stay on the `Message`. -/
 structure CallContext : Type where
   /-- The sender (`CALLER`). -/
   caller : Address
   /-- The account whose storage and balance the frame acts on (`ADDRESS`); EVMC's
-  `recipient`, today's `currentTarget`. -/
+  `recipient`, `Sevm.currentTarget`. -/
   recipient : Address
   /-- The value (`CALLVALUE`). -/
   value : U256
-  /-- The input (`CALLDATA*`); today's `data`. -/
+  /-- The input (`CALLDATA*`); `Sevm.data`. -/
   calldata : Bytes
   /-- The code the frame runs. -/
   code : ByteArray
@@ -214,9 +211,9 @@ structure CallContext : Type where
   depthLeft : Nat
   /-- Whether state changes are forbidden (`STATICCALL`). -/
   isStatic : Bool
-  /-- The transaction's static record; cut down to `TransactionContext` at unit P. -/
+  /-- The transaction's static record; cut down to `TransactionContext` at W3's unit P. -/
   tx : TenvStat
-  /-- The block's static record; cut down to `BlockContext` at unit P. -/
+  /-- The block's static record; cut down to `BlockContext` at W3's unit P. -/
   block : BenvStat
 
 /-! ### Message and frame -/
@@ -266,7 +263,7 @@ inductive Fault : Type
   | internal (reason : InternalError)
 deriving DecidableEq, Repr
 
-/-- A fault as an error of today's vocabulary. -/
+/-- A fault as an `EvmError`. -/
 def Fault.toEvmError : Fault → EvmError
   | .crypto reason => .crypto reason
   | .internal reason => .internal reason
@@ -316,7 +313,7 @@ def trail : Frame.Result → Trail
   | .revert _ _ _ trail => trail
   | .halt _ _ trail => trail
 
-/-- The settled outcome as today's vocabulary records it: none for a success. -/
+/-- The settled outcome as `Meta.error` records it: none for a success. -/
 def error? : Frame.Result → Option SettledHalt
   | .success .. => none
   | .revert .. => some .revert
@@ -344,13 +341,14 @@ structure Pending : Type where
   target : ReturnTarget
   /-- Whether the spawn charged a new account's state gas, which a failed child refunds. -/
   newAccountCharged : Bool
-  /-- W1 only: the caller's `Meta.output`, passed through so `resume` can rebuild its `Devm`. -/
+  /-- Until `Devm` is replaced: the caller's `Meta.output`, passed through so `resume` can
+  rebuild its `Devm`. -/
   legacyOutput : Bytes
-  /-- W1 only: the caller's `Meta.error`, passed through so `resume` can rebuild its `Devm`. -/
+  /-- Until `Devm` is replaced: the caller's `Meta.error`, passed through so `resume` can
+  rebuild its `Devm`. -/
   legacyError : Option SettledHalt
 
-/-- The result of a message opcode: finished in place, or a child frame to run. Today's `XStep`;
-the old name carries a retired token. -/
+/-- The result of a message opcode: finished in place, or a child frame to run. -/
 inductive MessageOp.Outcome : Type
   /-- The opcode finished without opening a frame. -/
   | done (ex : Execution)
@@ -361,7 +359,7 @@ inductive MessageOp.Outcome : Type
 inductive Step : Type
   /-- The frame stopped, with its raw result. -/
   | halt (ex : Execution)
-  /-- The frame goes on at `pc`. Today's `cont`. -/
+  /-- The frame goes on at `pc`. -/
   | next (pc : Nat) (devm : Devm)
   /-- The frame opens a child, and goes on at `pc` when the child is resumed. -/
   | spawn (child : Frame) (pending : Pending) (pc : Nat)
@@ -376,7 +374,7 @@ inductive Frame.Entry : Type
 
 /-! ### Entry helpers -/
 
-/-- The value transfer at entry: today's `Msg.benvAfterTransfer` on the world. A balance too
+/-- The value transfer at entry: `Msg.benvAfterTransfer` on the world. A balance too
 small to pay is an internal fault: call preparation has already checked it. -/
 def Message.transfer (m : Message) (w : World) : Except Fault World :=
   if m.transfersValue ∧ m.context.value ≠ 0 then
@@ -402,7 +400,7 @@ def transferLogs (rules : ForkRules) (m : Message) : List Log :=
       [transferLog m.context.caller m.context.recipient m.context.value]
     else []
 
-/-- The static machine record of a message: today's `initSevm`. -/
+/-- The static machine record of a message: `initSevm`'s counterpart. -/
 def Message.sevm (m : Message) : Sevm :=
   { caller := m.context.caller, target := m.target, currentTarget := m.context.recipient
     gas := m.gas, value := m.context.value, data := m.context.calldata
@@ -414,7 +412,7 @@ def Message.sevm (m : Message) : Sevm :=
 /-! ### Resume helpers -/
 
 /-- A successful child's substate merged into its caller's. Under rules with state gas the
-caller keeps its touched accounts, as today's Amsterdam merge does. -/
+caller keeps its touched accounts. -/
 def Substate.absorb (rules : ForkRules) (saved child : Substate) : Substate :=
   { logs := saved.logs ++ child.logs
     refund := saved.refund + child.refund

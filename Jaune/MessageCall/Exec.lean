@@ -4,8 +4,8 @@ import Jaune.Implementation.CachedDriver
 /-!
 # The four-part message call: the total interpreter (goal `jaune-shape-and-names-v1`, W1 unit F)
 
-`exec` runs the staged driver with fuel seeded from the frame's own gas measure, as today's
-`exec` does; the exhaustion branch is a typed internal invariant error. Staged under a namespace of its own until the switch commit, which gave it its final names.
+`exec` runs the driver with fuel seeded from the frame's own gas measure; the exhaustion branch
+is a typed internal invariant error.
 
 It sits in its own module so that the cached twin of the driver, with its compiler-substitution
 theorem, can be imported here before `exec` is compiled: that substitution rewrites only code
@@ -15,7 +15,7 @@ compiles `exec` against the uncached driver.
 
 namespace Jaune
 
-/-- The total interpreter over the staged driver. -/
+/-- The total interpreter over the driver `execFueled`. -/
 def exec (evm : Evm) : Except (EvmError × Devm) Devm :=
   match (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run with
   | some r => r

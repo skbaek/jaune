@@ -5,15 +5,15 @@ namespace Jaune
 open Jaune
 
 /-!
-# A sufficient fuel bound for the interpreter driver
+# A sufficient fuel bound for the interpreter driver: the instruction layer
 
-`Jaune.Execution` defines the interpreter driver structurally recursive on a
-fuel parameter, so it must report exhaustion as a possible outcome. This module
-proves that fuel seeded from the frame's gas measure is always sufficient, and
-uses that proof to give the driver and its frame wrappers a total type.
-
-It sits between `Jaune.Execution` (the driver) and `Jaune.Transaction` (its
-first consumer) so that the consumers can be stated against the total API.
+The driver `execFueled` (`Jaune.MessageCall.Driver`) is structurally recursive
+on a fuel parameter, so it must report exhaustion as a possible outcome.
+`Jaune.MessageCall.Totality` proves that fuel seeded from the frame's gas
+measure is always sufficient, which gives `exec` its total type. This module
+holds the part of that argument below the step: the measure, the per-instruction
+walks, the halt branch and the settlement obligation `Execution.SettledGasLe`.
+`Jaune.MessageCall.StepGas` builds the step-level obligation on it.
 
 ## The measure
 
@@ -37,7 +37,7 @@ and every site proof ends in one `omega`.
 Sufficiency reduces to four facts about one step of the driver, all measured
 against the frame's gas at the *start* of the step:
 
-* `.cont` — a continuing step leaves a strictly smaller measure;
+* `Step.next` — a continuing step leaves a strictly smaller measure;
 * spawn/child — a spawned child starts with a strictly smaller measure than its
   parent;
 * spawn/done — a spawn that resolves without running a child resumes the parent
@@ -53,7 +53,7 @@ child's own budget has to be known not to have grown.
 /-- The measure carried by a raw frame result, in either branch. The error
 branch retains its `Devm` precisely so that the measure can still be read off
 it, and the driver's monotonicity theorem has to cover both branches because
-`Frame.settle` consumes both. -/
+`settle` consumes both. -/
 def Execution.gasMeasure : Execution → Nat
   | .ok devm => devm.gasMeasure
   | .error e => e.2.gasMeasure
@@ -241,7 +241,8 @@ number per `Devm`, not three.
 `withGasLeft` is the one plain update that moves the measure, and it moves it
 by exactly the change in `gasLeft`: the meter's two spill fields ride along.
 That pair is named, as `Devm.spill`, because it is also what an exceptional
-halt keeps -- `handleError` zeroes `gasLeft` and leaves the meter alone -- so
+halt keeps -- without state gas `settle` zeroes `gasLeft` and leaves the meter
+alone -- so
 the same name is what the halt obligation below is stated against. -/
 
 namespace Devm
@@ -461,7 +462,7 @@ theorem Devm.popN_gasMeasure {devm : Devm} {n : Nat} {xs : List U256} {devm' : D
 `liftMachExecution` and its `Meta`/`World` variants only ever reattach the
 core's own `Mach` to the original `Devm`, so a fact proved once about the core's
 `Mach` transfers verbatim. These inversion lemmas are what let the `apply*`
-family — and, in the corpus, `Rinst.balanceCore` — be handled at the `Mach`
+family — and, in the corpus, `PlainOp.balanceCore` — be handled at the `Mach`
 level, where there is no `Devm` scaffolding in the way. They return the whole
 `Mach` rather than one field of it, so that both the measure and, where a site
 needs it, the meter can be read off the same witness. -/
@@ -569,7 +570,7 @@ end Mach
 
 /-! ## The instruction-level combinators
 
-These four cover every `Rinst` constructor whose body is a bare
+These four cover every `PlainOp` constructor whose body is a bare
 `pushItem`/`apply*` call, and they are the last step of the walk for many of
 the rest. Each is stated as an exact equation in the charge, so a caller that
 needs strictness supplies `0 < c` and finishes with `omega`. -/
@@ -769,8 +770,8 @@ can be estimated honestly and the combinator layer is known to be the right one.
 
 The slice is `.add` (the `apply*` family, 25 constructors), `.mstore` (a
 memory-extending body, 7 constructors), `.extcodesize` (a warm/cold access body
-with the charge inside an `if`, 4 constructors), `Jinst.jumpdest` (the smallest
-charge in the machine, `gJumpdest = 1`), and `Xinst.step .call` — the hard case,
+with the charge inside an `if`, 4 constructors), `JumpOp.jumpdest` (the smallest
+charge in the machine, `gJumpdest = 1`), and `MessageOp.step .call` — the hard case,
 covering a spawn and both of its refund branches. -/
 
 @[simp] theorem accessDelegation_gasMeasure (devm : Devm) (adr : Address) :
@@ -1617,12 +1618,11 @@ theorem executePrecompile_gasLe (evm : Evm) (adr : Address) :
 /-! ## Gas non-increase
 
 The corpus above constrains successful results only, but the driver hands a
-child's *whole* result back to its parent. `executeCode.handleError` turns a
-`"Revert"` error into a *successful* frame result carrying the reverting frame's
-leftover gas, and `Resume.run` adds that back to the parent, so driver
-monotonicity has to bound the error branch too. (The other two error shapes are
-free: an exceptional halt is rewritten to zero gas, and any remaining tag stays
-an `.error`, which `Resume.run` cannot turn into a resumed parent.)
+child's *whole* result back to its parent. `settle` turns a `.revert` error into
+a frame result carrying the reverting frame's leftover gas, and `resume` adds
+that back to the parent, so driver monotonicity has to bound the error branch
+too. (The other error shapes are free: an exceptional halt is settled with zero
+gas, and a fault is not a frame result: it ends the run.)
 
 The device is one compositional bind lemma. `resultGas proj e` reads the gas out
 of whichever branch `e` takes, and the bind lemmas peel a single `bind`, leaving
@@ -1884,7 +1884,7 @@ theorem gasLe_bind {α : Type} {n : Nat} {proj : α → Devm}
   | ok a => exact Nat.le_trans (hf a) he
 
 /-- The fully general peeling lemma, for bodies that do not end in a bare
-`Devm` — `Jinst.runCore` returns a `Nat × Devm` jump target. -/
+`Devm` — `JumpOp.runCore` returns a `Nat × Devm` jump target. -/
 theorem gasLe_bind_gen {α β : Type} {n : Nat} {proj : α → Devm} {proj' : β → Devm}
     {e : Except (EvmError × Devm) α} {f : α → Except (EvmError × Devm) β}
     (he : resultGas proj e ≤ n)
@@ -1898,7 +1898,7 @@ theorem gasLe_bind_gen {α β : Type} {n : Nat} {proj : α → Devm} {proj' : β
     resultGas (fun _ => devm) (assertDynamic sevm devm) = devm.gasMeasure :=
   resultGas_assert _
 
-/-- The `Mach × Meta` analogue of `machResultGas`, for `Rinst.balanceCore`. -/
+/-- The `Mach × Meta` analogue of `machResultGas`, for `PlainOp.balanceCore`. -/
 def machMetaResultGas {α : Type} : Footprint.Outcome (Mach × Meta) α → Nat
   | .error p => p.2.1.gasMeasure
   | .ok p => p.2.1.gasMeasure
@@ -1953,9 +1953,9 @@ theorem PlainOp.balanceCore_resultGasLe (rules : ForkRules) (world : World)
         simp only [machMetaResultGas]
         omega
 
-/-- Every `Rinst` body leaves at most the gas it started with, in *either*
+/-- Every `PlainOp` body leaves at most the gas it started with, in *either*
 branch. The successful branch is already covered strictly by
-`Rinst.runCore_gasLt`; this is the error branch the `"Revert"` path needs. -/
+`PlainOp.runCore_gasLt`; this is the error branch the `"Revert"` path needs. -/
 theorem PlainOp.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (r : PlainOp) :
     (PlainOp.runCore pc devm sevm r).gasMeasure ≤ devm.gasMeasure := by
   cases r <;> simp only [PlainOp.runCore]
@@ -2313,8 +2313,8 @@ theorem JumpOp.runCore_gasLe (pc : Nat) (devm : Devm) (sevm : Sevm) (j : JumpOp)
     (devm.withOutput output).gasMeasure = devm.gasMeasure := rfl
 
 /-- The halting instructions. `.revert` is the reason this whole layer exists: it
-is the sole producer of the `"Revert"` tag, the one error `handleError` turns
-back into a successful frame result carrying live gas. -/
+is the sole producer of the `.revert` error, the one error `settle` turns into a
+frame result carrying live gas. -/
 theorem HaltOp.run_gasLe (sevm : Sevm) (devm : Devm) (l : HaltOp) :
     Execution.gasMeasure (HaltOp.run sevm devm l) ≤ devm.gasMeasure := by
   cases l <;> simp only [HaltOp.run]
@@ -2390,21 +2390,21 @@ theorem HaltOp.run_gasLe (sevm : Sevm) (devm : Devm) (l : HaltOp) :
           simp only [apply_ite, Execution.gasMeasure_ok, addAccountToDelete_gasMeasure,
             Devm.emitTransferLog_gasMeasure, Devm.addBal_gasMeasure, ite_self, Nat.le_refl]
 
-/-! ## The `Xinst` halt branch
+/-! ## The `MessageOp` halt branch
 
-`Xinst` is the one family whose error branch resists the `resultGas` walk. A
+`MessageOp` is the one family whose error branch resists the `resultGas` walk. A
 call-type instruction that short-circuits at depth 0 hands the stipend *back*,
 so the `Devm` in `(evm1.withGasLeft (evm1.gasLeft + gas)).push 0` carries more
 gas than the intermediate it came from; the bound is recoverable only from the
 charge equation the compositional device deliberately discards.
 
 What the driver actually needs is weaker than a measure bound, and it has two
-halves. `handleError` manufactures a live-gas frame result out of exactly one
-tag, `"Revert"`, and every error an `Xinst` can raise is a stack or gas fault —
-`"Revert"` is produced at a single site in the whole interpreter,
-`Linst.run .revert`. That is the first half, and it is a walk with no
+halves. `settle` makes a live-gas frame result out of exactly one error,
+`.revert`, and every error a `MessageOp` can raise is a stack or gas fault —
+`.revert` is produced at a single site in the whole interpreter,
+`HaltOp.run .revert`. That is the first half, and it is a walk with no
 arithmetic in it at all. The second half is what an exceptional halt *keeps*:
-`handleError` zeroes `gasLeft` and leaves the meter alone, so the settled
+without state gas `settle` zeroes `gasLeft` and leaves the meter alone, so the settled
 measure is the halted frame's `spill`, and the driver needs that spill bounded
 by the measure the step began with. Along a Prague arm no operation touches the
 meter, so the walk carries one more fact -- every branch still holds the meter
@@ -2658,7 +2658,7 @@ theorem Execution.SettledGasLe.mono {m n : Nat} {ex : Execution} (h : m ≤ n)
   | .error (.crypto _, _), _ => trivial
   | .error (.internal _, _), _ => trivial
 
-/-- The route the `Rinst`/`Jinst`/`Linst` corpus takes. -/
+/-- The route the `PlainOp`/`JumpOp`/`HaltOp` corpus takes. -/
 theorem Execution.settledGasLe_of_gasLe {n : Nat} {ex : Execution}
     (h : ex.gasMeasure ≤ n) : ex.SettledGasLe n := by
   match ex with
@@ -2676,7 +2676,7 @@ theorem Execution.settledGasLe_of_gasLe {n : Nat} {ex : Execution}
   | .error (.crypto _, _) => trivial
   | .error (.internal _, _) => trivial
 
-/-- The route the `Xinst` family takes: bound the successful branch, rule out
+/-- The route the `MessageOp` family takes: bound the successful branch, rule out
 the one tag that would let an error carry live gas through, and bound the spill
 an exceptional halt keeps. -/
 theorem Execution.settledGasLe_of_halt {n : Nat} {ex : Execution}
@@ -3003,7 +3003,7 @@ theorem executionGas_alone_can_increase :
     (refundState 7 before).execution > before.execution := by
   decide
 
-/-- Representative site 1: `Rinst.runCore_gasLt`'s `.sstore` arm in
+/-- Representative site 1: `PlainOp.runCore_gasLt`'s `.sstore` arm in
 `Jaune.Sufficiency`.  Amsterdam SSTORE charges positive execution gas, then
 performs a reservoir charge or a refund.  Even allowing both state operations
 in sequence, each is neutral in the adjusted measure, so the execution charge
@@ -3021,7 +3021,7 @@ theorem sstore_site_measure_decreases
   have hr := refundState_measure refund afterState
   omega
 
-/-- Representative site 2: `Xinst.step_call_gasDecreasing` and its
+/-- Representative site 2: `MessageOp.step_call_gasDecreasing` and its
 spawn/settle obligation.  Amsterdam may spill a new-account state charge before
 calculating the child grant, drains the state reservoir into the child, and
 later incorporates the child's remaining gas.  If the child does not increase

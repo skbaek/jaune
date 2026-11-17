@@ -8,13 +8,10 @@ state-gas meter `StateGasMeter.zero`. The machine layer (`Jaune.Machine`) proves
 instruction preserves `Devm.StateGasZero`; this module adds the frame structure of the
 four-part message call: `step`'s spawns, `enter`, `settle`, `resume` and the driver.
 
-This restates the state-gas-zero family of `Jaune.Execution`, which speaks of the old chain
-(`Legacy.Frame`, `Resume`, `XStep`, `Legacy.Step`, `FrameEntry`). Two things are simpler here:
+Two points of its shape:
 
-* a frame has one message, so `Frame.StateGasZero` has one rules clause where
-  `Legacy.Frame.StateGasZero` had two (outer and inner message); the saved caller is the
-  frame's checkpoint, so its zero meter is a clause of the frame, where it was a clause of
-  `Resume`;
+* a frame has one message, so `Frame.StateGasZero` has one rules clause; the saved caller is
+  the frame's checkpoint, so its zero meter is a clause of the frame;
 * `resume` under rules without state gas leaves the caller's meter as saved, so its lemma needs
   nothing about the child's result, and the driver needs neither the `enter` nor the `settle`
   lemma: they are kept as facts in their own right.
@@ -326,10 +323,7 @@ theorem chargeDeposit_stateGasZero {rules : ForkRules} {code : Bytes} {d : Devm}
     · exact hthen
   · exact hthen
 
-/-- A settled result keeps the zero meter. The counterpart of the old chain's
-`Legacy.Frame.settle_stateGasZero` together with its helpers for `executeCode.handleError`,
-`processMessage.settle`, `processCreateMessage.settle` and `Legacy.Frame.settleMsg`, which are
-one function here. -/
+/-- A settled result keeps the zero meter. -/
 theorem settle_stateGasZero {f : Frame}
     (hrules : f.message.context.block.rules.stateGas = none)
     {raw : Execution} (h : raw.StateGasZero) {r : Frame.Result}
@@ -386,8 +380,7 @@ theorem settle_stateGasZero {f : Frame}
             cases hd
 
 /-- Entering a frame keeps the zero meter. Only the rules and the grant are needed: a child
-starts from the message's grant, not from its checkpoint's meter. The counterpart of
-`Legacy.Frame.enter_stateGasZero` and `executeCode.enter_stateGasZero`. -/
+starts from the message's grant, not from its checkpoint's meter. -/
 theorem enter_stateGasZero {f : Frame}
     (hrules : f.message.context.block.rules.stateGas = none)
     (hgrant : f.message.stateGasGrant = 0) :
@@ -414,8 +407,7 @@ theorem enter_stateGasZero {f : Frame}
       · exact hevm
 
 /-- Resuming a caller keeps its zero meter. Under rules without state gas `resume` hands the
-caller's meter back as saved, so nothing about the child's result is needed: the old chain's
-`Resume.run_stateGasZero` asked for the settled child as well. -/
+caller's meter back as saved, so nothing about the child's result is needed. -/
 theorem resume_stateGasZero {rules : ForkRules} {p : Pending} {saved : Frame.State}
     {r : Frame.Result} {x : Except (ExceptionalHalt × Devm) Devm}
     (hrules : rules.stateGas = none) (hsaved : saved.machine.stateGas = .zero)

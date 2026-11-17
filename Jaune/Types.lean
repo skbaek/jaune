@@ -1357,7 +1357,7 @@ def UInt8.toPlainOp : UInt8 → Option PlainOp
   | 0x1c => some .shr -- 0x1c / 2 / 1 / logical shift right operation.
   | 0x1d => some .sar -- 0x1d / 2 / 1 / arithmetic (signed) shift right operation.
   -- 0x1e decodes at every fork; whether it is a defined instruction is a rule,
-  -- checked by `Rinst.runCore` against `ForkRules.op`.  Decoding stays
+  -- checked by `PlainOp.runCore` against `ForkRules.op`.  Decoding stays
   -- fork-independent so that instruction positions -- and every downstream
   -- statement about them -- do not depend on which rules are running.
   | 0x1e => some .clz -- 0x1e / 1 / 1 / count leading zero bits.
@@ -1390,7 +1390,7 @@ def UInt8.toPlainOp : UInt8 → Option PlainOp
   | 0x49 => some .blobhash -- 0x49 / 1 / 1 /
   | 0x4A => some .blobbasefee -- 0x4A / 0 / 1 /
   -- 0x4B decodes at every fork, like 0x1E; whether it is a defined instruction
-  -- is `ForkRules.op.slotnum`, checked by `Rinst.runCore` (EIP-7843).
+  -- is `ForkRules.op.slotnum`, checked by `PlainOp.runCore` (EIP-7843).
   | 0x4B => some .slotnum -- 0x4B / 0 / 1 / get the current block's slot number.
   | 0x50 => some .pop -- 0x50 / 1 / 0 / Remove an item from the stack.
   | 0x51 => some .mload -- 0x51 / 1 / 1 / Load a word from memory.

@@ -24,13 +24,12 @@ open Jaune
 
 /-! ## The derivation over the four-part message call
 
-`Exec` restated over the four-part message call (goal `jaune-shape-and-names-v1`, W1 unit J): its
-premises are equations about `Evm.step`, `enter`, `settle` and `resume`. The shape is
-`Legacy.Exec`'s: six constructors, the same recursive premises. -/
+`Exec` over the four-part message call (goal `jaune-shape-and-names-v1`, W1 unit J): its
+premises are equations about `Evm.step`, `enter`, `settle` and `resume`; six constructors. -/
 
 /-- The caller's continuation after a spawned child, as the driver takes it: a fault ends the
 run, a halted caller ends it with the halt, and a resumed caller goes on. A fault carries the
-child's checkpoint, which nothing reads (W1). -/
+child's checkpoint, which nothing reads. -/
 def resumeCaller (rules : ForkRules) (child : Frame) (pending : Pending) :
     Except Fault Frame.Result → Execution
   | .error fault => .error (fault.toEvmError, child.checkpoint.toDevm)
@@ -275,8 +274,8 @@ theorem Evm.step_of_halt {pc : Nat} {sevm : Sevm} {devm : Devm} {l : HaltOp}
 
 /-! ### Block statics across a frame boundary, on the four-part message call
 
-The restated forms of the `Legacy.*` facts above: a spawned child's message carries its caller's
-block statics, and entering a frame runs a machine under its message's. -/
+A spawned child's message carries its caller's block statics, and entering a frame runs a machine
+under its message's. -/
 
 /-- A CALL-family spawn hands the parent's block statics to the child frame. -/
 theorem genericCall.step_spawn_benvStat

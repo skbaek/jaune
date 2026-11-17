@@ -1,24 +1,22 @@
 import Jaune.MessageCall.Driver
 
 /-!
-# The cached twin of the staged driver (goal `jaune-shape-and-names-v1`, W1 unit H)
+# The cached twin of the driver (goal `jaune-shape-and-names-v1`, W1 unit H)
 
 Implementation module (see `scripts/layering.json`). `execFueledCached` is a second
-implementation of the staged driver `execFueled`, kept for speed: it threads a cache
+implementation of the driver `execFueled`, kept for speed: it threads a cache
 that shares one physical copy of an identical calldata slice across a deep call path. Its
 semantic component is proved equal to `execFueled` (`execFueledCachedCore_fst`), and
 the compiled-code substitution theorem `execFueled_eq_cached` makes the compiled code run it in
 place of `execFueled`.
 
-This is today's `Jaune.Impl.CachedExec` over the staged `Step`: the same cache, the same
-coverage (the four legacy call arms cached; the Amsterdam arms and the creation opcodes take
+It keeps the cache and coverage of the old `Jaune.Impl.CachedExec`, deleted at G1, over `Step`
+(the four legacy call arms cached; the Amsterdam arms and the creation opcodes take
 the ordinary definition), and `genericCall.stepCached` is the fifth producer of a spawn, proved
-equal to the staged `genericCall.step`.
+equal to `genericCall.step`.
 
 A substitution theorem rewrites only code compiled after it is in scope, so
-`Jaune.MessageCall.Exec`, which defines the staged total `exec`, imports this module. Both this
-module and today's `Jaune.Impl.CachedExec` stand until the delete commit removes the old
-chain.
+`Jaune.MessageCall.Exec`, which defines the total `exec`, imports this module.
 -/
 
 namespace Jaune
@@ -29,8 +27,7 @@ open Jaune
 compact backing array plus the requested range; the padded `Bytes` value is allocated once and
 reused when a later call asks for the identical slice. The proof field is erased by code
 generation and makes every hit definitionally accountable to the ordinary `Array.sliceD`
-result. A private copy of today's (`Jaune.Impl.CachedExec`), which is private there and is
-deleted with the old chain. -/
+result. -/
 
 private structure CalldataCacheKey where
   data : Array UInt8
@@ -76,7 +73,7 @@ private theorem CalldataCache.get_fst
       simpa [h] using cached.valid
     · rfl
 
-/-- The fifth producer of a spawn: the staged `genericCall.step` with the calldata slice taken
+/-- The fifth producer of a spawn: `genericCall.step` with the calldata slice taken
 through the cache. -/
 private def genericCall.stepCached
     (sevm : Sevm) (devm : Devm) (gas : Nat) (value : U256)
@@ -146,10 +143,10 @@ private theorem Except.map_bind' {ε α β γ : Type} (m : Except ε α)
 private theorem Except.map_pure' {ε α β : Type} (f : α → β) (a : α) :
     Except.map f (pure a : Except ε α) = pure (f a) := rfl
 
-/-- Cache-threaded specialization of the staged `MessageOp.step`. The four call opcodes'
+/-- Cache-threaded specialization of `MessageOp.step`. The four call opcodes'
 legacy (`stateGas = none`) arms are reproduced verbatim with `genericCall.stepCached` in place
 of `genericCall.step` and the cache threaded through the early returns; every other arm is the
-ordinary definition. Coverage is today's (`Jaune.Impl.CachedExec`). -/
+ordinary definition. -/
 private def MessageOp.stepCached
     (sevm : Sevm) (devm : Devm) (cache : Option CalldataCache) :
     MessageOp → MessageOp.Outcome × Option CalldataCache
@@ -403,7 +400,7 @@ private theorem Evm.stepCached_fst
     | jump j => rfl
     | halt l => rfl
 
-/-- Cache-threaded staged driver. Its semantic component is proved below to be exactly
+/-- Cache-threaded driver. Its semantic component is proved below to be exactly
 `execFueled`; the extra component only retains a shareable physical representative of
 an exact calldata slice, threaded through a child's run into its caller's continuation. -/
 private def execFueledCachedCore :

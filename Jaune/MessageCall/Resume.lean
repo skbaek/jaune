@@ -5,7 +5,7 @@ import Jaune.MessageCall
 
 `resume` hands a finished child's result back to the caller that spawned it: under Amsterdam's
 rules it first checks that the result is settled, then merges the result into the saved caller
-by lifetime and runs the calling opcode's push and output write. Staged under a namespace of its own until the switch commit, which gave it its final names; nothing in today's interpreter reads it until the switch commit.
+by lifetime and runs the calling opcode's push and output write.
 
 * The machine is the saved caller's, with the child's meters absorbed and its return data set
   (`absorbMeters`).
@@ -14,13 +14,14 @@ by lifetime and runs the calling opcode's push and output write. Staged under a 
 * The trail is always merged.
 * The push has its capacity check: on a full stack the caller halts with the merged state.
 
-This is the W1 form: the caller comes back as today's `Devm`, rebuilt from the merged groups and
+The caller comes back as a `Devm`, rebuilt from the merged groups and
 the caller's `output` and `error`, which `Pending` passes through unchanged.
 -/
 
 namespace Jaune
 
-/-- `credit_state_gas_refund` on a staged machine: today's `Mach.creditStateGasRefund`. -/
+/-- `credit_state_gas_refund` on a lifetime-grouped machine: `Mach.creditStateGasRefund`'s
+counterpart. -/
 def Machine.creditStateGasRefund (amount : Nat) (m : Machine) : Machine :=
   let g := m.stateGas
   let fromGasLeft := min amount g.spilled
@@ -29,7 +30,8 @@ def Machine.creditStateGasRefund (amount : Nat) (m : Machine) : Machine :=
     stateGas :=
       { g with left := g.left + (amount - fromGasLeft), spilled := g.spilled - fromGasLeft } }
 
-/-- `repay_state_gas_spill` on a staged machine: today's `Mach.repayStateGasSpill`. -/
+/-- `repay_state_gas_spill` on a lifetime-grouped machine: `Mach.repayStateGasSpill`'s
+counterpart. -/
 def Machine.repayStateGasSpill (m : Machine) : Machine :=
   let g := m.stateGas
   let repayment := min g.left g.spilled
@@ -76,8 +78,8 @@ def ReturnTarget.finish (target : ReturnTarget) (r : Frame.Result) (m : Machine)
     { m with memory := m.memory.write outputIndex (r.output.take outputSize) }
   | .create _ => m
 
-/-- A lifetime-grouped caller as today's `Devm`, with the output and stored error it had when
-it spawned. W1 only. -/
+/-- A lifetime-grouped caller as a `Devm`, with the output and stored error it had when
+it spawned. Goes when `Devm` is replaced by `Frame.State`. -/
 def Pending.restore (p : Pending) (s : Frame.State) : Devm :=
   let d := s.toDevm
   { d with «meta» := { d.meta with output := p.legacyOutput, error := p.legacyError } }
@@ -86,7 +88,7 @@ def Pending.restore (p : Pending) (s : Frame.State) : Devm :=
 
 Under state gas a failed result must be settled (no committed or outstanding spill, the
 reservoir at its baseline) and a successful one must have no committed spill; otherwise the run
-faults with today's texts. The merged caller is then pushed the status; a full stack halts it
+faults. The merged caller is then pushed the status; a full stack halts it
 with the merged state. -/
 def resume (rules : ForkRules) (p : Pending) (saved : Frame.State) (r : Frame.Result) :
     Except Fault (Except (ExceptionalHalt × Devm) Devm) := do

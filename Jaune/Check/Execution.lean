@@ -1,10 +1,11 @@
 -- Check/Execution.lean : executable checks of `Jaune/Execution.lean`.
 --
 -- Check module (see `scripts/layering.json`). The `#guard`s, `example`s and test
--- helpers below were relocated unchanged from `Jaune/Execution.lean` so that the
+-- helpers below were relocated from `Jaune/Execution.lean` so that the
 -- specification module defines only the specification (goal
--- `jaune-shape-and-names-v1`, unit W0). The default build compiles this module
--- through `JauneChecks.lean`.
+-- `jaune-shape-and-names-v1`, unit W0); those that drove the old chain were
+-- restated over the four-part message call when it was deleted (W1). The default
+-- build compiles this module through `JauneChecks.lean`.
 import Jaune.Execution
 import Jaune.MessageCall.Top
 
@@ -94,8 +95,8 @@ private def isLeadingZeros : DecodeError → Bool
 #guard (DecodeError.structure "block" "expected a 4-item list").render
   = "RlpStructureError : block : expected a 4-item list"
 
--- The `Resume.run` guards that stood here are restated over `resume` and `Frame.Result` in
--- `Jaune/Check/MessageCall.lean` (goal `jaune-shape-and-names-v1`, W1).
+-- The guards of the deleted `Resume.run` that stood here are restated over `resume` and
+-- `Frame.Result` in `Jaune/Check/MessageCall.lean` (goal `jaune-shape-and-names-v1`, W1).
 
 -- EIP-8024 `DUPN`/`SWAPN`/`EXCHANGE` (goal C, G4), stepped from real code
 -- through `getInst`, so that the immediate's sizing, the zero fill past the
@@ -358,7 +359,7 @@ below sensitive to the schedule they are handed, even in the `stateGas = none`
 lane where every fork carries `pragueGasSchedule`.
 
 **Why this is a `GasSchedule` and no longer a `ForkRules`.** It used to be a
-whole rule record, and the guards below drove `Xinst.step`/`Linst.run` on a
+whole rule record, and the guards below drove `MessageOp.step`/`HaltOp.run` on a
 machine carrying it, which is how a *third* legacy-shaped record proved that
 the instruction sites read the *selected* `rules.gas` rather than the globals
 or a hard-wired Prague/Amsterdam pair. A machine now carries a `Fork`, so no
@@ -387,8 +388,8 @@ The other half -- that the sites name those functions rather than the globals
 beside them -- is a source condition after this change rather than an evaluation
 one, and `scripts/check-rule-data-reads.sh` is **the whole of the replacement's
 site coverage**. It is shown to bite twice, each in a disposable tree: on
-`Xinst.step`'s legacy CALL arm reading the global that shadows `callValue`, and
-on `Linst.run`'s legacy SELFDESTRUCT arm (`Jaune/Machine.lean`) reading the one
+`MessageOp.step`'s legacy CALL arm reading the global that shadows `callValue`, and
+on `HaltOp.run`'s legacy SELFDESTRUCT arm (`Jaune/Machine.lean`) reading the one
 that shadows `coldAccountAccess` -- each leaves the tree green with every
 `#guard` below still passing, and turns only that gate red. Its three names
 cover exactly the CREATE and SELFDESTRUCT reads no row here controls.

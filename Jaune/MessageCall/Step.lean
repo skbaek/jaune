@@ -4,11 +4,10 @@ import Jaune.MessageCall
 /-!
 # The four-part message call: `step` (goal `jaune-shape-and-names-v1`, W1 unit E)
 
-One step of a running frame, with call preparation handing the driver a staged child `Frame`
-and a `Pending` instead of today's two messages and `Resume`. Staged under a namespace of its own until the switch commit, which gave it its final names; nothing in today's interpreter reads it until the switch commit.
+One step of a running frame, with call preparation handing the driver a child `Frame` and a
+`Pending`.
 
-The text is today's (`genericCreate.step` through `Evm.step` in `Jaune.Execution`) with three
-changes only:
+Three points of its shape (`genericCreate.step` through `Evm.step`):
 
 * the four tails, the only producers of a spawn, end in
   `.spawn ⟨message, Frame.State.ofDevm saved⟩ ⟨target, charged, saved.output, saved.error⟩`;
@@ -16,7 +15,7 @@ changes only:
   and read no state: the world a child is entered on is its frame's checkpoint;
 * a message opcode's result is a `MessageOp.Outcome`, and a step that goes on is `Step.next`.
 
-This is the W1 form: the running machine is still today's `Evm` over `Devm`.
+The running machine is an `Evm` over `Devm`.
 -/
 
 namespace Jaune
@@ -25,8 +24,8 @@ open Jaune
 
 /-! ### Building a child's message -/
 
-/-- The message a call-family opcode sends its child (today's `callMsg`, without the world: the
-child's world is its frame's checkpoint). -/
+/-- The message a call-family opcode sends its child (`callMsg`'s counterpart, without the
+world: the child's world is its frame's checkpoint). -/
 def callMessage (sevm : Sevm) (gas : Nat) (value : U256) (caller target codeAddress : Address)
     (transfersValue isStaticcall : Bool) (calldata : Bytes) (code : ByteArray)
     (disablePrecompiles : Bool) : Message :=
@@ -41,8 +40,8 @@ def callMessage (sevm : Sevm) (gas : Nat) (value : U256) (caller target codeAddr
     transfersValue := transfersValue
     disablePrecompiles := disablePrecompiles }
 
-/-- The message a creation opcode sends its child (today's `createMsg`, without the world). The
-initcode is the code run; the calldata is empty. -/
+/-- The message a creation opcode sends its child (`createMsg`'s counterpart, without the
+world). The initcode is the code run; the calldata is empty. -/
 def createMessage (sevm : Sevm) (createGas : Nat) (endowment : U256) (newAddress : Address)
     (initcode : Bytes) : Message :=
   { context :=
@@ -252,7 +251,7 @@ def MessageOp.step (sevm : Sevm) (devm : Devm) : MessageOp → MessageOp.Outcome
         return genericCreateAmsterdam.step
           sevm state devm endowment newAddress memoryIndex memorySize
   -- S8 (EIP-1014): availability first, the `CLZ` pattern in
-  -- `Rinst.runCore`: without the fork the byte is an undefined instruction
+  -- `PlainOp.runCore`: without the fork the byte is an undefined instruction
   -- whatever the stack holds. The two metering shapes below are untouched.
   | .create2 =>
     if sevm.benvStat.rules.opcodes.create2 then
@@ -653,7 +652,7 @@ def NextOp.step (evm : Evm) (n : NextOp) : Step :=
   match n with
   -- S8 (EIP-3855): `PUSH0` is the empty push. Without the fork the byte is an
   -- undefined instruction whatever the stack and gas hold, exactly as for
-  -- `CLZ` in `Rinst.runCore`; a nonzero push is untouched.
+  -- `CLZ` in `PlainOp.runCore`; a nonzero push is untouched.
   | .push xs _ =>
     if xs = [] && !evm.sta.benvStat.rules.opcodes.push0 then
       Step.ofExecution pc (.error ⟨.halt (.invalidOpcode .none), evm.dyna⟩)

@@ -7,11 +7,10 @@ import Jaune.MessageCall.Resume
 
 `execFueled` runs a frame's machine step by step. A step that spawns a child enters it
 (`enter`), runs it if it has code to run, settles its raw result (`settle`), and resumes the
-caller with the settled result (`resume`). Staged under a namespace of its own until the switch commit, which gave it its final names; nothing in today's interpreter reads it until the switch commit.
+caller with the settled result (`resume`).
 
-This is the W1 form: the driver keeps today's type and returns the frame's raw result, so it
-consumes fuel exactly as today does. A fault still carries a `Devm` in W1; the driver puts the
-child's checkpoint there, and nothing reads it.
+The driver returns the frame's raw result (`Except (EvmError × Devm) Devm`). A fault carries a
+`Devm`; the driver puts the child's checkpoint there, and nothing reads it.
 
 The total `exec` over this driver is in `Jaune.MessageCall.Exec`, a separate module, so that the
 cached twin of this driver can be imported before `exec` is compiled.
@@ -19,7 +18,7 @@ cached twin of this driver can be imported before `exec` is compiled.
 
 namespace Jaune
 
-/-- The fuel-bounded driver over the staged `Step`. Each step consumes one unit of fuel; a
+/-- The fuel-bounded driver over `Step`. Each step consumes one unit of fuel; a
 child's run and its caller's continuation each get the fuel that remains. -/
 def execFueled : Evm → Nat → Fueled (EvmError × Devm) Devm
   | _, 0 => Fueled.exhausted

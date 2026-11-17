@@ -104,7 +104,7 @@ private def guardBlockAccessListLo' : BlockAccessListAccountChanges := { guardBl
   BlockAccessList.encode [guardBlockAccessListLo, guardBlockAccessListLo', guardBlockAccessListHi]
 #guard BlockAccessList.encode (BlockAccessList.canonicalise []) = [0xC0]
 
--- The `none` state-gas lanes -- `Xinst`'s legacy call and create paths and the
+-- The `none` state-gas lanes -- `MessageOp`'s legacy call and create paths and the
 -- legacy top-level dispatch -- record no access-list reads. That is sound only
 -- while every supported fork with a block-level access list also meters state
 -- gas, so those lanes are never taken under `bal` rules; this pins it.
@@ -1991,7 +1991,7 @@ private def typedEnvelopeBytes? (bs : Bytes) : Option Bytes :=
 --------------- AMSTERDAM FAILURE-ORDER REGRESSIONS ---------------
 
 -- These guards pin failure precedence and warming at the metering switch.
--- They deliberately exercise `Rinst.runCore`, all four `Xinst.step` CALL
+-- They deliberately exercise `PlainOp.runCore`, all four `MessageOp.step` CALL
 -- variants, and the private top-level dispatch boundary rather than a pricing
 -- helper in isolation.
 private def orderingGuardMessage (fork : Fork) (gas : Nat) : Msg :=

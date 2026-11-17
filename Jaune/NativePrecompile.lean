@@ -5,7 +5,7 @@ import Jaune.MessageCall.Step
 /-!
 # Enabled native STATICCALLs do not enter an interpreter child
 
-The conclusion concerns the actual spawn and Frame.enter equations, including
+The conclusion concerns the actual spawn and `enter` equations, including
 native failure outcomes. It neither constructs a call nor asserts native success.
 -/
 
@@ -48,8 +48,7 @@ private theorem genericCall_native_not_run
       exact h (decide_eq_true (of_decide_eq_true active))
 
 /-- The six-operand STATICCALL to an enabled, effectively direct native precompile cannot
-enter an interpreter child: the four-part form of
-`Legacy.MessageOp.step_staticcall_not_run_of_precompile`, over `MessageOp.step` and `enter`. -/
+enter an interpreter child, over `MessageOp.step` and `enter`. -/
 theorem MessageOp.step_staticcall_not_run_of_precompile
     {sevm : Sevm} {pre : Devm} {child : Frame} {pending : Pending} {c : Evm}
     {g t ii size oi outSize : U256} {rest : List U256}

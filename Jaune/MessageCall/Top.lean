@@ -8,16 +8,15 @@ on: `initDevm` of the message, or under Amsterdam's rules the state `prepareTopL
 returns. `Frame.runTop` enters it from that checkpoint, runs `exec` and settles. The transaction
 reads the settled `Frame.Result` through `Frame.output` and `Frame.outputAmsterdam`.
 
-W1 form: today's `Msg` is still the top-level message type, so `Message.ofTop` builds the
-frame's message from it.
+`Msg` is the top-level message type, and `Message.ofTop` builds the frame's message from it.
 -/
 
 namespace Jaune
 
 open Jaune
 
-/-- Today's message as a frame message. `isCreate` gives the kind; today it is the frame's
-flag, not the message's. -/
+/-- A top-level `Msg` as a frame message. `isCreate` gives the kind; it is the frame's flag,
+not the message's. -/
 def Message.ofTop (msg : Msg) (isCreate : Bool) : Message :=
   { context :=
       { caller := msg.caller, recipient := msg.currentTarget, value := msg.value

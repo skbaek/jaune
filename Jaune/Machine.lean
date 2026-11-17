@@ -1879,7 +1879,7 @@ structure Meta : Type where
   Dragon through Gray Glacier), so it stays empty under every Paris-and-later
   rule set. Defaulted so that every `Meta` literal keeps elaborating. It dies
   with a failed child, except for EELS's RIPEMD-160 quirk
-  (`incorporateChildOnError`). -/
+  (`Substate.keepTouch` in `resume`). -/
   touchedAccounts : AdrSet := .emptyWithCapacity
 
 @[ext]
@@ -2416,7 +2416,7 @@ arithmetic content of the migration: a state-gas operation is measure-*neutral*,
 an execution charge is measure-*decreasing* by exactly what it charges, and a
 spawn conserves the measure across the parent/child pair. Everything the
 termination argument has to know about two reservoirs is here; the sites above
-`Xinst.step` then only have to say which operations they perform.
+`MessageOp.step` then only have to say which operations they perform.
 
 `Jaune.DualGasProbe` proved these same five shapes on a bounded model before any
 of this existed, and its `executionGas_alone_can_increase` is why the measure
@@ -3376,7 +3376,7 @@ accounts that still carry storage. An untouched empty prestate account stays
 present; neither parsing nor a fork crossing globally clears it.
 
 All three sites are recorded: the two frame-level ones
-(`processMessage.settle`, `incorporateChildOnError`) and the `SELFDESTRUCT`
+(`settle`'s `Devm.recordTouch`, `Substate.keepTouch` in `resume`) and the `SELFDESTRUCT`
 beneficiary (`Devm.creditBeneficiary`). The last includes a zero credit to an
 empty beneficiary, which legacy `modify_state` keeps present and the touch
 hands to the sweep. -/
@@ -7015,10 +7015,9 @@ theorem TransientStorage.Canonical.setStorageValue {τ : TransientStorage} (h : 
 --   2. the original state, in `BenvStat.origState`, which `SLOAD`'s original
 --      value and the gas refund rules read long after it stopped being
 --      current; and
---   3. every saved parent state, which in this interpreter lives in the frame's
---      `Msg` -- `msg.benv.state` and `msg.tenv.transientStorage` are exactly the
---      pair `Devm.rollback` restores at `processMessage.settle` and
---      `processCreateMessage.settle`.
+--   3. every saved parent state, which in this interpreter lives in a frame's
+--      checkpoint (`Frame.checkpoint`) -- its world's state and transient
+--      storage are exactly the pair a failed frame falls back to in `settle`.
 --
 -- Transient storage is carried alongside the world state everywhere, so each
 -- predicate below pairs `State.Canonical` with `Tra.Canonical` rather than
@@ -7456,8 +7455,8 @@ Every instruction that writes neither storage, transient storage, nor (through
 `SELFDESTRUCT`) balances keeps three components of the machine it starts from:
 the world -- state and transient storage -- and the two deletion-relevant sets,
 `accountsToDelete` and `createdAccounts`. This is the one arm-by-arm walk of
-those instructions (`Rinst.runCore_worldFrame`, `Jinst.runCore_worldFrame`,
-`Linst.run_worldFrame`); canonicality of the same arms is a corollary of it
+those instructions (`PlainOp.runCore_worldFrame`, `JumpOp.runCore_worldFrame`,
+`HaltOp.run_worldFrame`); canonicality of the same arms is a corollary of it
 (`Execution.WorldFrame.canonical`), because canonicality reads only the world.
 Both channels are covered: an error keeps the frame of the machine it
 carries, which execution goes on using. -/
@@ -7848,7 +7847,7 @@ theorem HaltOp.run_worldFrame (sevm : Sevm) (devm : Devm) (l : HaltOp)
 
 /-- Canonicality through every register-instruction arm. Only `SSTORE` and
 `TSTORE` change the world, each through its named mutator, and are walked
-here; every other arm keeps the world frame (`Rinst.runCore_worldFrame`). -/
+here; every other arm keeps the world frame (`PlainOp.runCore_worldFrame`). -/
 theorem PlainOp.runCore_canonical (pc : Nat) {devm : Devm} (sevm : Sevm)
     (h : devm.Canonical) (r : PlainOp) :
     (PlainOp.runCore pc devm sevm r).Canonical := by

@@ -15,7 +15,7 @@ open Jaune
 
 /-! ## Over the four-part message call
 
-The same induction and subderivation order for the restated `Exec`. -/
+The induction and subderivation order for `Exec`. -/
 
 abbrev Exec.Pred : Type :=
   ∀ pc sevm devm exc, Exec pc sevm devm exc → Prop

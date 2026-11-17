@@ -174,7 +174,7 @@ def initDevm (msg : Msg) : Devm :=
       }
     }
     «meta» := {
-      -- `process_call`'s value move has already happened at `Frame.enter`;
+      -- `process_call`'s value move has already happened at `enter`;
       -- under `some _` EIP-7708 logs it, ahead of everything the frame itself
       -- logs. `Devm.emitTransferLog` carries upstream's two guards (a
       -- self-transfer and a zero transfer log nothing).
@@ -318,8 +318,9 @@ def callMsg
   }
 
 /-!
-Flattened interpreter core.  All frame-local definitions below are
-non-recursive and fuel-free; `execFueled` is the single fueled driver.
+Message helpers for the interpreter core.  The core itself (`Evm.step`,
+`enter`, `settle`, `resume`) is in `Jaune.MessageCall`, non-recursive and
+fuel-free; `execFueled` (`Jaune.MessageCall.Driver`) is the single fueled driver.
 -/
 
 /-- The message passed to a CREATE/CREATE2 child.  This named barrier is the
@@ -920,11 +921,9 @@ def setDelegation (msg : Msg) : Except EvmError (Msg × U256) := do
 --------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
 
 -- Checkpoint 2, frame half: canonicality through delegation access, message
--- initialisation, frame enter/settle/resume, the step machinery, and the
--- fueled driver. Restoration sources are exactly the ones the invariant
--- carries: a message's saved pair (`Frame.Canonical`, both messages), a
--- settlement error payload (`Except.CanonicalSettle`), and a child world
--- incorporated wholesale.
+-- initialisation, the value transfer, child messages and delegation setting.
+-- Canonicality through `enter`, `settle`, `resume`, the step and the driver is
+-- in `Jaune.MessageCall.Canonical`.
 
 /-- Delegation access touches only the accessed-address set. Stated over the
 projection because callers consume the result through an irrefutable `let`. -/
@@ -1091,10 +1090,9 @@ theorem setDelegation_canonical {msg : Msg} (h : msg.Canonical)
 /-! ### The zero-meter invariant through execution
 
 The machine layer proves that every legacy instruction preserves
-`Devm.StateGasZero`.  These result predicates add the frame and interpreter
-structure needed to say the same thing about spawning, settlement, and the
-fueled driver.  Amsterdam-only resume constructors are deliberately excluded:
-under `rules.stateGas = none` they are unreachable. -/
+`Devm.StateGasZero`.  This section adds `Evm.StateGasZero` and the precompile
+and delegation-access facts; the frame structure (spawns, `enter`, `settle`,
+`resume` and the driver) is in `Jaune.MessageCall.StateGasZero`. -/
 
 def Evm.StateGasZero (evm : Evm) : Prop :=
   evm.sta.benvStat.rules.stateGas = none ∧ evm.dyna.StateGasZero

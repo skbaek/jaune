@@ -4,17 +4,15 @@ import Jaune.T8n
 /-!
 # The four-part message call: the trace serialiser (goal `jaune-shape-and-names-v1`, W1 unit K1)
 
-Today's readers (`Jaune.TraceJson`) over the staged events of `Jaune.MessageCall.Trace`. Staged under a namespace of its own until the switch commit, which gave it its final names; the switch (unit K2) moved the tracer onto it.
+The JSON readers over the events of `Jaune.MessageCall.Trace`; the tracer (`TraceMain`) writes
+its rows through them.
 
-What changes is where each value is read (the W1 design note, second revision, §6.5):
+Where each value is read (the W1 design note, second revision, §6.5):
 
 * at a spawn, the saved caller's gas and refund come from the child's checkpoint, the child's
   grant from its message, and call or create from the pending return target;
 * the root summary reads the settled `Frame.Result`: its output and gas, the world after the
-  frame, and whether it failed; a root fault renders through today's renderer.
-
-The configuration, the serialiser state and the rendering helpers are today's or copies of
-today's private ones; they move here with the switch.
+  frame, and whether it failed; a root fault renders through `EvmError.render`.
 -/
 
 namespace Jaune
@@ -51,7 +49,7 @@ def quantity (n : Nat) : Json := .str (T8n.hexQuantity n)
 def bytes (bs : Bytes) : Json := .str (T8n.hexBytes bs)
 def textBytes (s : String) : Json := bytes s.toUTF8.data.toList
 
-/-- Today's `gasCost?` over the staged step. At a spawn the saved caller is the child's
+/-- The gas cost of a step, if the row reports one. At a spawn the saved caller is the child's
 checkpoint, the child's grant its message's gas, and the kind its pending return target. -/
 def gasCost? (before : Evm) (step : Step) : Option Nat :=
   if before.sta.benvStat.rules.stateGas.isSome then none else
@@ -68,7 +66,7 @@ def gasCost? (before : Evm) (step : Step) : Option Nat :=
     | .create _ =>
       safeSub before.dyna.gasLeft (child.checkpoint.machine.gasLeft + child.message.gas)
 
-/-- Today's pre-operation row over the staged step. -/
+/-- The pre-operation row of a step. -/
 def instruction (cfg : Config) (context : Trace.Context) (refundBase : Int)
     (before : Evm) (step : Step) : Except String Json := do
   if before.dyna.returnData.length > cfg.maxDataBytes then
@@ -112,7 +110,7 @@ def current (cfg : Config) (state : State) (ctx : Trace.Context) :
       throw "event frame identity or depth differs"
     return frame
 
-/-- Today's root summary over the staged settled result: the frame's grant is its message's gas,
+/-- The root summary over the settled result: the frame's grant is its message's gas,
 the state root is the world after the frame, and the pass flag is "did not fail". -/
 def rootSummary (cfg : Config) (frame : Frame) (result : Frame.Result) :
     Except String Json := do
@@ -124,7 +122,7 @@ def rootSummary (cfg : Config) (frame : Frame) (result : Frame.Result) :
     ("output", bytes result.output), ("gasUsed", quantity used),
     ("pass", .bool !result.failed)]
 
-/-- Today's `consume` over the staged events. -/
+/-- Consume one trace event. -/
 def consume (cfg : Config) (state : State) (event : Trace.Event) :
     Except String (State × Option Json × Json) := do
   if cfg.runId.isEmpty then throw "runId must be nonempty"
@@ -175,7 +173,8 @@ def consume (cfg : Config) (state : State) (event : Trace.Event) :
     return ({ state with frames := tail, closed := tail.isEmpty }, row,
       lifecycle ctx "settled" [("root", .bool tail.isEmpty)])
 
-/-- Today's `IO` sink over the staged events: the same writes, flushes and limits. -/
+/-- The `IO` sink over the trace events: rows are written, flushed and bounded by `Config`'s
+limits. -/
 def sink (cfg : Config) (state : IO.Ref State)
     (trace frames : IO.FS.Handle) : Trace.Sink IO := fun event => do
   let (next, row, frameRow) ← match consume cfg (← state.get) event with

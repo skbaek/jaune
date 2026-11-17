@@ -5,10 +5,9 @@ import Jaune.Precompiles
 # The four-part message call: `enter` (goal `jaune-shape-and-names-v1`, W1 unit D)
 
 `enter` starts a frame: it moves the value, and either hands back a machine to run or, for a
-precompile or a failed value transfer, the frame's result at once. Staged under a namespace of its own until the switch commit, which gave it its final names; nothing in today's interpreter reads it until the switch commit.
+precompile or a failed value transfer, the frame's result at once.
 
-This is the W1 form: the running machine is still today's `Evm`, built through
-`Message.sevm` and `Frame.State.toDevm`.
+The running machine is an `Evm`, built through `Message.sevm` and `Frame.State.toDevm`.
 
 The world and the created accounts a frame runs on always come from its checkpoint; only the
 machine, the substate and the trail's read sets come from the start state. A spawned child starts
@@ -18,10 +17,10 @@ self-destruct refund; a top-level frame starts from its checkpoint, ungated.
 
 namespace Jaune
 
-/-- A spawned child's initial state: today's `initDevm` of the child's message. The machine is
-empty with the message's gas and state-gas grant; the world is the checkpoint's; the logs are the
-entry's transfer log; the deletions are the caller's under rules that pay a self-destruct
-refund; the accessed sets and created accounts are the caller's. -/
+/-- A spawned child's initial state: `initDevm`'s counterpart for the child's message. The
+machine is empty with the message's gas and state-gas grant; the world is the checkpoint's; the
+logs are the entry's transfer log; the deletions are the caller's under rules that pay a
+self-destruct refund; the accessed sets and created accounts are the caller's. -/
 def Frame.startState (f : Frame) : Frame.State :=
   let m := f.message
   let cp := f.checkpoint
@@ -44,7 +43,7 @@ def Frame.startState (f : Frame) : Frame.State :=
         touchedAccounts := .emptyWithCapacity }
     trail := { createdAccounts := cp.trail.createdAccounts } }
 
-/-- A spawned child's initial state as today's `Devm`. -/
+/-- A spawned child's initial state as a `Devm`. -/
 def Frame.start (f : Frame) : Devm := (Frame.startState f).toDevm
 
 /-- The created accounts a frame runs with: the checkpoint's, and for a creation its new

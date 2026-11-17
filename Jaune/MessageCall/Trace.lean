@@ -3,18 +3,15 @@ import Jaune.MessageCall.Top
 /-!
 # The four-part message call: the trace driver (goal `jaune-shape-and-names-v1`, W1 unit K1)
 
-Today's streaming driver (`Jaune.Trace`) over the staged `Step`, `Frame`, `Frame.Entry` and
-settled `Frame.Result`. Staged under a namespace of its own until the switch commit, which gave it its final names; the switch
-(units I and K2) moved the tracer onto it. Like today's, this module sits outside `Jaune.lean`'s import closure.
+The streaming driver over `Step`, `Frame`, `Frame.Entry` and settled `Frame.Result`. The tracer
+(`TraceMain`, `Jaune.TraceTransaction`) runs on it. This module sits outside `Jaune.lean`'s import
+closure.
 
-The driver delivers the same events in the same order as today's, with the staged payloads. A
-caller's raw result after its child (`resumedRaw`) is the staged driver's own tail: a settlement
+A caller's raw result after its child (`resumedRaw`) is the driver's own tail: a settlement
 fault, a resumption fault, a halt or the resumed machine. Each successful return carries a
-kernel-checked projection onto the staged driver, `execFueled`, as today's does onto
-today's.
+kernel-checked projection onto the driver `execFueled`.
 
-The run identity `Context` and the certificate `CertifiedResult` mention no message-call type;
-the switch moved them here from today's tracer, which now reads them from this module.
+The run identity `Context` and the certificate `CertifiedResult` mention no message-call type.
 -/
 
 namespace Jaune
@@ -36,8 +33,8 @@ structure CertifiedResult (expected : Fueled (EvmError × Devm) Devm) where
   nextFrame : Nat
   erases : value = expected
 
-/-- Today's events with the staged payloads. `instruction` carries the pre-state and the staged
-step; `entered` the staged frame and entry; `settled` the staged settled result. -/
+/-- The trace events. `instruction` carries the pre-state and the step; `entered` the frame and
+entry; `settled` the settled result. -/
 inductive Event where
   | instruction (context : Context) (before : Evm) (step : Step)
   | entered (context : Context) (frame : Frame) (entry : Frame.Entry)
@@ -47,10 +44,10 @@ inductive Event where
 
 abbrev Sink (m : Type → Type) := Event → m Unit
 
-/-- Index by the staged driver's result, so that proof transport erases to runtime identity. -/
+/-- Index by the driver's result, so that proof transport erases to runtime identity. -/
 abbrev Result (evm : Evm) (fuel : Nat) := CertifiedResult (Jaune.execFueled evm fuel)
 
-/-- The caller's raw result once its child has settled: the staged driver's tail. A fault, in
+/-- The caller's raw result once its child has settled: the driver's tail. A fault, in
 settlement or in resumption, carries the child's checkpoint as its (unread) state. -/
 def resumedRaw (rules : ForkRules) (child : Frame) (pending : Pending) :
     Except Fault Frame.Result → Execution
@@ -61,7 +58,7 @@ def resumedRaw (rules : ForkRules) (child : Frame) (pending : Pending) :
     | .ok (.error (reason, devm)) => .error (.halt reason, devm)
     | .ok (.ok devm) => .ok devm
 
-/-- The staged driver's spawn tail, read through `resumedRaw`. -/
+/-- The driver's spawn tail, read through `resumedRaw`. -/
 theorem execFueled_tail (rules : ForkRules) (child : Frame) (pending : Pending) (pc : Nat)
     (sta : Sevm) (fuel : Nat) (settled : Except Fault Frame.Result) :
     (match (generalizing := false) some settled with
@@ -81,7 +78,7 @@ theorem execFueled_tail (rules : ForkRules) (child : Frame) (pending : Pending) 
   · simp only [resumedRaw]
     rcases resume rules pending child.checkpoint result with fault | ⟨reason, devm⟩ | devm <;> rfl
 
-/-- The staged driver at a spawn, read through `resumedRaw`. -/
+/-- The driver at a spawn, read through `resumedRaw`. -/
 theorem execFueled_spawn {evm : Evm} {fuel : Nat} {child : Frame} {pending : Pending} {pc : Nat}
     (hstep : Evm.step evm = .spawn child pending pc) :
     Jaune.execFueled evm (fuel + 1)
@@ -103,8 +100,8 @@ theorem execFueled_spawn {evm : Evm} {fuel : Nat} {child : Frame} {pending : Pen
     | none => rfl
     | some raw => exact execFueled_tail _ child pending pc evm.sta fuel _
 
-/-- The staged production driver with an arbitrary monadic streaming sink: today's
-`Trace.execFueled` over the staged step, entry, settlement and resumption. Fuel zero emits no
+/-- The production driver with an arbitrary monadic streaming sink, over step, entry,
+settlement and resumption. Fuel zero emits no
 instruction; child events precede the parent's next instruction. Each branch builds its erasure
 proof from the child certificate, and parent continuations `cast` the whole monadic result. -/
 def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
@@ -176,17 +173,17 @@ def execFueled {m : Type → Type} [Monad m] (sink : Sink m) :
               (execFueled sink ⟨pc, evm.sta, devm⟩ fuel context childResult.nextFrame)
   termination_by _ fuel _ _ => fuel
 
-/-- The exact execution projection of every successfully returned staged result. -/
+/-- The exact execution projection of every successfully returned result. -/
 theorem execFueled_erasure {evm : Evm} {fuel : Nat} (result : Result evm fuel) :
     result.value = Jaune.execFueled evm fuel := result.erases
 
-/-- Successful total executions agree with the staged total interpreter. -/
+/-- Successful total executions agree with the total interpreter. -/
 structure ExecutionResult (evm : Evm) where
   value : Execution
   nextFrame : Nat
   erases : value = Jaune.exec evm
 
-/-- Seed exactly the same sufficient fuel as the staged total interpreter. Exhaustion gives the
+/-- Seed exactly the same sufficient fuel as the total interpreter. Exhaustion gives the
 interpreter's own internal invariant error, with no further event. -/
 def exec {m : Type → Type} [Monad m] (sink : Sink m) (evm : Evm)
     (context : Context) (nextFrame : Nat) : m (ExecutionResult evm) := do
@@ -199,7 +196,7 @@ def exec {m : Type → Type} [Monad m] (sink : Sink m) (evm : Evm)
     pure ⟨.error ⟨.internal (.invariant .none), evm.dyna⟩, result.nextFrame, by
       simp only [Jaune.exec, ← result.erases, hrun]⟩
 
-/-- The total driver returns exactly the staged total interpreter's result. -/
+/-- The total driver returns exactly the total interpreter's result. -/
 theorem exec_erasure {evm : Evm} (result : ExecutionResult evm) :
     result.value = Jaune.exec evm := result.erases
 

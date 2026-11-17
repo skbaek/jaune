@@ -37,7 +37,7 @@ def returnedMachine (rules : ForkRules) (p : Pending) (saved : Machine) (r : Fra
     Machine :=
   p.target.finish r (absorbMeters rules p saved r)
 
-/-- The caller's lifetime groups after its child returns, before the W1 rebuild into `Devm`. -/
+/-- The caller's lifetime groups after its child returns, before the rebuild into `Devm`. -/
 def resumedState (rules : ForkRules) (p : Pending) (saved : Frame.State) (r : Frame.Result) :
     Frame.State :=
   { machine := returnedMachine rules p saved.machine r

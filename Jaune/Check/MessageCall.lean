@@ -1,7 +1,7 @@
 -- Check/MessageCall.lean : executable checks of the four-part message call's `resume`.
 --
--- Check module (see `scripts/layering.json`). The `Resume.run` guards of
--- `Jaune/Check/Execution.lean` restated over `Frame.Result` values (goal
+-- Check module (see `scripts/layering.json`). The guards of the deleted `Resume.run`, formerly
+-- in `Jaune/Check/Execution.lean`, restated over `Frame.Result` values (goal
 -- `jaune-shape-and-names-v1`, W1 unit L). Six of the seven carry over. The seventh, a failed
 -- child with refund 1, has no counterpart: a failed `Frame.Result` carries no refund, so the
 -- state it rejected cannot be built. The default build compiles this module through
@@ -12,7 +12,7 @@ namespace Jaune
 
 open Jaune
 
-/-- The saved caller and its world, substate and trail: today's default machine. -/
+/-- The saved caller and its world, substate and trail: the default machine. -/
 private def resumeCheckSaved : Frame.State := Frame.State.ofDevm default
 
 private def resumeCheckCreate : Pending := ⟨.create 0, false, [], none⟩

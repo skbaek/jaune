@@ -2,19 +2,16 @@ import Jaune.Sufficiency
 import Jaune.MessageCall.Step
 
 /-!
-# Totality of the staged driver: the step-level obligation (goal `jaune-shape-and-names-v1`, W1 unit G)
+# Totality of the driver: the step-level obligation (goal `jaune-shape-and-names-v1`, W1 unit G)
 
-The staged `Evm.step` (`Jaune.MessageCall.Step`) keeps today's call-family bodies and changes
-only what a spawn carries: the child's `Frame` (its message and its caller's checkpoint) and the
-caller's `Pending` continuation. This module ports today's step-level gas corpus from
-`Jaune.Sufficiency` to it: `MessageOp.Outcome.GasDecreasing` (today's `XStep.GasDecreasing`), the
-`Halt` obligation of the call-family halt branch, and `Step.GasBound` with
-`Evm.step_gasBound`.
+A spawn of `Evm.step` (`Jaune.MessageCall.Step`) carries the child's `Frame` (its message and
+its caller's checkpoint) and the caller's `Pending` continuation. This module holds the
+step-level gas corpus over it: `MessageOp.Outcome.GasDecreasing`, the `Halt` obligation of the
+call-family halt branch, and `Step.GasBound` with `Evm.step_gasBound`.
 
-The measure a spawn leaves its caller is now its checkpoint's (`Frame.parentGas`, today's
-`Resume.parentGas`). Everything that does not mention the step type -- the pricing walks, the
-`HaltLe` combinators, the non-call instruction corpus -- is reused from `Jaune.Sufficiency`
-unchanged. Staged under a namespace of its own until the switch commit, which gave it its final names.
+The measure a spawn leaves its caller is its checkpoint's (`Frame.parentGas`). Everything that
+does not mention the step type -- the pricing walks, the `HaltLe` combinators, the non-call
+instruction corpus -- comes from `Jaune.Sufficiency`.
 -/
 
 namespace Jaune
@@ -23,7 +20,7 @@ open Jaune
 
 /-! ## The measures a spawn and a result carry -/
 
-/-- A lifetime-grouped state's gas measure: today's `Devm.gasMeasure` on its machine. -/
+/-- A lifetime-grouped state's gas measure: `Devm.gasMeasure` on its machine. -/
 def Frame.State.gasMeasure (s : Frame.State) : Nat :=
   s.machine.gasLeft + s.machine.stateGas.spilled + s.machine.stateGas.committedSpill
 
@@ -34,13 +31,13 @@ def Frame.State.gasMeasure (s : Frame.State) : Nat :=
     s.toDevm.gasMeasure = s.gasMeasure := rfl
 
 /-- The measure a spawn retains for its caller, before the child's leftover is added back:
-the checkpoint's (today's `Resume.parentGas`, the saved caller's measure). -/
+the checkpoint's (the saved caller's measure). -/
 def Frame.parentGas (f : Frame) : Nat := f.checkpoint.gasMeasure
 
 /-! ## The call-family obligation -/
 
 /-- The step-level obligation for a call-type instruction, measured against the frame's gas at
-the start of the step (today's `XStep.GasDecreasing`).
+the start of the step.
 
 The spawn case is the single arithmetic fact `child.message.gas + child.parentGas < n`, with
 the child running under the spawning frame's rules. The driver's other spawn obligations follow
@@ -62,7 +59,7 @@ theorem MessageOp.Outcome.ofExcept_gasDecreasing {sevm : Sevm} {n : Nat}
   | ok step => exact h step rfl
 
 /-- The call-family spawn, stated once for all six dispatch sites. The single
-hypothesis is what each `Xinst` constructor has to establish: the gas the parent
+hypothesis is what each `MessageOp` constructor has to establish: the gas the parent
 keeps, plus the whole budget handed to the child, is still strictly less than
 what the parent had when the step began. The depth-0 refund branch hands the
 budget straight back, so it needs exactly the same inequality. -/
@@ -939,7 +936,7 @@ theorem MessageOp.step_gasDecreasing (sevm : Sevm) (devm : Devm) (x : MessageOp)
   case delegatecall => exact MessageOp.step_delegatecall_gasDecreasing sevm devm
   case staticcall => exact MessageOp.step_staticcall_gasDecreasing sevm devm
 
-/-- What the `Xinst` route owes on its halt branch, against the measure `n`
+/-- What the `MessageOp` route owes on its halt branch, against the measure `n`
 the step began with: no `"Revert"` tag, and a spill `n` still covers, because
 the spill is what an exceptional halt keeps. A spawn carries no outcome of its
 own, so it owes nothing. -/

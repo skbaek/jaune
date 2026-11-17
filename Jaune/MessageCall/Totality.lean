@@ -2,12 +2,11 @@ import Jaune.MessageCall.StepGas
 import Jaune.MessageCall.Exec
 
 /-!
-# Totality of the staged driver (goal `jaune-shape-and-names-v1`, W1 unit G)
+# Totality of the driver (goal `jaune-shape-and-names-v1`, W1 unit G)
 
-The staged `execFueled` (`Jaune.MessageCall.Driver`) never reports fuel exhaustion when it is
-seeded with more fuel than the frame's gas measure, so the staged `exec`
-(`Jaune.MessageCall.Exec`) never takes its invariant branch. This is today's argument from
-`Jaune.Sufficiency` over the staged pieces:
+The driver `execFueled` (`Jaune.MessageCall.Driver`) never reports fuel exhaustion when it is
+seeded with more fuel than the frame's gas measure, so `exec` (`Jaune.MessageCall.Exec`) never
+takes its invariant branch. The argument, over the four parts:
 
 * a step owes `Step.GasBound` (`Jaune.MessageCall.StepGas`);
 * `enter` hands a running child exactly its message's gas, and a child settled at once reports
@@ -15,8 +14,6 @@ seeded with more fuel than the frame's gas measure, so the staged `exec`
 * `settle` turns a raw result that owes `Execution.SettledGasLe n` into a result measuring at
   most `n`;
 * `resume` hands the caller back at most its checkpoint's measure plus the result's.
-
-Staged under a namespace of its own until the switch commit, which gave it its final names.
 -/
 
 namespace Jaune
@@ -280,7 +277,7 @@ theorem resume_gasLe {rules : ForkRules} {p : Pending} {saved : Frame.State}
 
 /-! ## The driver
 
-As today: monotonicity first (a child that ran to completion hands back no more than it was
+Monotonicity first (a child that ran to completion hands back no more than it was
 given), then sufficiency, both by structural induction on the fuel. -/
 
 /-- The spawn branch of the driver, once the child's settled result `x` is known. -/
@@ -329,7 +326,7 @@ private theorem spawn_settledGasLe {fuel : Nat} {evm : Evm} {child : Frame}
       unfold Frame.parentGas at hlt
       exact (ih _ h).mono (show devm.gasMeasure ≤ evm.dyna.gasMeasure by omega)
 
-/-- Driver monotonicity, over the settlement obligation, as today. -/
+/-- Driver monotonicity, over the settlement obligation. -/
 theorem execFueled_settledGasLe : ∀ (fuel : Nat) (evm : Evm) {raw : Execution},
     (execFueled evm fuel).run = some raw →
       raw.SettledGasLe evm.dyna.gasMeasure := by
@@ -401,8 +398,8 @@ private theorem spawn_isSome {fuel : Nat} {evm : Evm} {child : Frame}
       unfold Frame.parentGas at hlt
       exact ih _ (show devm.gasMeasure < fuel by omega)
 
-/-- **Sufficiency.** Fuel strictly greater than the frame's measure always carries the staged
-driver to a result. -/
+/-- **Sufficiency.** Fuel strictly greater than the frame's measure always carries the driver
+to a result. -/
 theorem execFueled_run_isSome : ∀ (fuel : Nat) (evm : Evm),
     evm.dyna.gasMeasure < fuel →
       ∃ raw : Execution, (execFueled evm fuel).run = some raw := by
@@ -446,7 +443,7 @@ theorem execFueled_ne_exhausted (evm : Evm) (fuel : Nat)
   simp only [Fueled.exhausted_run] at hraw
   nomatch hraw
 
-/-- Seeding the staged driver with `gasMeasure + 1` is always enough. -/
+/-- Seeding the driver with `gasMeasure + 1` is always enough. -/
 theorem execFueled_succ_ne_exhausted (evm : Evm) :
     execFueled evm (evm.dyna.gasMeasure + 1) ≠ Fueled.exhausted :=
   execFueled_ne_exhausted evm (evm.dyna.gasMeasure + 1) (Nat.lt_succ_self _)
@@ -461,8 +458,7 @@ theorem execFueled_run_sufficientFuel_isSome (evm : Evm) :
   rw [hraw]
   rfl
 
-/-- **Bridge equation.** The staged driver at the seeded budget returns exactly the staged
-total result. -/
+/-- **Bridge equation.** The driver at the seeded budget returns exactly the total result. -/
 theorem execFueled_run_sufficientFuel (evm : Evm) :
     (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run = some (exec evm) := by
   obtain ⟨raw, hraw⟩ :=
@@ -472,7 +468,7 @@ theorem execFueled_run_sufficientFuel (evm : Evm) :
   unfold exec
   rw [hraw]
 
-/-- The staged `exec`'s invariant branch is unreachable: it is the staged driver's own answer,
+/-- `exec`'s invariant branch is unreachable: it is the driver's own answer,
 so it never returns the fuel-exhaustion fault. -/
 theorem exec_ok (evm : Evm) :
     ∃ raw, (execFueled evm (sufficientFuel evm.dyna.gasMeasure)).run = some raw
@@ -515,7 +511,7 @@ private theorem spawn_mono {fuel m : Nat} {evm : Evm} {child : Frame}
     · exact h
     · exact ih _ h
 
-/-- More fuel never changes a result the staged driver already reached. -/
+/-- More fuel never changes a result the driver already reached. -/
 theorem execFueled_run_mono :
     ∀ (fuel : Nat) (evm : Evm) {fuel' : Nat} {raw : Execution}, fuel ≤ fuel' →
       (execFueled evm fuel).run = some raw → (execFueled evm fuel').run = some raw := by
@@ -549,7 +545,7 @@ theorem execFueled_run_mono :
           exact spawn_mono (fun e _ he' => ih e hle' he') h
       · exact spawn_mono (fun e _ he' => ih e hle' he') h
 
-/-- The staged driver at an arbitrary sufficient budget. -/
+/-- The driver at an arbitrary sufficient budget. -/
 theorem execFueled_run_of_lt {evm : Evm} {fuel : Nat} (h : evm.dyna.gasMeasure < fuel) :
     (execFueled evm fuel).run = some (exec evm) :=
   execFueled_run_mono _ evm h (execFueled_run_sufficientFuel evm)
