@@ -1215,8 +1215,8 @@ def rlpHeaderWidthTag : String := "RlpHeaderWidthError"
 
 --------------- TYPED SEMANTIC REASONS: CODEC AND VM ---------------
 
--- Declarations, renderers, and golden guards only; no producer is migrated
--- here and no rendered message changes. Steps 9 and 10 move the producers.
+-- Declarations and renderers only (golden guards: `Jaune/Check/Machine.lean`);
+-- no producer moves here, no rendered message changes; Steps 9 and 10 move them.
 --
 -- Placement is frozen by `scripts/report-integrity-design.md` section 6. All
 -- four types below live in this module because their carriers and tag

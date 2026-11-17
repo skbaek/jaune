@@ -866,8 +866,8 @@ end secp256k1
 
 The curve constants are the ones the specification's reference implementation
 names (`SECP256R1P`, `SECP256R1N`, `SECP256R1A`, `SECP256R1B`); the base point
-is the standard one, and `#guard`s below check it lies on the curve and has the
-stated order rather than taking the literals on trust.
+is the standard one, and `#guard`s in `Jaune/Check/EC.lean` check it lies on the
+curve and has the stated order rather than taking the literals on trust.
 
 Unlike secp256k1 this curve has `a ≠ 0`, so the Jacobian formulas above -- which
 are the `shortw-jacobian-0` family -- do not apply to it.  Scalar multiplication

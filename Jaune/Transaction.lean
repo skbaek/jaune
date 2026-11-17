@@ -19,15 +19,15 @@ between the driver and its first consumer.
 
 --------- TYPED SEMANTIC REASONS: TRANSACTION, BLOCK, IMPORT ---------
 
--- Declarations, renderers, and golden guards only; no producer is migrated
--- here and no rendered message changes. Step 10 moves the producers.
+-- Declarations and renderers only (golden guards: `Jaune/Check/Transaction.lean`);
+-- no producer moves here, no rendered message changes; Step 10 moves them.
 --
 -- Placement is frozen by `scripts/report-integrity-design.md` section 6:
 -- every transition and import entry point is in this module, so the two
 -- validation vocabularies and the three failure sums belong here. Their tag
 -- constants stay where they are declared, in `Jaune/Machine.lean`, and this
 -- module reads them; a tag and the constructor that renders under it are
--- pinned to each other by the golden guards below.
+-- pinned to each other by the golden guards in `Jaune/Check/Transaction.lean`.
 
 /-- Why a transaction is not admissible in the block that contains it.
 
@@ -2614,7 +2614,7 @@ rule data does not carry a type-0 entry.
 
 `pragueRules.requests` reproduces exactly the two calls, in the order, this
 function made before the list existed: `pragueRules_requests` in
-`Jaune/Machine.lean` states that by `rfl`, and a `#guard` below runs it. -/
+`Jaune/Machine.lean` states that by `rfl`; a `Jaune/Check/Fork.lean` `#guard` runs it. -/
 def processGeneralPurposeRequestsAt (balIndex : Nat)
   (benv : Benv) (bout : BlockOutput) :
   Except TransitionError (State × BlockOutput) := do
