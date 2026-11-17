@@ -39,7 +39,7 @@ def finalState (base : Devm) (a b : UInt8) : Devm :=
 
 /-- A data-valued derivation, built from the same constructors used by adequacy. -/
 def execution (env : Sevm) (base : Devm) (a b : UInt8) :
-    Jaune.Exec 0 { env with code := code a b } (initial base)
+    Jaune.Legacy.Exec 0 { env with code := code a b } (initial base)
       (.ok (finalState base a b)) := by
   apply SymbolicPush.prepend [a] (by simp) (first a b)
   · simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]
