@@ -42,7 +42,7 @@ smaller.
 
 The stable core of the supported surface is the canonical execution type, its
 constructors and adequacy, the derivation operations and the symbolic rules.
-These are also the declarations the destination axiom audit pins. Their 53 rows
+These are also the declarations the destination axiom audit pins. Their 52 rows
 are listed in [`scripts/ExecutionAxioms.lean`](scripts/ExecutionAxioms.lean),
 and each row's provenance is in
 [`scripts/assurance-manifest.json`](scripts/assurance-manifest.json).

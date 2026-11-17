@@ -63,7 +63,7 @@ Axiom auditing follows ownership. Each repository checks the axiom closure of
 the results it owns, and neither audit covers the other repository's results.
 
 **Jaune audits its canonical execution proof layer.**
-[`scripts/ExecutionAxioms.lean`](scripts/ExecutionAxioms.lean) holds 53
+[`scripts/ExecutionAxioms.lean`](scripts/ExecutionAxioms.lean) holds 52
 `#expect_axioms` rows. They cover `Jaune.Exec` and its constructors, adequacy
 (`exec_iff_exec_eq`), derivation and chronology operations, settlement
 lemmas, frame spawn lemmas, the symbolic PUSH and arithmetic rules, and the

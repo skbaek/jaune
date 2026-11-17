@@ -42,4 +42,3 @@ Jaune/Sufficiency.lean unfold accessCost Gas.warmStorageReadCost Gas.coldAccount
 # --- prose ---
 Jaune/Machine.lean interpreter) rewrites to `gasCallValue` and meets the arithmetic it already
 Jaune/Sufficiency.lean `gasCallValue = 9000` against a `gCallStipend = 2300` stipend.
-Jaune/Sufficiency.lean -- a value-bearing call pays `gasCallValue` against a `gCallStipend` stipend.

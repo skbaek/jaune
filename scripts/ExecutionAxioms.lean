@@ -8,10 +8,12 @@ import Examples.Arithmetic
 /-!
 # Destination axiom audit for the canonical execution surface
 
-Fifty-three rows, each with the exact expected set
-`Classical.choice, Quot.sound, propext`. The first thirty-eight are the approved
-rows of user decision `jaune-destination-axiom-pins-20260924`: fifteen restate
-obligations Blanc already pinned under the declarations' former `Blanc.*` names;
+Fifty-two rows, each with the exact expected set
+`Classical.choice, Quot.sound, propext`. The first thirty-seven are the approved
+rows of user decision `jaune-destination-axiom-pins-20260924`, as amended by user
+decision `jsn-g1-packet` (one row removed, one re-pointed to
+`Jaune.Frame.settlementCommits_iff`): fourteen restate obligations Blanc already
+pinned, thirteen under the declarations' former `Blanc.*` names;
 the rest bind the canonical `Exec` type and its constructors, adequacy,
 derivation operations, symbolic PUSH rules and the PUSH example. The last
 fifteen, added with the declarations they audit (unit
@@ -29,13 +31,12 @@ ordinary build fails on any mismatch.
 #expect_axioms Jaune.Exec.descendantFrames_runOk_of_not_settlementCommits [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Exec.descendantFrames_runOk_create_codeDepositRollback [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Exec.committedFrames_eq_nil_of_not_commits [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.ProcessMessage.settlementCommits_of_some_ok_clean [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.settlementCommits_iff [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Frame.settlementCommits_ofCall_of_raw_commits [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Exec.retainedNodes_runOk_of_settlementCommits [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Exec.retainedNodes_runOk_of_not_settlementCommits [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.benvAfterTransfer_stat [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Frame.enter_run_benvStat [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.RunFrame.benvStat_eq [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.genericCall.step_spawn_benvStat [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.genericCreate.step_spawn_benvStat [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.MessageOp.step_spawn_benvStat [Classical.choice, Quot.sound, propext]
