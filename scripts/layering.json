@@ -18,6 +18,7 @@
  "modules": {
   "Examples.Arithmetic": "check",
   "Examples.Execution": "check",
+  "Examples.ShapePilot": "check",
   "Jaune.Adapter.Io": "adapter",
   "Jaune.BLS": "specification",
   "Jaune.BLSConst": "specification",
