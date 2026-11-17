@@ -1423,7 +1423,7 @@ token counts, and the system-transaction reservoir).
 
 `STORAGE_SET`, `NEW_ACCOUNT` and `AUTH_BASE` are not fields: they are the
 `StateGasRules` products 64 * 1530 = 97,920, 120 * 1530 = 183,600 and
-23 * 1530 = 35,190, guarded as such below. -/
+23 * 1530 = 35,190, guarded as such in `Jaune/Check/Fork.lean`. -/
 def amsterdamStateGasRules : StateGasRules := {
   costPerStateByte := 1530
   stateBytesPerNewAccount := 120
@@ -1489,8 +1489,8 @@ and both header fields.
 
 Written as an update of `bpo2Rules` so that every field Amsterdam does *not*
 move -- the blob schedule, the block limits, `MODEXP`, the
-precompile set -- is BPO2's by construction, and the record-update guards below
-state, field by field and as a whole, exactly which fields moved. Nothing here
+precompile set -- is BPO2's by construction, and the record-update guards in
+`Jaune/Check/Fork.lean` state, field by field and as a whole, exactly which fields moved. Nothing here
 is inherited by accident: the anonymous-constructor `example` beside those
 guards names all thirteen fields positionally, so a `ForkRules` field added
 later fails the build until it is classified as moved or inherited. (The
@@ -1906,7 +1906,7 @@ deriving DecidableEq, Repr
 /-- The one renderer for `ChainContextError`.
 
 The first three arms reproduce today's `ChainConfig.validate` messages exactly;
-the golden guards below pin them against the live producer as well as against
+the golden guards in `Jaune/Check/Fork.lean` pin them against the live producer as well as against
 the literal text. -/
 def ChainContextError.render : ChainContextError → String
   | .emptySchedule =>

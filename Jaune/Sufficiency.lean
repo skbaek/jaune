@@ -1838,7 +1838,7 @@ theorem PlainOp.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
           · split
             · unfold Gas.sstoreSetGas
               omega
-            · unfold Gas.sreset Gas.coldSloadCost
+            · unfold Gas.sstoreResetGas Gas.coldSloadCost
               omega
           · unfold Gas.warmStorageReadCost
             omega

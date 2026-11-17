@@ -1,17 +1,5 @@
 {
  "schema_version": 1,
- "description": "Reviewed capture-qualified quotations accepted by N4 (naming-candidate.py compare --reviewed-quotations). Each record is accepted only where it occurs, with this before/after spelling, pre-resolving to map_old, and with the after spelling exactly map_old's fully qualified new name; an unlisted occurrence fails and an unused record is stale. Master decision 2026-11-16 (jsn-u9, G0a).",
- "quotations": [
-  {
-   "module": "JauneConsensus.SSZ.Progressive",
-   "constant": "JauneConsensus._aux_JauneConsensus_SSZ_Progressive___macroRules_JauneConsensus_sszProgressiveContainer_1",
-   "before": "B256",
-   "after": "Jaune.U256",
-   "map_old": "Jaune.B256",
-   "map_new": "Jaune.U256",
-   "decision": "capture-qualified quotation; pre-resolution identical",
-   "reason": "ssz_progressive_container quotes the word type inside namespace JauneConsensus, which has its own U256 (pyspec uint256); the names-only respelling U256 would denote that type, so the rename qualifies it as Jaune.U256. The quotation pre-resolves to Jaune.B256 before and Jaune.U256 after (same declaration under the map); the macro reads its own arguments with getId, not this identifier.",
-   "precedent": "decision 3 (2026-11-16): JauneConsensus/SSZ/Container.lean:120, the same quotation in ssz_container, pre-spelled Jaune.B256 in c7842939"
-  }
- ]
+ "description": "Reviewed capture-qualified quotations accepted by N4 (naming-candidate.py compare --reviewed-quotations). Each record is accepted only where it occurs, with this before/after spelling, pre-resolving to map_old, and with the after spelling exactly map_old's fully qualified new name; an unlisted occurrence fails and an unused record is stale. Empty: the one G0a record (jsn-u9, master decision 2026-11-16: the ssz_progressive_container quotation of B256 in JauneConsensus.SSZ.Progressive, respelled Jaune.U256) was consumed by the G0a application, and it occurs in no N4 run whose 'before' is post-G0a main, so every such run reported it stale (jsn-u17, G0b map carry). Retired at G0b (jsn-u18, master decision 2026-11-17); it remains in Git history at 904d7fff.",
+ "quotations": []
 }

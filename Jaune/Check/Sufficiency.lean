@@ -16,13 +16,14 @@ open Jaune
 These mirror the flatten arc's representative states — arithmetic loop, nested
 CALL, CREATE collision, precompile under both dispatch paths, depth-zero
 short-circuit, out-of-gas halt, REVERT with output — but drive them through the
-fuel-free API. `Jaune.Execution` keeps the checks that pin `execFueled` itself,
+fuel-free API. `Jaune.Check.Execution` keeps the checks that pin `execFueled` itself,
 including the one that shows fuel really can run out when it is not seeded from
 the frame's gas.
 
 `private` declarations do not cross module boundaries, so the two helpers this
-block shares with `Jaune.Execution` are restated here. Keep them in step with
-their counterparts at `Jaune/Execution.lean:4203`. -/
+block shares with `Jaune.Check.Execution` are restated here. Keep them in step with
+their counterparts `flattenGuardCode` and `flattenGuardMsg` at
+`Jaune/Check/Execution.lean:263`. -/
 
 private def totalGuardCode (bytes : Bytes) : ByteArray := .mk <| .mk bytes
 

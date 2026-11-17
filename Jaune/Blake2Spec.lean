@@ -14,8 +14,8 @@ over an explicit round count.
 
 This module is that definition, transcribed from **RFC 7693** (*The BLAKE2
 Cryptographic Hash and MAC*, Saarinen and Aumasson, 2015) — section numbers are
-cited at each declaration — and EIP-152's framing of it, with `#guard`s at the
-end pinning it against the EIP-152 test cases and the production `bCompress`.
+cited at each declaration — and EIP-152's framing of it, with `#guard`s in
+`Jaune/Check/Blake2Spec.lean` pinning it against the EIP-152 test cases and the production `bCompress`.
 
 The transcription is written from the standard, never read back out of the
 production code: the rotation amounts are the standard's `R1..R4`, the sigma

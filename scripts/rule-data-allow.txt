@@ -34,8 +34,8 @@ Jaune/Machine.lean pragueRules.gas.coldAccountAccess = Gas.coldAccountAccessCost
 Jaune/Machine.lean pragueRules.gas.callValue = Gas.callValue := rfl
 Jaune/Machine.lean pragueRules.gas.createAccess = Gas.create := rfl
 Jaune/Machine.lean @[simp] theorem Gas.txCreate_eq_create : Gas.txCreate = Gas.create := rfl
-Jaune/Machine.lean #guard pragueGas.callValue = Gas.callValue
-Jaune/Machine.lean #guard pragueGas.createAccess = Gas.create
+Jaune/Check/Machine.lean #guard pragueGas.callValue = Gas.callValue
+Jaune/Check/Machine.lean #guard pragueGas.createAccess = Gas.create
 # --- the retained schedule-free `accessCost`, which is Prague's function ---
 Jaune/Machine.lean if x ∈ a then Gas.warmStorageReadCost else Gas.coldAccountAccessCost
 Jaune/Sufficiency.lean unfold accessCost Gas.warmStorageReadCost Gas.coldAccountAccessCost

@@ -27,7 +27,7 @@ individual declarations one by one.
 | class | meaning | what it covers |
 |---|---|---|
 | **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The eight canonical execution modules: `Jaune.ExecFrame`, `Jaune.Exec`, `Jaune.ExecDeriv`, `Jaune.ExecSettlement`, `Jaune.ExecChronology`, `Jaune.MessageExecution`, `Jaune.SymbolicPush`, `Jaune.SymbolicArith`. Also the entry-point families named in sections 3–5, such as `exec`, `processMessage`, `processTransaction`, the checked chain types, and `State`/`Storage` access, and the lemma families and modules named in section 6. |
-| **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration (section 6 lifts named families out of this class) in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.Sufficiency`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.Adapter.Io`, `Main`, `MemoryProbe`) are adapters, and the executable checks (`Jaune.BLSGuards` and the `Jaune.Check.*` modules, library `JauneChecks`) are checks; neither is proof surface. `scripts/layering.json` classifies every module. |
+| **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration (section 6 lifts named families out of this class) in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.Sufficiency`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Also the `Fueled` residue lemmas in `Jaune.Fuel`, and the cached driver `Jaune.Impl.CachedExec` (an implementation module, reached through `Jaune.Sufficiency`). Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.FixtureTransition`, `Jaune.Trace`, `Jaune.TraceJson`, `Jaune.TraceTransaction`, `Jaune.Adapter.Io`, `Main`, `MemoryProbe`, `TraceMain`) are adapters, and the executable checks (`Jaune.BLSGuards` and the `Jaune.Check.*` modules, library `JauneChecks`) are checks; neither is proof surface. `scripts/layering.json` classifies every module. `Jaune.Bridge.*` modules hold a convergence gate's old definitions and their bridge theorems until the gate's tagged commit, and are deleted in the commit after it. |
 | **experimental** | Implemented and gated, but expected to change as its upstream target moves. | The Amsterdam lane: `amsterdamRules`, the `StateGasRules` / `stateGas` dimension, `genericCallAmsterdam` / `genericCreateAmsterdam` and their lemmas, `executeCode.handleErrorAmsterdam`, and the `BlockAccessList` / `BlockAccessList*` family. Also the reusable axiom-audit command `#expect_axioms` (`scripts/AxiomAudit.lean`, library `Assurance`). |
 
 A module's class applies to all of its declarations unless this guide says
@@ -97,15 +97,15 @@ validity or message settlement, and they are not an all-opcodes rule set.
 ## 2. Complete raw-frame execution
 
 **Demonstrated task.** Compose a multi-step run by inversion.
-[`Examples.Arithmetic.result`](Examples/Arithmetic.lean#L131) takes an
+[`Examples.Arithmetic.result`](Examples/Arithmetic.lean#L133) takes an
 *arbitrary* `Exec` derivation from the start state. It peels off the three
-continuing steps with the example-local inversion `next` (line 118), then
+continuing steps with the example-local inversion `next` (line 120), then
 settles `STOP` with `Exec.halt_inv`. So every derivation has the stated
 outcome, not just the one that was built.
-[`interpreter`](Examples/Arithmetic.lean#L141) reads the answer of the total
-interpreter `exec` through adequacy. [`concrete`](Examples/Arithmetic.lean#L175)
+[`interpreter`](Examples/Arithmetic.lean#L143) reads the answer of the total
+interpreter `exec` through adequacy. [`concrete`](Examples/Arithmetic.lean#L177)
 shows that the premises can be met, at `g = 9` and `s = []`. The first negative
-check (line 185) keeps the build red if eight gas were ever accepted.
+check (line 193) keeps the build red if eight gas were ever accepted.
 
 **Imports.** `import Jaune.Exec` gives the type, the constructors, inversion
 and adequacy. Add `Jaune.ExecDeriv` for induction and subderivation order,

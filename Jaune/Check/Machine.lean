@@ -531,7 +531,7 @@ private def amsterdamState : StateGasRules := amsterdamStateGasRules
 -- cold-load charge plus the difference; a change to an already-warm slot that
 -- is not the first this transaction costs the warm access alone.
 #guard Gas.coldSloadCost + Gas.sstoreSetGas = 22100
-#guard Gas.coldSloadCost + (Gas.sreset - Gas.coldSloadCost) = 5000
+#guard Gas.coldSloadCost + (Gas.sstoreResetGas - Gas.coldSloadCost) = 5000
 #guard Gas.warmStorageReadCost = 100
 
 -- Amsterdam: access plus `STORAGE_WRITE` on the slot's first change, and

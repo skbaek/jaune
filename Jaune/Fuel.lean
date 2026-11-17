@@ -10,7 +10,8 @@
 -- Relocated unchanged from `Jaune/Machine.lean` (the carrier and helpers),
 -- `Jaune/Exec.lean` (the residue lemmas) and `Jaune/Sufficiency.lean`
 -- (`sufficientFuel`), goal `jaune-shape-and-names-v1`, unit W0.
-import Mathlib.Tactic.Lemma
+-- The relocated `lemma` declarations are spelled `theorem`, so this module
+-- imports nothing and adds nothing to the mathlib import surface (README.md).
 
 namespace Jaune
 
@@ -54,22 +55,22 @@ def toExcept (onExhausted : ε) (x : Fueled ε α) : Except ε α :=
   | none => .error onExhausted
   | some result => result
 
-@[simp] lemma exhausted_run : (exhausted : Fueled ε α).run = none := rfl
+@[simp] theorem exhausted_run : (exhausted : Fueled ε α).run = none := rfl
 
-@[simp] lemma ofExcept_run (x : Except ε α) : (ofExcept x).run = some x := rfl
+@[simp] theorem ofExcept_run (x : Except ε α) : (ofExcept x).run = some x := rfl
 
-@[simp] lemma ok_run (x : α) : (ok x : Fueled ε α).run = some (.ok x) := rfl
+@[simp] theorem ok_run (x : α) : (ok x : Fueled ε α).run = some (.ok x) := rfl
 
-@[simp] lemma error_run (e : ε) :
+@[simp] theorem error_run (e : ε) :
     (error e : Fueled ε α).run = some (.error e) := rfl
 
-@[simp] lemma mapResult_run (f : Except ε α → Except ζ β) (x : Fueled ε α) :
+@[simp] theorem mapResult_run (f : Except ε α → Except ζ β) (x : Fueled ε α) :
     (mapResult f x).run = x.run.map f := rfl
 
-@[simp] lemma toExcept_exhausted (e : ε) :
+@[simp] theorem toExcept_exhausted (e : ε) :
     toExcept e (exhausted : Fueled ε α) = .error e := rfl
 
-@[simp] lemma toExcept_ofExcept (e : ε) (x : Except ε α) :
+@[simp] theorem toExcept_ofExcept (e : ε) (x : Except ε α) :
     toExcept e (ofExcept x) = x := rfl
 
 end Fueled
@@ -89,13 +90,13 @@ namespace Fueled
 
 variable {ε : Type} {α : Type}
 
-lemma ext {x y : Fueled ε α} (h : x.run = y.run) : x = y := h
+theorem ext {x y : Fueled ε α} (h : x.run = y.run) : x = y := h
 
-lemma exhausted_ne_ofExcept {x : Except ε α} :
+theorem exhausted_ne_ofExcept {x : Except ε α} :
     (Fueled.exhausted : Fueled ε α) ≠ Fueled.ofExcept x :=
   fun h => nomatch congrArg ExceptT.run h
 
-@[simp] lemma ofExcept_inj {x y : Except ε α} :
+@[simp] theorem ofExcept_inj {x y : Except ε α} :
     (Fueled.ofExcept x : Fueled ε α) = Fueled.ofExcept y ↔ x = y :=
   ⟨fun h => Option.some.inj (congrArg ExceptT.run h), fun h => by rw [h]⟩
 

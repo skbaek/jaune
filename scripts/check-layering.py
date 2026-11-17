@@ -5,9 +5,11 @@ Every Jaune module is classified in `scripts/layering.json` as one of
 specification, proof, check, adapter, implementation or bridge. The check fails
 
 * on a module that is not classified, or a classification with no module;
-* on a `#guard`, `#eval`, `#reduce`, `#synth` or `example` command, or on a test
-  helper (a declaration whose name says guard, fixture, golden or probe), in a
-  specification module;
+* on a `#guard` (any `#guard_*` form, `#guard_msgs` included), `#eval`,
+  `#reduce`, `#synth` or `example` command, or on a test helper (a declaration
+  whose name says guard, fixture, golden or probe), in a specification module.
+  Commands and declarations are found at any indentation and behind modifiers,
+  attributes, doc comments and `set_option ... in` / `open ... in` prefixes;
 * on a fixture-vocabulary declaration (a rejection tag or renderer) in a
   specification module that `fixture_vocabulary_residue` does not list. The
   residue is the vocabulary that specification functions still call; it only
@@ -19,7 +21,10 @@ specification, proof, check, adapter, implementation or bridge. The check fails
   specification, proof imports specification and proof, implementation and bridge
   import anything but check and adapter modules, check and adapter import any;
 * on a check, adapter or implementation module that the default build's targets
-  do not reach, and on an umbrella root that declares anything.
+  do not reach, on an umbrella root that declares anything, and on an import by
+  the `Jaune` umbrella (the library a consumer imports) of anything but
+  specification, proof and bridge modules. Imports are read in every header form
+  (`public`, `meta`, `import all`).
 
 It reads source and `lakefile.lean` only. Usage:
     python3 scripts/check-layering.py [--root DIR]
@@ -48,20 +53,33 @@ ALLOWED = {
     "check": set(CLASSES),
     "adapter": set(CLASSES),
 }
-FORBIDDEN_COMMANDS = ("#guard", "#eval", "#reduce", "#synth", "example")
+# The `Jaune` umbrella is the library a consumer imports: it reaches only
+# specification, proof and bridge modules directly (implementation modules only
+# through a registered specification import). Other umbrellas are unrestricted.
+UMBRELLA_ALLOWED = {"Jaune": {"specification", "proof", "bridge"}}
+FORBIDDEN_COMMANDS = ("#guard", "#guard_msgs", "#eval", "#reduce", "#synth", "example")
 HELPER_NAME = re.compile(r"Guard|guard[A-Z]|[Ff]ixture|[Gg]olden|[Pp]robe")
-VOCAB_NAME = re.compile(r"(?:Tags?|\.tag|\.render|^render\w*)$")
+# A renderer is `render` or a camel-case `renderThing`, at the top level or as
+# the last component of a namespaced name; `Foo.render_lemma` is a statement
+# about a renderer, not vocabulary.
+VOCAB_NAME = re.compile(r"(?:Tags?|\.tag|^render\w*|\.render(?:[A-Z]\w*)?)$")
+# What may precede a command or declaration keyword on its line or the lines
+# before it: indentation, `set_option ... in` / `open ... in`, attributes and
+# modifiers. Comments (doc comments included) are already blanked by source_text.
+_LEAD = r"^[ \t]*(?:(?:set_option|open)\b[^\n]*?\bin\s+)*(?:@\[[^\]]*\]\s*)*"
+_MODS = r"(?:(?:private|protected|public|noncomputable|nonrec|partial|unsafe|meta)\s+)*"
 DECL = re.compile(
-    r"^(?:@\[[^\]]*\]\s*)*(?P<mods>(?:(?:private|protected|noncomputable|nonrec|partial|unsafe)\s+)*)"
+    _LEAD + r"(?P<mods>" + _MODS + r")"
     r"(?P<kind>theorem|lemma|def|abbrev|instance|inductive|structure|class|opaque|axiom)\s+"
     r"(?P<name>[^\s:({\[]+)", re.M)
-SCOPE = re.compile(r"^(namespace|end|section|mutual)\b[ \t]*(\S*)", re.M)
-COMMAND = re.compile(r"^(#guard|#eval|#reduce|#synth|example)\b", re.M)
-IMPORT = re.compile(r"^import\s+(\S+)\s*$", re.M)
+SCOPE = re.compile(r"^[ \t]*(namespace|end|section|mutual)\b[ \t]*(\S*)", re.M)
+COMMAND = re.compile(_LEAD + _MODS + r"(#guard\w*|#eval|#reduce|#synth|example)\b", re.M)
+IMPORT = re.compile(
+    r"^[ \t]*(?:(?:public|private|meta)\s+)*import\s+(?:all\s+)?(\S+)\s*$", re.M)
 TOP_DECL = re.compile(
-    r"^(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|nonrec|partial|unsafe)\s+)*"
+    _LEAD + _MODS +
     r"(?:theorem|lemma|def|abbrev|instance|inductive|structure|class|opaque|axiom"
-    r"|#guard|#eval|#reduce|#synth|example|variable)\b", re.M)
+    r"|#guard\w*|#eval|#reduce|#synth|example|variable)\b", re.M)
 
 
 def module_name(root, path):
@@ -174,6 +192,11 @@ def check(root):
             stripped = IMPORT.sub("", text)
             if TOP_DECL.search(stripped):
                 problems.append(f"{m}: umbrella root declares something")
+            allowed = UMBRELLA_ALLOWED.get(m)
+            for d in deps if allowed is not None else ():
+                dc = classes.get(d)
+                if dc is not None and dc not in allowed:
+                    problems.append(f"{m} (umbrella) imports {d} ({dc})")
             continue
         cls = classes.get(m)
         if cls not in CLASSES:
@@ -196,7 +219,7 @@ def check(root):
                 problems.append(f"{m} ({cls}) imports {d} ({dc})")
         if cls == "specification":
             for match in COMMAND.finditer(text):
-                line = text.count("\n", 0, match.start()) + 1
+                line = text.count("\n", 0, match.start(1)) + 1
                 problems.append(f"{m}:{line}: {match.group(1)} in a specification module")
             for name, kind, private in declarations(text):
                 last = name.split(".")[-1]

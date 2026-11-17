@@ -588,7 +588,14 @@ def Gas.codeDeposit : Nat := 200
 def Gas.create : Nat := 32000
 def Gas.hashOpcodeGas : Nat := 3
 def Gas.perBlob : Nat := 2 ^ 17
-def Gas.sreset := 5000
+/-- SSTORE's charge for writing a slot whose original value is nonzero: EIP-2200
+`SSTORE_RESET_GAS` (5000), the name geth (`SstoreResetGasEIP2200`) and revm
+(`SSTORE_RESET`) also use. From Berlin Jaune charges `Gas.sstoreResetGas - Gas.coldSloadCost`
+(2900), EIP-2929's redefined `SSTORE_RESET_GAS` (`5000 - COLD_SLOAD_COST`).
+Other spellings: Yellow Paper `G_sreset` (5000 before Berlin, 2900 from Berlin);
+execution-specs `GAS_STORAGE_UPDATE` (older layout) and `GasCosts.COLD_STORAGE_WRITE`
+(at the conformance pin `e27f097e`). -/
+def Gas.sstoreResetGas : Nat := 5000
 def Gas.ecrecover : Nat := 3000
 def Gas.p256Verify : Nat := 6900
 -- `maxCodeSize` and `maxInitCodeSize` are fork rules, not global constants:
@@ -1208,8 +1215,8 @@ def rlpHeaderWidthTag : String := "RlpHeaderWidthError"
 
 --------------- TYPED SEMANTIC REASONS: CODEC AND VM ---------------
 
--- Declarations, renderers, and golden guards only; no producer is migrated
--- here and no rendered message changes. Steps 9 and 10 move the producers.
+-- Declarations and renderers only (golden guards: `Jaune/Check/Machine.lean`);
+-- no producer moves here, no rendered message changes; Steps 9 and 10 move them.
 --
 -- Placement is frozen by `scripts/report-integrity-design.md` section 6. All
 -- four types below live in this module because their carriers and tag
@@ -3950,7 +3957,7 @@ def sstoreNewRefundCounter (gas : GasSchedule) (new_value : U256)
       if original_value = 0 then
         rc'' + (Gas.sstoreSetGas - Gas.warmStorageReadCost)
       else
-        rc'' + (Gas.sreset - Gas.coldSloadCost - Gas.warmStorageReadCost)
+        rc'' + (Gas.sstoreResetGas - Gas.coldSloadCost - Gas.warmStorageReadCost)
     else
       rc''
   else rc
@@ -4003,15 +4010,15 @@ def sstoreRegimeGasCost (sstore : SstoreRules) (access : AccessSchedule)
         gasCost2 + Gas.sstoreSetGas
       else
         gasCost2 + match access with
-          | .flat _ => Gas.sreset
-          | .eip2929 => Gas.sreset - Gas.coldSloadCost
+          | .flat _ => Gas.sstoreResetGas
+          | .eip2929 => Gas.sstoreResetGas - Gas.coldSloadCost
     else
       gasCost2 + match access with
         | .flat g => g.sload
         | .eip2929 => Gas.warmStorageReadCost
   else
     if current_value = 0 ∧ new_value ≠ 0 then Gas.sstoreSetGas
-    else Gas.sreset
+    else Gas.sstoreResetGas
 
 /-- Every row of the pre-Berlin schedule is positive: the literals are, and
 the flat no-op price is positive on valid access schedules. The termination
@@ -4028,12 +4035,12 @@ theorem sstoreRegimeGasCost_pos (sstore : SstoreRules) {access : AccessSchedule}
       exact hacc.2.2.2.1
     unfold sstoreRegimeGasCost
     dsimp only
-    unfold Gas.sstoreSetGas Gas.sreset
+    unfold Gas.sstoreSetGas Gas.sstoreResetGas
     split_ifs <;> omega
   | eip2929 =>
     unfold sstoreRegimeGasCost
     dsimp only
-    unfold Gas.sstoreSetGas Gas.sreset Gas.warmStorageReadCost Gas.coldSloadCost
+    unfold Gas.sstoreSetGas Gas.sstoreResetGas Gas.warmStorageReadCost Gas.coldSloadCost
     split_ifs <;> omega
 
 /-- The flat net-metered refund (EIP-1283 Constantinople, EIP-2200
@@ -4058,7 +4065,7 @@ def sstoreFlatRefundCounter (gas : GasSchedule) (sload : Nat)
       if original_value = 0 then
         rc'' + (Gas.sstoreSetGas - sload)
       else
-        rc'' + (Gas.sreset - sload)
+        rc'' + (Gas.sstoreResetGas - sload)
     else
       rc''
   else rc
@@ -4521,7 +4528,7 @@ def PlainOp.runCore
             if original_value = 0 then
               gasCost2 + Gas.sstoreSetGas
             else
-              gasCost2 + (Gas.sreset - Gas.coldSloadCost)
+              gasCost2 + (Gas.sstoreResetGas - Gas.coldSloadCost)
           else
             gasCost2 + Gas.warmStorageReadCost
         let devm ← .ok <| devm.withRefundCounter <|

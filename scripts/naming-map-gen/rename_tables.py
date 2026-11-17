@@ -1,8 +1,14 @@
 """Decisions behind the execution-layer map rows (goal jaune-shape-and-names-v1).
 
-Each table entry is a naming decision with its rule and source.  Status codes:
-`B` accepted in goal Appendix B (decision 10); `M` added by this map under the
-same rules, for review (choices are named in the row's notes).
+Each table entry is a naming decision with its rule and source.  Status codes
+(appended to the map row's `source` as `[B]` / `[M]`; the map schema defines no
+status field and no checker reads them):
+`B` settled: accepted in goal Appendix B (decision 10), or decided by the user
+(a source that starts `user decision`: `Tx.gas`, `gasStorageUpdate`), or a
+rule-1 gas constant spelled as its EIP names it, or a row derived from such a
+decision (an instance or member that follows a settled rename); `M` added by
+this map under the same rules, for review (choices are named in the row's
+notes).
 """
 
 # Token -> (replacement, rule, source, status).  Applied to camelCase tokens of
@@ -317,7 +323,7 @@ _GAS = [
     ('gasColdAccountAccess', 'coldAccountAccessCost', '1', 'EIP-2929 `COLD_ACCOUNT_ACCESS_COST` (verified)'),
     ('gasWarmAccess', 'warmStorageReadCost', '1', 'EIP-2929 `WARM_STORAGE_READ_COST` (verified)'),
     ('gasStorageSet', 'sstoreSetGas', '1', 'EIP-2200 `SSTORE_SET_GAS` = 20000, unchanged by EIP-2929 (verified in both texts)'),
-    ('gasStorageUpdate', 'sreset', '1', 'Yellow Paper G_sreset = 5000; EIP-2200 `SSTORE_RESET_GAS` = 5000. EIP-2929 redefines `SSTORE_RESET_GAS` as 5000 - COLD_SLOAD_COST = 2900, which is how Jaune charges it (`sreset - coldSloadCost`), so the EIP name is not used for this gross value (review B1)'),
+    ('gasStorageUpdate', 'sstoreResetGas', '2', 'user decision jsn-g0b-packet-user (2026-11-17): EIP-2200 `SSTORE_RESET_GAS` = 5000, the same suffix as `sstoreSetGas`. EIP-2929 redefines `SSTORE_RESET_GAS` as 5000 - COLD_SLOAD_COST = 2900, which is how Jaune charges it from Berlin (`sstoreResetGas - coldSloadCost`); Yellow Paper `G_sreset` (5000 before Berlin, 2900 from Berlin); EELS `GAS_STORAGE_UPDATE` (older layout), `GasCosts.COLD_STORAGE_WRITE` (pin e27f097e); geth `SstoreResetGasEIP2200`; revm `SSTORE_RESET` (G0b packet; supersedes review B1)'),
     ('gasInitCodeWordCost', 'initcodeWordCost', '1', 'EIP-3860 `INITCODE_WORD_COST` (verified)'),
     ('standardCallDataTokenCost', 'standardTokenCost', '1', 'EIP-7623 `STANDARD_TOKEN_COST` (verified)'),
     ('floorCalldataCost', 'totalCostFloorPerToken', '1', 'EIP-7623 `TOTAL_COST_FLOOR_PER_TOKEN` (verified)'),
@@ -333,7 +339,8 @@ _GAS = [
 ]
 GAS_LEAVES = {}
 for old, new, rule, src in _GAS:
-    explicit(old, 'Gas.' + new, rule, src, 'B' if rule == '1' and 'EIP' in src else 'M',
+    explicit(old, 'Gas.' + new, rule, src,
+             'B' if (rule == '1' and 'EIP' in src) or src.startswith('user decision') else 'M',
              'depth change (new `Gas` namespace member)')
     GAS_LEAVES[old] = new
 

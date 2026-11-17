@@ -12,7 +12,7 @@ Every identifier in Jaune follows these seven rules in priority order:
    from EIPs, field names from `ethereum/execution-apis` JSON-RPC and Engine API
    schemas, and—for the consensus layer—names from the Ethereum consensus
    pyspec and Beacon API, verbatim up to the layer's case style (rule 7).
-2. **When community sources disagree, record the user's choice.** Six execution
+2. **When community sources disagree, record the user's choice.** Seven execution
    names with divergent community spellings are settled:
    - `Header.coinbase` (JSON-RPC `miner`, Engine API `feeRecipient`)
    - `Header.prevRandao` (JSON-RPC `mixHash`)
@@ -20,6 +20,9 @@ Every identifier in Jaune follows these seven rules in priority order:
    - `Block.ommers` (JSON-RPC `uncles`)
    - `Transaction.gasLimit` (JSON-RPC `gas`, EIP payloads `gas_limit`)
    - `Transaction.data` (JSON-RPC `input`)
+   - `Gas.sstoreResetGas` (EIP-2200 `SSTORE_RESET_GAS` = 5000; EIP-2929 redefines that name
+     as 2900, as does the Berlin+ Yellow Paper `G_sreset`; pinned execution-specs
+     `COLD_STORAGE_WRITE`)
    The doc comment on each settled declaration records the alternate spellings.
    Any new disagreement of this kind is escalated as a decision.
 3. **Clients' shared working vocabulary.** When no protocol schema fixes the

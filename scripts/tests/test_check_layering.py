@@ -165,6 +165,56 @@ class LayeringTests(unittest.TestCase):
         self.write("Jaune/Base.lean", "import Jaune.Bridge\ndef base : Nat := 0\n")
         self.assertProblem("Jaune.Base (specification) imports Jaune.Bridge (bridge)")
 
+    # Review finding 4 (G0b landing review): each claimed bypass, planted alone.
+
+    def test_umbrella_jaune_imports_only_specification_proof_bridge(self):
+        for imported, cls in (("Jaune.Check.Spec", "check"), ("Jaune.Adapter", "adapter"),
+                              ("Jaune.Impl.Cached", "implementation")):
+            self.write("Jaune.lean", f"import Jaune.Spec\nimport Jaune.Proof\nimport {imported}\n")
+            self.assertProblem(f"Jaune (umbrella) imports {imported} ({cls})")
+
+    def test_check_umbrella_may_import_anything(self):
+        self.write("JauneChecks.lean", "import Jaune.Check.Spec\nimport Jaune.Adapter\n")
+        self.assertEqual(self.problems(), [])
+
+    def test_indented_commands_in_specification_module_fail(self):
+        self.write("Jaune/Base.lean",
+                   "namespace Jaune\ndef base : Nat := 0\n  #guard base = 0\nend Jaune\n")
+        self.assertProblem("Jaune.Base:3: #guard in a specification module")
+        self.write("Jaune/Base.lean",
+                   "namespace Jaune\ndef base : Nat := 0\n  example : base = 0 := rfl\nend Jaune\n")
+        self.assertProblem("Jaune.Base:3: example in a specification module")
+
+    def test_modified_and_attributed_examples_fail(self):
+        for prefix in ("private ", "noncomputable ", "@[simp] ", "@[simp]\n", "/-- doc -/ ",
+                       "set_option maxHeartbeats 0 in ", "open Nat in\n  "):
+            self.write("Jaune/Base.lean", f"def base : Nat := 0\n{prefix}example : base = 0 := rfl\n")
+            self.assertProblem("example in a specification module")
+
+    def test_guard_msgs_in_specification_module_fails(self):
+        self.write("Jaune/Base.lean", "/-- info: 0 -/\n#guard_msgs in\ndef base : Nat := 0\n")
+        self.assertProblem("Jaune.Base:2: #guard_msgs in a specification module")
+
+    def test_public_and_meta_imports_are_read(self):
+        self.write("Jaune/Base.lean", "module\npublic import Jaune.Impl.Cached\ndef base : Nat := 0\n")
+        self.assertProblem("Jaune.Base: specification module imports implementation module")
+        self.write("Jaune/Base.lean", "def base : Nat := 0\n")
+        self.write("Jaune/Proof.lean", "module\npublic meta import all Jaune.Adapter\ntheorem t : True := trivial\n")
+        self.assertProblem("Jaune.Proof (proof) imports Jaune.Adapter (adapter)")
+
+    def test_indented_vocabulary_and_helpers_fail(self):
+        self.write("Jaune/Base.lean",
+                   "mutual\n  def fooTag : String := \"\"\n  def barGuard : Nat := 0\nend\n")
+        self.assertProblem("fixture vocabulary not in fixture_vocabulary_residue: fooTag")
+        self.assertProblem("test helper in a specification module: barGuard")
+
+    def test_namespaced_renderer_fails(self):
+        self.write("Jaune/Base.lean",
+                   "namespace Jaune\nnamespace Foo\ndef renderThing : String := \"\"\nend Foo\nend Jaune\n")
+        self.assertProblem("fixture vocabulary not in fixture_vocabulary_residue: Foo.renderThing")
+        self.write("Jaune/Base.lean", "theorem Foo.render_split : True := trivial\n")
+        self.assertEqual(self.problems(), [])
+
     def test_tracked_data_and_tree_pass_the_classification_rules(self):
         data = json.loads((ROOT / "scripts" / "layering.json").read_text(encoding="utf-8"))
         self.assertEqual(set(data["modules"].values()) - set(MODULE.CLASSES), set())
