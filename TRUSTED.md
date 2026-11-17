@@ -28,8 +28,8 @@ three standard classical axioms — `propext`, `Classical.choice`, `Quot.sound` 
 and nothing else. Nothing in the Jaune library is `@[extern]`, `opaque`,
 `partial`, `native_decide`-backed, `bv_decide`-backed, or `sorry`-ed, and there
 is no `panic` in its import closure. What the theorems do *not* cover is
-the fixture harness (`Main.lean`, which no theorem mentions), the two harness
-modules outside the library's import closure, and the question of whether the
+the fixture harness (`Main.lean`, which no theorem mentions), the runner-side
+and check modules outside the library's import closure, and the question of whether the
 theorems state the properties you actually care about. Conformance with the
 Ethereum fixture corpora is evidence from testing, not from proof, and this
 document keeps that line sharp.
@@ -40,8 +40,8 @@ Trusting a Jaune theorem means trusting:
 
 | | |
 |---|---|
-| the Lean 4 kernel | the toolchain named in `lean-toolchain` (`leanprover/lean4:v4.34.0` when this was written) |
-| Mathlib | the tag required in `lakefile.lean` and the revision `lake-manifest.json` resolves (`v4.34.0`, `5ed2965256430c3649e86755f9576b54eca72435` when this was written) |
+| the Lean 4 kernel | the toolchain named in `lean-toolchain` (`leanprover/lean4:v4.35.0` when this was written) |
+| Mathlib | the tag required in `lakefile.lean` and the revision `lake-manifest.json` resolves (`v4.35.0`, `56a005855ea17e0b0958f73ec801ae140b0a1679` when this was written) |
 
 The files are the record; the commands below read them.
 
@@ -170,7 +170,8 @@ defended, and a reader is entitled to know where the guarantee is a gate and
 where it is a fact.
 
 [`scripts/check-hygiene.sh`](scripts/check-hygiene.sh) — forbids `dbg_trace`
-and `sorry` under `Jaune/` and `Examples/`, fail-closed against the committed
+and `sorry` under `Jaune/`, `Examples/` and `JauneConsensus/` and in their
+root and runner files, fail-closed against the committed
 allowlist [`scripts/hygiene-allow.txt`](scripts/hygiene-allow.txt). Matching
 is line-number independent, so the gate survives edits above an occurrence
 but forces re-review if the matched text changes. It needs no Lean
@@ -190,7 +191,8 @@ never be satisfied by moving code out of reach:
   except exact allowlist rows.
 - **R4** — no stringly-typed semantic error carrier or string-driven semantic
   branch. Its scope is the closure *plus* the runner boundary
-  (`Jaune/ChainStore.lean`, `Jaune/FixtureException.lean`, `Main.lean`), and it
+  (`Jaune/ChainStore.lean`, `Jaune/FixtureException.lean`, `Main.lean`) and the
+  bounded memory probe `MemoryProbe.lean`, and it
   refuses a `PENDING` row outright: a new stringly semantic carrier can no
   longer be deferred, only reviewed in or rejected.
 
@@ -206,8 +208,10 @@ integrity reports 56 occurrences allowlisted, 0 pending, pending budget 0.
 
 **The trust surface is now enforced, not merely reported.** `check-hygiene.sh`
 fails on any un-allowlisted `axiom`, `opaque`, `@[extern]`, `@[implemented_by]`,
-`@[csimp]`, `partial def`, `unsafe` or `native_decide` under `Jaune/` and
-`Examples/`, in `Jaune.lean`, `Examples.lean` and `MemoryProbe.lean`, and in
+`@[csimp]`, `partial def`, `unsafe` or `native_decide` under `Jaune/`,
+`Examples/` and `JauneConsensus/`, in `Jaune.lean`, `Examples.lean`,
+`JauneConsensus.lean`, `ConsensusMain.lean`, `ConsensusBLSBench.lean`,
+`ConsensusKZGVectors.lean` and `MemoryProbe.lean`, and in
 the external-consumer smoke source, alongside the original `dbg_trace` and
 `sorry`. Every one of these counts is zero except one: the allowlist carries
 exactly one row, the proved `@[csimp]` substitution `execFueled_eq_cached`
@@ -281,14 +285,22 @@ an unclassified defect — but it is an exception, and 56 of them is the honest
 count of places where the strong reading of "no raw bang operations, no
 stringly-typed errors" does not literally hold.
 
-**Two modules are outside the gate's closure.** `Jaune/ChainStore.lean` and
-`Jaune/FixtureException.lean` are not in `Jaune.lean`'s transitive import
-closure, so R1–R3 do not inventory them. This is deliberate — they are harness
-surface, not consensus surface — and R4 does reach them, but a reader auditing
-"which code do these rules cover" deserves the boundary stated rather than
-inferred from a comment in a shell script.
+**Twenty-five `Jaune/` modules are outside the gate's closure.** None is in
+`Jaune.lean`'s transitive import closure, so R2 and R3 do not inventory them:
+the runner-side adapters (`Jaune/ChainStore.lean`, `Jaune/FixtureException.lean`,
+`Jaune/FixtureTransition.lean`, `Jaune/T8n.lean`, `Jaune/Trace.lean`,
+`Jaune/TraceJson.lean`, `Jaune/TraceTransaction.lean`, `Jaune/Adapter/Io.lean`),
+the executable checks (`Jaune/BLSGuards.lean` and the fifteen
+`Jaune/Check/*.lean` modules, library `JauneChecks`), and
+`Jaune/StaticcallEffects.lean`, a proof module only the axiom-audit union
+imports. `scripts/layering.json` classifies each. This is deliberate — none is
+consensus surface, and no module of the closure imports one — and R1 and the
+hygiene gate reach all of them, R4 reaches `Jaune/ChainStore.lean` and
+`Jaune/FixtureException.lean`, but a reader auditing "which code do these rules
+cover" deserves the boundary stated rather than inferred from a comment in a
+shell script.
 
-**`Main.lean` is in no proof cone.** The fixture harness is 1,300 lines of `IO`
+**`Main.lean` is in no proof cone.** The fixture harness is about 2,000 lines of `IO`
 that parse JSON, select cases, and compare roots. Every conformance claim this
 project makes passes through code that no theorem covers. R1 and R4 reach it;
 no proof does. It is tested, not proved, and that distinction is the point of
@@ -400,8 +412,8 @@ the corpus it runs over. The last eight rows are the consensus layer's
 
 | Primitive | Reference (standard, section) | Transcription source | Proved (theorem names) | Tested only (corpora) |
 |---|---|---|---|---|
-| `Keccak-256` (KECCAK256 opcode, not a precompile) | NIST FIPS 202 §3 (`Keccak-p[1600,24]`), §4 (sponge), §5.1-5.2 (`pad10*1`, `KECCAK[c]`), Appendix B.1; Ethereum's KEC is `KECCAK[512](M, 256)` without SHA-3 domain bits | Port of the SHA3IUF C implementation (`Jaune/Hash.lean:281-283`); independent transcription `Jaune/KeccakSpec.lean` | `Bytes.keccak_eq_fips`, `ByteArray.keccak_eq_fips` and `ByteArray.keccak_eq_fips_of_le` (`Jaune/KeccakSpec.lean`), via `Keccak.FIPS.f1600_eq_keccakP` and the older `KECCAK.f1600_eq` (kernel equals its in-file port); opcode-side `PlainOp.runCore_keccak256_eq_reference` (`Jaune/Machine.lean:4718`) relates the opcode to `Bytes.keccak` | `Jaune/Check/KeccakSpec.lean` empty-string guard; `check-u256.sh` keccak/keccak_ba vectors vs pinned EELS (83 cases; they test the hash value, which the theorems now state); fixture suites |
-| `SHA-256` (0x02) | NIST FIPS 180-4 §4.1.2, §4.2.2, §5.1.1, §5.2.1, §5.3.3, §6.2.2 | Port of Mosnier's C (`Jaune/Hash.lean:158-160`); independent transcription `Jaune/SHA256Spec.lean:14-16` | `Bytes.sha256_eq_fips` (`Jaune/SHA256Spec.lean:740`) | `scripts/vectors/sha256.json` (81 cases); `check-vectors.sh`; fixtures |
+| `Keccak-256` (KECCAK256 opcode, not a precompile) | NIST FIPS 202 §3 (`Keccak-p[1600,24]`), §4 (sponge), §5.1-5.2 (`pad10*1`, `KECCAK[c]`), Appendix B.1; Ethereum's KEC is `KECCAK[512](M, 256)` without SHA-3 domain bits | Port of the SHA3IUF C implementation (`Jaune/Hash.lean:281-282`); independent transcription `Jaune/KeccakSpec.lean` | `Bytes.keccak_eq_fips`, `ByteArray.keccak_eq_fips` and `ByteArray.keccak_eq_fips_of_le` (`Jaune/KeccakSpec.lean`), via `Keccak.FIPS.f1600_eq_keccakP` and the older `KECCAK.f1600_eq` (kernel equals its in-file port); opcode-side `PlainOp.runCore_keccak256_eq_reference` (`Jaune/Machine.lean:4718`) relates the opcode to `Bytes.keccak` | `Jaune/Check/KeccakSpec.lean` empty-string guard; `check-u256.sh` keccak/keccak_ba vectors vs pinned EELS (83 cases; they test the hash value, which the theorems now state); fixture suites |
+| `SHA-256` (0x02) | NIST FIPS 180-4 §4.1.2, §4.2.2, §5.1.1, §5.2.1, §5.3.3, §6.2.2 | Port of Mosnier's C (`Jaune/Hash.lean:158-159`); independent transcription `Jaune/SHA256Spec.lean:14-16` | `Bytes.sha256_eq_fips` (`Jaune/SHA256Spec.lean:740`) | `scripts/vectors/sha256.json` (81 cases); `check-vectors.sh`; fixtures |
 | `RIPEMD-160` (0x03) | Dobbertin-Bosselaers-Preneel, FSE 1996 (Appendix A pseudo-code); ISO/IEC 10118-3:2004 (Dedicated Hash-Function 1); Yellow Paper Appendix E | Port of tiny-ripemd160 C (`Jaune/Hash.lean:11-12`); reference transcription `Jaune/RIPEMD160Spec.lean` | none (agreement shown by `#guard`s only) | `Jaune/Check/RIPEMD160Spec.lean` guards (8 published test values; kernel agreement on those plus 13 seam lengths); `scripts/vectors/ripemd160.json` (85 cases); fixtures |
 | `BLAKE2 F` (0x09) | RFC 7693 §3.2 (F), §3.1 (G), §2.6-2.7; EIP-152 (framing) | `bCompress` (`Jaune/Precompiles.lean:577`), source previously unstated; reference transcription `Jaune/Blake2Spec.lean` | none about values (`Blake2.roundVec_toArray`, `Blake2.roundsVec_toArray` relate the optimized rounds to the in-file readable rounds, not to the standard) | `Jaune/Check/Blake2Spec.lean` guards (EIP-152 vectors 4-7, four framing-failure classes, `BLAKE2b-512("abc")`, production agreement); `scripts/vectors/blake2F.json` (5 cases); fixtures |
 | `MODEXP` (0x05) | EIP-198 (semantics); EIP-2565 and EIP-7883 (gas); EIP-7823 (length bound) | `executeModexp` (`Jaune/Precompiles.lean:150`) via `Nat.powMod` (`Jaune/Precompiles.lean:170`) | none about values | `modexp_eip2565.json` (47 cases); `modexp_eip7883.json` (45 cases); 29 gas, complexity and length-bound `#guard`s, none on values (`Jaune/Check/Precompiles.lean:21-64`); fixtures |
@@ -414,10 +426,10 @@ the corpus it runs over. The last eight rows are the consensus layer's
 | `BLS12-381 G1 MSM` (0x0C) | EIP-2537 (G1MSM) | `executeBls12G1Msm` (`Jaune/Precompiles.lean:817`) via `g1MsmSum` (`Jaune/BLS.lean:59`) | none about values | `mul_G1_bls.json`, `msm_G1_bls.head.json`, `blsG1Mul.json`, `blsG1MultiExp.head.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
 | `BLS12-381 G2 add` (0x0D) | EIP-2537 (G2ADD) | `executeBls12G2Add` (`Jaune/Precompiles.lean:832`) | none about values | `add_G2_bls.json`, `blsG2Add.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
 | `BLS12-381 G2 MSM` (0x0E) | EIP-2537 (G2MSM) | `executeBls12G2Msm` (`Jaune/Precompiles.lean:842`) | none about values | `mul_G2_bls.json`, `msm_G2_bls.head.json`, `blsG2Mul.json`, `blsG2MultiExp.head.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
-| `BLS12-381 pairing check` (0x0F) | EIP-2537 (PAIRING_CHECK) | `executeBls12Pairing` (`Jaune/Precompiles.lean:933`) via `blsPairing` (`Jaune/BLS.lean:179`) | none about values (bilinearity shown by guards only) | `pairing_check_bls.json`, `blsPairing.shard1-8.json` (the 106 cases of `blsPairing.json`) and their `fail-` files via `check-vectors.sh`; bilinearity guard (`Jaune/BLSGuards.lean:41`); `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
-| `BLS12-381 map Fp to G1` (0x10) | EIP-2537 (MAP_FP_TO_G1); RFC 9380 §6.6.3 (simplified SWU via an 11-isogeny, Appendix E.2) and §7 | `executeBls12MapFpToG1` (`Jaune/Precompiles.lean:857`) via `blsMapFpToG1` (`Jaune/BLS.lean:279`) | none about values | `map_fp_to_G1_bls.json`, `blsMapG1.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
-| `BLS12-381 map Fp2 to G2` (0x11) | EIP-2537 (MAP_FP2_TO_G2); RFC 9380 §6.6.3 (simplified SWU via a 3-isogeny, Appendix E.3) and §7 | `executeBls12MapFp2ToG2` (`Jaune/Precompiles.lean:905`) via `blsMapFp2ToG2` (`Jaune/BLS.lean:341`) | none about values | `map_fp2_to_G2_bls.json`, `blsMapG2.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
-| `KZG point evaluation` (0x0A) | EIP-4844 (point evaluation precompile); Deneb `polynomial-commitments.md` (`verify_kzg_proof`) | `executePointEval` (`Jaune/Precompiles.lean:781`) via `verifyKzgProofImpl` (`Jaune/BLS.lean:398`) | none about values | `pointEvaluation.json` (1 case) via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
+| `BLS12-381 pairing check` (0x0F) | EIP-2537 (PAIRING_CHECK) | `executeBls12Pairing` (`Jaune/Precompiles.lean:933`) via `blsPairing` (`Jaune/BLS.lean:365`) | none about values (bilinearity shown by guards only) | `pairing_check_bls.json`, `blsPairing.shard1-8.json` (the 106 cases of `blsPairing.json`) and their `fail-` files via `check-vectors.sh`; bilinearity guard (`Jaune/BLSGuards.lean:44`); `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
+| `BLS12-381 map Fp to G1` (0x10) | EIP-2537 (MAP_FP_TO_G1); RFC 9380 §6.6.3 (simplified SWU via an 11-isogeny, Appendix E.2) and §7 | `executeBls12MapFpToG1` (`Jaune/Precompiles.lean:857`) via `blsMapFpToG1` (`Jaune/BLS.lean:455`) | none about values | `map_fp_to_G1_bls.json`, `blsMapG1.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
+| `BLS12-381 map Fp2 to G2` (0x11) | EIP-2537 (MAP_FP2_TO_G2); RFC 9380 §6.6.3 (simplified SWU via a 3-isogeny, Appendix E.3) and §7 | `executeBls12MapFp2ToG2` (`Jaune/Precompiles.lean:905`) via `blsMapFp2ToG2` (`Jaune/BLS.lean:517`) | none about values | `map_fp2_to_G2_bls.json`, `blsMapG2.json` and their `fail-` files via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
+| `KZG point evaluation` (0x0A) | EIP-4844 (point evaluation precompile); Deneb `polynomial-commitments.md` (`verify_kzg_proof`) | `executePointEval` (`Jaune/Precompiles.lean:781`) via `verifyKzgProofImpl` (`Jaune/BLS.lean:548`) | none about values | `pointEvaluation.json` (1 case) via `check-vectors.sh`; `check-legacy.sh --bls` (the EEST BLS/point-evaluation tier); fixtures |
 | SSZ serialize, deserialize, `hash_tree_root` (consensus layer) | `ethereum/consensus-specs` v1.6.1 `ssz/simple-serialize.md` (from v1.7.0 the SSZ specification lives in `ethereum/ssz-specs`; the pinned `v1.7.0-beta.4` carries no `ssz/` directory and its README points there) | the spec markdown and pyspec | `hashPair_eq` (`JauneConsensus/SSZ/Merkle.lean`, `JauneConsensus/Crypto/Sha256Pair.lean`) | `ssz_generic`, `ssz_static`, `merkle_proof`, `light_client` vectors |
 | `hashPair` 256-bit fast path (consensus layer) | same SSZ merkleization | Jaune `Bytes.sha256` | `hashPair_eq`, `hashPair_eq_hashPairKernel` | `--bench-hash-pair` differential plus the corpora above |
 | RFC 9380 hash-to-curve (`expand_message_xmd`, `hash_to_field`, SWU with isogeny, `map_to_curve` on G2) (consensus layer) | RFC 9380 §5.3 and §8 | the RFC text | none; `#guard` vectors only | RFC appendix vectors as guards (`JauneConsensus/Crypto/HashToCurveVectors.lean`), official `bls` vectors |
