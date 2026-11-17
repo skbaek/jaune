@@ -154,18 +154,18 @@ theorem Legacy.Frame.raw_commits_of_settlementCommits
           exact execution_commits_of_handleErrorWith_clean hhandled hhandledClean
 
 /-- The concrete outcome indexed by an `Exec` derivation. -/
-def Exec.outcome {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
-    (_ : Exec pc sevm pre out) : Execution := out
+def Legacy.Exec.outcome {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
+    (_ : Legacy.Exec pc sevm pre out) : Execution := out
 
 /-- A retained successful execution frame.  Keeping the full derivation makes
 the history suitable for later provenance refinements, rather than merely
 retaining a precomputed numeric tally. -/
-structure Exec.Frame where
+structure Legacy.Exec.Frame where
   pc : Nat
   sevm : Sevm
   pre : Devm
   out : Execution
-  run : Exec pc sevm pre out
+  run : Legacy.Exec pc sevm pre out
   committed : Execution.commits out = true
 
 /-- The committed post-machine indexed by a retained frame. -/
@@ -175,82 +175,82 @@ def Execution.committedPost (out : Execution)
   | .ok post => post
   | .error _ => by simp [Execution.commits] at h
 
-def Exec.Frame.post (frame : Exec.Frame) : Devm :=
+def Legacy.Exec.Frame.post (frame : Legacy.Exec.Frame) : Devm :=
   Execution.committedPost frame.out frame.committed
 
-def Exec.Frame.ofRun {pc : Nat} {sevm : Sevm} {pre : Devm}
-    {out : Execution} (run : Exec pc sevm pre out)
-    (committed : Execution.commits out = true) : Exec.Frame :=
+def Legacy.Exec.Frame.ofRun {pc : Nat} {sevm : Sevm} {pre : Devm}
+    {out : Execution} (run : Legacy.Exec pc sevm pre out)
+    (committed : Execution.commits out = true) : Legacy.Exec.Frame :=
   ⟨pc, sevm, pre, out, run, committed⟩
 
 /-- Successful descendant frames whose effects survive in the enclosing
 successful frame.  Failed children are discarded, while successful children
 are traversed to arbitrary depth. -/
-def Exec.descendantFrames {pc : Nat} {sevm : Sevm} {pre : Devm}
-    {out : Execution} (run : Exec pc sevm pre out) : List Exec.Frame :=
+def Legacy.Exec.descendantFrames {pc : Nat} {sevm : Sevm} {pre : Devm}
+    {out : Execution} (run : Legacy.Exec pc sevm pre out) : List Legacy.Exec.Frame :=
   match run with
   | .halt _ => []
-  | .cont _ next => Exec.descendantFrames next
+  | .cont _ next => Legacy.Exec.descendantFrames next
   | .doneErr _ _ _ => []
-  | .doneOk _ _ _ next => Exec.descendantFrames next
+  | .doneOk _ _ _ next => Legacy.Exec.descendantFrames next
   | .runErr _ _ _ _ => []
   | .runOk (f := frame) (raw := raw) _ _ child _ next =>
       let childFrames :=
         if h : Legacy.Frame.settlementCommits frame raw = true then
           let hraw : Execution.commits raw = true :=
             Legacy.Frame.raw_commits_of_settlementCommits h
-          Exec.Frame.ofRun child hraw :: Exec.descendantFrames child
+          Legacy.Exec.Frame.ofRun child hraw :: Legacy.Exec.descendantFrames child
         else []
-      childFrames ++ Exec.descendantFrames next
+      childFrames ++ Legacy.Exec.descendantFrames next
 termination_by sizeOf run
 
 /-- A successful spawn retains its settlement-committing child before the
 child's descendants and before the parent continuation's descendants. -/
-@[simp] theorem Exec.descendantFrames_runOk_of_settlementCommits
+@[simp] theorem Legacy.Exec.descendantFrames_runOk_of_settlementCommits
     {pc pc' : Nat} {sevm : Sevm} {pre devm' : Devm}
     {f : Jaune.Legacy.Frame} {rsm : Resume}
     {cevm : Evm} {raw out : Execution}
     (hstep : Jaune.Legacy.Evm.step ⟨pc, sevm, pre⟩ = .spawn f rsm pc')
     (henter : f.enter = .run cevm)
-    (child : Exec cevm.pc cevm.sta cevm.dyna raw)
+    (child : Legacy.Exec cevm.pc cevm.sta cevm.dyna raw)
     (hr : rsm.run (f.settle raw) = .ok devm')
-    (next : Exec pc' sevm devm' out)
+    (next : Legacy.Exec pc' sevm devm' out)
     (hcommit : Legacy.Frame.settlementCommits f raw = true) :
-    Exec.descendantFrames (Exec.runOk hstep henter child hr next) =
-      Exec.Frame.ofRun child
+    Legacy.Exec.descendantFrames (Legacy.Exec.runOk hstep henter child hr next) =
+      Legacy.Exec.Frame.ofRun child
           (Legacy.Frame.raw_commits_of_settlementCommits hcommit) ::
-        Exec.descendantFrames child ++ Exec.descendantFrames next := by
-  simp [Exec.descendantFrames, hcommit]
+        Legacy.Exec.descendantFrames child ++ Legacy.Exec.descendantFrames next := by
+  simp [Legacy.Exec.descendantFrames, hcommit]
 
 /-- A spawned child whose complete frame settlement does not commit contributes
 no retained frame, even if its raw execution itself committed. -/
-@[simp] theorem Exec.descendantFrames_runOk_of_not_settlementCommits
+@[simp] theorem Legacy.Exec.descendantFrames_runOk_of_not_settlementCommits
     {pc pc' : Nat} {sevm : Sevm} {pre devm' : Devm}
     {f : Jaune.Legacy.Frame} {rsm : Resume}
     {cevm : Evm} {raw out : Execution}
     (hstep : Jaune.Legacy.Evm.step ⟨pc, sevm, pre⟩ = .spawn f rsm pc')
     (henter : f.enter = .run cevm)
-    (child : Exec cevm.pc cevm.sta cevm.dyna raw)
+    (child : Legacy.Exec cevm.pc cevm.sta cevm.dyna raw)
     (hr : rsm.run (f.settle raw) = .ok devm')
-    (next : Exec pc' sevm devm' out)
+    (next : Legacy.Exec pc' sevm devm' out)
     (hnot : Legacy.Frame.settlementCommits f raw ≠ true) :
-    Exec.descendantFrames (Exec.runOk hstep henter child hr next) =
-      Exec.descendantFrames next := by
-  simp only [Exec.descendantFrames, dite_eq_right hnot, List.nil_append]
+    Legacy.Exec.descendantFrames (Legacy.Exec.runOk hstep henter child hr next) =
+      Legacy.Exec.descendantFrames next := by
+  simp only [Legacy.Exec.descendantFrames, dite_eq_right hnot, List.nil_append]
 
 /-- In particular, a CREATE child whose raw execution commits but whose
 code-deposit settlement rolls back contributes no descendant frame.  The raw
 commit premise records the semantic counterexample to pruning by raw outcome
 alone. -/
-theorem Exec.descendantFrames_runOk_create_codeDepositRollback
+theorem Legacy.Exec.descendantFrames_runOk_create_codeDepositRollback
     {pc pc' : Nat} {sevm : Sevm} {pre devm' settled : Devm}
     {f : Jaune.Legacy.Frame} {rsm : Resume}
     {cevm : Evm} {raw out : Execution}
     (hstep : Jaune.Legacy.Evm.step ⟨pc, sevm, pre⟩ = .spawn f rsm pc')
     (henter : f.enter = .run cevm)
-    (child : Exec cevm.pc cevm.sta cevm.dyna raw)
+    (child : Legacy.Exec cevm.pc cevm.sta cevm.dyna raw)
     (hr : rsm.run (f.settle raw) = .ok devm')
-    (next : Exec pc' sevm devm' out)
+    (next : Legacy.Exec pc' sevm devm' out)
     (_rawCommits : Execution.commits raw = true)
     (hcreate : f.isCreate = true)
     (hsettled : processCreateMessage.settle f.outer
@@ -258,9 +258,9 @@ theorem Exec.descendantFrames_runOk_create_codeDepositRollback
         (executeCode.handleErrorWith f.inner.benv.stat.rules.stateGas raw)) =
         .ok settled)
     (herror : settled.error.isSome = true) :
-    Exec.descendantFrames (Exec.runOk hstep henter child hr next) =
-      Exec.descendantFrames next := by
-  apply Exec.descendantFrames_runOk_of_not_settlementCommits
+    Legacy.Exec.descendantFrames (Legacy.Exec.runOk hstep henter child hr next) =
+      Legacy.Exec.descendantFrames next := by
+  apply Legacy.Exec.descendantFrames_runOk_of_not_settlementCommits
     hstep henter child hr next
   intro hcommit
   have hframeSettle : f.settle raw = .ok settled := by
@@ -275,20 +275,20 @@ theorem Exec.descendantFrames_runOk_create_codeDepositRollback
 /-- All and only committed frames in a successful root execution.  An errored
 root contributes no frames, so a later enclosing rollback cannot leak actions
 into the accounting fold. -/
-def Exec.committedFrames {pc : Nat} {sevm : Sevm} {pre : Devm}
-    {out : Execution} (run : Exec pc sevm pre out) : List Exec.Frame :=
+def Legacy.Exec.committedFrames {pc : Nat} {sevm : Sevm} {pre : Devm}
+    {out : Execution} (run : Legacy.Exec pc sevm pre out) : List Legacy.Exec.Frame :=
   if h : Execution.commits out = true then
-    Exec.Frame.ofRun run h :: Exec.descendantFrames run
+    Legacy.Exec.Frame.ofRun run h :: Legacy.Exec.descendantFrames run
   else []
 
 /-- A noncommitting root contributes no retained frame, regardless of any
 locally successful descendants in its derivation. -/
-@[simp] theorem Exec.committedFrames_eq_nil_of_not_commits
+@[simp] theorem Legacy.Exec.committedFrames_eq_nil_of_not_commits
     {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
-    (run : Exec pc sevm pre out)
+    (run : Legacy.Exec pc sevm pre out)
     (h : Execution.commits out ≠ true) :
-    Exec.committedFrames run = [] := by
-  simp [Exec.committedFrames, h]
+    Legacy.Exec.committedFrames run = [] := by
+  simp [Legacy.Exec.committedFrames, h]
 
 theorem ProcessMessage.settlementCommits_of_some_ok_clean
     {msg : Msg} {pc : Nat} {sevm : Sevm} {pre child : Devm}

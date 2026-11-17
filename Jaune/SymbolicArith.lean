@@ -101,8 +101,8 @@ def prepend {pc : Nat} {sevm : Sevm} {pre : Devm} {out : Execution}
     (decoded : PlainOp.At sevm.code pc op.rinst)
     (stack : pre.stack = x :: y :: rest)
     (gas : op.cost ≤ pre.gasLeft) (room : rest.length < 1024)
-    (next : Exec (pc + 1) sevm (post op x y rest pre) out) :
-    Exec pc sevm pre out :=
+    (next : Legacy.Exec (pc + 1) sevm (post op x y rest pre) out) :
+    Legacy.Exec pc sevm pre out :=
   .cont ((Legacy.Evm.step_next (n := .plain op.rinst) decoded).trans
     (step_success ⟨pc, sevm, pre⟩ op x y rest stack gas room)) next
 

@@ -10,7 +10,7 @@ def outOfGas {pc : Nat} {env : Sevm} {pre : Devm}
     (decoded : Jaune.NextOp.At env.code pc (.push bytes width))
     (gas : pre.gasLeft < SymbolicPush.cost bytes)
     (hgate : bytes ≠ [] ∨ env.benvStat.rules.opcodes.push0) :
-    Jaune.Exec pc env pre (.error ⟨.halt (.outOfGas .none), pre⟩) :=
+    Jaune.Legacy.Exec pc env pre (.error ⟨.halt (.outOfGas .none), pre⟩) :=
   .halt ((Jaune.Legacy.Evm.step_next decoded).trans
     (SymbolicPush.step_outOfGas ⟨pc, env, pre⟩ bytes width gas hgate))
 
