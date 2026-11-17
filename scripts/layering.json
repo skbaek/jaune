@@ -7,7 +7,7 @@
   "check: #guard / example / test helpers and consumer examples; compiled by the default build.",
   "adapter: runner, fixture and tracer front ends; they may import anything.",
   "implementation: a second implementation kept for speed; a specification module imports one only where listed in implementation_imports.",
-  "bridge: old and new definitions side by side at a convergence gate (3.1); none yet.",
+  "bridge: old and new definitions side by side at a convergence gate (3.1), with the maps and invariants their bridges use.",
   "fixture_vocabulary_residue: rejection tags and renderers that still sit in specification modules. evm_halt_kinds stay by decision (the tracer prints them; a failed checked system call puts them in the block's rejection text). called_by_specification are reached by specification functions that return rendered text (stateTransitionAt, stateTransitionUsing, rlpToBlock, ImportOutcome.renderLegacy, processCheckedSystemTransaction, validateOmmerWithParent); they leave with the structured-cause cuts and chain-transition variants (S6c) and the list only shrinks."
  ],
  "umbrellas": [
@@ -24,6 +24,7 @@
   "Jaune.BLSGuards": "check",
   "Jaune.Basic": "specification",
   "Jaune.Blake2Spec": "specification",
+  "Jaune.Bridge.MessageCall": "bridge",
   "Jaune.ChainStore": "adapter",
   "Jaune.Check.BLS": "check",
   "Jaune.Check.Basic": "check",
@@ -58,6 +59,7 @@
   "Jaune.KeccakSpec": "specification",
   "Jaune.Machine": "specification",
   "Jaune.MemoryAccounting": "proof",
+  "Jaune.MessageCall": "specification",
   "Jaune.MessageExecution": "proof",
   "Jaune.MulDiv": "proof",
   "Jaune.NativePrecompile": "proof",

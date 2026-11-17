@@ -17,6 +17,7 @@ import Jaune.BLSConst
 import Jaune.BLS
 import Jaune.Fuel
 import Jaune.Machine
+import Jaune.MessageCall
 import Jaune.DevmProjections
 import Jaune.Precompiles
 import Jaune.Execution
@@ -33,6 +34,7 @@ import Jaune.SymbolicPush
 import Jaune.SymbolicArith
 import Jaune.MessageExecution
 import Jaune.Transaction
+import Jaune.Bridge.MessageCall
 
 namespace Jaune
 
