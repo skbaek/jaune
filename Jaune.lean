@@ -50,15 +50,6 @@ import Jaune.SymbolicPush
 import Jaune.SymbolicArith
 import Jaune.MessageExecution
 import Jaune.Transaction
-import Jaune.Bridge.MessageCall
-import Jaune.Bridge.CleanResult
-import Jaune.Bridge.Settle
-import Jaune.Bridge.Enter
-import Jaune.Bridge.Step
-import Jaune.Bridge.Resume
-import Jaune.Bridge.Driver
-import Jaune.Bridge.Top
-import Jaune.Bridge.Exec
 
 namespace Jaune
 

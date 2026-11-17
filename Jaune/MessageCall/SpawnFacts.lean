@@ -12,7 +12,10 @@ and 8)
   `prepareMessage` builds a `Msg` whose code address is absent exactly when its target is
   (`prepareMessage_codeAddress_eq_none_iff`), and the creation flag `processMessageCall` passes is
   `msg.target.isNone`; top-level delegation resolution only ever sets a code address
-  (`Msg.resolveCodeDelegation_codeAddress_eq_none`).
+  (`Msg.resolveCodeDelegation_codeAddress_eq_none`). Together with the authorization step and
+  Amsterdam's preparation, which keep the code address (`legacyAuthorization_codeAddress`,
+  `prepareTopLevelAmsterdam_message`), every top frame `processMessageCall` runs on a prepared
+  message is coherent (`processMessageCall.topFrame_kindCoherent`).
 * **The spawn checkpoint.** A spawned child's checkpoint is its caller after the opcode's own
   effects, warming included (`genericCall.step_spawn_checkpoint` and its three siblings); a
   created address is warm in its checkpoint (`Evm.step_spawn_create_warm`).
@@ -305,5 +308,43 @@ theorem resolveCodeDelegation_call_kindCoherent {msg : Msg} (h : msg.codeAddress
     (Frame.ofTop msg.resolveCodeDelegation false).message.KindCoherent := by
   refine (Message.ofLegacy_kindCoherent_iff _ false).mpr ?_
   exact iff_of_false (by simp) (fun e => h (Msg.resolveCodeDelegation_codeAddress_eq_none e))
+
+/-- The top frame `processMessageCall msg` runs, when it runs one. Without state gas: a creation's
+frame over the message (`processMessageCall.create`, past the collision test), or a call's frame
+over the authorized, delegation-resolved message (`processMessageCall.call`). With state gas: the
+frame over the prepared message and state, created exactly when the message has no target
+(`processTopLevelAmsterdam`, whose creation flag `processMessageCall` sets from the target). -/
+inductive processMessageCall.TopFrame (msg : Msg) : Frame → Prop
+  | create (ht : msg.target = none) (hs : msg.benv.stat.rules.stateGas = none) :
+      processMessageCall.TopFrame msg (Frame.ofTop msg true)
+  | call (ht : msg.target ≠ none) (hs : msg.benv.stat.rules.stateGas = none) {q : Msg × Nat}
+      (ha : processMessageCall.legacyAuthorization msg = .ok q) :
+      processMessageCall.TopFrame msg (Frame.ofTop q.1.resolveCodeDelegation false)
+  | amsterdam {state : StateGasRules} (hs : msg.benv.stat.rules.stateGas = some state)
+      {p : Msg × Devm} (hp : prepareTopLevelAmsterdam state msg = .ok p) :
+      processMessageCall.TopFrame msg
+        ⟨Message.ofLegacy p.1 msg.target.isNone, Frame.State.ofDevm p.2⟩
+
+/-- **Every top-level frame is kind-coherent.** For a message a transaction prepares, the top
+frame `processMessageCall` runs has kind `.create` exactly when it has no code address: the
+authorization step and Amsterdam's preparation keep the code address a creation lacks and a call
+carries. -/
+theorem processMessageCall.topFrame_kindCoherent {benv : Benv} {tenv : Tenv} {tx : Transaction}
+    {msg : Msg} (hm : prepareMessage benv tenv tx = .ok msg) {f : Frame}
+    (hf : processMessageCall.TopFrame msg f) : f.message.KindCoherent := by
+  have hca := prepareMessage_codeAddress_eq_none_iff hm
+  cases hf with
+  | create ht _ => exact prepareMessage_create_kindCoherent hm ht
+  | call ht _ ha =>
+    exact resolveCodeDelegation_call_kindCoherent
+      (processMessageCall.legacyAuthorization_codeAddress ha (fun e => ht (hca.mp e)))
+  | amsterdam _ hp =>
+    obtain ⟨htarget, hcreate, hcall⟩ := prepareTopLevelAmsterdam_message hp
+    refine (Message.ofLegacy_kindCoherent_iff _ _).mpr ?_
+    cases ht : msg.target with
+    | none => simp [hcreate ht, hca.mpr ht]
+    | some a =>
+      have := hcall (by simp [ht])
+      simp [this]
 
 end Jaune

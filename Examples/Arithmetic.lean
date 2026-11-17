@@ -9,11 +9,11 @@ memory, metadata and world are all variables. The derivation is a completed
 raw frame: it ends at `STOP` with an `.ok` machine state, and it says nothing
 about message settlement or transaction validation. Its premises are
 `9 ≤ g` (three static charges of 3) and `s.length < 1023` (room for two pushes).
-`concrete` exhibits them at `g = 9`, `s = []`.
+`concreteExec` exhibits them at `g = 9`, `s = []`.
 
-`execution` builds one derivation. `result` inverts an arbitrary derivation
+`executionExec` builds one derivation. `resultExec` inverts an arbitrary derivation
 step by step, so every derivation from this start state (not only the one we
-built) ends in the same state; `interpreter` then reads the total interpreter's
+built) ends in the same state; `interpreterExec` then reads the total interpreter's
 answer through adequacy. The negative checks at the end fail the build if a
 wrong premise or an unsupported opcode ever starts elaborating.
 -/
@@ -71,79 +71,7 @@ variable (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
 /-- The environment running this code. -/
 abbrev sevm : Sevm := { env with code := code a b }
 
-theorem step0 (gas : 9 ≤ g) (room : s.length < 1023) :
-    Legacy.Evm.step ⟨0, sevm env a b, initial base g s⟩ = .cont 2 (afterFirst base a g s) :=
-  (Legacy.Evm.step_next (first a b)).trans <|
-    SymbolicPush.step_success _ [a] (by simp)
-      (by simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]; omega)
-      (by simp [initial, Devm.stack, Devm.setMach]; omega)
-      (Or.inl (by simp))
-
-theorem step2 (gas : 9 ≤ g) (room : s.length < 1023) :
-    Legacy.Evm.step ⟨2, sevm env a b, afterFirst base a g s⟩ =
-      .cont 4 (afterSecond base a b g s) :=
-  (Legacy.Evm.step_next (second a b)).trans <|
-    SymbolicPush.step_success _ [b] (by simp)
-      (by simp [SymbolicPush.cost, SymbolicPush.post, afterFirst, initial, Devm.gasLeft,
-            Devm.setMach, Gas.veryLow]; omega)
-      (by simp [SymbolicPush.post, afterFirst, initial, Devm.stack, Devm.setMach]; omega)
-      (Or.inl (by simp))
-
-theorem step4 (gas : 9 ≤ g) (room : s.length < 1023) :
-    Legacy.Evm.step ⟨4, sevm env a b, afterSecond base a b g s⟩ =
-      .cont 5 (finalState base a b g s) :=
-  (Legacy.Evm.step_next (pc := 4) (sevm := sevm env a b)
-    (n := .plain SymbolicArith.Op.add.rinst) (third a b)).trans <|
-    SymbolicArith.step_success _ .add _ _ s rfl
-      (by simp [SymbolicArith.Op.cost, SymbolicPush.cost, SymbolicPush.post, afterSecond,
-            afterFirst, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]; omega)
-      (by omega)
-
-theorem step5 :
-    Legacy.Evm.step ⟨5, sevm env a b, finalState base a b g s⟩ =
-      .halt (.ok (finalState base a b g s)) :=
-  Legacy.Evm.step_last (l := .stop) (last a b)
-
 end Steps
-
-/-- One derivation, from the canonical constructors. -/
-def execution (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
-    (gas : 9 ≤ g) (room : s.length < 1023) :
-    Legacy.Exec 0 (sevm env a b) (initial base g s) (.ok (finalState base a b g s)) :=
-  .cont (step0 env base a b g s gas room) <|
-  .cont (step2 env base a b g s gas room) <|
-  .cont (step4 env base a b g s gas room) <|
-  .halt (step5 env base a b g s)
-
-/-- Inversion at a continuing step: a derivation whose root step continues
-contains a derivation of the same outcome from the successor state. -/
-def next {pc pc' : Nat} {sevm : Sevm} {devm devm' : Devm} {out : Execution}
-    (d : Legacy.Exec pc sevm devm out) (h : Legacy.Evm.step ⟨pc, sevm, devm⟩ = .cont pc' devm') :
-    Legacy.Exec pc' sevm devm' out := by
-  cases d with
-  | halt h' => cases h.symm.trans h'
-  | cont h' d' => cases h.symm.trans h'; exact d'
-  | doneErr h' _ _ => cases h.symm.trans h'
-  | doneOk h' _ _ _ => cases h.symm.trans h'
-  | runErr h' _ _ _ => cases h.symm.trans h'
-  | runOk h' _ _ _ _ => cases h.symm.trans h'
-
-/-- Every derivation from this start state ends in `finalState`: the outcome is
-forced by inverting the three continuing steps and the final `STOP`. -/
-theorem result (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
-    (gas : 9 ≤ g) (room : s.length < 1023) {out : Execution}
-    (d : Legacy.Exec 0 (sevm env a b) (initial base g s) out) :
-    out = .ok (finalState base a b g s) :=
-  let d2 := next d (step0 env base a b g s gas room)
-  let d4 := next d2 (step2 env base a b g s gas room)
-  let d5 := next d4 (step4 env base a b g s gas room)
-  d5.halt_inv (step5 env base a b g s)
-
-/-- Adequacy connects the derivation to the total interpreter. -/
-theorem interpreter (env : Sevm) (base : Devm) (a b : UInt8) (g : Nat) (s : List U256)
-    (gas : 9 ≤ g) (room : s.length < 1023) :
-    Legacy.exec ⟨0, sevm env a b, initial base g s⟩ = .ok (finalState base a b g s) :=
-  (Legacy.exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b g s gas room⟩
 
 theorem final_stack (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) :
     (finalState base a b g s).stack = (Bytes.toU256 [b] + Bytes.toU256 [a]) :: s := rfl
@@ -173,52 +101,35 @@ theorem final_world (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) :
 theorem final_meta (base : Devm) (a b : UInt8) (g : Nat) (s : List U256) :
     (finalState base a b g s).meta = base.meta := rfl
 
-/-- The premises are satisfiable: exactly nine gas and an empty stack. -/
-theorem concrete (env : Sevm) (base : Devm) (a b : UInt8) :
-    Legacy.exec ⟨0, sevm env a b, initial base 9 []⟩ = .ok (finalState base a b 9 []) ∧
-      (finalState base a b 9 []).gasLeft = 0 :=
-  ⟨interpreter env base a b 9 [] (by decide) (by decide), final_gas base a b 9 []⟩
-
 /-! ### Negative checks
 
 Each block below must fail to elaborate. `#guard_msgs` turns the expected
 error into a pass and any other outcome, including success, into a build error. -/
 
--- Eight gas is one short of the three static charges: the gas premise is rejected.
-/--
-error: Tactic `decide` proved that the proposition
-  9 ≤ 8
-is false
--/
-#guard_msgs in
-example (env : Sevm) (base : Devm) (a b : UInt8) :
-    Legacy.exec ⟨0, sevm env a b, initial base 8 []⟩ = .ok (finalState base a b 8 []) :=
-  interpreter env base a b 8 [] (by decide) (by decide)
-
 -- `DIV` is not a member of the arithmetic family, so the `ADD` rule cannot
 -- describe its step.
 /--
 error: Type mismatch
-  SymbolicArith.step_success evm SymbolicArith.Op.add x y rest stack gas room
+  SymbolicArith.nextOp_step_success evm SymbolicArith.Op.add x y rest stack gas room
 has type
-  Legacy.NextOp.step evm (NextOp.plain SymbolicArith.Op.add.rinst) =
-    Legacy.Step.cont (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
+  NextOp.step evm (NextOp.plain SymbolicArith.Op.add.rinst) =
+    Step.next (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
 but is expected to have type
-  Legacy.NextOp.step evm (NextOp.plain PlainOp.div) =
-    Legacy.Step.cont (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
+  NextOp.step evm (NextOp.plain PlainOp.div) =
+    Step.next (evm.pc + 1) (SymbolicArith.post SymbolicArith.Op.add x y rest evm.dyna)
 -/
 #guard_msgs in
 example (evm : Evm) (x y : U256) (rest : List U256)
     (stack : evm.dyna.stack = x :: y :: rest)
     (gas : SymbolicArith.Op.cost .add ≤ evm.dyna.gasLeft) (room : rest.length < 1024) :
-    Legacy.NextOp.step evm (.plain .div) =
-      .cont (evm.pc + 1) (SymbolicArith.post .add x y rest evm.dyna) :=
-  SymbolicArith.step_success evm .add x y rest stack gas room
+    NextOp.step evm (.plain .div) =
+      .next (evm.pc + 1) (SymbolicArith.post .add x y rest evm.dyna) :=
+  SymbolicArith.nextOp_step_success evm .add x y rest stack gas room
 
-/-! ## On the four-part message call
+/-! ## The derivation
 
-The same three steps, derivation, inversion and adequacy, over `Evm.step`, `Exec` and `exec` of
-the four-part chain. -/
+The three steps, the derivation, its inversion and its adequacy, over `Evm.step`, `Exec` and
+`exec`. -/
 
 section StepsExec
 
@@ -299,8 +210,7 @@ theorem concreteExec (env : Sevm) (base : Devm) (a b : UInt8) :
       (finalState base a b 9 []).gasLeft = 0 :=
   ⟨interpreterExec env base a b 9 [] (by decide) (by decide), final_gas base a b 9 []⟩
 
--- Eight gas is one short of the three static charges: the gas premise is rejected on the
--- four-part chain too.
+-- Eight gas is one short of the three static charges: the gas premise is rejected.
 /--
 error: Tactic `decide` proved that the proposition
   9 ≤ 8

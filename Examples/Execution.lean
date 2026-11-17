@@ -37,21 +37,6 @@ def initial (base : Devm) : Devm :=
 def finalState (base : Devm) (a b : UInt8) : Devm :=
   SymbolicPush.post [b] (SymbolicPush.post [a] (initial base))
 
-/-- A data-valued derivation, built from the same constructors used by adequacy. -/
-def execution (env : Sevm) (base : Devm) (a b : UInt8) :
-    Jaune.Legacy.Exec 0 { env with code := code a b } (initial base)
-      (.ok (finalState base a b)) := by
-  apply SymbolicPush.prepend [a] (by simp) (first a b)
-  · simp [SymbolicPush.cost, initial, Devm.gasLeft, Devm.setMach, Gas.veryLow]
-  · simp [initial, Devm.stack, Devm.setMach]
-  · exact Or.inl (by simp)
-  apply SymbolicPush.prepend [b] (by simp) (second a b)
-  · simp [SymbolicPush.cost, SymbolicPush.post, initial, Devm.gasLeft,
-      Devm.setMach, Gas.veryLow]
-  · simp [SymbolicPush.post, initial, Devm.stack, Devm.setMach]
-  · exact Or.inl (by simp)
-  exact .halt (Jaune.Legacy.Evm.step_last (devm := finalState base a b) (l := .stop) (last a b))
-
 theorem final_stack (base : Devm) (a b : UInt8) :
     (finalState base a b).stack = [Bytes.toU256 [b], Bytes.toU256 [a]] := rfl
 
@@ -64,15 +49,9 @@ theorem final_world (base : Devm) (a b : UInt8) :
 theorem final_meta (base : Devm) (a b : UInt8) :
     (finalState base a b).meta = base.meta := rfl
 
-/-- Adequacy connects the constructed derivation to the total interpreter. -/
-theorem interpreter (env : Sevm) (base : Devm) (a b : UInt8) :
-    Legacy.exec ⟨0, { env with code := code a b }, initial base⟩ =
-      .ok (finalState base a b) :=
-  (Jaune.Legacy.exec_iff_exec_eq _ _ _ _).mp ⟨execution env base a b⟩
+/-! ## The derivation and its adequacy
 
-/-! ## On the four-part message call
-
-The same derivation and its adequacy, over `Exec` and `exec` of the four-part chain. -/
+The derivation over `Exec` and `exec` of the four-part message call. -/
 
 /-- A data-valued derivation on the four-part chain, from `SymbolicPush.prependExec`. -/
 def executionExec (env : Sevm) (base : Devm) (a b : UInt8) :

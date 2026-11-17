@@ -26,11 +26,8 @@ import Jaune.Check.MessageCall
 -- Standalone proof facts, outside the production umbrella.
 import Jaune.StaticcallEffects
 -- Standalone tracer modules, outside the production umbrella.
-import Jaune.Trace
-import Jaune.TraceJson
 import Jaune.TraceTransaction
 -- The staged tracer and its bridge (goal jaune-shape-and-names-v1, W1 unit K1).
-import Jaune.Bridge.Trace
 
 /-!
 # Whole-library axiom union for `Jaune`

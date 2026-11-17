@@ -6,6 +6,7 @@
 -- `jaune-shape-and-names-v1`, unit W0). The default build compiles this module
 -- through `JauneChecks.lean`.
 import Jaune.Execution
+import Jaune.MessageCall.Top
 
 namespace Jaune
 
@@ -93,64 +94,8 @@ private def isLeadingZeros : DecodeError → Bool
 #guard (DecodeError.structure "block" "expected a 4-item list").render
   = "RlpStructureError : block : expected a 4-item list"
 
-private def resumeGuardCommittedChild : Devm :=
-  (default : Devm).setMach
-    { (default : Devm).mach with
-      stateGas := {StateGasMeter.zero with committedSpill := 1} }
-
-private def resumeGuardUnsettledFailure : Devm :=
-  ((default : Devm).setMach
-    { (default : Devm).mach with
-      stateGas := {StateGasMeter.zero with spilled := 1} }).withError (some .revert)
-
-private def resumeGuardFailedCommittedSpill : Devm :=
-  ((default : Devm).setMach
-    { (default : Devm).mach with
-      stateGas := {StateGasMeter.zero with committedSpill := 1} }).withError (some .revert)
-
-private def resumeGuardFailedRefund : Devm :=
-  ((default : Devm).withRefundCounter 1).withError (some .revert)
-
-private def resumeGuardFailedReservoir : Devm :=
-  ((default : Devm).setMach
-    { (default : Devm).mach with
-      stateGas := {StateGasMeter.zero with baseline := 1} }).withError (some .revert)
-
-private def resumeGuardSettledFailure : Devm :=
-  (default : Devm).withError (some .revert)
-
-private def resumeGuardIsInvariantError : Execution → Bool
-  | .error ⟨.internal (.invariant _), _⟩ => true
-  | _ => false
-
-private def resumeGuardStack : Execution → Option (List U256)
-  | .ok devm => some devm.stack
-  | .error _ => none
-
--- Both actual Amsterdam resume constructors reject a child whose committed
--- spill would otherwise disappear, and a failed child whose rollback facts do
--- not hold. Clean success and settled failure still reach incorporation.
-#guard resumeGuardIsInvariantError <|
-  Resume.run (.createAmsterdam amsterdamStateGasRules default 0 false)
-    (.ok resumeGuardCommittedChild)
-#guard resumeGuardIsInvariantError <|
-  Resume.run (.callAmsterdam amsterdamStateGasRules default 0 0 false)
-    (.ok resumeGuardUnsettledFailure)
-#guard resumeGuardIsInvariantError <|
-  Resume.run (.createAmsterdam amsterdamStateGasRules default 0 false)
-    (.ok resumeGuardFailedCommittedSpill)
-#guard resumeGuardIsInvariantError <|
-  Resume.run (.callAmsterdam amsterdamStateGasRules default 0 0 false)
-    (.ok resumeGuardFailedRefund)
-#guard resumeGuardIsInvariantError <|
-  Resume.run (.createAmsterdam amsterdamStateGasRules default 0 false)
-    (.ok resumeGuardFailedReservoir)
-#guard resumeGuardStack
-    (Resume.run (.createAmsterdam amsterdamStateGasRules default 0 false) (.ok default))
-      = some [0]
-#guard resumeGuardStack
-    (Resume.run (.callAmsterdam amsterdamStateGasRules default 0 0 false)
-      (.ok resumeGuardSettledFailure)) = some [0]
+-- The `Resume.run` guards that stood here are restated over `resume` and `Frame.Result` in
+-- `Jaune/Check/MessageCall.lean` (goal `jaune-shape-and-names-v1`, W1).
 
 -- EIP-8024 `DUPN`/`SWAPN`/`EXCHANGE` (goal C, G4), stepped from real code
 -- through `getInst`, so that the immediate's sizing, the zero fill past the
@@ -167,9 +112,9 @@ private def stackAccessGuardEvm (fork : Fork) (code : ByteArray)
 
 private def stackAccessGuard (fork : Fork) (code : List UInt8)
     (gasLeft : Nat) (stack : List Nat) : String × Nat × List Nat × Nat :=
-  match Legacy.Evm.step (stackAccessGuardEvm fork ⟨code.toArray⟩ gasLeft
+  match Evm.step (stackAccessGuardEvm fork ⟨code.toArray⟩ gasLeft
       (stack.map Nat.toU256)) with
-  | .cont pc d => ("ok", d.gasLeft, d.stack.map U256.toNat, pc)
+  | .next pc d => ("ok", d.gasLeft, d.stack.map U256.toNat, pc)
   | .halt (.error ⟨e, d⟩) => (e.render, d.gasLeft, d.stack.map U256.toNat, 0)
   | .halt (.ok d) => ("halt-ok", d.gasLeft, d.stack.map U256.toNat, 0)
   | .spawn _ _ _ => ("spawn", 0, [], 0)
@@ -235,8 +180,8 @@ private def guardStackOf (n : Nat) : List Nat := List.range n
 -- S8 (EIP-1014) `CREATE2` availability (unit U5): without the fork the byte is
 -- an undefined instruction whatever the stack holds; with it an empty stack
 -- reaches the first pop instead (the gate passed, the stack failed).
-private def guardCreate2 (fork : Fork) : XStep :=
-  Legacy.MessageOp.step
+private def guardCreate2 (fork : Fork) : MessageOp.Outcome :=
+  MessageOp.step
     { (default : Sevm) with
       benvStat := { (default : BenvStat) with fork := fork } }
     default .create2
@@ -256,9 +201,8 @@ private def guardCreate2 (fork : Fork) : XStep :=
 
 /-! Focused executable checks for the flattened core.
 
-The frame wrappers these once also covered (`runFrame`, `executeCode`,
-`processMessage`, `processCreateMessage`) are total and therefore live in
-`Jaune.Sufficiency`; their checks moved with them. -/
+The frame-level checks (entry, run, settlement) are in `Jaune.Check.Sufficiency`, over the
+four-part message call. -/
 
 private def flattenGuardCode (bytes : Bytes) : ByteArray := .mk <| .mk bytes
 
@@ -273,7 +217,7 @@ private def flattenGuardMsg (bytes : Bytes) (gas depth : Nat) : Msg :=
 -- Arithmetic loop: the driver spends one unit per instruction and exhausts.
 private def flattenGuardArithmeticLoop : Bool :=
   let msg := flattenGuardMsg [0x5B, 0x60, 0x00, 0x56] 1000 8
-  (Legacy.execFueled (initEvm msg) 20).run.isNone
+  (execFueled (initEvm msg) 20).run.isNone
 
 #guard flattenGuardArithmeticLoop
 
@@ -289,7 +233,7 @@ private def flattenGuardCreateCollision (code : Bool) : Bool :=
       benv := {(default : Benv) with state := state}
     }
   match
-      Legacy.genericCreate.step (initSevm msg) (initDevm msg)
+      genericCreate.step (initSevm msg) (initDevm msg)
         0 target 0 0 with
   | .done (.ok devm) => devm.stack.head? == some 0
   | _ => false
@@ -307,7 +251,7 @@ private def flattenGuardCreateAmsterdamCollision (code : Bool) : Bool :=
     {(flattenGuardMsg [] 100000 8) with
       benv := {base with state := state, stat := {base.stat with fork := .amsterdam}}
       stateGasGrant := 200000}
-  match Legacy.genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
+  match genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
       0 target 0 0 with
   | .done (.ok devm) => devm.stack.head? == some 0
   | _ => false
@@ -316,13 +260,13 @@ private def flattenGuardCreateAmsterdamCollision (code : Bool) : Bool :=
 #guard flattenGuardCreateAmsterdamCollision false
 
 -- Storage alone admits a child in both shared CREATE helpers. CREATE2
--- reaches these same helpers through `Xinst.step`; child entry wipes storage.
+-- reaches these same helpers through `MessageOp.step`; child entry wipes storage.
 private def flattenGuardCreateStorageOnly : Bool :=
   let target : Address := 0x41
   let state := State.setStorVal .empty target 1 1
   let msg : Msg :=
     {(flattenGuardMsg [] 100000 8) with benv := {(default : Benv) with state := state}}
-  match Legacy.genericCreate.step (initSevm msg) (initDevm msg) 0 target 0 0 with
+  match genericCreate.step (initSevm msg) (initDevm msg) 0 target 0 0 with
   | .spawn _ _ => true
   | _ => false
 
@@ -334,7 +278,7 @@ private def flattenGuardCreateAmsterdamStorageOnly : Bool :=
     {(flattenGuardMsg [] 100000 8) with
       benv := {base with state := state, stat := {base.stat with fork := .amsterdam}}
       stateGasGrant := 200000}
-  match Legacy.genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
+  match genericCreateAmsterdam.step (initSevm msg) amsterdamStateGasRules (initDevm msg)
       0 target 0 0 with
   | .spawn _ _ => true
   | _ => false
@@ -352,7 +296,7 @@ private def flattenGuardPrecompileDispatch : Bool :=
       codeAddress := some 1
     }
   let disabled := {msg with disablePrecompiles := true}
-  match (Legacy.Frame.ofCall msg).enter, (Legacy.Frame.ofCall disabled).enter with
+  match enter (Frame.ofTop msg false), enter (Frame.ofTop disabled false) with
   | .done _, .run _ => true
   | _, _ => false
 
@@ -362,7 +306,7 @@ private def flattenGuardPrecompileDispatch : Bool :=
 private def flattenGuardDepthZero : Bool :=
   let msg := flattenGuardMsg [] 100 0
   match
-      Legacy.genericCall.step (initSevm msg) (initDevm msg) 17 0
+      genericCall.step (initSevm msg) (initDevm msg) 17 0
         0 0 0 false false 0 0 0 0 .empty false with
   | .done (.ok devm) =>
     devm.stack.head? == some 0 && devm.gasLeft == 117
@@ -375,10 +319,10 @@ private def flattenGuardCallData
   let msg := flattenGuardMsg [] 100 8
   let devm := (initDevm msg).withMemory ⟨#[0xAA], 1⟩
   match
-      Legacy.genericCall.step (initSevm msg) devm 17 0
+      genericCall.step (initSevm msg) devm 17 0
         0 codeAddress codeAddress false false 0 1 0 0
         (flattenGuardCode codeBytes) disablePrecompiles with
-  | .spawn frame _ => some frame.inner.data
+  | .spawn child _ => some child.message.context.calldata
   | _ => none
 
 -- `genericCall.step` keeps its exact original spawned-message construction;
@@ -500,22 +444,16 @@ private def meteringGuardDelegatedDevm
     (fork : Fork) (stack : List U256) : Devm :=
   (initDevm (meteringGuardDelegatedMsg fork)).withStack stack
 
-private def meteringGuardResumeParent : Resume → Devm
-  | .create parent _ => parent
-  | .call parent _ _ => parent
-  | .createAmsterdam _ parent _ _ => parent
-  | .callAmsterdam _ parent _ _ _ => parent
-
 private def meteringGuardCreateCharges
     (fork : Fork) (stateGasGrant : Nat) (x : MessageOp)
     (stack : List U256) : Option (Nat × Nat) :=
   let msg := meteringGuardMsg fork stateGasGrant
-  match Legacy.MessageOp.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
-  | .spawn frame resume =>
-    let parent := meteringGuardResumeParent resume
+  match MessageOp.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
+  | .spawn child _ =>
+    let parent := child.checkpoint.toDevm
     some
-      (meteringGuardGas - (parent.gasLeft + frame.inner.gas),
-       stateGasGrant - (parent.stateGasLeft + frame.inner.stateGasGrant))
+      (meteringGuardGas - (parent.gasLeft + child.message.gas),
+       stateGasGrant - (parent.stateGasLeft + child.message.stateGasGrant))
   | _ => none
 
 -- EIP-7954 (goal C, G5): the deposited-code check and both `CREATE`-family
@@ -524,11 +462,10 @@ private def meteringGuardCreateCharges
 -- one byte above; under BPO2 the same boundary sits at 0x6000.
 private def codeLimitGuardDeposit (fork : Fork) (stateGasGrant : Nat)
     (size : Nat) : Option Bool :=
-  match processCreateMessage.chargeCodeGas (Fork.ruleSet fork)
-      (((meteringGuardDevm fork stateGasGrant []).withGasLeft 20_000_000).withOutput
-        (List.replicate size (0x00 : UInt8))) with
+  match chargeDeposit (Fork.ruleSet fork) (List.replicate size (0x00 : UInt8))
+      ((meteringGuardDevm fork stateGasGrant []).withGasLeft 20_000_000) with
   | .ok _ => some true
-  | .error ⟨.halt (.outOfGas _), _⟩ => some false
+  | .error ⟨.outOfGas _, _⟩ => some false
   | .error _ => none
 
 #guard codeLimitGuardDeposit .amsterdam 200_000_000 0x10000 = some true
@@ -556,12 +493,12 @@ private def meteringGuardCallCharges
     (fork : Fork) (stateGasGrant : Nat) (x : MessageOp)
     (stack : List U256) : Option (Nat × Nat) :=
   let msg := meteringGuardMsg fork stateGasGrant
-  match Legacy.MessageOp.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
-  | .spawn frame resume =>
-    let parent := meteringGuardResumeParent resume
+  match MessageOp.step (initSevm msg) (meteringGuardDevm fork stateGasGrant stack) x with
+  | .spawn child _ =>
+    let parent := child.checkpoint.toDevm
     some
       (meteringGuardGas - parent.gasLeft,
-       stateGasGrant - (parent.stateGasLeft + frame.inner.stateGasGrant))
+       stateGasGrant - (parent.stateGasLeft + child.message.stateGasGrant))
   | _ => none
 
 private def meteringGuardSelfdestructCharges
@@ -689,7 +626,7 @@ private def meteringGuardDelegatedCharge (gas : GasSchedule) (value : U256) : Na
 -- A PUSH with zero gas halts through the frozen OutOfGasError channel.
 private def flattenGuardOog : Bool :=
   let msg := flattenGuardMsg [0x60, 0x01, 0x00] 0 8
-  match (Legacy.execFueled (initEvm msg) 10).run with
+  match (execFueled (initEvm msg) 10).run with
   | .some (.error ⟨err, _⟩) => err == .halt (.outOfGas .none)
   | _ => false
 
@@ -703,7 +640,7 @@ private def flattenGuardOog : Bool :=
 private def flattenGuardJumpOob : Bool :=
   -- PUSH1 0xFF; JUMP — destination 255 is out of range for 3 bytes of code.
   let msg := flattenGuardMsg [0x60, 0xFF, 0x56] 100 8
-  match (Legacy.execFueled (initEvm msg) 10).run with
+  match (execFueled (initEvm msg) 10).run with
   | .some (.error ⟨err, _⟩) => err == .halt (.invalidJumpDest .none)
   | _ => false
 
@@ -713,7 +650,7 @@ private def flattenGuardJumpiOob : Bool :=
   -- PUSH1 0x01 (condition); PUSH1 0xFF (destination); JUMPI — taken branch,
   -- destination 255 is out of range for 5 bytes of code.
   let msg := flattenGuardMsg [0x60, 0x01, 0x60, 0xFF, 0x57] 100 8
-  match (Legacy.execFueled (initEvm msg) 10).run with
+  match (execFueled (initEvm msg) 10).run with
   | .some (.error ⟨err, _⟩) => err == .halt (.invalidJumpDest .none)
   | _ => false
 

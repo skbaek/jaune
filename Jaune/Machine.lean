@@ -5673,213 +5673,6 @@ def calculateMsgCallGas
     let gas' := min gas (except64th (gas_left - memory_cost - extra_gas))
     ⟨gas' + extra_gas, gas' + call_stipend⟩
 
-def incorporateChildOnError (parent child : Devm) (returnData : Bytes) : Devm :=
-  let parent := parent.setMach
-    {parent.mach with gasLeft := parent.gasLeft + child.gasLeft}
-  let parent := parent.setMeta
-    {parent.meta with
-      createdAccounts := child.createdAccounts
-      returnData := returnData
-      -- EIP-7928: a failed child's reads survive (the pinned snapshot shares
-      -- the read sets by reference and rolls back only the writes).
-      accountReads := parent.meta.accountReads.union child.meta.accountReads
-      storageReads := parent.meta.storageReads.union child.meta.storageReads
-      -- EIP-161's RIPEMD-160 quirk: a touch of 0x03 survives the failure. The
-      -- child's own frame settlement has already recorded 0x03 when it was
-      -- the child's target (`processMessage.settle`); the set is empty unless the
-      -- rules sweep.
-      touchedAccounts :=
-        if child.meta.touchedAccounts.contains ripemd160Address
-        then parent.meta.touchedAccounts.insert ripemd160Address
-        else parent.meta.touchedAccounts}
-  parent.setWorld
-    {parent.world with
-      state := child.state
-      transientStorage := child.transientStorage
-      storageWrites := child.world.storageWrites}
-
-def incorporateChildOnSuccess (parent child : Devm) (returnData : Bytes) : Devm :=
-  let parent := parent.setMach
-    {parent.mach with gasLeft := parent.gasLeft + child.gasLeft}
-  let parent := parent.setMeta
-    {parent.meta with
-      createdAccounts := child.createdAccounts
-      logs := parent.logs ++ child.logs
-      refundCounter := parent.refundCounter + child.refundCounter
-      accountsToDelete := parent.accountsToDelete.union child.accountsToDelete
-      returnData := returnData
-      accessedAddresses := parent.accessedAddresses.union child.accessedAddresses
-      accessedStorageKeys := parent.accessedStorageKeys.union child.accessedStorageKeys
-      accountReads := parent.meta.accountReads.union child.meta.accountReads
-      storageReads := parent.meta.storageReads.union child.meta.storageReads
-      -- EIP-161: the child's touches, including its own target, which its
-      -- frame settlement recorded (`processMessage.settle`).
-      touchedAccounts := parent.meta.touchedAccounts.union child.meta.touchedAccounts}
-  parent.setWorld
-    {parent.world with
-      state := child.state
-      transientStorage := child.transientStorage
-      storageWrites := child.world.storageWrites}
-
-/-! ### Child incorporation under the two-dimensional meter
-
-Upstream's `incorporate_child` is one function with an `if` inside; Jaune's is
-two functions chosen by the caller, and the Amsterdam siblings keep that shape
-so that `Resume.run`'s two branches stay the two branches they are.
-
-The rule the pin states, and what these transcribe: **gas returns to the parent
-regardless of the child's fate**, because a failed child arrives already
-settled -- rolled back to its baseline, its spill refilled, its refunds
-discarded -- so absorbing its meter unconditionally reclaims exactly what it
-gives back. Everything else -- logs, scheduled self-destructs, warmed access
-sets -- survives only on success, dying with the reverted state. A successful
-merge then ends with `repayStateGasSpill`, introduced during devnet-8 (#3478).
-
-Committed spill is not absorbed, because a child never has any: only the top
-frame commits, and it commits after `set_delegation`, which no child runs.
-Upstream states that as an `assert`; `Resume.run` enforces the same invariant at
-both actual Amsterdam incorporation sites, so a malformed child becomes a
-typed internal invariant error instead of silently losing gas. -/
-
-/-- The invariant every successfully settled Amsterdam child must satisfy
-before its meter can be incorporated into its parent. -/
-def Devm.AmsterdamChildUncommitted (child : Devm) : Prop :=
-  child.mach.stateGas.committedSpill = 0
-
-instance {child : Devm} : Decidable child.AmsterdamChildUncommitted := by
-  unfold Devm.AmsterdamChildUncommitted
-  infer_instance
-
-/-- The additional settlement facts required before incorporating a failed
-Amsterdam child: rollback has restored the reservoir baseline, cleared the
-outstanding spill, and discarded the child's refund counter. -/
-def Devm.AmsterdamFailedChildSettled (child : Devm) : Prop :=
-  child.AmsterdamChildUncommitted ∧
-    child.mach.stateGas.spilled = 0 ∧
-    child.refundCounter = 0 ∧
-    child.stateGasLeft = child.mach.stateGas.baseline
-
-instance {child : Devm} : Decidable child.AmsterdamFailedChildSettled := by
-  unfold Devm.AmsterdamFailedChildSettled
-  infer_instance
-
-/-- `incorporate_child` on a failed child, under `stateGas = some _`.
-
-The child's execution gas, reservoir and outstanding spill all come back; so do
-its refunds, which the child's own frame settlement has already zeroed. Nothing
-it accumulated survives. -/
-def incorporateChildAmsterdamOnError (parent child : Devm) (returnData : Bytes) :
-    Devm :=
-  let parent := parent.setMach
-    {parent.mach with
-      gasLeft := parent.gasLeft + child.gasLeft
-      stateGas := {parent.mach.stateGas with
-        left := parent.mach.stateGas.left + child.mach.stateGas.left
-        spilled := parent.mach.stateGas.spilled + child.mach.stateGas.spilled}}
-  let parent := parent.setMeta
-    {parent.meta with
-      createdAccounts := child.createdAccounts
-      refundCounter := parent.refundCounter + child.refundCounter
-      returnData := returnData
-      -- EIP-7928: a failed child's reads survive (the pinned snapshot shares
-      -- the read sets by reference and rolls back only the writes).
-      accountReads := parent.meta.accountReads.union child.meta.accountReads
-      storageReads := parent.meta.storageReads.union child.meta.storageReads}
-  parent.setWorld
-    {parent.world with
-      state := child.state
-      transientStorage := child.transientStorage
-      storageWrites := child.world.storageWrites}
-
-/-- `incorporate_child` on a successful child, under `stateGas = some _`.
-
-The same unconditional absorption, then the merged meter repays `gasLeft` from
-the reservoir up to the spill still outstanding: a refund can land in a
-different frame than the charge it undoes, and this merge is where the claim
-and the credit first share one meter. -/
-def incorporateChildAmsterdamOnSuccess (parent child : Devm) (returnData : Bytes) :
-    Devm :=
-  let parent := parent.setMach
-    ((({parent.mach with
-        gasLeft := parent.gasLeft + child.gasLeft
-        stateGas := {parent.mach.stateGas with
-          left := parent.mach.stateGas.left + child.mach.stateGas.left
-          spilled :=
-            parent.mach.stateGas.spilled + child.mach.stateGas.spilled}}
-      : Mach)).repayStateGasSpill)
-  let parent := parent.setMeta
-    {parent.meta with
-      createdAccounts := child.createdAccounts
-      logs := parent.logs ++ child.logs
-      refundCounter := parent.refundCounter + child.refundCounter
-      accountsToDelete := parent.accountsToDelete.union child.accountsToDelete
-      returnData := returnData
-      accessedAddresses := parent.accessedAddresses.union child.accessedAddresses
-      accessedStorageKeys := parent.accessedStorageKeys.union child.accessedStorageKeys
-      accountReads := parent.meta.accountReads.union child.meta.accountReads
-      storageReads := parent.meta.storageReads.union child.meta.storageReads}
-  parent.setWorld
-    {parent.world with
-      state := child.state
-      transientStorage := child.transientStorage
-      storageWrites := child.world.storageWrites}
-
-/-- Absorbing a failed child conserves the measure, up to the committed spill a
-child cannot have. -/
-theorem incorporateChildAmsterdamOnError_gasMeasure
-    (parent child : Devm) (rd : Bytes) :
-    (incorporateChildAmsterdamOnError parent child rd).gasMeasure
-        + child.mach.stateGas.committedSpill
-      = parent.gasMeasure + child.gasMeasure := by
-  simp only [incorporateChildAmsterdamOnError, Devm.gasMeasure, Mach.gasMeasure,
-    Devm.setMach, Devm.setMeta, Devm.setWorld, Devm.gasLeft]
-  omega
-
-/-- The same for a successful child. The repayment moves gas between two pools
-the measure adds together, so it cancels. -/
-theorem incorporateChildAmsterdamOnSuccess_gasMeasure
-    (parent child : Devm) (rd : Bytes) :
-    (incorporateChildAmsterdamOnSuccess parent child rd).gasMeasure
-        + child.mach.stateGas.committedSpill
-      = parent.gasMeasure + child.gasMeasure := by
-  simp only [incorporateChildAmsterdamOnSuccess, Mach.repayStateGasSpill,
-    Devm.gasMeasure, Mach.gasMeasure, Devm.setMach, Devm.setMeta, Devm.setWorld,
-    Devm.gasLeft]
-  have h :
-      min (parent.mach.stateGas.left + child.mach.stateGas.left)
-          (parent.mach.stateGas.spilled + child.mach.stateGas.spilled)
-        ≤ parent.mach.stateGas.spilled + child.mach.stateGas.spilled :=
-    Nat.min_le_right _ _
-  omega
-
-/-- A child that carries no committed spill hands its whole measure back. -/
-theorem incorporateChildAmsterdamOnSuccess_gasMeasure_of_child_uncommitted
-    {parent child : Devm} {rd : Bytes}
-    (h : child.AmsterdamChildUncommitted) :
-    (incorporateChildAmsterdamOnSuccess parent child rd).gasMeasure
-      = parent.gasMeasure + child.gasMeasure := by
-  have e := incorporateChildAmsterdamOnSuccess_gasMeasure parent child rd
-  unfold Devm.AmsterdamChildUncommitted at h
-  omega
-
-theorem incorporateChildAmsterdamOnError_gasMeasure_of_child_uncommitted
-    {parent child : Devm} {rd : Bytes}
-    (h : child.AmsterdamChildUncommitted) :
-    (incorporateChildAmsterdamOnError parent child rd).gasMeasure
-      = parent.gasMeasure + child.gasMeasure := by
-  have e := incorporateChildAmsterdamOnError_gasMeasure parent child rd
-  unfold Devm.AmsterdamChildUncommitted at h
-  omega
-
-/-- The exact conservation equation available at the failed-child
-incorporation site after its executable settlement check succeeds. -/
-theorem incorporateChildAmsterdamOnError_gasMeasure_of_child_settled
-    {parent child : Devm} {rd : Bytes}
-    (h : child.AmsterdamFailedChildSettled) :
-    (incorporateChildAmsterdamOnError parent child rd).gasMeasure
-      = parent.gasMeasure + child.gasMeasure :=
-  incorporateChildAmsterdamOnError_gasMeasure_of_child_uncommitted h.1
-
 /-! ### The zero-meter invariant
 
 Under `rules.stateGas = none` no meter operation above is ever reached, so a
@@ -6614,16 +6407,6 @@ interpreter actually uses. -/
 theorem Devm.stateGasZero_withGasLeft {devm : Devm} {n : Nat}
     (h : devm.StateGasZero) : (devm.withGasLeft n).StateGasZero := h
 
-/-- Prague's child incorporation cannot break it either: both siblings rebuild
-`Mach` from the parent's, leaving `stateGas` alone. -/
-theorem incorporateChildOnError_stateGasZero {parent child : Devm} {rd : Bytes}
-    (h : parent.StateGasZero) :
-    (incorporateChildOnError parent child rd).StateGasZero := h
-
-theorem incorporateChildOnSuccess_stateGasZero {parent child : Devm} {rd : Bytes}
-    (h : parent.StateGasZero) :
-    (incorporateChildOnSuccess parent child rd).StateGasZero := h
-
 def computeContractAddress (sender : Address) (nonce : UInt64) : Address :=
   let LA : Bytes :=
     Rlp.Item.toBytes <| .list [.bytes sender.toBytes, .bytes nonce.toBytes.sig]
@@ -6672,15 +6455,6 @@ def Devm.setCode (devm : Devm) (adr : Address) (code : ByteArray) : Devm :=
 
 def Devm.rollback (devm : Devm) (wor : State) (tra : TransientStorage) : Devm :=
   devm.setWorld {devm.world with state := wor, transientStorage := tra}
-
-def liftToExecution (devm : Devm)
-  (f : Except (EvmError × State × AdrSet × TransientStorage) Devm) : Execution := do
-  match f with
-  | .error ⟨err, state, createdAccounts, tra⟩ =>
-    let devm' := (devm.withCreatedAccounts createdAccounts).setWorld
-      {devm.world with state := state, transientStorage := tra}
-    .error ⟨err, devm'⟩
-  | .ok devm' => .ok devm'
 
 --------------- CANONICAL STATE AND STORAGE (P0.4) ---------------
 
@@ -7362,17 +7136,6 @@ def Except.CanonicalOn {ρ α : Type} (P : α → Prop) :
 abbrev Execution.Canonical (x : Execution) : Prop :=
   x.CanonicalOn Devm.Canonical
 
-/-- Canonicality of a frame-settlement result.
-
-The settlement carrier's error channel holds the saved state and transient
-storage the parent will be rolled back to or rebuilt from
-(`liftToExecution`), so both components must be canonical; a settled machine
-is obliged outright. -/
-def Except.CanonicalSettle {ρ : Type} :
-    Except (ρ × State × AdrSet × TransientStorage) Devm → Prop
-  | .ok devm => devm.Canonical
-  | .error e => State.Canonical e.2.1 ∧ TransientStorage.Canonical e.2.2.2
-
 /-- Sequencing preserves canonicality: the compositional lemma the whole
 interpreter corpus threads through. Nothing about a particular operation is
 here -- only that `Except.bind` takes the error channel through unchanged and
@@ -7674,33 +7437,6 @@ theorem Msg.Canonical.setCode {msg : Msg} (h : msg.Canonical)
 -- matters. These are the exact joints through which a frame's result
 -- re-enters its parent.
 
-theorem incorporateChildOnError_canonical {parent child : Devm}
-    (hc : child.Canonical) (rd : Bytes) :
-    (incorporateChildOnError parent child rd).Canonical :=
-  ⟨hc.1, hc.2⟩
-
-theorem incorporateChildOnSuccess_canonical {parent child : Devm}
-    (hc : child.Canonical) (rd : Bytes) :
-    (incorporateChildOnSuccess parent child rd).Canonical :=
-  ⟨hc.1, hc.2⟩
-
-/-- The Amsterdam siblings take the child's world wholesale too. -/
-theorem incorporateChildAmsterdamOnError_canonical {parent child : Devm}
-    (hc : child.Canonical) (rd : Bytes) :
-    (incorporateChildAmsterdamOnError parent child rd).Canonical :=
-  ⟨hc.1, hc.2⟩
-
-theorem incorporateChildAmsterdamOnSuccess_canonical {parent child : Devm}
-    (hc : child.Canonical) (rd : Bytes) :
-    (incorporateChildAmsterdamOnSuccess parent child rd).Canonical :=
-  ⟨hc.1, hc.2⟩
-
-theorem liftToExecution_canonical {devm : Devm} {r}
-    (hr : Except.CanonicalSettle r) : (liftToExecution devm r).Canonical := by
-  cases r with
-  | error e => exact ⟨hr.1, hr.2⟩
-  | ok devm' => exact hr
-
 -- Checkpoint 2 of the corpus: through the instruction arms. First the intro
 -- forms and the settle-carrier sequencing lemma, then a descent tactic for
 -- the homogeneous machine-level `do`-chains.
@@ -7713,17 +7449,6 @@ no case split. Stated so the descent tactic can skip the abstraction. -/
 theorem Except.canonicalOn_bind_ok {ρ α β : Type} {P : β → Prop} {a : α}
     {f : α → Except (ρ × Devm) β} (h : (f a).CanonicalOn P) :
     ((Except.ok a : Except (ρ × Devm) α) >>= f).CanonicalOn P := h
-
-/-- Sequencing on the settlement carrier: the error channel passes through
-unchanged, an ok machine feeds the continuation. -/
-theorem Except.CanonicalSettle.bind {ρ : Type}
-    {x : Except (ρ × State × AdrSet × TransientStorage) Devm}
-    {f : Devm → Except (ρ × State × AdrSet × TransientStorage) Devm}
-    (hx : x.CanonicalSettle) (hf : ∀ d, d.Canonical → (f d).CanonicalSettle) :
-    (x >>= f).CanonicalSettle := by
-  cases x with
-  | error e => exact hx
-  | ok d => exact hf d hx
 
 /-! ### The world frame
 

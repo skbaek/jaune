@@ -25,16 +25,6 @@
   "Jaune.BLSGuards": "check",
   "Jaune.Basic": "specification",
   "Jaune.Blake2Spec": "specification",
-  "Jaune.Bridge.CleanResult": "bridge",
-  "Jaune.Bridge.Driver": "bridge",
-  "Jaune.Bridge.Enter": "bridge",
-  "Jaune.Bridge.MessageCall": "bridge",
-  "Jaune.Bridge.Resume": "bridge",
-  "Jaune.Bridge.Settle": "bridge",
-  "Jaune.Bridge.Step": "bridge",
-  "Jaune.Bridge.Top": "bridge",
-  "Jaune.Bridge.Exec": "bridge",
-  "Jaune.Bridge.Trace": "adapter",
   "Jaune.ChainStore": "adapter",
   "Jaune.Check.BLS": "check",
   "Jaune.Check.Basic": "check",
@@ -67,7 +57,6 @@
   "Jaune.Fuel": "specification",
   "Jaune.Hash": "specification",
   "Jaune.Impl.CachedDriver": "implementation",
-  "Jaune.Impl.CachedExec": "implementation",
   "Jaune.KeccakSpec": "specification",
   "Jaune.Machine": "specification",
   "Jaune.MemoryAccounting": "proof",
@@ -103,8 +92,6 @@
   "Jaune.SymbolicArith": "proof",
   "Jaune.SymbolicPush": "proof",
   "Jaune.T8n": "adapter",
-  "Jaune.Trace": "adapter",
-  "Jaune.TraceJson": "adapter",
   "Jaune.TraceTransaction": "adapter",
   "Jaune.Transaction": "specification",
   "Jaune.Types": "specification",
@@ -113,13 +100,7 @@
   "MemoryProbe": "adapter",
   "TraceMain": "adapter"
  },
- "implementation_imports": [
-  {
-   "importer": "Jaune.Sufficiency",
-   "imported": "Jaune.Impl.CachedExec",
-   "reason": "The compiled-code substitution theorem execFueled_eq_cached rewrites only code compiled after it is in scope; Sufficiency defines exec, so it must import the cached driver (3.2). scripts/check-memory-probe.sh fails without it."
-  }
- ],
+ "implementation_imports": [],
  "fixture_vocabulary_residue": {
   "evm_halt_kinds": [
    "ExceptionalHalt.render",

@@ -120,13 +120,13 @@ theorem settle_gasLe {f : Frame} {raw : Execution} {n : Nat} {r : Frame.Result}
     subst h
     cases hs : f.message.context.block.rules.stateGas with
     | none =>
-      have := hraw none (d.withError (some .revert)) rfl
-      simp only [Devm.withError, Devm.gasMeasure, Mach.gasMeasure] at this
+      have : d.gasMeasure ≤ n := hraw.1
+      simp only [Devm.gasMeasure, Mach.gasMeasure] at this
       simp only [Frame.Result.gasMeasure, Frame.Result.gasLeft, Frame.Result.stateGas]
       exact this
     | some state =>
-      have := hraw (some state) (d.restoreStateGas.withError (some .revert)) rfl
-      simp only [Devm.withError, Devm.gasMeasure, Mach.gasMeasure] at this
+      have : d.restoreStateGas.gasMeasure ≤ n := hraw.2
+      simp only [Devm.gasMeasure, Mach.gasMeasure] at this
       simp only [Frame.Result.gasMeasure, Frame.Result.gasLeft, Frame.Result.stateGas]
       exact this
   · rename_i reason d
@@ -134,16 +134,15 @@ theorem settle_gasLe {f : Frame} {raw : Execution} {n : Nat} {r : Frame.Result}
     subst h
     cases hs : f.message.context.block.rules.stateGas with
     | none =>
-      have := hraw none _ rfl
+      have : (d.withGasLeft 0).gasMeasure ≤ n := hraw.1
       simp only [Frame.Result.gasMeasure, Frame.Result.gasLeft, Frame.Result.stateGas]
-      exact Nat.le_trans (stateGas_le _) (by simpa only [Devm.setMeta_gasMeasure] using this)
+      exact Nat.le_trans (stateGas_le _) this
     | some state =>
-      have := hraw (some state) _ rfl
+      have : d.restoreStateGas.forfeitRemainingGas.gasMeasure ≤ n := hraw.2
       simp only [Frame.Result.gasMeasure, Frame.Result.gasLeft, Frame.Result.stateGas]
-      exact Nat.le_trans (stateGas_le _) (by simpa only [Devm.setMeta_gasMeasure] using this)
+      exact Nat.le_trans (stateGas_le _) this
   · rename_i d
-    have hd : d.gasMeasure ≤ n :=
-      hraw none d (by simp [executeCode.handleErrorWith, executeCode.handleError])
+    have hd : d.gasMeasure ≤ n := hraw
     split at h
     · simp only [Except.ok.injEq] at h
       subst h

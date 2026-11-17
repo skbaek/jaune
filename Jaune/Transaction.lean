@@ -636,153 +636,6 @@ def prepareTopLevelAmsterdam (state : StateGasRules) (msg : Msg) :
     else setDelegationAmsterdam state msg devm
   finishTopLevelAmsterdam state msg devm
 
-/-- Enter the existing total interpreter with the machine prepared above.
-Only the ordinary `Frame.enter` initialization is replaced: transfer,
-precompile dispatch, execution, and frame settlement remain shared. -/
-private def Legacy.runPreparedTopFrame (frame : Legacy.Frame) (prepared : Devm) :
-    Except (EvmError × State × AdrSet × TransientStorage) Devm :=
-  match frame.inner.benvAfterTransfer with
-  | .error e => frame.settleMsg (.error e)
-  | .ok benv =>
-    let inner := frame.inner.withBenv benv
-    let dyna :=
-      ((prepared.withState benv.state).withStorageWrites benv.storageWrites).withCreatedAccounts
-        benv.createdAccounts
-    let evm : Evm := {pc := 0, sta := initSevm inner, dyna := dyna}
-    let raw :=
-      match inner.codeAddress with
-      | none => Legacy.exec evm
-      | some adr =>
-        if !inner.disablePrecompiles && inner.benv.stat.rules.isPrecompile adr then
-          executePrecompile evm adr
-        else Legacy.exec evm
-    frame.settle raw
-
-private def Legacy.msgCallOutputAmsterdam (msg : Msg) (evm : Devm) :
-    Except EvmError (State × MsgCallOutput) := do
-  let refundCounter ←
-    if evm.error.isNone then
-      (Int.toNat? evm.refundCounter).toExcept
-        (EvmError.internal (.invariant (.text "refund counter is negative")))
-    else .ok 0
-  let logs := if evm.error.isNone then evm.logs else []
-  let accountsToDelete :=
-    if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
-  let stateGasUsed :=
-    Int.ofNat msg.stateGasGrant - Int.ofNat evm.stateGasLeft +
-      Int.ofNat evm.mach.stateGas.spilled +
-      Int.ofNat evm.mach.stateGas.committedSpill
-  .ok ⟨evm.state, {
-    accountReads := evm.meta.accountReads
-    storageReads := evm.meta.storageReads
-    storageWrites := evm.world.storageWrites
-    gasLeft := evm.gasLeft
-    refundCounter := refundCounter
-    logs := logs
-    accountsToDelete := accountsToDelete
-    error := evm.error
-    returnData := evm.output
-    stateGasLeft := evm.stateGasLeft
-    stateGasUsed := stateGasUsed
-  }⟩
-
-/-- Settle a top-level Amsterdam message call whose preparation failed before
-the interpreter was entered: a halt rolls the state back, forfeits the remaining
-gas and reports the pre-call state with the reads preparation had already
-recorded, while every other error propagates unchanged. Amsterdam-only, and
-reached only from `processTopLevelAmsterdam`'s error branch. -/
-def Legacy.settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
-    (devm : Devm) : Except EvmError (State × MsgCallOutput) :=
-  match error with
-  | .halt reason =>
-    let devm :=
-      (devm.rollback msg.benv.state msg.tenv.transientStorage)
-        |>.restoreStateGasToEntry msg.stateGasGrant
-        |>.forfeitRemainingGas
-    -- The reads the preparation recorded before it halted -- the authorities
-    -- of every processed tuple, the recipient once dispatch loaded it -- stay
-    -- in the block-level access list: `incorporate_tx_into_block` runs for a
-    -- halted transaction too, and a read survives the rollback (EIP-7928).
-    .ok ⟨msg.benv.state, {
-      accountReads := devm.meta.accountReads
-      storageReads := devm.meta.storageReads
-      storageWrites := msg.benv.storageWrites
-      gasLeft := devm.gasLeft
-      refundCounter := 0
-      logs := []
-      accountsToDelete := .emptyWithCapacity
-      error := some (.halt reason)
-      returnData := []
-      stateGasLeft := devm.stateGasLeft
-      stateGasUsed := 0
-    }⟩
-  | .revert => .error .revert
-  | .crypto reason => .error (.crypto reason)
-  | .internal reason => .error (.internal reason)
-
-/-- Run one top-level Amsterdam message call: prepare the machine, settle a
-preparation failure, or enter the shared interpreter on the prepared frame and
-render its output. `frameOf` selects the creation or the call frame, which is
-what makes this the one Amsterdam body behind both `processMessageCall.create`
-and `processMessageCall.call`. Amsterdam-only. -/
-def Legacy.processTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
-    (frameOf : Msg → Legacy.Frame) : Except EvmError (State × MsgCallOutput) :=
-  match prepareTopLevelAmsterdam state msg with
-  | .error ⟨error, devm⟩ =>
-    Legacy.settleTopLevelPreparationFailure msg error devm
-  | .ok ⟨msg, devm⟩ => do
-    let evm ← Except.bimap Prod.fst id
-      (Legacy.runPreparedTopFrame (frameOf msg) devm)
-    Legacy.msgCallOutputAmsterdam msg evm
-
-def Legacy.processMessageCall.create (msg : Msg) :
-  Except EvmError (State × MsgCallOutput) := do
-  match msg.benv.stat.rules.stateGas with
-  | none =>
-    let benv := msg.benv
-    let isCollision : Bool :=
-      accountHasCodeOrNonce benv.state msg.currentTarget
-    if isCollision then
-      return ⟨benv.state,
-        { gasLeft := 0, refundCounter := 0, logs := [],
-          accountsToDelete := .emptyWithCapacity,
-          error := .some (.halt (.addressCollision .none)), returnData := [] }⟩
-    else
-      let evm ← Except.bimap Prod.fst id (processCreateMessage msg)
-      let logs := if evm.error.isNone then evm.logs else []
-      let accountsToDelete :=
-        if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
-      let touchedAccounts :=
-        if evm.error.isNone then evm.meta.touchedAccounts else .emptyWithCapacity
-      let refundCounter ←
-        if evm.error.isNone then
-         (Int.toNat? evm.refundCounter).toExcept
-           (EvmError.internal (.invariant (.text "refund counter is negative")))
-        else
-          .ok 0
-      .ok ⟨
-        evm.state,
-        {
-          gasLeft := evm.gasLeft,
-          refundCounter := refundCounter
-          logs := logs,
-          accountsToDelete := accountsToDelete,
-          error := evm.error,
-          returnData := evm.output,
-          touchedAccounts := touchedAccounts
-        }
-      ⟩
-  | some state =>
-    Legacy.processTopLevelAmsterdam state msg Legacy.Frame.ofCreate
-
-/-- Ordinary top-level authorization follows the active fork's delegation rule. -/
-def Legacy.processMessageCall.legacyAuthorization (msg : Msg) : Except EvmError (Msg × Nat) :=
-  if !msg.benv.stat.rules.delegationEnabled || msg.tenv.stat.auths.isEmpty then
-    .ok ⟨msg, 0⟩
-  else do
-    let ⟨delegated, refund⟩ ← setDelegation msg
-    .ok ⟨delegated, refund.toNat⟩
-
 /-- Top-level resolution warms the delegate without a nested-call surcharge. -/
 def Msg.resolveCodeDelegation (msg : Msg) : Msg :=
   match msg.benv.stat.rules.delegatedCodeAddress msg.code with
@@ -793,19 +646,6 @@ def Msg.resolveCodeDelegation (msg : Msg) : Msg :=
       accessedAddresses := msg.accessedAddresses.insert address
       code := msg.benv.state.getCode address
       codeAddress := some address }
-
-theorem Legacy.processMessageCall.legacyAuthorization_disabled (msg : Msg)
-    (h : msg.benv.stat.rules.delegationEnabled = false) :
-    legacyAuthorization msg = .ok ⟨msg, 0⟩ := by
-  simp only [legacyAuthorization, h, Bool.not_false, Bool.true_or, ↓reduceIte]
-
-theorem Legacy.processMessageCall.legacyAuthorization_enabled (msg : Msg)
-    (h : msg.benv.stat.rules.delegationEnabled = true) :
-    legacyAuthorization msg =
-      (if msg.tenv.stat.auths.isEmpty then .ok ⟨msg, 0⟩ else do
-        let ⟨delegated, refund⟩ ← setDelegation msg
-        .ok ⟨delegated, refund.toNat⟩) := by
-  simp only [legacyAuthorization, h, Bool.not_true, Bool.false_or]
 
 theorem Msg.resolveCodeDelegation_disabled (msg : Msg)
     (h : msg.benv.stat.rules.delegationEnabled = false) :
@@ -829,57 +669,6 @@ theorem Msg.resolveCodeDelegation_canonical {msg : Msg} (h : msg.Canonical) :
     msg.resolveCodeDelegation.Canonical := by
   unfold resolveCodeDelegation
   split <;> exact h
-
-theorem Legacy.processMessageCall.legacyAuthorization_canonical {msg : Msg}
-    (h : msg.Canonical) {p} (hp : legacyAuthorization msg = .ok p) :
-    p.1.Canonical := by
-  unfold legacyAuthorization at hp
-  split at hp
-  · cases hp; exact h
-  · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
-    cases hp
-    exact setDelegation_canonical h hpair
-
-def Legacy.processMessageCall.call (msg : Msg) :
-  Except EvmError (State × MsgCallOutput) := do
-  match msg.benv.stat.rules.stateGas with
-  | none =>
-    let ⟨msgDelegation, refundDelegation⟩ ← Legacy.processMessageCall.legacyAuthorization msg
-    let msgPc := msgDelegation.resolveCodeDelegation
-    let evm ← Except.bimap Prod.fst id (processMessage msgPc)
-    let refundProcessMessage ←
-      if evm.error.isNone then
-        (Int.toNat? evm.refundCounter).toExcept
-          (EvmError.internal (.invariant (.text "refund counter is negative")))
-      else
-        .ok 0
-    let logs := if evm.error.isNone then evm.logs else []
-    let accountsToDelete :=
-      if evm.error.isNone then evm.accountsToDelete else .emptyWithCapacity
-    -- EIP-161: a failed transaction keeps no touch (`touched_accounts = set()`).
-    let touchedAccounts :=
-      if evm.error.isNone then evm.meta.touchedAccounts else .emptyWithCapacity
-    .ok ⟨
-      evm.state,
-      {
-        gasLeft := evm.gasLeft,
-        refundCounter := refundDelegation + refundProcessMessage
-        logs := logs,
-        accountsToDelete := accountsToDelete,
-        error := evm.error,
-        returnData := evm.output,
-        touchedAccounts := touchedAccounts
-      }
-    ⟩
-  | some state =>
-    Legacy.processTopLevelAmsterdam state msg Legacy.Frame.ofCall
-
-def Legacy.processMessageCall (msg : Msg) :
-    Except EvmError (State × MsgCallOutput) := do
-  if msg.target.isNone then
-    Legacy.processMessageCall.create msg
-  else
-    Legacy.processMessageCall.call msg
 
 /-! ### The top-level message call on the four-part chain
 
@@ -908,6 +697,26 @@ theorem processMessageCall.legacyAuthorization_enabled (msg : Msg)
         let ⟨delegated, refund⟩ ← setDelegation msg
         .ok ⟨delegated, refund.toNat⟩) := by
   simp only [legacyAuthorization, h, Bool.not_true, Bool.false_or]
+
+/-- The ordinary top-level authorization leaves a message with a code address: an
+unchanged message keeps its own, and `setDelegation` fails closed without one. -/
+theorem processMessageCall.legacyAuthorization_codeAddress {msg : Msg} {q : Msg × Nat}
+    (h : legacyAuthorization msg = .ok q) (hc : msg.codeAddress ≠ none) :
+    q.1.codeAddress ≠ none := by
+  unfold legacyAuthorization at h
+  split at h
+  · cases h; exact hc
+  · obtain ⟨pair, hpair, h⟩ := Except.bind_eq_ok h
+    cases h
+    unfold setDelegation at hpair
+    obtain ⟨⟨m, r⟩, -, hpair⟩ := Except.bind_eq_ok hpair
+    dsimp only at hpair
+    split at hpair
+    · simp [bind, Except.bind] at hpair
+    · rename_i ca hca
+      simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq] at hpair
+      subst hpair
+      simp [hca]
 
 theorem processMessageCall.legacyAuthorization_canonical {msg : Msg}
     (h : msg.Canonical) {p} (hp : legacyAuthorization msg = .ok p) :
@@ -5421,121 +5230,6 @@ private theorem prepareTopLevelAmsterdam_canonical {state : StateGasRules}
   · exact Except.CanonicalOn.bind (setDelegationAmsterdam_canonical hi)
       (fun _ hd => finishTopLevelAmsterdam_canonical hm hd)
 
-private theorem Legacy.runPreparedTopFrame_canonicalSettle {frame : Legacy.Frame}
-    {prepared : Devm} (hf : frame.Canonical) (hp : prepared.Canonical) :
-    (Legacy.runPreparedTopFrame frame prepared).CanonicalSettle := by
-  unfold Legacy.runPreparedTopFrame
-  rcases hbt : frame.inner.benvAfterTransfer with e | benv
-  · exact Legacy.Frame.settleMsg_canonicalSettle hf
-      (Msg.benvAfterTransfer_error_canonical hf.2 hbt)
-  · have hb := Msg.benvAfterTransfer_ok_canonical hf.2 hbt
-    have hi := Msg.Canonical.withBenv hf.2 hb
-    have hd :
-        (((prepared.withState benv.state).withStorageWrites benv.storageWrites).withCreatedAccounts
-          benv.createdAccounts).Canonical :=
-      ⟨hb.1, hp.2⟩
-    let evm : Evm := {
-      pc := 0
-      sta := initSevm (frame.inner.withBenv benv)
-      dyna := ((prepared.withState benv.state).withStorageWrites benv.storageWrites).withCreatedAccounts
-        benv.createdAccounts
-    }
-    have hevm : evm.Canonical := ⟨initSevm_canonical hi, hd⟩
-    dsimp only
-    split
-    · exact Legacy.Frame.settle_canonicalSettle hf (Legacy.exec_canonical hevm)
-    · split
-      · exact Legacy.Frame.settle_canonicalSettle hf
-          (executePrecompile_canonical hevm.2 _)
-      · exact Legacy.Frame.settle_canonicalSettle hf (Legacy.exec_canonical hevm)
-
-private theorem Legacy.processTopLevelAmsterdam_canonical {state : StateGasRules}
-    {msg : Msg} (hm : msg.Canonical) (frameOf : Msg → Legacy.Frame)
-    (hframe : ∀ {prepared : Msg}, prepared.Canonical →
-      (frameOf prepared).Canonical) {p}
-    (hp : Legacy.processTopLevelAmsterdam state msg frameOf = .ok p) :
-    State.Canonical p.1 := by
-  unfold Legacy.processTopLevelAmsterdam at hp
-  have hprepare := prepareTopLevelAmsterdam_canonical (state := state) hm
-  cases hprep : prepareTopLevelAmsterdam state msg with
-  | error failure =>
-    rw [hprep] at hp hprepare
-    obtain ⟨error, devm⟩ := failure
-    cases error with
-    | halt reason =>
-      simp only [Legacy.settleTopLevelPreparationFailure] at hp
-      cases hp
-      exact hm.1.1
-    | revert =>
-      simp only [Legacy.settleTopLevelPreparationFailure] at hp
-      cases hp
-    | crypto reason =>
-      simp only [Legacy.settleTopLevelPreparationFailure] at hp
-      cases hp
-    | internal reason =>
-      simp only [Legacy.settleTopLevelPreparationFailure] at hp
-      cases hp
-  | ok prepared =>
-    rw [hprep] at hp hprepare
-    obtain ⟨preparedMsg, preparedDevm⟩ := prepared
-    obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
-    have hrun := Legacy.runPreparedTopFrame_canonicalSettle
-      (hframe hprepare.1) hprepare.2
-    rw [Except.bimap_id_eq_ok hevm] at hrun
-    unfold Legacy.msgCallOutputAmsterdam at hp
-    split at hp <;>
-      (obtain ⟨refundCounter, _, hp⟩ := Except.bind_eq_ok hp
-       cases hp
-       exact hrun.1)
-
-theorem Legacy.processMessageCall.create_canonical {msg : Msg} (h : msg.Canonical)
-    {p} (hp : Legacy.processMessageCall.create msg = .ok p) :
-    State.Canonical p.1 := by
-  unfold Legacy.processMessageCall.create at hp
-  dsimp only at hp
-  split at hp
-  · split at hp <;>
-      first
-      | (cases hp; exact h.1.1)
-      | (obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
-         have hcan := processCreateMessage_ok_canonical h
-           (Except.bimap_id_eq_ok hevm)
-         split at hp <;>
-           (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
-            cases hp
-            exact hcan.1))
-  · exact Legacy.processTopLevelAmsterdam_canonical h Legacy.Frame.ofCreate
-      (fun hm => Legacy.Frame.canonical_ofCreate hm) hp
-
-theorem Legacy.processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
-    {p} (hp : Legacy.processMessageCall.call msg = .ok p) :
-    State.Canonical p.1 := by
-  unfold Legacy.processMessageCall.call at hp
-  dsimp only at hp
-  split at hp
-  · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
-    obtain ⟨delegated, refund⟩ := pair
-    have hm := Legacy.processMessageCall.legacyAuthorization_canonical h hpair
-    dsimp only at hp
-    obtain ⟨evm, hevm, hp⟩ := Except.bind_eq_ok hp
-    have hcan := processMessage_ok_canonical
-      (Msg.resolveCodeDelegation_canonical hm) (Except.bimap_id_eq_ok hevm)
-    split at hp <;>
-      (obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
-       cases hp
-       exact hcan.1)
-  · exact Legacy.processTopLevelAmsterdam_canonical h Legacy.Frame.ofCall
-      (fun hm => Legacy.Frame.canonical_ofCall hm) hp
-
-/-- A successful message call leaves a canonical state, for both the create
-and the call route. -/
-theorem Legacy.processMessageCall_canonical {msg : Msg} (h : msg.Canonical)
-    {p} (hp : Legacy.processMessageCall msg = .ok p) : State.Canonical p.1 := by
-  unfold Legacy.processMessageCall at hp
-  split at hp
-  · exact Legacy.processMessageCall.create_canonical h hp
-  · exact Legacy.processMessageCall.call_canonical h hp
-
 /-! ### The prepared top-level state -/
 
 private theorem liftMachExecution_ok_meta {core : Mach → Footprint.Outcome Mach Unit} {d d' : Devm}
@@ -5735,6 +5429,41 @@ theorem prepareTopLevelAmsterdam_prepared {state : StateGasRules} {msg : Msg} {p
       p.1.accessedAddresses = p.2.accessedAddresses ∧
       p.1.accessedStorageKeys = p.2.accessedStorageKeys :=
   ⟨(prepared_fresh h).1, (prepared_fresh h).2, prepared_coh h⟩
+
+/-- **The prepared top-level message.** Amsterdam's preparation keeps the message's target; a
+creation keeps its code address, and a call leaves with one (`resolveTopLevelCallAmsterdam`). -/
+theorem prepareTopLevelAmsterdam_message {state : StateGasRules} {msg : Msg} {p : Msg × Devm}
+    (h : prepareTopLevelAmsterdam state msg = .ok p) :
+    p.1.target = msg.target ∧ (msg.target = none → p.1.codeAddress = msg.codeAddress) ∧
+      (msg.target ≠ none → p.1.codeAddress ≠ none) := by
+  have hcall : ∀ {d : Devm} {p : Msg × Devm}, resolveTopLevelCallAmsterdam msg d = .ok p →
+      p.1.target = msg.target ∧ p.1.codeAddress ≠ none := by
+    intro d p hc
+    unfold resolveTopLevelCallAmsterdam at hc
+    obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
+    cases hc
+    exact ⟨rfl, by simp⟩
+  have key : ∀ d1, finishTopLevelAmsterdam state msg d1 = .ok p →
+      p.1.target = msg.target ∧ (msg.target = none → p.1.codeAddress = msg.codeAddress) ∧
+        (msg.target ≠ none → p.1.codeAddress ≠ none) := by
+    intro d1 h
+    unfold finishTopLevelAmsterdam dispatchTopLevelAmsterdam at h
+    generalize (if msg.tenv.stat.auths.isEmpty then d1 else d1.commitStateGas) = d2 at h
+    dsimp only at h
+    split at h
+    · rename_i hnone
+      have ht : msg.target = none := Option.isNone_iff_eq_none.mp hnone
+      split at h
+      · simp only [reduceCtorEq] at h
+      · split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;> cases h <;>
+          exact ⟨rfl, fun _ => rfl, fun hne => absurd ht hne⟩
+    · rename_i hsome
+      have ht : msg.target ≠ none := fun e => hsome (by simp [e])
+      split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;>
+        exact ⟨(hcall h).1, fun e => absurd e ht, fun _ => (hcall h).2⟩
+  unfold prepareTopLevelAmsterdam at h
+  dsimp only at h
+  split at h <;> obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h <;> exact key _ h
 
 private theorem frameOutput_canonical {f : Frame} {a : Nat} {r : Frame.Result}
     (hw : (f.worldAfter r).Canonical) {p} (hp : f.output a r = .ok p) : State.Canonical p.1 := by

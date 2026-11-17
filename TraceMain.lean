@@ -1,7 +1,7 @@
 import Jaune.MessageCall.TraceJson
 import Jaune.TraceTransaction
 import Jaune.Adapter.Io
-import Jaune.Bridge.Trace
+import Jaune.MessageCall.Top
 
 /-! Standalone message or signed-transaction tracing. Inputs state their scope;
 transaction mode uses the proof-carrying public-pipeline driver. -/
