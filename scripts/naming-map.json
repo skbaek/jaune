@@ -21195,11 +21195,11 @@
     },
     {
       "old": "Jaune.gasStorageUpdate",
-      "new": "Jaune.Gas.sreset",
+      "new": "Jaune.Gas.sstoreResetGas",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "1",
-      "source": "Yellow Paper G_sreset = 5000; EIP-2200 `SSTORE_RESET_GAS` = 5000. EIP-2929 redefines `SSTORE_RESET_GAS` as 5000 - COLD_SLOAD_COST = 2900, which is how Jaune charges it (`sreset - coldSloadCost`), so the EIP name is not used for this gross value (review B1) [B]",
+      "rule": "2",
+      "source": "user decision jsn-g0b-packet-user (2026-11-17): EIP-2200 `SSTORE_RESET_GAS` = 5000, the same suffix as `sstoreSetGas`. EIP-2929 redefines `SSTORE_RESET_GAS` as 5000 - COLD_SLOAD_COST = 2900, which is how Jaune charges it from Berlin (`sstoreResetGas - coldSloadCost`); Yellow Paper `G_sreset` (5000 before Berlin, 2900 from Berlin); EELS `GAS_STORAGE_UPDATE` (older layout), `GasCosts.COLD_STORAGE_WRITE` (pin e27f097e); geth `SstoreResetGasEIP2200`; revm `SSTORE_RESET` (G0b packet; supersedes review B1) [B]",
       "notes": "depth change (new `Gas` namespace member)"
     },
     {
