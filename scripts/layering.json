@@ -110,7 +110,12 @@
   "Jaune.Bridge.G2b.Control": "bridge",
   "Jaune.MessageCall.MessageOps": "specification",
   "Jaune.Bridge.G2b.MessageOps": "bridge",
-  "Jaune.Bridge.G2b.MessageOpsGas": "bridge"
+  "Jaune.Bridge.G2b.MessageOpsGas": "bridge",
+  "Jaune.Run.Fields": "specification",
+  "Jaune.Run.Settle": "specification",
+  "Jaune.Run.SystemCall": "specification",
+  "Jaune.Bridge.G2a.Consumers": "bridge",
+  "Jaune.Run.Trace": "adapter"
  },
  "implementation_imports": [
   {
