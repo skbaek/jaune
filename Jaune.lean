@@ -55,6 +55,9 @@ import Jaune.Bridge.G2b.State
 import Jaune.Run.Message
 import Jaune.Run.Transaction
 import Jaune.Bridge.G2a.Run
+import Jaune.MessageCall.MessageOps
+import Jaune.Bridge.G2b.MessageOps
+import Jaune.Bridge.G2b.MessageOpsGas
 
 namespace Jaune
 
