@@ -107,7 +107,10 @@
   "Jaune.MessageCall.Plain": "specification",
   "Jaune.Bridge.G2b.Plain": "bridge",
   "Jaune.MessageCall.Control": "specification",
-  "Jaune.Bridge.G2b.Control": "bridge"
+  "Jaune.Bridge.G2b.Control": "bridge",
+  "Jaune.MessageCall.MessageOps": "specification",
+  "Jaune.Bridge.G2b.MessageOps": "bridge",
+  "Jaune.Bridge.G2b.MessageOpsGas": "bridge"
  },
  "implementation_imports": [
   {

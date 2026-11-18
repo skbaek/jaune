@@ -59,6 +59,9 @@ import Jaune.MessageCall.Plain
 import Jaune.Bridge.G2b.Plain
 import Jaune.MessageCall.Control
 import Jaune.Bridge.G2b.Control
+import Jaune.MessageCall.MessageOps
+import Jaune.Bridge.G2b.MessageOps
+import Jaune.Bridge.G2b.MessageOpsGas
 
 namespace Jaune
 
