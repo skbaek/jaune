@@ -137,7 +137,10 @@
   "Jaune.Run.BodyFactsT8n": "adapter",
   "Jaune.Run.Canonical": "specification",
   "Jaune.Run.BlockFacts": "specification",
-  "Jaune.Bridge.G2a.Canonical": "bridge"
+  "Jaune.Bridge.G2a.Canonical": "bridge",
+  "Jaune.FinalSufficiencyWalk": "proof",
+  "Jaune.MessageCall.FinalGasFacts": "proof",
+  "Jaune.MessageCall.FinalPlainGasFacts": "proof"
  },
  "implementation_imports": [
   {
