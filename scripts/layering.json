@@ -134,7 +134,10 @@
   "Jaune.Bridge.G2b.FinalDriver": "bridge",
   "Jaune.Run.BodyFactsRlp": "proof",
   "Jaune.Run.BodyFacts": "proof",
-  "Jaune.Run.BodyFactsT8n": "adapter"
+  "Jaune.Run.BodyFactsT8n": "adapter",
+  "Jaune.Run.Canonical": "specification",
+  "Jaune.Run.BlockFacts": "specification",
+  "Jaune.Bridge.G2a.Canonical": "bridge"
  },
  "implementation_imports": [
   {

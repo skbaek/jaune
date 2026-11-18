@@ -82,6 +82,9 @@ import Jaune.Bridge.G2b.FinalOutput
 import Jaune.Bridge.G2b.FinalDriver
 import Jaune.Run.BodyFactsRlp
 import Jaune.Run.BodyFacts
+import Jaune.Run.Canonical
+import Jaune.Run.BlockFacts
+import Jaune.Bridge.G2a.Canonical
 
 namespace Jaune
 
