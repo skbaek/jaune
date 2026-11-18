@@ -14,7 +14,7 @@ MODULE_KINDS = frozenset({"module"})
 VALID_LAYERS = frozenset({"execution", "consensus", "adapter"})
 VALID_RULES = frozenset({"1", "2", "3", "4", "5", "6", "7"})
 REQUIRED_FIELDS = ("old", "new", "kind", "layer", "rule", "source")
-OPTIONAL_FIELDS = ("notes", "from_module", "to_module")
+OPTIONAL_FIELDS = ("notes", "from_module", "to_module", "public_from")
 ALLOWED_ENTRY_FIELDS = frozenset(REQUIRED_FIELDS + OPTIONAL_FIELDS)
 # An acronym with a plural `s` (`BLTs`, `NTBs`) is the acronym and `s`, not `BL` + `Ts`.
 TOKEN_RE = re.compile(r"[A-Z]{2,}(?=s(?:[A-Z0-9_]|$))|[A-Z]+(?=[A-Z][a-z0-9]|$)|[A-Z]?[a-z0-9]+")
@@ -103,10 +103,16 @@ def validate_map(data):
                     raise ValueError(f"entry {index} relocation requires non-empty '{field}'")
             elif field in entry:
                 raise ValueError(f"entry {index} '{field}' is only valid for relocation rows")
+        if "public_from" in entry:
+            private = split_private(entry["public_from"]) if isinstance(entry["public_from"], str) else None
+            if (entry["kind"] not in ("declaration", "relocation") or not private
+                    or (relocation and private[0] != entry["from_module"])
+                    or private[2] != old_name or new_name.startswith("_private.")):
+                raise ValueError(f"entry {index} public_from must name the relocated private declaration")
         if relocation and entry["from_module"] == entry["to_module"]:
             raise ValueError(f"entry {index} relocates within one module")
         # A relocation may keep its name: the module is what changes.
-        if old_name == new_name and not relocation:
+        if old_name == new_name and not relocation and "public_from" not in entry:
             raise ValueError(f"entry {index} maps '{old_name}' to itself")
         if entry["layer"] not in VALID_LAYERS:
             raise ValueError(f"entry {index} invalid layer: {entry['layer']!r}")
@@ -162,6 +168,7 @@ class Renamer:
 
     def __init__(self, entries):
         self.exact, self.namespaces, self.modules, self.relocations = {}, {}, {}, {}
+        self.public_from = {e["public_from"]: e["new"] for e in entries if "public_from" in e}
         for entry in entries:
             kind = entry["kind"]
             if kind == "module":
@@ -222,6 +229,8 @@ class Renamer:
 
     def explain(self, name):
         """(new name, 'exact' | 'namespace' | 'unchanged')."""
+        if name in self.public_from:
+            return self.public_from[name], "exact"
         private = split_private(name)
         if private:
             module, counter, user = private

@@ -7,6 +7,7 @@ No build or elaboration runs here. Output plans belong outside the checkout (or
 in an ignored directory), so they do not change their own input inventory.
 """
 import argparse
+from bisect import bisect_right
 import importlib.util
 import json
 from pathlib import Path
@@ -199,6 +200,7 @@ def plan_sources(root, candidate, bundles, mapping, consumer=False, extra_names=
     if consumer and any(row['kind'] == 'relocation' and row['from_module'] not in candidate['modules']
                         for row in mapping['entries']):
         raise ValueError('relocation rows of dependency modules are not supported for a consumer')
+    plan_promotions(candidate, texts, by_record, bundles, renamer, consumer)
     plan_relocations(candidate, texts, by_record, bundles, mapping, renamer)
     for row in records:
         row['edits'].sort(key=lambda e: (e['start'], e['end']))
@@ -370,6 +372,97 @@ def render_open(row, renamer):
     return f'open {prefix} ({last})' if last == alias else f'open {prefix} renaming {last} → {alias}'
 
 
+def authored_locations(index, positions):
+    """Full names bound to declaration spans, including constructor and field
+    definitions recorded only as a reference's definition site."""
+    decls = {name: APPLY.span(positions, loc[:4]) for name, loc in index['decls'].items()}
+    for key, info in index['references'].items():
+        const = json.loads(key).get('c')
+        if const and const['m'] == APPLY.module_name(index['module']) and info.get('definition'):
+            decls.setdefault(const['n'], APPLY.span(positions, info['definition']))
+    return decls
+
+
+def plan_promotions(candidate, texts, records, bundles, renamer, consumer):
+    for full in renamer.public_from:
+        module = MAP.split_private(full)[0]
+        if module not in candidate['modules'] and consumer:
+            continue
+        if module not in bundles:
+            raise ValueError(f'public_from {full} requires a compiler export of {module}')
+        path = candidate['modules'][module]['path']
+        text, index = texts[path], bundles[module]['index']
+        positions = APPLY.Positions(text)
+        loc = index['decls'].get(full)
+        if loc is None:
+            # Publishing a structure publishes its authored fields too. Their
+            # exact rows are checked by N4; the parent's row edits the keyword.
+            parent = full.rpartition('.')[0]
+            if parent in renamer.public_from and full in authored_locations(index, positions):
+                continue
+            raise ValueError(f'public_from {full} has no matching declaration or published parent')
+        start, _ = APPLY.span(positions, loc[:4])
+        name_start, _ = APPLY.span(positions, loc[4:8])
+        prefix = code_only(text[start:name_start])
+        modifier = re.search(r'\bprivate([ \t]+)(?:def|abbrev|theorem|lemma|structure)\s+$', prefix)
+        if not modifier:
+            raise ValueError(f'public_from {full}: unsupported private declaration header')
+        a = start + modifier.start()
+        b = a + len('private')
+        if text[b:b + 1] == ' ':
+            b += 1
+        records[path]['edits'].append(dict(start=a, end=b, old=text[a:b], new='', declaration=full))
+
+
+def relocation_references(moving, bundles):
+    """Resolve both ends of a use in the proposed layout. References between
+    two moving commands travel with those commands, including private uses."""
+    spans, declarations = {}, {}
+    for (module, a, b), entry in sorted(moving.items()):
+        starts, ranges = spans.setdefault(module, ([], []))
+        starts.append(a)
+        ranges.append((b, entry))
+        entry['needs'], entry['users'] = set(), set()
+
+    def moved_command(module, loc):
+        if module in spans:
+            starts, ranges = spans[module]
+            i = bisect_right(starts, loc[0]) - 1
+            if i >= 0 and loc[1] <= ranges[i][0]:
+                return ranges[i][1]
+        return None
+
+    for module in spans:
+        bundle = bundles[module]
+        for name, span in authored_locations(bundle['index'], APPLY.Positions(bundle['source'])).items():
+            # Record stationary authors as well: a separately declared lemma
+            # under a moving type's namespace need not move with its parent.
+            declarations[module, name] = moved_command(module, span)
+
+    for user_module, bundle in bundles.items():
+        positions = APPLY.Positions(bundle['source'])
+        for key, info in bundle['index']['references'].items():
+            const = json.loads(key).get('c')
+            if not const:
+                continue
+            source, name = const['m'], const['n']
+            if source not in spans and user_module not in spans:
+                continue
+            # Compiler-created children (e.g. a recursor) belong to the
+            # nearest declaration. A separately authored child has its own row.
+            while '.' in name and (source, name) not in declarations:
+                name = name.rpartition('.')[0]
+            definition = declarations.get((source, name))
+            destination = definition['target'] if definition else source
+            for loc in info['usages']:
+                caller = moved_command(user_module, APPLY.span(positions, loc))
+                if caller:
+                    caller['needs'].add(destination)
+                user = caller['target'] if caller else user_module
+                if definition and user != destination:
+                    definition['users'].add(user)
+
+
 def plan_relocations(candidate, texts, records, bundles, mapping, renamer):
     """Move each relocated declaration's whole command to the end of its target
     module, in a section that restores its namespace and open declarations.
@@ -386,7 +479,7 @@ def plan_relocations(candidate, texts, records, bundles, mapping, renamer):
         return
     modules = candidate['modules']
     by_module = {row['module']: row for row in records.values() if row['module']}
-    moving = {}
+    moving, source_data = {}, {}
     for row in rows:
         source, target = row['from_module'], row['to_module']
         for module in (source, target):
@@ -403,18 +496,22 @@ def plan_relocations(candidate, texts, records, bundles, mapping, renamer):
         if meta.get('version') != 2:
             problem('export lacks version-2 command scopes')
             continue
-        positions = APPLY.Positions(text)
-        offsets = APPLY.byte_offsets(text)
-        decls = {}
-        for name, loc in index['decls'].items():
-            user = MAP.split_private(name)
-            decls.setdefault(user[2] if user else name, []).append((name, APPLY.span(positions, loc[:4])))
+        if source not in source_data:
+            positions = APPLY.Positions(text)
+            offsets = APPLY.byte_offsets(text)
+            decls = {}
+            for name, location in authored_locations(index, positions).items():
+                user = MAP.split_private(name)
+                decls.setdefault(user[2] if user else name, []).append((name, location))
+            commands = [(APPLY.char_span(offsets, r[0], r[1], text), r)
+                        for r in meta['commands'] if r[0] < r[1]]
+            source_data[source] = decls, commands
+        decls, commands = source_data[source]
         found = decls.get(row['old'], [])
         if len(found) != 1:
             problem(f'{len(found)} declarations of this name in {source}')
             continue
         full, (a, b) = found[0]
-        commands = [(APPLY.char_span(offsets, r[0], r[1], text), r) for r in meta['commands'] if r[0] < r[1]]
         containing = [(span, r) for span, r in commands if span[0] <= a and b <= span[1]]
         if len(containing) != 1:
             problem('declaration is not inside exactly one top-level command', a, b)
@@ -425,7 +522,9 @@ def plan_relocations(candidate, texts, records, bundles, mapping, renamer):
         entry['rows'].append(row)
         if entry['target'] != target:
             problem('one command relocated to two modules', start, end)
-        entry['private'] = entry.get('private', []) + ([full] if full.startswith('_private.') else [])
+        if full.startswith('_private.') and 'public_from' not in row:
+            entry['private'] = True
+    relocation_references(moving, bundles)
     for (source, start, end), entry in sorted(moving.items()):
         record = by_module[source]
         target = entry['target']
@@ -453,39 +552,12 @@ def plan_relocations(candidate, texts, records, bundles, mapping, renamer):
         if not eof or eof[0] != 0:
             problem(f'target {target} ends inside an open namespace or section')
             continue
-        # Imports: references made by the moved command.
-        moved_decls = {name for name, loc in index['decls'].items()
-                       if start <= APPLY.span(positions, loc[:4])[0] < end}
-        needed, users, before = set(), {}, len(record['unresolved'])
-        for key, info in index['references'].items():
-            const = json.loads(key).get('c')
-            if not const:
-                continue
-            for loc in info['usages'] + ([info['definition']] if info['definition'] else []):
-                ra, rb = APPLY.span(positions, loc)
-                if not (start <= ra and rb <= end):
-                    continue
-                if const['m'] != source:
-                    needed.add(const['m'])
-                elif const['n'] not in moved_decls:
-                    needed.add(source)  # It still uses a declaration staying behind.
+        before = len(record['unresolved'])
         target_closure = closure_of(modules, target) | {target}
-        missing = sorted(m for m in needed if m in modules and m not in target_closure)
+        missing = sorted(m for m in entry['needs'] if m in modules and m not in target_closure)
         if missing:
             problem(f'target {target} does not import {missing}, needed by the moved command')
-        for module, bundle in bundles.items():
-            if module == target:
-                continue
-            module_positions = positions if module == source else APPLY.Positions(bundle['source'])
-            for key, info in bundle['index']['references'].items():
-                const = json.loads(key).get('c')
-                if not const or const['m'] != source or const['n'] not in moved_decls:
-                    continue
-                used = [loc for loc in info['usages']
-                        if module != source or not (start <= APPLY.span(module_positions, loc)[0] < end)]
-                if used:
-                    users[module] = users.get(module, 0) + len(used)
-        for module in sorted(users):
+        for module in sorted(entry['users']):
             if entry.get('private') and module == source:
                 problem('private declaration is still used in its old module')
             elif target not in closure_of(modules, module) | {module}:

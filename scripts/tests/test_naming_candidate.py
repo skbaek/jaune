@@ -123,6 +123,29 @@ class CandidateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'duplicate constants in one import environment'):
                 CHECK.read_environments(paths, graph, ['One', 'Two'])
 
+    def test_relocation_is_checked_in_each_environment_that_imports_its_module(self):
+        graph = {m: module(m + '.lean', m) for m in ('A', 'B', 'Tool')}
+        graph['Client'] = module('Client.lean', 'client', ['A', 'B'])
+        before = snapshot(graph, ['Client', 'Tool'])
+        after = copy.deepcopy(before)
+        val = dict(kernel=['definition', 1])
+        for snap, owner in [(before, 'A'), (after, 'B')]:
+            env = union_bundle({'N.f': val}, owner)
+            env['modules'].update({'Client': [], 'A': [], 'B': []})
+            snap['fidelity']['Client'] = env
+            snap['fidelity']['Tool'] = union_bundle({'main': val}, 'Tool')
+        row = dict(old='N.f', new='N.f', kind='relocation', layer='execution', rule='4',
+                   source='fixture', from_module='A', to_module='B')
+        mapping = dict(EMPTY, entries=[row])
+        self.assertEqual(CHECK.compare(before, after, mapping)['status'], 'OK')
+        after['fidelity']['Tool']['constants']['main'] = dict(kernel=['definition', 2])
+        with self.assertRaises(CHECK.FIDELITY.Mismatch):
+            CHECK.compare(before, after, mapping)
+        after['fidelity']['Tool']['constants']['main'] = val
+        with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'outside every compared'):
+            CHECK.compare(before, after, dict(EMPTY, entries=[row, dict(row, old='Absent.f',
+                          new='Absent.f', from_module='Absent', to_module='AlsoAbsent')]))
+
     def test_relocation_to_a_new_root_compares_the_union(self):
         bundle = union_bundle
         value = dict(kernel=['definition', 1])

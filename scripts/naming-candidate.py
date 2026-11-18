@@ -845,17 +845,39 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
         # Module rows rename roots; each environment is compared with its image.
         import gc
         results, failures = {}, []
+        # An unrelated executable has no instance of a relocation to verify.
+        # Every scoped row must still be checked in at least one environment.
+        checked_rows = set()
+        scoped = {i for i, row in enumerate(mapping['entries'])
+                  if row['kind'] == 'relocation' or 'public_from' in row}
         for root, env in before['fidelity'].items():
             # One environment at a time; its comparison state is released
             # before the next (collect-all semantics unchanged).
             try:
-                results[root] = FIDELITY.check(env, after['fidelity'][renamer.module(root)], mapping,
+                new_env = after['fidelity'][renamer.module(root)]
+                applicable = set()
+                for i in scoped:
+                    row = mapping['entries'][i]
+                    if row['kind'] == 'relocation':
+                        src, dst = row['from_module'], row['to_module']
+                    else:
+                        src = FIDELITY.MAP.split_private(row['public_from'])[0]
+                        dst = renamer.module(src)
+                    if src in env['modules'] or dst in new_env['modules']:
+                        applicable.add(i)
+                checked_rows.update(applicable)
+                local_map = dict(mapping, entries=[row for i, row in enumerate(mapping['entries'])
+                                                   if i not in scoped or i in applicable])
+                results[root] = FIDELITY.check(env, new_env, local_map,
                                                records, used, collect, plan_edits)
             except FIDELITY.Mismatch as error:
                 if not collect:
                     raise
                 failures.append(f'[{root}] {error}')
             gc.collect()
+        if scoped - checked_rows:
+            missing = [mapping['entries'][i]['old'] for i in sorted(scoped - checked_rows)]
+            failures.append(f'relocation or promotion outside every compared environment: {missing}')
         if failures:
             raise FIDELITY.Mismatch('\n'.join(failures))
     stale_quotations(records, used)

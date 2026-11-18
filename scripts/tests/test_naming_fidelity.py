@@ -69,6 +69,27 @@ class NamingFidelityTests(unittest.TestCase):
         self.renames = self.entries(('A', 'B', 'module', {}))
         self.assertEqual(self.run_check()['status'], 'OK')
 
+    def test_promoting_a_private_declaration_requires_its_exact_row(self):
+        old = '_private.A.0.N.f'
+        self.before = snapshot({old: constant()}, [old])
+        self.after = snapshot({'N.f': constant()}, ['N.f'])
+        self.before['owners'], self.after['owners'] = {old: 'A'}, {'N.f': 'B'}
+        row = dict(from_module='A', to_module='B')
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', row))
+        with self.assertRaisesRegex(CHECK.Mismatch, 'authored constant set changed'):
+            self.run_check()
+        row['public_from'] = old
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', row))
+        self.assertEqual(self.run_check()['status'], 'OK')
+        self.after['constants']['N.f'] = constant(2)
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+        self.before = snapshot({'N.f': constant()}, ['N.f'])
+        self.before['owners'] = {'N.f': 'A'}
+        self.after['constants']['N.f'] = constant()
+        with self.assertRaisesRegex(CHECK.Mismatch, 'public_from names no authored private'):
+            self.run_check()
+
     def test_compiler_named_declarations_are_graph_matched(self):
         source = 'instance : Inhabited B256 := ⟨⟨0⟩⟩\ndef B256.f := 1\n'
         def export(name):

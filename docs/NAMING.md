@@ -114,6 +114,10 @@ Optional entry fields:
   preserved in doc comments).
 - `from_module`, `to_module`: required for, and only allowed on, `relocation`
   rows: the module the declaration leaves and the module it moves to.
+- `public_from`: on a declaration or relocation row, the exact kernel name of
+  a private declaration made public. Its source name and any source module must match
+  the row. The planner checks the declaration header and removes its private
+  modifier. N4 checks the public constant against that exact private constant.
 
 Row semantics (`Renamer` in `scripts/check-naming-map.py`, shared by the
 planner, N4 and N3):
@@ -145,7 +149,7 @@ planner, N4 and N3):
   every import is rewritten, and private names change module prefix.
 - `relocation`: move one declaration's command from `from_module` to
   `to_module`; `new` may equal `old` (a pure move) or rename it as well.
-  Private names keep their counter and take the target module's prefix.
+  Private names that remain private keep their counter and take the target module's prefix.
 
 Private names (`_private.<module>.<counter>.<name>`) are renamed through their
 user name. Module and constant names live in separate name spaces for the
@@ -154,7 +158,7 @@ one-to-one check.
 Validation invariants enforced by `scripts/check-naming-map.py`:
 
 1. Every entry has non-empty `old`, `new`, `kind`, `layer`, `rule`, and `source`,
-   with `old != new` except on a relocation row. Missing or empty `source` fails
+   with `old != new` except on a relocation or an explicit promotion. Missing or empty `source` fails
    closed. Relocation rows name two different modules.
 2. `kind`, `layer`, and `rule` contain only valid registered values.
 3. The map is a one-to-one bijection on `old -> new` within each name space
@@ -190,7 +194,7 @@ structures' fields distinct. It reports every affected token it cannot resolve,
 with the exporter's reason where one exists. Any unresolved token prevents
 application; exit 1 means an unresolved plan, exit 2 a setup/input refusal. No
 spelling-based global replacement is used. The selected-file planner refuses
-`module` and `relocation` rows; they need whole-tree planning (below).
+`module`, `relocation` and `public_from` rows; they need whole-tree planning (below).
 
 Only an identifier occurrence covers a candidate word: a compiler reference
 whose range is a dotted identifier, with the word as one component (a local
@@ -392,7 +396,8 @@ a command that also declares other names, section variables/options/universes
 in scope, a target ending inside an open scope, a target that does not already
 import a module the command references, an indexed module (the old module
 included) still using the declaration without importing the target, and a
-private declaration still used in its old module. Guards and other checks are
+private declaration still used in its old module. A use in another command
+that relocates is checked at that command's destination. Guards and other checks are
 moved by hand; N4 compares them as expressions (section 6).
 
 The exporters share `NamingReferencesCore` so candidate captures retain the

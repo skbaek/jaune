@@ -57,8 +57,12 @@ structure Tx where
 
 def mkTx (g : Nat) : Tx := Tx.mk (gas := g) (to := ofNat 1)
 
+private def shifted (n : Nat) := n + 4
+
 /-- A declaration that moves to `ScopeB`; it uses only `Lean`. -/
-def moved (n : Nat) : Nat := n * 3
+def moved (n : Nat) : Nat :=
+  let n := shifted n - 4
+  n * 3
 
 #guard (mkTx 5).gas == 5
 #guard twice (ScopeA.B256.ofNat 2) == 4
@@ -86,7 +90,9 @@ end ScopeB
 
 ROWS = [('ScopeA.B256', 'ScopeA.U256', 'namespace', {}),
         ('ScopeA.Tx.gas', 'ScopeA.Tx.gasLimit', 'field', {}),
-        ('ScopeA.moved', 'ScopeA.moved', 'relocation', dict(from_module='ScopeA', to_module='ScopeB'))]
+        ('ScopeA.moved', 'ScopeA.moved', 'relocation', dict(from_module='ScopeA', to_module='ScopeB')),
+        ('ScopeA.shifted', 'ScopeA.shifted', 'relocation', dict(from_module='ScopeA', to_module='ScopeB',
+            public_from='_private.ScopeA.0.ScopeA.shifted'))]
 
 
 def save(path, value):
@@ -161,10 +167,12 @@ def run(directory, exporter):
                   'def pick (x : ScopeA.U256)', 'def pickIn (x : ScopeA.U256)']
     if [e for e in expected_a if e not in a] or 'B256' in a or 'def moved' in a:
         raise ValueError(f'namespace or relocation edits wrong:\n{a}')
+    if 'private def shifted' in b or 'def shifted' not in b or 'def shifted' in a:
+        raise ValueError(f'private declaration was not promoted and moved:\n{b}')
     if '/-- A declaration that moves to `ScopeB`' not in b or 'namespace ScopeA\n/--' not in b:
         raise ValueError(f'relocated command or its scope wrong:\n{b}')
     # N4 compares the hand-moved guard as an expression across modules.
-    (directory / 'ScopeB.lean').write_text(b.replace('end ScopeA\nend\n', guard + 'end ScopeA\nend\n'))
+    (directory / 'ScopeB.lean').write_text(b + '\nnamespace ScopeA\n' + guard + 'end ScopeA\n')
     renamed = {m: (directory / f'{m}.lean').read_bytes() for m in ('ScopeA', 'ScopeB')}
     after = {m: r.export(m, 'after') for m in ('ScopeA', 'ScopeB')}
     left = CHECK.read_exports(list(before.values()))
@@ -188,7 +196,10 @@ def run(directory, exporter):
 
     control('body', 'ScopeB', b'n * 3', b'3 * n', ROWS, 'kernel')
     control('moved-guard', 'ScopeB', guard.encode(), b'#guard moved 2 == 6 && true\n', ROWS, 'guards')
-    control('unrecorded-move', 'ScopeB', b'', b'', ROWS[:2], 'module ScopeA became ScopeB')
+    control('unrecorded-move', 'ScopeB', b'', b'', ROWS[:2] + ROWS[3:], 'module ScopeA became ScopeB')
+    promoted = ROWS[3]
+    retained = (*promoted[:3], {k: v for k, v in promoted[3].items() if k != 'public_from'})
+    control('unrecorded-promotion', 'ScopeB', b'', b'', ROWS[:3] + [retained], 'authored constant set')
     # Relocation into a target that lacks a needed import is reported.
     (directory / 'ScopeA.lean').write_text(SCOPE_A)
     (directory / 'ScopeB.lean').write_text(SCOPE_B)

@@ -1192,6 +1192,9 @@ class Comparison:
                     if right_owner[self.name(name)] != expected:
                         self.fail(f'{name}: module {left_owner[name]} became '
                                        f'{right_owner[self.name(name)]}, expected {expected}')
+        for private in self.mapping.public_from:
+            if private not in self.before['roots']:
+                self.fail(f'public_from names no authored private declaration in scope: {private}')
         for row, (source, target) in sorted(self.mapping.relocations.items()):
             if not any(MAP.split_private(n)[2] == row if MAP.split_private(n) else n == row
                        for n in self.before['roots']):

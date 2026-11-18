@@ -259,8 +259,10 @@ def replacement(spelling, old, new, renamer=None, type_directed=False):
     """
     leading_dot = spelling.startswith('.')
     bare = spelling[1:] if leading_dot else spelling
-    if old.startswith('_private.') and new.startswith('_private.'):
-        old, new = MAP.split_private(old)[2], MAP.split_private(new)[2]
+    if old.startswith('_private.'):
+        old = MAP.split_private(old)[2]
+    if new.startswith('_private.'):
+        new = MAP.split_private(new)[2]
     old_parts, new_parts = split_name(old), split_name(new)
     parts = split_name(bare)
     if parts != old_parts[-len(parts):]:
@@ -841,8 +843,8 @@ def build_plan(root, map_path, files):
     map_bytes = map_path.read_bytes()
     data = json.loads(map_bytes)
     MAP.validate_map(data)
-    if any(row['kind'] in ('module', 'relocation') for row in data['entries']):
-        raise ValueError('module/relocation rows need whole-tree planning (naming-tree.py)')
+    if any(row['kind'] in ('module', 'relocation') or 'public_from' in row for row in data['entries']):
+        raise ValueError('module/relocation rows and visibility changes need whole-tree planning (naming-tree.py)')
     records = []
     for relative, artifact in files:
         source = safe_path(root, relative)
