@@ -1,22 +1,10 @@
 import Jaune.MessageCall.FinalExec
+import Jaune.MessageCall.FinalMemoryCosts
 
 /-! # Call input and return windows on the lifetime-grouped machine -/
 
 namespace Jaune.Staging
 open Jaune
-
-private theorem memory_slice_length (xs : Array UInt8) (index size : Nat)
-    (defaultByte : UInt8) : (Array.sliceD xs index size defaultByte).length = size := by
-  have aux (acc : List UInt8) (n : Nat) :
-      (Array.sliceD.aux xs acc index n defaultByte).length = acc.length + n := by
-    induction n generalizing acc with
-    | zero => rfl
-    | succ n ih =>
-      change (Array.sliceD.aux xs (xs.getD (index + n) defaultByte :: acc)
-        index n defaultByte).length = _
-      rw [ih, List.length_cons]
-      omega
-  simpa only [Array.sliceD, List.length_nil, Nat.zero_add] using aux [] size
 
 private theorem push_done_ne_spawn (d : Frame.State) (c : Frame) (p : Pending) :
     MessageOp.Outcome.ofExcept (do
@@ -181,5 +169,43 @@ theorem enter_precompile {f : Frame} {world : World} {adr : Address}
       f.message.context.block.rules.isPrecompile adr) = true) :
     enter f = .done (runPrecompile (Frame.entered f f.startState world) adr >>= settle f) := by
   simp only [enter, enterWith, htransfer, hcode, hdispatch, ite_true]
+
+
+/-- A successful precompile reply at entry obeys the native bound, including identity and modexp. -/
+theorem enter_native_ok_output_length_lt_two_pow_160 {f : Frame} {world : World} {adr : Address}
+    {exit : Frame.Exit} (h : runPrecompile (Frame.entered f f.startState world) adr = .ok exit)
+    (hdata : f.message.context.calldata.length < 2 ^ 160)
+    (hgas : f.message.gas < 2 ^ 256 + Gas.callStipend) : exit.output.length < 2 ^ 160 := by
+  unfold runPrecompile at h
+  cases hp : precompileRun (Frame.entered f f.startState world).precompileEvm adr with
+  | ok cost output =>
+    rw [hp] at h; cases h
+    exact precompileRun_ok_output_length_lt_two_pow_160 hp hdata hgas
+  | error reason cost =>
+    rw [hp] at h
+    cases reason <;> cases h <;> exact (by decide : 0 < 2 ^ 160)
+
+/-- A rejected precompile that returns an exit has no output. -/
+theorem enter_native_error_output_nil {f : Frame} {world : World} {adr : Address} {cost : Nat}
+    {reason : EvmError} {e : Frame.Exit}
+    (hp : precompileRun (Frame.entered f f.startState world).precompileEvm adr = .error reason cost)
+    (h : runPrecompile (Frame.entered f f.startState world) adr = .ok e) : e.output = [] := by
+  unfold runPrecompile at h
+  rw [hp] at h
+  cases reason <;> cases h <;> rfl
+
+/-- Settlement keeps the output length or clears the output on a failed creation deposit. -/
+theorem settle_output_length_le {f : Frame} {e : Frame.Exit} {r : Frame.Result}
+    (h : settle f e = .ok r) : r.output.length ≤ e.output.length := by
+  cases e with
+  | halted reason s => cases h; exact Nat.le_refl _
+  | reverted output s => cases h; exact Nat.le_refl _
+  | finished output s =>
+    simp only [settle] at h
+    split at h
+    · cases h; exact Nat.le_refl _
+    · split at h
+      · cases h; exact Nat.le_refl _
+      · cases h; exact Nat.zero_le _
 
 end Jaune.Staging

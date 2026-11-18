@@ -90,6 +90,7 @@ import Jaune.MessageCall.FinalPlainGasFacts
 import Jaune.FinalSufficiencyWalk
 import Jaune.MessageCall.FinalStateGasOps
 import Jaune.MessageCall.FinalStateGasZero
+import Jaune.MessageCall.FinalMemoryCosts
 import Jaune.MessageCall.FinalMemoryAccounting
 import Jaune.MessageCall.FinalStepGasBound
 
