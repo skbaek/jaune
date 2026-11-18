@@ -136,6 +136,8 @@
   "Jaune.MessageCall.FinalStateGasOps": "proof",
   "Jaune.MessageCall.FinalStateGasZero": "proof",
   "Jaune.MessageCall.FinalMemoryCosts": "proof",
+  "Jaune.MessageCall.FinalPlainMemory": "proof",
+  "Jaune.MessageCall.FinalMessageMemory": "proof",
   "Jaune.MessageCall.FinalMemoryAccounting": "proof"
  },
  "implementation_imports": [
