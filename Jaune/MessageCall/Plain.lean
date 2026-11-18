@@ -9,7 +9,7 @@ The successor of `PlainOp.runCore`: the same seventy arms, run over the lifetime
 `ExceptionalHalt` (design §2.5). Staged as `Jaune.Staging.PlainOp.runCore`; the switch commit
 relocates the old definition and drops `Staging`.
 
-The arms are grouped by the families W4 turns into rows (W4 design rev 2 §2, rev 3):
+The arms are grouped by the families W4 turns into rows (W4 design note, revisions 2 and 3, §2):
 
 * **Word** (arithmetic, comparison, environment pushes, `CALLDATALOAD`, `BLOBHASH`,
   `BLOCKHASH`, `EXP`, `POP`, `GAS`, `PC`, `MSIZE`, `RETURNDATASIZE`) and **Shuffle** (`DUP`,
