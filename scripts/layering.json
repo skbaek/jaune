@@ -122,7 +122,16 @@
   "Jaune.Bridge.G2a.Body": "bridge",
   "Jaune.Run.BodyT8n": "adapter",
   "Jaune.Run.Block": "specification",
-  "Jaune.Bridge.G2a.Block": "bridge"
+  "Jaune.Bridge.G2a.Block": "bridge",
+  "Jaune.MessageCall.FinalStep": "specification",
+  "Jaune.MessageCall.FinalParts": "specification",
+  "Jaune.MessageCall.FinalDriver": "specification",
+  "Jaune.MessageCall.FinalExec": "specification",
+  "Jaune.Implementation.FinalCachedDriver": "implementation",
+  "Jaune.Bridge.G2b.FinalStep": "bridge",
+  "Jaune.Bridge.G2b.FinalParts": "bridge",
+  "Jaune.Bridge.G2b.FinalOutput": "bridge",
+  "Jaune.Bridge.G2b.FinalDriver": "bridge"
  },
  "implementation_imports": [
   {
