@@ -136,7 +136,9 @@
   "Jaune.MessageCall.FinalGasFacts": "proof",
   "Jaune.MessageCall.FinalPlainGasFacts": "proof",
   "Jaune.MessageCall.FinalMessageGasFacts": "proof",
-  "Jaune.MessageCall.FinalStepGasBound": "proof"
+  "Jaune.MessageCall.FinalStepGasBound": "proof",
+  "Jaune.MessageCall.FinalPartsGas": "proof",
+  "Jaune.MessageCall.FinalTotality": "proof"
  },
  "implementation_imports": [
   {

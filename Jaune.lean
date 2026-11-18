@@ -81,6 +81,8 @@ import Jaune.Bridge.G2b.FinalParts
 import Jaune.Bridge.G2b.FinalOutput
 import Jaune.Bridge.G2b.FinalDriver
 import Jaune.MessageCall.FinalStepGasBound
+import Jaune.MessageCall.FinalPartsGas
+import Jaune.MessageCall.FinalTotality
 
 namespace Jaune
 
