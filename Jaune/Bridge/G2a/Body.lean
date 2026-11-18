@@ -154,11 +154,11 @@ theorem fold_transactions (benv : Benv) :
   | [], p, rest => rfl
   | ⟨i, tx⟩ :: l, p, rest => by
     simp only [List.map_cons, List.cons_append, Body.fold, Body.step, applyTransactions,
-      ← processTransaction_eq_b2]
-    cases h : B2.processTransaction (benv.withState p.state) p.toBlockOutput tx i with
+      ← processTransaction_eq_b2, ← B2.Transaction.run_output]
+    cases h : B2.Transaction.run (benv.withState p.state) p.toBlockOutput tx i with
     | error e => rfl
     | ok q =>
-      obtain ⟨st, b⟩ := q
+      obtain ⟨run, b⟩ := q
       simp only [bind, Except.bind, pure, Except.pure]
       rw [fold_transactions benv l]
       rfl
@@ -327,7 +327,7 @@ theorem fold_postOps (benv : Benv) (p : Body.Prefix) (n : Nat) (ommers : List He
     (by
       show (withdrawalsPass _ _ _ _).2.receiptKeys.length = n
       rw [withdrawalsPass_receiptKeys]; exact hk)]
-  simp only [fold_tailOps, Body.Prefix.state_ofBlockOutput, Body.Prefix.toBlockOutput_ofBlockOutput,
+  simp only [Body.Prefix.state_ofBlockOutput, Body.Prefix.toBlockOutput_ofBlockOutput,
     Benv.withState_withState]
   rcases withdrawalsPass benv.stat.rules (benv.withState p.state) p.toBlockOutput wds with ⟨stW, bW⟩
   dsimp only
