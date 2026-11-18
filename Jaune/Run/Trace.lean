@@ -1,3 +1,4 @@
+import Jaune.Bridge.G2a.Old.Trace
 import Jaune.TraceTransaction
 import Jaune.Bridge.G2a.Consumers
 

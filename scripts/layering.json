@@ -16,6 +16,13 @@
   "JauneChecks"
  ],
  "modules": {
+  "Jaune.Transaction.Parts": "specification",
+  "Jaune.Bridge.G2a.Old.Message": "bridge",
+  "Jaune.Bridge.G2a.Old.Transaction": "bridge",
+  "Jaune.Bridge.G2a.Old.Body": "bridge",
+  "Jaune.Bridge.G2a.Old.Trace": "adapter",
+  "Jaune.Bridge.G2a.Old.T8n": "adapter",
+  "Jaune.Bridge.G2a.Phased": "bridge",
   "Examples.Arithmetic": "check",
   "Examples.Execution": "check",
   "Examples.ShapePilot": "check",

@@ -1,3 +1,4 @@
+import Jaune.Bridge.G2a.Old.Transaction
 import Batteries.Tactic.OpenPrivate
 import Jaune.MessageCall.SpawnFacts
 import Jaune.Run.Transaction

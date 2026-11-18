@@ -1,3 +1,4 @@
+import Jaune.Transaction.Parts
 import Jaune.Sufficiency
 import Jaune.MessageCall.Canonical
 -- `List.IsChain` itself is Batteries; its infix/suffix closure lemmas, which
