@@ -39,6 +39,7 @@ import Jaune.MessageCall.ResumeFacts
 import Jaune.MessageCall.RunInvariants
 import Jaune.MessageCall.DriverInvariants
 import Jaune.MessageCall.SpawnFacts
+import Jaune.MessageCall.State
 import Jaune.ExecFrame
 import Jaune.ExecFrameRel
 import Jaune.Exec
@@ -50,6 +51,7 @@ import Jaune.SymbolicPush
 import Jaune.SymbolicArith
 import Jaune.MessageExecution
 import Jaune.Transaction
+import Jaune.Bridge.G2b.State
 
 namespace Jaune
 

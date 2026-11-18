@@ -79,6 +79,8 @@
   "Jaune.MessageCall.StateGasZero": "proof",
   "Jaune.MessageCall.MemoryAccounting": "proof",
   "Jaune.MessageCall.SpawnFacts": "proof",
+  "Jaune.MessageCall.State": "specification",
+  "Jaune.Bridge.G2b.State": "bridge",
   "Jaune.MessageExecution": "proof",
   "Jaune.MulDiv": "proof",
   "Jaune.NativePrecompile": "proof",
