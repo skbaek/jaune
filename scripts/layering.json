@@ -160,7 +160,11 @@
   "Jaune.MessageCall.FinalDerivOrder": "proof",
   "Jaune.Bridge.G2b.FinalDerivation": "bridge",
   "Jaune.Bridge.G2b.FinalAdequacy": "bridge",
-  "Jaune.Bridge.G2b.FinalChronology": "bridge"
+  "Jaune.Bridge.G2b.FinalChronology": "bridge",
+  "Jaune.MessageCall.FinalRunInvariants": "proof",
+  "Jaune.MessageCall.FinalDriverInvariants": "proof",
+  "Examples.FinalShapePilot": "check",
+  "Jaune.MessageCall.FinalCanonical": "proof"
  },
  "implementation_imports": [
   {

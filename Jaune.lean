@@ -107,6 +107,9 @@ import Jaune.MessageCall.FinalDerivOrder
 import Jaune.Bridge.G2b.FinalDerivation
 import Jaune.Bridge.G2b.FinalAdequacy
 import Jaune.Bridge.G2b.FinalChronology
+import Jaune.MessageCall.FinalRunInvariants
+import Jaune.MessageCall.FinalDriverInvariants
+import Jaune.MessageCall.FinalCanonical
 
 namespace Jaune
 
