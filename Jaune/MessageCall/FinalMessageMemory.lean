@@ -113,7 +113,8 @@ private theorem create2_memory (ctx : CallContext) (s : Frame.State) (hn : ctx.b
     exact ht
   · exact Nat.le_refl _
 
-private theorem delegation_machine (rules : ForkRules) (s : Frame.State) (a : Address) :
+/-- Delegation lookup observes or warms addresses in the caller without touching its machine. -/
+theorem ForkRules.accessDelegation_machine (rules : ForkRules) (s : Frame.State) (a : Address) :
     (ForkRules.accessDelegation rules s a).2.2.2.2.machine = s.machine := by
   unfold ForkRules.accessDelegation
   split
@@ -175,7 +176,7 @@ local macro "call_charge" : tactic => `(tactic| (
   dsimp only at *
   refine Walk.bind (charged_call_memory _ _ _ (grant_le_cost _ _ _ _ _ ?_) ?_ ?_) ?_
   · first | exact Nat.zero_le _ | apply value_stipend_le_transfer
-  · rw [delegation_machine]; split <;> rfl
+  · rw [ForkRules.accessDelegation_machine]; split <;> rfl
   · assumption
   · intro t ht
     try (refine Walk.bind (Walk.assert (H := fun post => Machine.memoryPotential post.machine ≤ _) ((Machine.memoryPotential_le_extended _ _).trans ((Nat.le_add_right _ _).trans ht))) ?_; intro _ _)
