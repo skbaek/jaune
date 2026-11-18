@@ -138,9 +138,12 @@
   "Jaune.Run.Canonical": "specification",
   "Jaune.Run.BlockFacts": "specification",
   "Jaune.Bridge.G2a.Canonical": "bridge",
-  "Jaune.FinalSufficiencyWalk": "proof",
   "Jaune.MessageCall.FinalGasFacts": "proof",
-  "Jaune.MessageCall.FinalPlainGasFacts": "proof"
+  "Jaune.MessageCall.FinalPlainGasFacts": "proof",
+  "Jaune.FinalSufficiencyWalk": "proof",
+  "Jaune.MessageCall.FinalStateGasOps": "proof",
+  "Jaune.MessageCall.FinalStateGasZero": "proof",
+  "Jaune.MessageCall.FinalMemoryAccounting": "proof"
  },
  "implementation_imports": [
   {

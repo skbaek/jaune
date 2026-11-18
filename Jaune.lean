@@ -87,6 +87,10 @@ import Jaune.Run.BlockFacts
 import Jaune.Bridge.G2a.Canonical
 import Jaune.MessageCall.FinalGasFacts
 import Jaune.MessageCall.FinalPlainGasFacts
+import Jaune.FinalSufficiencyWalk
+import Jaune.MessageCall.FinalStateGasOps
+import Jaune.MessageCall.FinalStateGasZero
+import Jaune.MessageCall.FinalMemoryAccounting
 
 namespace Jaune
 
