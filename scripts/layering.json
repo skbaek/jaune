@@ -153,7 +153,8 @@
   "Jaune.MessageCall.FinalTotality": "proof",
   "Jaune.MessageCall.FinalDerivation": "proof",
   "Jaune.MessageCall.FinalChronology": "proof",
-  "Jaune.MessageCall.FinalAdequacy": "proof"
+  "Jaune.MessageCall.FinalAdequacy": "proof",
+  "Jaune.MessageCall.FinalDerivationMemory": "proof"
  },
  "implementation_imports": [
   {
