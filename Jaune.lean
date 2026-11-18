@@ -92,6 +92,8 @@ import Jaune.MessageCall.FinalPartsGas
 import Jaune.MessageCall.FinalTotality
 import Jaune.MessageCall.FinalSpawnFacts
 import Jaune.MessageCall.FinalResumeFacts
+import Jaune.MessageCall.FinalRunInvariants
+import Jaune.MessageCall.FinalDriverInvariants
 
 namespace Jaune
 

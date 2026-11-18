@@ -146,7 +146,9 @@
   "Jaune.MessageCall.FinalPartsGas": "proof",
   "Jaune.MessageCall.FinalTotality": "proof",
   "Jaune.MessageCall.FinalSpawnFacts": "proof",
-  "Jaune.MessageCall.FinalResumeFacts": "proof"
+  "Jaune.MessageCall.FinalResumeFacts": "proof",
+  "Jaune.MessageCall.FinalRunInvariants": "proof",
+  "Jaune.MessageCall.FinalDriverInvariants": "proof"
  },
  "implementation_imports": [
   {
