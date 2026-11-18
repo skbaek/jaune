@@ -85,6 +85,9 @@ import Jaune.Run.BodyFacts
 import Jaune.Run.Canonical
 import Jaune.Run.BlockFacts
 import Jaune.Bridge.Memory
+import Jaune.MessageCall.CheckedFrame
+import Jaune.Bridge.G2b.CheckedFrame
+import Jaune.Bridge.G2b.MemoryReachability
 import Jaune.Bridge.G2a.Canonical
 
 namespace Jaune
