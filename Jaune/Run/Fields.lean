@@ -6,7 +6,7 @@ import Jaune.Run.Message
 The transaction and the system calls read a top-level message run through the functions below,
 one per value they need. Each is a function of the `MessageRun`, branching on its preparation and
 result and, where the two lanes differ, once on the rules' state gas. There is no output record:
-`MsgCallOutput` dissolves into these functions (W2 design rev 3 §3.1, the table of output fields).
+`MsgCallOutput` dissolves into these functions (W2 design revision 3, §3.1, the table of output fields).
 
 * A frame that ran reports its result: the world after it, its gas, output and settled halt; on
   success its substate's logs, deletions and (without state gas) touched accounts. With state gas
