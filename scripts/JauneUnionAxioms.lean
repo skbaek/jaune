@@ -28,6 +28,7 @@ import Jaune.StaticcallEffects
 -- Standalone tracer modules, outside the production umbrella.
 import Jaune.TraceTransaction
 import Jaune.MessageCall.TraceJson
+import Jaune.Run.Trace
 
 /-!
 # Whole-library axiom union for `Jaune`
