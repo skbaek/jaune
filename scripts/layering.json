@@ -143,7 +143,9 @@
   "Jaune.FinalSufficiencyWalk": "proof",
   "Jaune.MessageCall.FinalStateGasOps": "proof",
   "Jaune.MessageCall.FinalStateGasZero": "proof",
-  "Jaune.MessageCall.FinalMemoryAccounting": "proof"
+  "Jaune.MessageCall.FinalMemoryAccounting": "proof",
+  "Jaune.MessageCall.FinalMessageGasFacts": "proof",
+  "Jaune.MessageCall.FinalStepGasBound": "proof"
  },
  "implementation_imports": [
   {
