@@ -148,7 +148,8 @@
   "Jaune.MessageCall.FinalSpawnFacts": "proof",
   "Jaune.MessageCall.FinalResumeFacts": "proof",
   "Jaune.MessageCall.FinalRunInvariants": "proof",
-  "Jaune.MessageCall.FinalDriverInvariants": "proof"
+  "Jaune.MessageCall.FinalDriverInvariants": "proof",
+  "Examples.FinalShapePilot": "check"
  },
  "implementation_imports": [
   {
