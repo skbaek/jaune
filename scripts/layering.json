@@ -150,7 +150,10 @@
   "Jaune.MessageCall.FinalPlainMemory": "proof",
   "Jaune.MessageCall.FinalMessageMemory": "proof",
   "Jaune.MessageCall.FinalPartsGas": "proof",
-  "Jaune.MessageCall.FinalTotality": "proof"
+  "Jaune.MessageCall.FinalTotality": "proof",
+  "Jaune.MessageCall.FinalDerivation": "proof",
+  "Jaune.MessageCall.FinalChronology": "proof",
+  "Jaune.MessageCall.FinalAdequacy": "proof"
  },
  "implementation_imports": [
   {
