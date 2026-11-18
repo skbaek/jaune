@@ -19,6 +19,10 @@ theorem exec_iff_exec_eq (r : Frame.Running) (out : Except Fault Frame.Exit) :
     rw [h] at hr
     exact Exec.of_fueled _ _ _ (Fueled.ext hr)
 
+/-- Compute the complete derivation at the totality budget. -/
+def Exec.ofRun (r : Frame.Running) : Exec r (exec r) :=
+  Exec.ofFueled _ r _ (Fueled.ext (execFueled_run_sufficientFuel r))
+
 theorem Exec.nonempty (r : Frame.Running) : Nonempty (Exec r (exec r)) :=
   (exec_iff_exec_eq r (exec r)).mpr rfl
 

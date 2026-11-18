@@ -134,21 +134,21 @@ theorem Exec.sufficient {r out} (run : Exec r out) :
 
 /-- Recover each subderivation from the driver, eliminating exhaustion at the root and at
 each child. -/
-theorem Exec.of_fueled (fuel : Nat) (r : Frame.Running) (out : Except Fault Frame.Exit)
-    (h : execFueled r fuel = Fueled.ofExcept out) : Nonempty (Exec r out) := by
-  induction fuel generalizing r out with
+def Exec.ofFueled (fuel : Nat) (r : Frame.Running) (out : Except Fault Frame.Exit)
+    (h : execFueled r fuel = Fueled.ofExcept out) : Exec r out := by
+  cases fuel with
   | zero => exact (Fueled.exhausted_ne_ofExcept h).elim
-  | succ fuel ih =>
+  | succ fuel =>
     rcases hs : step r with f | exit | ⟨pc, state⟩ | ⟨child, pending, pc⟩
     · simp only [execFueled, hs] at h
       cases Fueled.ofExcept_inj.mp h
-      exact ⟨.halt hs⟩
+      exact .halt hs
     · simp only [execFueled, hs] at h
       cases Fueled.ofExcept_inj.mp h
-      exact ⟨.halt hs⟩
+      exact .halt hs
     · simp only [execFueled, hs] at h
-      obtain ⟨next⟩ := ih _ _ h
-      exact ⟨.cont hs next⟩
+      let next := Exec.ofFueled fuel _ _ h
+      exact .cont hs next
     · cases he : enter child with
       | done result =>
         rw [execFueled_spawn_done hs he] at h
@@ -156,11 +156,11 @@ theorem Exec.of_fueled (fuel : Nat) (r : Frame.Running) (out : Except Fault Fram
         | error terminal =>
           rw [hr] at h
           cases Fueled.ofExcept_inj.mp h
-          exact ⟨.doneErr hs he hr⟩
+          exact .doneErr hs he hr
         | ok state =>
           rw [hr] at h
-          obtain ⟨next⟩ := ih _ _ h
-          exact ⟨.doneOk hs he hr next⟩
+          let next := Exec.ofFueled fuel _ _ h
+          exact .doneOk hs he hr next
       | run cr =>
         rw [execFueled_spawn_run hs he] at h
         cases hc : (execFueled cr fuel).run with
@@ -168,17 +168,21 @@ theorem Exec.of_fueled (fuel : Nat) (r : Frame.Running) (out : Except Fault Fram
           rw [hc] at h
           exact (Fueled.exhausted_ne_ofExcept h).elim
         | some raw =>
-          obtain ⟨childRun⟩ := ih cr raw (Fueled.ext hc)
+          let childRun := Exec.ofFueled fuel cr raw (Fueled.ext hc)
           rw [hc] at h
           dsimp only at h
           cases hr : resumeCaller r.context.block.rules child pending (raw >>= settle child) with
           | error terminal =>
             rw [hr] at h
             cases Fueled.ofExcept_inj.mp h
-            exact ⟨.runErr hs he childRun hr⟩
+            exact .runErr hs he childRun hr
           | ok state =>
             rw [hr] at h
-            obtain ⟨next⟩ := ih _ _ h
-            exact ⟨.runOk hs he childRun hr next⟩
+            let next := Exec.ofFueled fuel _ _ h
+            exact .runOk hs he childRun hr next
+termination_by fuel
+
+theorem Exec.of_fueled (fuel : Nat) (r : Frame.Running) (out : Except Fault Frame.Exit)
+    (h : execFueled r fuel = Fueled.ofExcept out) : Nonempty (Exec r out) := ⟨Exec.ofFueled fuel r out h⟩
 
 end Jaune.Staging
