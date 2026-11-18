@@ -138,7 +138,13 @@
   "Jaune.MessageCall.FinalMemoryCosts": "proof",
   "Jaune.MessageCall.FinalPlainMemory": "proof",
   "Jaune.MessageCall.FinalMessageMemory": "proof",
-  "Jaune.MessageCall.FinalMemoryAccounting": "proof"
+  "Jaune.MessageCall.FinalMemoryAccounting": "proof",
+  "Jaune.MessageCall.FinalGasFacts": "proof",
+  "Jaune.MessageCall.FinalPlainGasFacts": "proof",
+  "Jaune.MessageCall.FinalMessageGasFacts": "proof",
+  "Jaune.MessageCall.FinalStepGasBound": "proof",
+  "Jaune.MessageCall.FinalPartsGas": "proof",
+  "Jaune.MessageCall.FinalTotality": "proof"
  },
  "implementation_imports": [
   {

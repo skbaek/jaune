@@ -87,6 +87,9 @@ import Jaune.MessageCall.FinalMemoryCosts
 import Jaune.MessageCall.FinalPlainMemory
 import Jaune.MessageCall.FinalMessageMemory
 import Jaune.MessageCall.FinalMemoryAccounting
+import Jaune.MessageCall.FinalStepGasBound
+import Jaune.MessageCall.FinalPartsGas
+import Jaune.MessageCall.FinalTotality
 
 namespace Jaune
 
