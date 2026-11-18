@@ -3442,6 +3442,29 @@ storage setters preserve an existing owner's presence. -/
 def Account.clearIfEmpty (ac : Account) : Account :=
   if ac.isEmpty then .nil else ac
 
+/-- Which empty accounts a state update retains. Storage does not count towards EIP-161 emptiness,
+but it is part of the default account tested by `eraseNil`. -/
+inductive EmptyRule where
+  | erase
+  | keep
+  | eraseNil
+  | keepIfPresent
+
+/-- Update an account under the presence rule of the operation that writes it. -/
+def State.writeAccount (w : State) (rule : EmptyRule) (a : Address)
+    (update : Account → Account) : State :=
+  let result := update (w.get a)
+  let erase : Bool := match rule with
+    | .erase => decide result.isEmpty
+    | .keep => false
+    | .eraseNil => decide (result = .nil)
+    | .keepIfPresent => !(w[a]?).isSome && decide (result = .nil)
+  if erase then w.erase a else w.insert a result
+
+/-- A balance change cannot empty an account with a nonce or code. -/
+def State.Protected (w : State) (a : Address) : Prop :=
+  (w.get a).nonce ≠ 0 ∨ (w.get a).code.size ≠ 0
+
 /-- EELS `modify_state`: normalize after changing balance, nonce, or code. -/
 def State.setAccount (w : State) (a : Address) (ac : Account) : State :=
   w.set a ac.clearIfEmpty
@@ -3449,6 +3472,10 @@ def State.setAccount (w : State) (a : Address) (ac : Account) : State :=
 /-- Storage deletion is not a collection of SSTORE-to-zero operations. -/
 def KeySet.eraseAddress (writes : KeySet) (a : Address) : KeySet :=
   writes.filter fun key => key.1 != a
+
+/-- Forget writes at an address when the updated account is empty. -/
+def KeySet.clearIfEmpty (writes : KeySet) (w : State) (a : Address) : KeySet :=
+  if (w.get a).isEmpty then writes.eraseAddress a else writes
 
 def Benv.clearStorageWritesIfEmpty (benv : Benv) (a : Address) : Benv :=
   {benv with storageWrites :=

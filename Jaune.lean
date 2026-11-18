@@ -86,6 +86,9 @@ import Jaune.Run.Canonical
 import Jaune.Run.BlockFacts
 import Jaune.Bridge.G2a.Canonical
 
+import Jaune.AccountWriteFacts
+import Jaune.Bridge.AccountWrite
+
 namespace Jaune
 
 end Jaune
