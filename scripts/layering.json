@@ -98,7 +98,10 @@
   "Jaune.WordFacts": "proof",
   "Main": "adapter",
   "MemoryProbe": "adapter",
-  "TraceMain": "adapter"
+  "TraceMain": "adapter",
+  "Jaune.Run.Message": "specification",
+  "Jaune.Run.Transaction": "specification",
+  "Jaune.Bridge.G2a.Run": "bridge"
  },
  "implementation_imports": [
   {
