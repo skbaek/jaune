@@ -101,6 +101,8 @@ import Jaune.MessageCall.FinalDerivation
 import Jaune.MessageCall.FinalChronology
 import Jaune.MessageCall.FinalAdequacy
 import Jaune.MessageCall.FinalDerivationMemory
+import Jaune.MessageCall.FinalSpawnFacts
+import Jaune.MessageCall.FinalResumeFacts
 
 namespace Jaune
 

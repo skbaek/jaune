@@ -154,7 +154,9 @@
   "Jaune.MessageCall.FinalDerivation": "proof",
   "Jaune.MessageCall.FinalChronology": "proof",
   "Jaune.MessageCall.FinalAdequacy": "proof",
-  "Jaune.MessageCall.FinalDerivationMemory": "proof"
+  "Jaune.MessageCall.FinalDerivationMemory": "proof",
+  "Jaune.MessageCall.FinalSpawnFacts": "proof",
+  "Jaune.MessageCall.FinalResumeFacts": "proof"
  },
  "implementation_imports": [
   {
