@@ -59,6 +59,8 @@
   "Jaune.Implementation.CachedDriver": "implementation",
   "Jaune.KeccakSpec": "specification",
   "Jaune.Machine": "specification",
+  "Jaune.Memory": "specification",
+  "Jaune.Bridge.Memory": "bridge",
   "Jaune.MemoryAccounting": "proof",
   "Jaune.MessageCall": "specification",
   "Jaune.MessageCall.Canonical": "specification",
