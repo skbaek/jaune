@@ -90,6 +90,8 @@ import Jaune.MessageCall.FinalMemoryAccounting
 import Jaune.MessageCall.FinalStepGasBound
 import Jaune.MessageCall.FinalPartsGas
 import Jaune.MessageCall.FinalTotality
+import Jaune.MessageCall.FinalSpawnFacts
+import Jaune.MessageCall.FinalResumeFacts
 
 namespace Jaune
 

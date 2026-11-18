@@ -144,7 +144,9 @@
   "Jaune.MessageCall.FinalMessageGasFacts": "proof",
   "Jaune.MessageCall.FinalStepGasBound": "proof",
   "Jaune.MessageCall.FinalPartsGas": "proof",
-  "Jaune.MessageCall.FinalTotality": "proof"
+  "Jaune.MessageCall.FinalTotality": "proof",
+  "Jaune.MessageCall.FinalSpawnFacts": "proof",
+  "Jaune.MessageCall.FinalResumeFacts": "proof"
  },
  "implementation_imports": [
   {
