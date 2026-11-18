@@ -67,7 +67,7 @@ or one of the following community abbreviations:
   `KECCAK`, `RIPEMD160`, `BLAKE2`, `secp256k1`, `Modexp`, `Ecrecover`
 - Standard Lean / type tokens: `UInt8`, `UInt16`, `UInt32`, `UInt64`, `U8`,
   `U16`, `U32`, `U64`, `U256`, `U128`, `Hash32`, `Nat`, `Int`, `Bool`,
-  `ByteArray`, `Bytes`
+  `ByteArray`, `Bytes`, `IO` (Lean core's `IO`, as in `Jaune.Adapter.IO`)
 
 Lean's own lemma-name relation tokens are not abbreviations chosen by Jaune:
 `le`/`Le`, `lt`/`Lt`, `eq`/`Eq`, `ne`/`Ne` and their kin name the relation a

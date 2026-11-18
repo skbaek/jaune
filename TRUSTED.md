@@ -78,8 +78,10 @@ constructors (`Jaune.AxiomAudit.walk` in
 `Lean.collectAxioms` or `#print axioms`, which on current Lean can under-report
 axioms reached through an imported inductive (lean4#15226).
 [`scripts/assurance-manifest.json`](scripts/assurance-manifest.json) records
-every row's provenance. That includes the fifteen obligations Blanc pinned
-under their former `Blanc.*` names before these declarations moved into Jaune.
+every row's provenance. That includes the fourteen obligations Blanc pinned
+before these declarations moved into Jaune: thirteen under their former
+`Blanc.*` names, and one re-pointed to `Jaune.Frame.settlementCommits_iff` at
+G1.
 `python3 scripts/check-assurance-manifest.py` runs in CI. It fails when a row
 and the manifest disagree, when either loses an entry, or when a public rule of
 a symbolic-rule module has no row. Adding, removing or re-pinning a row is a
