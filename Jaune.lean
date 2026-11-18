@@ -52,6 +52,9 @@ import Jaune.SymbolicArith
 import Jaune.MessageExecution
 import Jaune.Transaction
 import Jaune.Bridge.G2b.State
+import Jaune.Run.Message
+import Jaune.Run.Transaction
+import Jaune.Bridge.G2a.Run
 
 namespace Jaune
 
