@@ -105,7 +105,9 @@
   "Jaune.Run.Transaction": "specification",
   "Jaune.Bridge.G2a.Run": "bridge",
   "Jaune.MessageCall.Plain": "specification",
-  "Jaune.Bridge.G2b.Plain": "bridge"
+  "Jaune.Bridge.G2b.Plain": "bridge",
+  "Jaune.MessageCall.Control": "specification",
+  "Jaune.Bridge.G2b.Control": "bridge"
  },
  "implementation_imports": [
   {
