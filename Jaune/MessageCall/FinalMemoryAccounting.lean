@@ -426,6 +426,14 @@ theorem exec_memory_accounting_output (run : Frame.Running) {e : Frame.Exit}
     Frame.Exit.MemoryAccounted (Machine.memoryPotential run.state.machine) e :=
   execFueled_memory_accounting_output _ run hn (seeded_run_of_ok he)
 
+/-- A code frame pays for its full output from its own message gas, including a reverted output. -/
+theorem entered_code_output_cost {child : Frame} {run : Frame.Running} {e : Frame.Exit}
+    (hn : child.message.context.block.rules.stateGas = none)
+    (henter : enter child = .run run) (hrun : exec run = .ok e) :
+    calculateMemoryGasCost e.output.length ≤ child.message.gas := by
+  obtain ⟨hctx, hp⟩ := enter_run_memory henter
+  exact hp ▸ (exec_memory_accounting_output run (hctx ▸ hn) hrun).2
+
 private theorem settle_exec_gasLe {f : Frame} {run : Frame.Running} {e : Frame.Exit} {r : Frame.Result}
     (he : enter f = .run run) (hx : exec run = .ok e) (hs : settle f e = .ok r) : r.gasMeasure ≤ f.message.gas := by
   have hbound := execFueled_settledGasLe _ run (seeded_run_of_ok hx)
@@ -463,9 +471,7 @@ private theorem child_result_output_bound
   | run r =>
     simp only [he] at h
     obtain ⟨e, hx, hs⟩ := Except.bind_eq_ok h
-    obtain ⟨hctx, hpot⟩ := enter_run_memory he
-    have haccount := exec_memory_accounting_output r (hctx ▸ hn) hx
-    have hc : calculateMemoryGasCost e.output.length ≤ child.message.gas := hpot ▸ haccount.2
+    have hc := entered_code_output_cost hn he hx
     exact (settle_output_length_le hs).trans_lt (output_length_with_stipend hc hgas)
 
 /-- An immediate child result or an executed child bounds return data on both caller resume channels. -/
@@ -689,9 +695,7 @@ theorem call_spawn_code_reply_bound
     e.output.length < 2 ^ 160 ∧ (∀ r, settle child e = .ok r → r.output.length < 2 ^ 160) ∧
       ∀ x, (settle child e >>= resume rules p child.checkpoint) = .ok x →
         (match x with | .ok t | .error (_, t) => t.returnData.length) < 2 ^ 160 := by
-  obtain ⟨hctx, hp⟩ := enter_run_memory henter
-  have hr := exec_memory_accounting_output run (hctx ▸ hn) hrun
-  have hout := output_length_with_stipend hr.2 (hp ▸ hgas)
+  have hout := output_length_with_stipend (entered_code_output_cost hn henter hrun) hgas
   exact ⟨hout, fun _ hs => (settle_output_length_le hs).trans_lt hout, fun _ hx => call_settle_resume_bound ht hout hx⟩
 
 /-- The actual grant and input of a spawned native call bound its raw output. -/
