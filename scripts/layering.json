@@ -103,7 +103,9 @@
   "TraceMain": "adapter",
   "Jaune.Run.Message": "specification",
   "Jaune.Run.Transaction": "specification",
-  "Jaune.Bridge.G2a.Run": "bridge"
+  "Jaune.Bridge.G2a.Run": "bridge",
+  "Jaune.MessageCall.Plain": "specification",
+  "Jaune.Bridge.G2b.Plain": "bridge"
  },
  "implementation_imports": [
   {
