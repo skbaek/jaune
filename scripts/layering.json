@@ -32,6 +32,7 @@
   "Jaune.Check.EC": "check",
   "Jaune.Check.Execution": "check",
   "Jaune.Check.Fork": "check",
+  "Jaune.Check.FrameBridgeAudit": "check",
   "Jaune.Check.Hash": "check",
   "Jaune.Check.KeccakSpec": "check",
   "Jaune.Check.Machine": "check",
@@ -157,7 +158,14 @@
   "Jaune.MessageCall.FinalDerivOrder": "proof",
   "Jaune.Bridge.G2b.FinalDerivation": "bridge",
   "Jaune.Bridge.G2b.FinalAdequacy": "bridge",
-  "Jaune.Bridge.G2b.FinalChronology": "bridge"
+  "Jaune.Bridge.G2b.FinalChronology": "bridge",
+  "Jaune.Run.Root": "proof",
+  "Jaune.Bridge.G2b.FinalPrefix": "bridge",
+  "Jaune.Bridge.G2b.FinalRetained": "bridge",
+  "Jaune.Bridge.G2b.RunRoots": "bridge",
+  "Jaune.Bridge.G2b.BodyRoots": "bridge",
+  "Jaune.Bridge.G2b.BodyResults": "bridge",
+  "Jaune.Bridge.G2b.KeptHistory": "bridge"
  },
  "implementation_imports": [
   {

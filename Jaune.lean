@@ -104,6 +104,13 @@ import Jaune.MessageCall.FinalDerivOrder
 import Jaune.Bridge.G2b.FinalDerivation
 import Jaune.Bridge.G2b.FinalAdequacy
 import Jaune.Bridge.G2b.FinalChronology
+import Jaune.Run.Root
+import Jaune.Bridge.G2b.FinalPrefix
+import Jaune.Bridge.G2b.FinalRetained
+import Jaune.Bridge.G2b.RunRoots
+import Jaune.Bridge.G2b.BodyRoots
+import Jaune.Bridge.G2b.BodyResults
+import Jaune.Bridge.G2b.KeptHistory
 
 namespace Jaune
 
