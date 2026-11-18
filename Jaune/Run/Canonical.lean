@@ -432,7 +432,10 @@ theorem Body.step_canonical {benv : Benv} (hb : benv.stat.Canonical) {p : Body.P
     simp only [Body.step] at hs
     obtain ⟨⟨state, bout⟩, ht, hs⟩ := Except.bind_eq_ok hs
     cases hs
-    exact B2.processTransaction_canonical he ht
+    apply B2.processTransaction_canonical he (tx := tx) (index := index)
+      (bout := p.toBlockOutput) (p := (state.state, bout))
+    rw [← B2.Transaction.run_output, ht]
+    rfl
   | withdrawals ws index =>
     simp only [Body.step] at hs
     cases hs

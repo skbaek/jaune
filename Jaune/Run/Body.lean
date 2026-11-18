@@ -138,12 +138,12 @@ inductive BodyOp : Type where
 
 /-- What one operation produced, beside the next prefix. -/
 inductive OpRun : Type where
-  | systemCall (address : Address) (run : MessageRun)
-  | transaction (index : Nat) (tx : Transaction)
+  | systemCall (index : Nat) (address : Address) (run : MessageRun)
+  | transaction (run : B2.TransactionRun)
   | withdrawals (index : Nat) (ws : List Withdrawal)
   | depositRequests (requests : Bytes)
-  | requestCall (type : UInt8) (address : Address) (run : MessageRun)
-  | rewards
+  | requestCall (index : Nat) (type : UInt8) (address : Address) (run : MessageRun)
+  | rewards (coinbase : Address) (minerReward : Nat) (credits : List (Address × Nat))
   | buildAccessList (list : BlockAccessList)
   | checkAccessListLimit
 
@@ -158,14 +158,14 @@ def Body.step (benv : Benv) (p : Body.Prefix) : BodyOp → Except TransitionErro
     let data ← data
     let run ← (processUncheckedSystemTransaction (benv.withState p.state) address data).mapError
       (fun e => TransitionError.vm e.toEvmError)
-    pure (.systemCall address run,
+    pure (.systemCall index address run,
       { p with
         state := run.state
         accessList := p.accessList.incorporateSystem benv.stat.rules index p.state run.state
           (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList })
   | .transaction tx index => do
-    let ⟨state, bout⟩ ← B2.processTransaction (benv.withState p.state) p.toBlockOutput tx index
-    pure (.transaction index tx, Body.Prefix.ofBlockOutput state bout)
+    let ⟨run, bout⟩ ← B2.Transaction.run (benv.withState p.state) p.toBlockOutput tx index
+    pure (.transaction run, Body.Prefix.ofBlockOutput run.state bout)
   | .withdrawals ws index =>
     let state := processWithdrawalsState p.state ws
     pure (.withdrawals index ws,
@@ -183,7 +183,7 @@ def Body.step (benv : Benv) (p : Body.Prefix) : BodyOp → Except TransitionErro
           else p.requests })
   | .requestCall type address index => do
     let run ← processCheckedSystemTransaction (benv.withState p.state) address []
-    pure (.requestCall type address run,
+    pure (.requestCall index type address run,
       { p with
         state := run.state
         requests :=
@@ -195,7 +195,7 @@ def Body.step (benv : Benv) (p : Body.Prefix) : BodyOp → Except TransitionErro
               (address :: run.accountReads.toList) run.storageReads.toList
               run.storageWrites.toList })
   | .rewards coinbase minerReward credits =>
-    pure (.rewards,
+    pure (.rewards coinbase minerReward credits,
       { p with state := creditAll credits (p.state.addBal coinbase minerReward.toU256) })
   | .buildAccessList =>
     let list := match benv.stat.rules.blockAccessListRules with

@@ -147,6 +147,156 @@ theorem B2.processTransaction_output {benv : Benv} {bout : BlockOutput} {tx : Tr
     rw [hpb.2, hcb.2]
     exact settleTransactionGas_none_invariants hnone _ _ _ _ _ _
 
+/-- Each transaction record supplies the exact trie entry and logs that settlement wrote. -/
+theorem B2.Transaction.run_writes {benv : Benv} {bout out : BlockOutput} {tx : Transaction}
+    {index : Nat} {r : B2.TransactionRun} (h : B2.Transaction.run benv bout tx index = .ok (r, out)) :
+    r.index = index ∧ r.transaction = tx ∧
+    (benv.stat.rules.stateGas = none →
+      r.gasSettlement.executionGasUsed = r.gasSettlement.gasUsed ∧ r.gasSettlement.stateGasUsed = 0) ∧
+    out = { bout.withGasSettlement r.gasSettlement r.blobGasUsed with
+      transactionsTrie := bout.transactionsTrie.insert (rlpKey index) tx
+      receiptKeys := bout.receiptKeys ++ [rlpKey index]
+      receiptsTrie := bout.receiptsTrie.insert (rlpKey index) r.receipt
+      blockLogs := bout.blockLogs ++ r.receipt.2.logs
+      blockAccessListBuilder := bout.blockAccessListBuilder.incorporateSystem benv.stat.rules
+        (index + 1) benv.state r.state
+        (r.sender :: benv.stat.coinbase :: r.message.accountReads.toList)
+        r.message.storageReads.toList r.storageWrites.toList } := by
+  unfold B2.Transaction.run at h
+  obtain ⟨checked, hc, h⟩ := Except.bind_eq_ok h
+  obtain ⟨prepared, hp, h⟩ := Except.bind_eq_ok h
+  obtain ⟨run, _, h⟩ := Except.bind_eq_ok h
+  have hcb : checked.bout =
+      {bout with transactionsTrie := bout.transactionsTrie.insert (rlpKey index) tx} ∧
+      checked.benv = benv.beginTransaction := by
+    unfold Transaction.check at hc
+    obtain ⟨_, hb, hc⟩ := Except.bind_eq_ok hc
+    cases hb
+    obtain ⟨_, _, hc⟩ := Except.bind_eq_ok hc
+    obtain ⟨⟨_, _⟩, _, hc⟩ := Except.bind_eq_ok hc
+    obtain ⟨⟨_, _, _, _⟩, _, hc⟩ := Except.bind_eq_ok hc
+    cases hc
+    exact ⟨rfl, rfl⟩
+  have hpb : prepared.bout = checked.bout ∧ prepared.benv = checked.benv ∧ prepared.sender = checked.sender := by
+    unfold Transaction.prepare at hp
+    obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+    obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+    cases hp
+    exact ⟨rfl, rfl, rfl⟩
+  unfold B2.Transaction.settleRun at h
+  obtain ⟨refundCounter, _, h⟩ := Except.bind_eq_ok h
+  cases h
+  refine ⟨rfl, rfl, ?_, ?_⟩
+  · intro hnone
+    apply settleTransactionGas_none_invariants
+    rw [hpb.2.1, hcb.2]
+    exact hnone
+  · rw [hpb.1, hcb.1, hpb.2.1, hcb.2, hpb.2.2]
+    rfl
+
+/-- Reconstruct the block prefix from the operations' observations. A transaction contributes its
+settled world, receipt and surviving writes. System calls contribute the world and reads of their
+message run. No operation executes a message while reading this record. -/
+def OpRun.apply (benv : Benv) (p : Body.Prefix) : OpRun → Body.Prefix
+  | .transaction run =>
+    let key := rlpKey run.index
+    let output := p.toBlockOutput.withGasSettlement run.gasSettlement run.blobGasUsed
+    Body.Prefix.ofBlockOutput run.state { output with
+      transactionsTrie := p.transactionsTrie.insert key run.transaction
+      receiptKeys := p.receiptKeys ++ [key]
+      receiptsTrie := p.receiptsTrie.insert key run.receipt
+      blockLogs := p.logs ++ run.receipt.2.logs
+      blockAccessListBuilder := p.accessList.incorporateSystem benv.stat.rules
+        (run.index + 1) p.state run.state
+        (run.sender :: benv.stat.coinbase :: run.message.accountReads.toList)
+        run.message.storageReads.toList run.storageWrites.toList }
+  | .systemCall index address run =>
+    { p with
+      state := run.state
+      accessList := p.accessList.incorporateSystem benv.stat.rules index p.state run.state
+        (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList }
+  | .withdrawals index ws =>
+    let state := processWithdrawalsState p.state ws
+    { p with
+      state
+      withdrawalsTrie := processWithdrawalsTrie p.withdrawalsTrie ws
+      accessList := p.accessList.incorporateSystem benv.stat.rules index p.state state
+        (ws.map Withdrawal.address) [] [] }
+  | .depositRequests deposits =>
+    { p with requests := if deposits.length > 0
+      then p.requests ++ [depositRequestType ++ deposits] else p.requests }
+  | .requestCall index type address run =>
+    { p with
+      state := run.state
+      requests := if run.returnData.length > 0 then p.requests ++ [[type] ++ run.returnData]
+        else p.requests
+      accessList := p.accessList.incorporateSystem benv.stat.rules index p.state run.state
+        (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList }
+  | .rewards coinbase amount credits =>
+    { p with state := creditAll credits (p.state.addBal coinbase amount.toU256) }
+  | .buildAccessList _ =>
+    { p with builtAccessList := match benv.stat.rules.blockAccessListRules with
+      | none => []
+      | some _ => p.accessList.build }
+  | .checkAccessListLimit => p
+
+/-- The rich observation of each successful operation determines its next prefix. -/
+theorem Body.step_apply {benv : Benv} {p q : Body.Prefix} {op : BodyOp} {run : OpRun}
+    (h : Body.step benv p op = .ok (run, q)) : run.apply benv p = q := by
+  cases op with
+  | transaction tx index =>
+    simp only [Body.step] at h
+    obtain ⟨⟨tr, output⟩, ht, h⟩ := Except.bind_eq_ok h
+    cases h
+    obtain ⟨hi, hx, _, hw⟩ := B2.Transaction.run_writes ht
+    simp only [Prod.fst, Prod.snd, OpRun.apply]
+    rw [hi, hx, hw]
+    rfl
+  | systemCall address data index =>
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h
+    rfl
+  | requestCall type address index =>
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h
+    rfl
+  | depositRequests =>
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h
+    rfl
+  | checkAccessListLimit =>
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h
+    rfl
+  | withdrawals | rewards | buildAccessList => cases h; rfl
+
+/-- Folding the operations' records reconstructs the whole final prefix, including its tries,
+receipt keys, logs, requests and block access list. -/
+theorem Body.run_apply (benv : Benv) : ∀ (ops : List BodyOp) (p q : Body.Prefix) (runs : List OpRun),
+    Body.run benv p ops = .ok (runs, q) →
+      runs.foldl (fun p run => run.apply benv p) p = q
+  | [], _, _, _, h => by cases h; rfl
+  | op :: ops, p, q, runs, h => by
+    simp only [Body.run] at h
+    obtain ⟨⟨r, next⟩, hs, h⟩ := Except.bind_eq_ok h
+    obtain ⟨⟨rs, last⟩, hr, h⟩ := Except.bind_eq_ok h
+    cases h
+    simp only [List.foldl_cons, Body.step_apply hs]
+    exact Body.run_apply benv ops next last rs hr
+
+/-- The streaming runner returns exactly the result reconstructed from the ordered records,
+including the same error whenever an operation fails. -/
+theorem Body.fold_eq_apply (benv : Benv) (p : Body.Prefix) (ops : List BodyOp) :
+    Body.fold benv p ops =
+      (fun pair => pair.1.foldl (fun q run => run.apply benv q) p) <$> Body.run benv p ops := by
+  rw [Body.fold_eq_run]
+  cases h : Body.run benv p ops with
+  | error e => rfl
+  | ok pair =>
+    obtain ⟨rs, q⟩ := pair
+    exact congrArg Except.ok (Body.run_apply benv ops p q rs h).symm
+
 /-! ### What the other operations leave alone -/
 
 /-- Every operation but a transaction leaves the gas counters, the transaction and receipt tries,
@@ -206,12 +356,15 @@ theorem Body.step_transaction_output {benv : Benv} {p q : Body.Prefix} {tx : Tra
         blockAccessListBuilder := q.accessList } ∧
       (benv.stat.rules.stateGas = none →
         settlement.executionGasUsed = settlement.gasUsed ∧ settlement.stateGasUsed = 0) ∧
-      r = .transaction index tx := by
+      (∃ run, r = .transaction run ∧ run.receipt = receipt) := by
   simp only [Body.step] at h
-  obtain ⟨⟨state, bout⟩, ht, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨run, bout⟩, ht, h⟩ := Except.bind_eq_ok h
   cases h
-  obtain ⟨settlement, txBlobGasUsed, receipt, hq, hs⟩ := B2.processTransaction_output ht
-  exact ⟨settlement, txBlobGasUsed, receipt, hq, hs, rfl⟩
+  obtain ⟨_, _, hgas, hw⟩ := B2.Transaction.run_writes ht
+  refine ⟨run.gasSettlement, run.blobGasUsed, run.receipt, ?_, hgas, run, rfl, rfl⟩
+  change bout = _
+  rw [hw]
+  rfl
 
 /-! ### Receipts so far, deposit requests and the legacy relation -/
 
@@ -556,6 +709,24 @@ theorem B2.processTransaction_summary {benv : Benv} {b b' : BlockOutput} (tx : T
   simp only [Functor.map, Except.map, outputSummary, BlockOutput.withGasSettlement,
     receiptsRead_insert, hg, hs, hc, hb, hk]
 
+theorem B2.Transaction.run_summary {benv : Benv} {b b' : BlockOutput} (tx : Transaction)
+    (index : Nat) (h : outputSummary b = outputSummary b') :
+    (fun q => (q.1, outputSummary q.2)) <$> B2.Transaction.run benv b tx index =
+      (fun q => (q.1, outputSummary q.2)) <$> B2.Transaction.run benv b' tx index := by
+  simp only [outputSummary, Prod.mk.injEq] at h
+  obtain ⟨hg, hs, hc, hb, hk⟩ := h
+  unfold B2.Transaction.run Transaction.check Transaction.prepare B2.Transaction.settleRun
+  simp only [map_bind, bind_assoc, Except.ok_bind', pure_bind]
+  rw [checkTransaction_congr (b := {b with
+    transactionsTrie := b.transactionsTrie.insert (Rlp.Item.bytes (Nat.toBytes index)).toBytes tx})
+    (b' := {b' with
+    transactionsTrie := b'.transactionsTrie.insert (Rlp.Item.bytes (Nat.toBytes index)).toBytes tx})
+    tx hg hs hb]
+  refine bind_congr fun _ => bind_congr fun _ => bind_congr fun _ => bind_congr fun _ =>
+    bind_congr fun _ => bind_congr fun _ => bind_congr fun _ => ?_
+  simp only [Functor.map, Except.map, outputSummary, BlockOutput.withGasSettlement,
+    receiptsRead_insert, hg, hs, hc, hb, hk]
+
 /-- **A prefix's summary**: what later steps read of it — the state, the execution, state,
 sender and blob gas used so far, and the receipts so far (each receipt key with its receipt). -/
 abbrev Body.Prefix.Summary : Type :=
@@ -622,11 +793,11 @@ theorem Body.step_summary (benv : Benv) {p p' : Body.Prefix} {op : BodyOp}
   | buildAccessList => exact absurd rfl h1
   | checkAccessListLimit => exact absurd rfl h2
   | transaction tx index =>
-    have key := B2.processTransaction_summary (benv := benv.withState p'.state) tx index hsum
+    have key := B2.Transaction.run_summary (benv := benv.withState p'.state) tx index hsum
     simp only [Body.step, hst]
     revert key
-    cases B2.processTransaction (benv.withState p'.state) p.toBlockOutput tx index <;>
-      cases B2.processTransaction (benv.withState p'.state) p'.toBlockOutput tx index <;>
+    cases B2.Transaction.run (benv.withState p'.state) p.toBlockOutput tx index <;>
+      cases B2.Transaction.run (benv.withState p'.state) p'.toBlockOutput tx index <;>
       intro key <;>
       simp_all [Functor.map, Except.map, bind, Except.bind, pure, Except.pure, Body.Prefix.summary]
   | systemCall address data index =>
