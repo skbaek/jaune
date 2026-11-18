@@ -66,6 +66,8 @@ import Jaune.Run.Fields
 import Jaune.Run.Settle
 import Jaune.Run.SystemCall
 import Jaune.Bridge.G2a.Consumers
+import Jaune.Run.Decode
+import Jaune.Bridge.G2a.Decode
 
 namespace Jaune
 

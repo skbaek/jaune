@@ -115,7 +115,9 @@
   "Jaune.Run.Settle": "specification",
   "Jaune.Run.SystemCall": "specification",
   "Jaune.Bridge.G2a.Consumers": "bridge",
-  "Jaune.Run.Trace": "adapter"
+  "Jaune.Run.Trace": "adapter",
+  "Jaune.Run.Decode": "specification",
+  "Jaune.Bridge.G2a.Decode": "bridge"
  },
  "implementation_imports": [
   {
