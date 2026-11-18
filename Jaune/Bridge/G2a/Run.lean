@@ -180,7 +180,7 @@ theorem processMessageCall_eq (msg : Msg) :
         simp [bind, Except.bind]
       | ok q =>
         obtain ⟨delegated, refund⟩ := q
-        rw [processMessageCall_of_frame (f := Frame.ofTop delegated.resolveCodeDelegation false)
+        rw [processMessageCall_of_frame (f := Frame.ofTop (Msg.resolveCodeDelegation delegated) false)
           (a := refund) (by
             simp only [Staging.TopLevel.prepare, Staging.TopLevel.prepare.call, ht, hs,
               Bool.false_eq_true, ↓reduceIte]

@@ -506,8 +506,19 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                 if split_name(spelling[len('_root_.'):]) != split_name(const):
                     raise ValueError(f'_root_ spelling {spelling!r} is not the full name {const}')
             else:
-                renamed = replacement(spelling, const, new, renamer,
-                                      type_directed=start > 0 and text[start - 1] == '.' and not spelling.startswith('.'))
+                projected = start > 0 and text[start - 1] == '.' and not spelling.startswith('.')
+                # A constructor or field header inside its relocated parent's
+                # own command inherits that parent's namespace. Separate
+                # declarations with the same textual prefix are lexical uses.
+                parent = const.rpartition('.')[0]
+                parent_loc = index.get('decls', {}).get(parent)
+                if ((start, end) in definitions and len(comps) == 1 and parent_loc
+                        and const in renamer.relocations and parent in renamer.relocations
+                        and renamer.relocations[const] == renamer.relocations[parent]
+                        and new.rpartition('.')[0] == renamer(parent)):
+                    a, b = span(positions, parent_loc[:4])
+                    projected = a <= start and end <= b
+                renamed = replacement(spelling, const, new, renamer, type_directed=projected)
             if (start, end) in local_spans and len(comps) == 1:
                 # Field abbreviation `{ gas }` is `{ gas := gas }`: the field is
                 # renamed, the local variable it reads is not.

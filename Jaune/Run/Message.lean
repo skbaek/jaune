@@ -498,7 +498,7 @@ def TopLevel.prepare.call (msg : Msg) : Except Fault TopLevel.Preparation :=
     match h : processMessageCall.authorize msg with
     | .error e => .error (EvmError.toFault e (processMessageCall.authorize_error_isFault h))
     | .ok (delegated, authorizationRefund) =>
-      .ok (.frame (Frame.ofTop delegated.resolveCodeDelegation false) authorizationRefund)
+      .ok (.frame (Frame.ofTop (Msg.resolveCodeDelegation delegated) false) authorizationRefund)
   | some state => TopLevel.prepare.amsterdam state msg false
 
 /-- Prepare a top-level message: a creation when it has no target, otherwise a call. -/

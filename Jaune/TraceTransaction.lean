@@ -81,7 +81,7 @@ def runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
       pure ⟨.error error, by simp only [processMessageCall.call, hfork, hauth]; rfl⟩
     | .ok ⟨delegated, refund⟩ =>
       authorizationRefund refund
-      let frame := Frame.ofTop delegated.resolveCodeDelegation false
+      let frame := Frame.ofTop (Msg.resolveCodeDelegation delegated) false
       let result ← Trace.runFrame sink frame runId
       let value : Except EvmError (State × MsgCallOutput) := do
         let r ← result.value.mapError Fault.toEvmError

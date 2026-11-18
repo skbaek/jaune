@@ -650,12 +650,12 @@ def Msg.resolveCodeDelegation (msg : Msg) : Msg :=
 
 theorem Msg.resolveCodeDelegation_disabled (msg : Msg)
     (h : msg.benv.stat.rules.delegationEnabled = false) :
-    msg.resolveCodeDelegation = msg := by
-  simp only [resolveCodeDelegation, ForkRules.delegatedCodeAddress_disabled h msg.code]
+    (Msg.resolveCodeDelegation msg) = msg := by
+  simp only [Msg.resolveCodeDelegation, ForkRules.delegatedCodeAddress_disabled h msg.code]
 
 theorem Msg.resolveCodeDelegation_enabled (msg : Msg)
     (h : msg.benv.stat.rules.delegationEnabled = true) :
-    msg.resolveCodeDelegation =
+    (Msg.resolveCodeDelegation msg) =
       (match getDelegatedCodeAddress msg.code with
       | none => msg
       | some address =>
@@ -664,11 +664,11 @@ theorem Msg.resolveCodeDelegation_enabled (msg : Msg)
           accessedAddresses := msg.accessedAddresses.insert address
           code := msg.benv.state.getCode address
           codeAddress := some address }) := by
-  simp only [resolveCodeDelegation, ForkRules.delegatedCodeAddress_enabled h]
+  simp only [Msg.resolveCodeDelegation, ForkRules.delegatedCodeAddress_enabled h]
 
 theorem Msg.resolveCodeDelegation_canonical {msg : Msg} (h : msg.Canonical) :
-    msg.resolveCodeDelegation.Canonical := by
-  unfold resolveCodeDelegation
+    (Msg.resolveCodeDelegation msg).Canonical := by
+  unfold Msg.resolveCodeDelegation
   split <;> exact h
 
 /-! ### The top-level message call on the four-part chain
@@ -793,7 +793,7 @@ def processMessageCall.call (msg : Msg) :
   match msg.benv.stat.rules.stateGas with
   | none =>
     let ⟨delegated, authorizationRefund⟩ ← processMessageCall.authorize msg
-    let f := Frame.ofTop delegated.resolveCodeDelegation false
+    let f := Frame.ofTop (Msg.resolveCodeDelegation delegated) false
     let r ← (Frame.runTop f).mapError Fault.toEvmError
     f.output authorizationRefund r
   | some state => processTopLevelAmsterdam state msg false

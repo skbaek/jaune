@@ -54,6 +54,20 @@ class NamingApplyTests(unittest.TestCase):
         self.assertIn('with gasLimit := 8', text)
         self.assertIn('simp [c, Tx.gasLimit]', text)
 
+    def test_constructor_header_follows_its_relocated_type(self):
+        text = 'inductive T where\n  | arm\nend\n'
+        index = index_for(text, [('T', 'Pilot.T', 0, True), ('arm', 'Pilot.T.arm', 0, True)])
+        index['decls'] = {'Pilot.T': [0, 0, 1, 7, 0, 10, 0, 11]}
+        rows = [dict(entry('Pilot.T', 'Pilot.U'), kind='relocation', from_module='Pilot', to_module='Parts'),
+                dict(entry('Pilot.T.arm', 'Pilot.U.arm'), kind='relocation', from_module='Pilot', to_module='Parts')]
+        edits, problems = M.plan_file(text, index, rows)
+        self.assertEqual(problems, [])
+        self.assertEqual([(e['old'], e['new']) for e in edits], [('T', 'U')])
+        # A separately declared child receives no constructor-header treatment.
+        index['decls']['Pilot.T'][:4] = [0, 0, 0, 17]
+        _, problems = M.plan_file(text, index, rows)
+        self.assertTrue(any('leaves the namespace' in p['reason'] for p in problems))
+
     def test_dot_constructor_reference(self):
         text = 'def f := .gas\n'
         index = index_for(text, [('.gas', 'Pilot.Op.gas', 0, False)])
