@@ -94,6 +94,7 @@ import Jaune.MessageCall.FinalSpawnFacts
 import Jaune.MessageCall.FinalResumeFacts
 import Jaune.MessageCall.FinalRunInvariants
 import Jaune.MessageCall.FinalDriverInvariants
+import Jaune.MessageCall.FinalCanonical
 
 namespace Jaune
 
