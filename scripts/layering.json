@@ -142,7 +142,26 @@
   "Jaune.Run.BodyFactsT8n": "adapter",
   "Jaune.Run.Canonical": "specification",
   "Jaune.Run.BlockFacts": "specification",
-  "Jaune.Bridge.G2a.Canonical": "bridge"
+  "Jaune.Bridge.G2a.Canonical": "bridge",
+  "Jaune.MessageCall.FinalGasFacts": "proof",
+  "Jaune.MessageCall.FinalPlainGasFacts": "proof",
+  "Jaune.FinalSufficiencyWalk": "proof",
+  "Jaune.MessageCall.FinalStateGasOps": "proof",
+  "Jaune.MessageCall.FinalStateGasZero": "proof",
+  "Jaune.MessageCall.FinalMemoryCosts": "proof",
+  "Jaune.MessageCall.FinalMemoryAccounting": "proof",
+  "Jaune.MessageCall.FinalMessageGasFacts": "proof",
+  "Jaune.MessageCall.FinalStepGasBound": "proof",
+  "Jaune.MessageCall.FinalPlainMemory": "proof",
+  "Jaune.MessageCall.FinalMessageMemory": "proof",
+  "Jaune.MessageCall.FinalPartsGas": "proof",
+  "Jaune.MessageCall.FinalTotality": "proof",
+  "Jaune.MessageCall.FinalDerivation": "proof",
+  "Jaune.MessageCall.FinalChronology": "proof",
+  "Jaune.MessageCall.FinalAdequacy": "proof",
+  "Jaune.MessageCall.FinalDerivationMemory": "proof",
+  "Jaune.MessageCall.FinalSpawnFacts": "proof",
+  "Jaune.MessageCall.FinalResumeFacts": "proof"
  },
  "implementation_imports": [
   {
