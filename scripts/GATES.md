@@ -285,6 +285,17 @@ The ordinary unit suite remains lock-free and does not run this elaborating
 check. Usage, limits and the explicit selected-file scope are in
 [`docs/NAMING.md`](../docs/NAMING.md#4-compiler-resolved-apply-tooling).
 
+### Shape-migration checks
+
+Goal `jaune-shape-and-names-v1`, decision 13 condition 2: before a structure field is
+deleted, a walk of the built environment confirms that nothing reads it.
+
+| command | proves | cost and admission |
+|---|---|---|
+| owned build of `jaune-field-readers` and of the walked targets, then `python3 scripts/field-readers.py --field S.f ... [--fields-file F] [--also-deleted C ...] [--table] [--json OUT]` | every constant of `Jaune`, `JauneChecks`, `Examples`, `Assurance` and the executable roots (`Main`, `TraceMain`, `MemoryProbe`) that reads each queried field, types and proof bodies included: projection function, kernel `Expr.proj`, `casesOn`/`recOn`/`rec` minor premise using the field's variable, or a matcher alternative using the parameter fed from the field (a shared matcher links only the declarations whose own alternative uses it); a queried plain constant reports every mention. Writers (`S.mk` with a non-copy argument: literals, `{ s with f := v }`) and copies (`S.f x` placed back in field `f`) are listed apart; generated constants (equation lemmas, matcher splitters, derived instances, the structure's own recursors, projections, `noConfusion`, `injEq`, `ext`, `sizeOf` lemmas) are discounted and listed; auxiliary `_proof_n` constants are charged to their declaration. Verdict `deletable` (exit 0) when no reader outside the deletion set remains, else `reader exists` (exit 1) | builds nothing; loads built `.olean`s through `lake env` (peak about 1.9 GiB RSS); cached per module under `.lake/field-readers-cache/`, keyed by the module's Lake trace hash, the query list and the tool binary's digest. 2026-11-18 WSL, 27 queries, 94 modules: cold 9.3 s, warm with one file changed 7.7 s (2 modules walked; olean import dominates) |
+| owned build of `jaune-field-readers FieldReadersTests`, then `python3 scripts/check-field-readers-tool.py [--output FRESH_DIRECTORY]` | on `scripts/tests/field-readers/FieldReadersFixture.lean` each reader kind is reported, literals and record updates are writers and copies only, and a matcher shared by two declarations links each only to its own field; a synthetic module with one planted reader of an otherwise unread field gives `reader exists` naming the plant, and the same module with only the plant's line removed gives `deletable` | elaborates one tiny module twice with `lake env lean`; seconds |
+| `python3 -B -m unittest discover -s scripts/tests -p test_field_readers.py` | the driver's merge: writers, copies, generated constants and readers inside the deletion set do not block; read kinds merge per declaration | light; part of the lock-free unit suite |
+
 ### Medium — before a commit or push candidate
 
 The standalone tracer also has a cheap native gate, `python3 scripts/check-trace.py`

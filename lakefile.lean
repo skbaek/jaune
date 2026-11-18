@@ -113,3 +113,14 @@ lean_exe «jaune-naming-fidelity» where
   srcDir := "scripts"
   root := `NamingFidelity
   supportInterpreter := true
+
+/-- Field-reader walk (decision 13 condition 2), driven by `scripts/field-readers.py`;
+optional tooling, not a default target. -/
+lean_exe «jaune-field-readers» where
+  srcDir := "scripts"
+  root := `FieldReaders
+
+/-- Synthetic fixture for the field-reader walk's control (`scripts/check-field-readers-tool.py`). -/
+lean_lib «FieldReadersTests» where
+  srcDir := "scripts/tests/field-readers"
+  roots := #[`FieldReadersFixture]
