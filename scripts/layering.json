@@ -131,7 +131,11 @@
   "Jaune.Bridge.G2b.FinalStep": "bridge",
   "Jaune.Bridge.G2b.FinalParts": "bridge",
   "Jaune.Bridge.G2b.FinalOutput": "bridge",
-  "Jaune.Bridge.G2b.FinalDriver": "bridge"
+  "Jaune.Bridge.G2b.FinalDriver": "bridge",
+  "Jaune.FinalSufficiencyWalk": "proof",
+  "Jaune.MessageCall.FinalStateGasOps": "proof",
+  "Jaune.MessageCall.FinalStateGasZero": "proof",
+  "Jaune.MessageCall.FinalMemoryAccounting": "proof"
  },
  "implementation_imports": [
   {
