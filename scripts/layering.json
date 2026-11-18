@@ -134,7 +134,9 @@
   "Jaune.Bridge.G2b.FinalDriver": "bridge",
   "Jaune.FinalSufficiencyWalk": "proof",
   "Jaune.MessageCall.FinalGasFacts": "proof",
-  "Jaune.MessageCall.FinalPlainGasFacts": "proof"
+  "Jaune.MessageCall.FinalPlainGasFacts": "proof",
+  "Jaune.MessageCall.FinalMessageGasFacts": "proof",
+  "Jaune.MessageCall.FinalStepGasBound": "proof"
  },
  "implementation_imports": [
   {
