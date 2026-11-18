@@ -29,6 +29,7 @@ import Jaune.StaticcallEffects
 import Jaune.TraceTransaction
 import Jaune.MessageCall.TraceJson
 import Jaune.Run.Trace
+import Jaune.Run.BodyT8n
 
 /-!
 # Whole-library axiom union for `Jaune`

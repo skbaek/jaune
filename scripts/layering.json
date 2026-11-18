@@ -117,7 +117,10 @@
   "Jaune.Bridge.G2a.Consumers": "bridge",
   "Jaune.Run.Trace": "adapter",
   "Jaune.Run.Decode": "specification",
-  "Jaune.Bridge.G2a.Decode": "bridge"
+  "Jaune.Bridge.G2a.Decode": "bridge",
+  "Jaune.Run.Body": "specification",
+  "Jaune.Bridge.G2a.Body": "bridge",
+  "Jaune.Run.BodyT8n": "adapter"
  },
  "implementation_imports": [
   {
