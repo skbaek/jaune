@@ -103,6 +103,10 @@ import Jaune.MessageCall.FinalAdequacy
 import Jaune.MessageCall.FinalDerivationMemory
 import Jaune.MessageCall.FinalSpawnFacts
 import Jaune.MessageCall.FinalResumeFacts
+import Jaune.MessageCall.FinalDerivOrder
+import Jaune.Bridge.G2b.FinalDerivation
+import Jaune.Bridge.G2b.FinalAdequacy
+import Jaune.Bridge.G2b.FinalChronology
 
 namespace Jaune
 

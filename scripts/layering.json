@@ -156,7 +156,11 @@
   "Jaune.MessageCall.FinalAdequacy": "proof",
   "Jaune.MessageCall.FinalDerivationMemory": "proof",
   "Jaune.MessageCall.FinalSpawnFacts": "proof",
-  "Jaune.MessageCall.FinalResumeFacts": "proof"
+  "Jaune.MessageCall.FinalResumeFacts": "proof",
+  "Jaune.MessageCall.FinalDerivOrder": "proof",
+  "Jaune.Bridge.G2b.FinalDerivation": "bridge",
+  "Jaune.Bridge.G2b.FinalAdequacy": "bridge",
+  "Jaune.Bridge.G2b.FinalChronology": "bridge"
  },
  "implementation_imports": [
   {
