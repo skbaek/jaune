@@ -70,6 +70,8 @@ import Jaune.Run.Decode
 import Jaune.Bridge.G2a.Decode
 import Jaune.Run.Body
 import Jaune.Bridge.G2a.Body
+import Jaune.Run.BodyFactsRlp
+import Jaune.Run.BodyFacts
 
 namespace Jaune
 

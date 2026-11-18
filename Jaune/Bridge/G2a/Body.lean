@@ -1,5 +1,6 @@
 import Jaune.Bridge.G2a.Consumers
 import Jaune.Run.Body
+import Jaune.Run.BodyFacts
 
 /-!
 # W2 cut D: bridges for the body run (goal `jaune-shape-and-names-v1`, gate G2a, bridge)
@@ -74,17 +75,7 @@ theorem processTransaction_receiptKeys {benv : Benv} {bout : BlockOutput} {tx : 
   cases h
   simp [hpb, hcb, BlockOutput.withGasSettlement]
 
-/-! ### Folding a list in pieces -/
-
-theorem Body.fold_append (benv : Benv) :
-    ∀ (p : Body.Prefix) (xs ys : List BodyOp),
-      Body.fold benv p (xs ++ ys) = Body.fold benv p xs >>= fun q => Body.fold benv q ys
-  | p, [], ys => rfl
-  | p, op :: xs, ys => by
-    simp only [List.cons_append, Body.fold]
-    cases Body.step benv p op with
-    | error e => rfl
-    | ok r => exact Body.fold_append benv r.2 xs ys
+/-! `Body.fold_append` is in `Jaune.Run.BodyFacts`. -/
 
 /-! ### The pre-execution system calls -/
 
@@ -196,14 +187,6 @@ theorem applyTransactions_receiptKeys :
     simp only at hk
     simp [hk]
     omega
-
-theorem length_putIndex_aux {ξ : Type} : ∀ (k : Nat) (xs : List ξ),
-    (List.putIndex.aux k xs).length = xs.length
-  | _, [] => rfl
-  | k, _ :: xs => by simp [List.putIndex.aux, length_putIndex_aux (k + 1) xs]
-
-theorem length_putIndex {ξ : Type} (xs : List ξ) : xs.putIndex.length = xs.length :=
-  length_putIndex_aux 0 xs
 
 /-! ### The requests -/
 
