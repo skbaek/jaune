@@ -5,6 +5,7 @@ import Jaune.RlpEval
 import Jaune.Types
 import Jaune.MulDiv
 import Jaune.WordFacts
+import Jaune.WordRepresentation
 import Jaune.RPow
 import Jaune.Fork
 import Jaune.Hash
