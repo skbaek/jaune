@@ -3338,15 +3338,6 @@ theorem Account.eq_nil_iff (ac : Account) :
 def State.get (w : State) (a : Address) : Account :=
   w.getD a .nil
 
-/-- Erasing convenience update: writing the default account removes the key. -/
-def State.set (w : State) (a : Address) (ac : Account) : State :=
-  if ac = .nil then w.erase a else w.insert a ac
-
-/-- Store an account as present, including an explicitly empty account.
-Deletion is a separate operation, `destroyAccount`. -/
-def State.setPresent (w : State) (a : Address) (ac : Account) : State :=
-  w.insert a ac
-
 def Account.isEmpty (a : Account) : Prop :=
   a.code.size = 0 ∧ a.nonce = 0 ∧ a.balance = 0
 
@@ -3461,13 +3452,42 @@ def State.writeAccount (w : State) (rule : EmptyRule) (a : Address)
     | .keepIfPresent => !(w[a]?).isSome && decide (result = .nil)
   if erase then w.erase a else w.insert a result
 
+/-- Erasing convenience update: writing the default account removes the key. -/
+def State.set (w : State) (a : Address) (ac : Account) : State :=
+  w.writeAccount .eraseNil a (fun _ => ac)
+
+/-- Store an account as present, including an explicitly empty account.
+Deletion is a separate operation, `destroyAccount`. -/
+def State.setPresent (w : State) (a : Address) (ac : Account) : State :=
+  w.writeAccount .keep a (fun _ => ac)
+
 /-- A balance change cannot empty an account with a nonce or code. -/
 def State.Protected (w : State) (a : Address) : Prop :=
   (w.get a).nonce ≠ 0 ∨ (w.get a).code.size ≠ 0
 
 /-- EELS `modify_state`: normalize after changing balance, nonce, or code. -/
 def State.setAccount (w : State) (a : Address) (ac : Account) : State :=
-  w.set a ac.clearIfEmpty
+  w.writeAccount .erase a (fun _ => ac)
+
+theorem State.writeAccount_erase_eq_clear (w : State) (a : Address) (f : Account → Account) :
+    w.writeAccount .erase a f = w.set a (f (w.get a)).clearIfEmpty := by
+  by_cases empty : (f (w.get a)).isEmpty
+  · simp [State.writeAccount, State.set, Account.clearIfEmpty, empty]
+  · have nondefault : f (w.get a) ≠ .nil := by
+      intro equal
+      apply empty
+      rw [equal]
+      decide
+    simp [State.writeAccount, State.set, Account.clearIfEmpty, empty, nondefault]
+
+theorem State.writeAccount_keepIfPresent_eq (w : State) (a : Address) (f : Account → Account) :
+    w.writeAccount .keepIfPresent a f =
+      if AccountExists w a then w.setPresent a (f (w.get a)) else w.set a (f (w.get a)) := by
+  by_cases present : AccountExists w a
+  · simp [AccountExists] at present
+    simp [State.writeAccount, State.setPresent, AccountExists, present]
+  · simp [AccountExists] at present
+    simp [State.writeAccount, State.set, AccountExists, present]
 
 /-- Storage deletion is not a collection of SSTORE-to-zero operations. -/
 def KeySet.eraseAddress (writes : KeySet) (a : Address) : KeySet :=
@@ -3479,13 +3499,11 @@ def KeySet.clearIfEmpty (writes : KeySet) (w : State) (a : Address) : KeySet :=
 
 def Benv.clearStorageWritesIfEmpty (benv : Benv) (a : Address) : Benv :=
   {benv with storageWrites :=
-    if (benv.state.get a).isEmpty then benv.storageWrites.eraseAddress a
-    else benv.storageWrites}
+    benv.storageWrites.clearIfEmpty benv.state a}
 
 def Devm.clearStorageWritesIfEmpty (devm : Devm) (a : Address) : Devm :=
   devm.withStorageWrites
-    (if (devm.state.get a).isEmpty then devm.world.storageWrites.eraseAddress a
-     else devm.world.storageWrites)
+    (devm.world.storageWrites.clearIfEmpty devm.state a)
 
 @[simp] theorem Account.clearIfEmpty_balance (ac : Account) :
     ac.clearIfEmpty.balance = ac.balance := by
@@ -3518,8 +3536,7 @@ def TransientStorage.set (τ : TransientStorage) (a : Address) (s : Storage) : T
   if s.isEmpty then τ.erase a else τ.insert a s
 
 def State.setCode (ω : State) (a : Address) (cd : ByteArray) : State :=
-  let ac := ω.get a
-  ω.setAccount a {ac with code := cd}
+  ω.writeAccount .erase a (fun ac => {ac with code := cd})
 
 def getOrigAcct (sevm : Sevm) (a : Address) : Account :=
   sevm.benvStat.origState.get a
@@ -3546,9 +3563,7 @@ def Storage.set (s : Storage) (k v : U256) : Storage :=
   if v = 0 then s.erase k else s.insert k v
 
 def State.setStorVal (wor : State) (adr : Address) (key val : U256) : State :=
-  let acct : Account := wor.get adr
-  if AccountExists wor adr then wor.setPresent adr {acct with storage := acct.storage.set key val}
-  else wor.set adr {acct with storage := acct.storage.set key val}
+  wor.writeAccount .keepIfPresent adr (fun ac => {ac with storage := ac.storage.set key val})
 
 def Benv.setStorVal (benv : Benv) (adr : Address) (key val : U256) : Benv :=
   {benv with
@@ -5502,7 +5517,7 @@ def JumpOp.run (evm : Evm) (j : JumpOp) : Except (EvmError × Devm) (Nat × Devm
 def State.bal (w : State) (a : Address) : U256 := (w.get a).balance
 
 def State.setBal (st : State) (adr : Address) (val : U256) : State :=
-  st.setAccount adr <| (st.get adr).withBalance val
+  st.writeAccount .erase adr (fun ac => ac.withBalance val)
 
 def State.addBal (st : State) (adr : Address) (val : U256) : State :=
   st.setBal adr <| (st.bal adr + val)
@@ -6446,9 +6461,7 @@ def create2NewAddress
   (Bytes.keccak LA).toAddress
 
 def State.incrNonce (w : State) (a : Address) : State :=
-  let ac := w.get a
-  let ac' : Account := {ac with nonce := ac.nonce + 1}
-  w.setAccount a ac'
+  w.writeAccount .erase a (fun ac => {ac with nonce := ac.nonce + 1})
 
 def Msg.incrNonce (msg : Msg) (adr : Address) : Msg :=
   {
@@ -6464,9 +6477,7 @@ def Benv.incrNonce (benv : Benv) (adr : Address) : Benv :=
   ({benv with state := benv.state.incrNonce adr} : Benv).clearStorageWritesIfEmpty adr
 
 def State.setStor (w : State) (a : Address) (s : Storage) : State :=
-  let ac := (w.get a)
-  if AccountExists w a then w.setPresent a {ac with storage := s}
-  else w.set a {ac with storage := s}
+  w.writeAccount .keepIfPresent a (fun ac => {ac with storage := s})
 
 def Benv.setStor (benv : Benv) (adr : Address) (stor : Storage) : Benv :=
   {benv with
@@ -6641,13 +6652,13 @@ theorem State.get_eq_getD (w : State) (a : Address) :
 theorem State.getElem?_set (w : State) (a b : Address) (ac : Account) :
     (w.set a ac)[b]?
       = if a = b then (if ac = .nil then none else some ac) else w[b]? := by
-  rw [State.set]
+  simp only [State.set, State.writeAccount, decide_eq_true_eq]
   split <;> simp_all [Std.TreeMap.getElem?_erase, Std.TreeMap.getElem?_insert]
 
 /-- Presence-preserving insertion never identifies `some Acct.nil` with `none`. -/
 theorem State.getElem?_setPresent (w : State) (a b : Address) (ac : Account) :
     (w.setPresent a ac)[b]? = if a = b then some ac else w[b]? := by
-  simp only [State.setPresent, Std.TreeMap.getElem?_insert, Std.compare_eq_iff_eq]
+  simp only [State.setPresent, State.writeAccount, Bool.false_eq_true, ite_false, Std.TreeMap.getElem?_insert, Std.compare_eq_iff_eq]
 
 theorem State.accountExists_setPresent (w : State) (a : Address) (ac : Account) :
     AccountExists (w.setPresent a ac) a := by
@@ -6797,14 +6808,14 @@ theorem State.get_setPresent_ne (w : State) {a b : Address} (h : a ≠ b) (ac : 
 
 theorem State.setStorVal_get_self (w : State) (a : Address) (k v : U256) :
     (w.setStorVal a k v).get a = {w.get a with storage := (w.get a).storage.set k v} := by
-  unfold State.setStorVal
+  rw [State.setStorVal, State.writeAccount_keepIfPresent_eq]
   split
   · exact State.get_setPresent_self _ _ _
   · exact State.get_set_self _ _ _
 
 theorem State.setStorVal_get_ne (w : State) {a b : Address} (h : a ≠ b) (k v : U256) :
     (w.setStorVal a k v).get b = w.get b := by
-  unfold State.setStorVal
+  rw [State.setStorVal, State.writeAccount_keepIfPresent_eq]
   split
   · exact State.get_setPresent_ne _ h _
   · exact State.get_set_ne _ h _
@@ -6812,14 +6823,14 @@ theorem State.setStorVal_get_ne (w : State) {a b : Address} (h : a ≠ b) (k v :
 /-- A storage write does not change membership or payload at another address. -/
 theorem State.getElem?_setStorVal_ne (w : State) {a b : Address} (h : a ≠ b) (k v : U256) :
     (w.setStorVal a k v)[b]? = w[b]? := by
-  unfold State.setStorVal
+  rw [State.setStorVal, State.writeAccount_keepIfPresent_eq]
   split
   · rw [State.getElem?_setPresent, ite_eq_right h]
   · rw [State.getElem?_set, ite_eq_right h]
 
 theorem State.getElem?_setStor_ne (w : State) {a b : Address} (h : a ≠ b) (stor : Storage) :
     (w.setStor a stor)[b]? = w[b]? := by
-  unfold State.setStor
+  rw [State.setStor, State.writeAccount_keepIfPresent_eq]
   split
   · rw [State.getElem?_setPresent, ite_eq_right h]
   · rw [State.getElem?_set, ite_eq_right h]
@@ -6828,24 +6839,27 @@ theorem State.getElem?_setStor_ne (w : State) {a b : Address} (h : a ≠ b) (sto
 theorem State.getElem?_setStorVal_self_of_exists (w : State) (a : Address) (k v : U256)
     (h : AccountExists w a) :
     (w.setStorVal a k v)[a]? = some {w.get a with storage := (w.get a).storage.set k v} := by
-  rw [State.setStorVal, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
+  rw [State.setStorVal, State.writeAccount_keepIfPresent_eq, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
 
 theorem State.getElem?_setStor_self_of_exists (w : State) (a : Address) (stor : Storage)
     (h : AccountExists w a) :
     (w.setStor a stor)[a]? = some {w.get a with storage := stor} := by
-  rw [State.setStor, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
+  rw [State.setStor, State.writeAccount_keepIfPresent_eq, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
 
 theorem State.setAccount_get_self (w : State) (a : Address) (ac : Account) :
-    (w.setAccount a ac).get a = ac.clearIfEmpty :=
-  State.get_set_self w a ac.clearIfEmpty
+    (w.setAccount a ac).get a = ac.clearIfEmpty := by
+  rw [State.setAccount, State.writeAccount_erase_eq_clear]
+  exact State.get_set_self w a ac.clearIfEmpty
 
 theorem State.setAccount_get_ne (w : State) {a b : Address} (h : a ≠ b) (ac : Account) :
-    (w.setAccount a ac).get b = w.get b :=
-  State.get_set_ne w h ac.clearIfEmpty
+    (w.setAccount a ac).get b = w.get b := by
+  rw [State.setAccount, State.writeAccount_erase_eq_clear]
+  exact State.get_set_ne w h ac.clearIfEmpty
 
 theorem State.Canonical.setAccount {w : State} (h : State.Canonical w) (a : Address)
     {ac : Account} (hs : Storage.Canonical ac.storage) :
     State.Canonical (w.setAccount a ac) := by
+  rw [State.setAccount, State.writeAccount_erase_eq_clear]
   apply h.set a
   unfold Account.clearIfEmpty
   split
@@ -6889,14 +6903,14 @@ theorem State.Canonical.incrNonce {w : State} (h : State.Canonical w) (a : Addre
 already be canonical. -/
 theorem State.Canonical.setStor {w : State} (h : State.Canonical w) (a : Address)
     {s : Storage} (hs : Storage.Canonical s) : State.Canonical (w.setStor a s) := by
-  unfold State.setStor
+  rw [State.setStor, State.writeAccount_keepIfPresent_eq]
   split
   · exact h.setPresent a hs
   · exact h.set a hs
 
 theorem State.Canonical.setStorVal {w : State} (h : State.Canonical w) (a : Address)
     (k v : U256) : State.Canonical (w.setStorVal a k v) := by
-  unfold State.setStorVal
+  rw [State.setStorVal, State.writeAccount_keepIfPresent_eq]
   split
   · exact h.setPresent a ((h.storage a).set k v)
   · exact h.set a ((h.storage a).set k v)

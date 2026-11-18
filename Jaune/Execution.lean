@@ -1174,10 +1174,10 @@ theorem State.of_subBal {st st' : Jaune.State} {ct : Address} {wad : U256}
 
 theorem State.incrNonce_get_bal {st : Jaune.State} {adr a : Address} :
     ((st.incrNonce adr).get a).balance = (st.get a).balance := by
-  simp only [State.incrNonce]
+  rw [State.incrNonce, State.writeAccount_erase_eq_clear]
   by_cases h : adr = a
-  · subst h; rw [State.setAccount_get_self, Account.clearIfEmpty_balance]
-  · rw [State.setAccount_get_ne _ h]
+  · subst h; rw [State.get_set_self, Account.clearIfEmpty_balance]
+  · rw [State.get_set_ne _ h]
 
 /-- The general nonce mutator includes wraparound; callers rule out overflow.
 Storage is cleared exactly when its resulting account is empty. -/
@@ -1185,18 +1185,18 @@ theorem State.incrNonce_get_stor {st : Jaune.State} {adr a : Address} :
     ((st.incrNonce adr).get a).storage =
       if adr = a ∧ ({st.get adr with nonce := (st.get adr).nonce + 1} : Account).isEmpty
       then .empty else (st.get a).storage := by
-  simp only [State.incrNonce]
+  rw [State.incrNonce, State.writeAccount_erase_eq_clear]
   by_cases h : adr = a
   · subst h
-    simp only [State.setAccount_get_self, Account.clearIfEmpty_storage, eq_self, true_and]
-  · simp only [State.setAccount_get_ne _ h, h, false_and, ite_false]
+    simp only [State.get_set_self, Account.clearIfEmpty_storage, eq_self, true_and]
+  · simp only [State.get_set_ne _ h, h, false_and, ite_false]
 
 theorem State.incrNonce_get_code {st : Jaune.State} {adr a : Address} :
     ((st.incrNonce adr).get a).code = (st.get a).code := by
-  simp only [State.incrNonce]
+  rw [State.incrNonce, State.writeAccount_erase_eq_clear]
   by_cases h : adr = a
-  · subst h; rw [State.setAccount_get_self, Account.clearIfEmpty_code]
-  · rw [State.setAccount_get_ne _ h]
+  · subst h; rw [State.get_set_self, Account.clearIfEmpty_code]
+  · rw [State.get_set_ne _ h]
 
 theorem State.setBal_getCode (st : State) (adr a : Address) (val : U256) :
     (st.setBal adr val).getCode a = st.getCode a :=
@@ -1250,12 +1250,12 @@ theorem Devm.setCode_getStor (devm : Devm) (address : Address)
       then .empty else devm.getStor target := by
   funext target
   change ((devm.state.setCode address code).get target).storage = _
-  unfold State.setCode
+  rw [State.setCode, State.writeAccount_erase_eq_clear]
   by_cases h : address = target
   · subst h
-    simp only [State.setAccount_get_self, Account.clearIfEmpty_storage, eq_self, true_and]
+    simp only [State.get_set_self, Account.clearIfEmpty_storage, eq_self, true_and]
     rfl
-  · simp only [State.setAccount_get_ne _ h, h, false_and, ite_false]
+  · simp only [State.get_set_ne _ h, h, false_and, ite_false]
     rfl
 
 end Jaune

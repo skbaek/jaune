@@ -4,70 +4,112 @@ import Jaune.Execution
 
 namespace Jaune
 
+namespace Bridge.OldAccount
+
+def set (w : State) (a : Address) (ac : Account) : State :=
+  if ac = .nil then w.erase a else w.insert a ac
+
+def setPresent (w : State) (a : Address) (ac : Account) : State :=
+  w.insert a ac
+
+def setAccount (w : State) (a : Address) (ac : Account) : State :=
+  set w a ac.clearIfEmpty
+
+def setBal (st : State) (adr : Address) (val : U256) : State :=
+  setAccount st adr <| (st.get adr).withBalance val
+
+def setCode (ω : State) (a : Address) (cd : ByteArray) : State :=
+  let ac := ω.get a
+  setAccount ω a {ac with code := cd}
+
+def incrNonce (w : State) (a : Address) : State :=
+  let ac := w.get a
+  let ac' : Account := {ac with nonce := ac.nonce + 1}
+  setAccount w a ac'
+
+def setStor (w : State) (a : Address) (s : Storage) : State :=
+  let ac := (w.get a)
+  if AccountExists w a then setPresent w a {ac with storage := s}
+  else set w a {ac with storage := s}
+
+def setStorVal (wor : State) (adr : Address) (key val : U256) : State :=
+  let acct : Account := wor.get adr
+  if AccountExists wor adr then setPresent wor adr {acct with storage := acct.storage.set key val}
+  else set wor adr {acct with storage := acct.storage.set key val}
+
+def clearBenv (benv : Benv) (a : Address) : Benv :=
+  {benv with storageWrites :=
+    if (benv.state.get a).isEmpty then benv.storageWrites.eraseAddress a
+    else benv.storageWrites}
+
+def clearDevm (devm : Devm) (a : Address) : Devm :=
+  devm.withStorageWrites
+    (if (devm.state.get a).isEmpty then devm.world.storageWrites.eraseAddress a
+     else devm.world.storageWrites)
+
+end Bridge.OldAccount
+
 theorem State.writeAccount_eraseNil (w : State) (a : Address) (f : Account → Account) :
-    w.writeAccount .eraseNil a f = w.set a (f (w.get a)) := by
-  simp [State.writeAccount, State.set]
+    w.writeAccount .eraseNil a f = Bridge.OldAccount.set w a (f (w.get a)) := by
+  simp [State.writeAccount, Bridge.OldAccount.set]
 
 theorem State.writeAccount_keep (w : State) (a : Address) (f : Account → Account) :
-    w.writeAccount .keep a f = w.setPresent a (f (w.get a)) := rfl
+    w.writeAccount .keep a f = Bridge.OldAccount.setPresent w a (f (w.get a)) := rfl
 
 theorem State.writeAccount_keepIfPresent (w : State) (a : Address) (f : Account → Account) :
     w.writeAccount .keepIfPresent a f =
-      if AccountExists w a then w.setPresent a (f (w.get a)) else w.set a (f (w.get a)) := by
+      if AccountExists w a then Bridge.OldAccount.setPresent w a (f (w.get a)) else Bridge.OldAccount.set w a (f (w.get a)) := by
   by_cases present : AccountExists w a
   · simp [State.writeAccount, AccountExists] at present ⊢
-    simp [present, State.setPresent]
+    simp [present, Bridge.OldAccount.setPresent]
   · simp [AccountExists] at present
-    simp [State.writeAccount, State.set, AccountExists, present]
+    simp [State.writeAccount, Bridge.OldAccount.set, AccountExists, present]
 
 theorem State.writeAccount_erase (w : State) (a : Address) (f : Account → Account) :
-    w.writeAccount .erase a f = w.setAccount a (f (w.get a)) := by
+    w.writeAccount .erase a f = Bridge.OldAccount.setAccount w a (f (w.get a)) := by
   by_cases empty : (f (w.get a)).isEmpty
-  · simp [State.writeAccount, State.setAccount, Account.clearIfEmpty, State.set, empty]
+  · simp [State.writeAccount, Bridge.OldAccount.setAccount, Account.clearIfEmpty, Bridge.OldAccount.set, empty]
   · have nondefault : f (w.get a) ≠ .nil := by
       intro equal
       apply empty
       rw [equal]
       decide
-    simp [State.writeAccount, State.setAccount, Account.clearIfEmpty, State.set, empty, nondefault]
+    simp [State.writeAccount, Bridge.OldAccount.setAccount, Account.clearIfEmpty, Bridge.OldAccount.set, empty, nondefault]
 
 theorem State.setBal_eq_writeAccount (w : State) (a : Address) (v : U256) :
-    w.setBal a v = w.writeAccount .erase a (fun ac => ac.withBalance v) :=
-by
+    Bridge.OldAccount.setBal w a v = w.writeAccount .erase a (fun ac => ac.withBalance v) := by
   rw [State.writeAccount_erase]
   rfl
 
 theorem State.setCode_eq_writeAccount (w : State) (a : Address) (code : ByteArray) :
-    w.setCode a code = w.writeAccount .erase a (fun ac => {ac with code}) :=
-by
+    Bridge.OldAccount.setCode w a code = w.writeAccount .erase a (fun ac => {ac with code}) := by
   rw [State.writeAccount_erase]
   rfl
 
 theorem State.incrNonce_eq_writeAccount (w : State) (a : Address) :
-    w.incrNonce a = w.writeAccount .erase a (fun ac => {ac with nonce := ac.nonce + 1}) :=
-by
+    Bridge.OldAccount.incrNonce w a = w.writeAccount .erase a (fun ac => {ac with nonce := ac.nonce + 1}) := by
   rw [State.writeAccount_erase]
   rfl
 
 theorem State.setStor_eq_writeAccount (w : State) (a : Address) (s : Storage) :
-    w.setStor a s = w.writeAccount .keepIfPresent a (fun ac => {ac with storage := s}) :=
-by
+    Bridge.OldAccount.setStor w a s = w.writeAccount .keepIfPresent a (fun ac => {ac with storage := s}) := by
   rw [State.writeAccount_keepIfPresent]
   rfl
 
 theorem State.setStorVal_eq_writeAccount (w : State) (a : Address) (key value : U256) :
-    w.setStorVal a key value = w.writeAccount .keepIfPresent a
-      (fun ac => {ac with storage := ac.storage.set key value}) :=
-by
+    Bridge.OldAccount.setStorVal w a key value = w.writeAccount .keepIfPresent a
+      (fun ac => {ac with storage := ac.storage.set key value}) := by
   rw [State.writeAccount_keepIfPresent]
   rfl
 
+theorem KeySet.clearIfEmpty_eq (writes : KeySet) (state : State) (a : Address) :
+    writes.clearIfEmpty state a =
+      if (state.get a).isEmpty then writes.eraseAddress a else writes := rfl
+
 theorem Benv.clearStorageWritesIfEmpty_eq (benv : Benv) (a : Address) :
-    benv.clearStorageWritesIfEmpty a =
-      {benv with storageWrites := benv.storageWrites.clearIfEmpty benv.state a} := rfl
+    benv.clearStorageWritesIfEmpty a = Bridge.OldAccount.clearBenv benv a := rfl
 
 theorem Devm.clearStorageWritesIfEmpty_eq (devm : Devm) (a : Address) :
-    devm.clearStorageWritesIfEmpty a =
-      devm.withStorageWrites (devm.world.storageWrites.clearIfEmpty devm.state a) := rfl
+    devm.clearStorageWritesIfEmpty a = Bridge.OldAccount.clearDevm devm a := rfl
 
 end Jaune
