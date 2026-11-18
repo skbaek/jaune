@@ -1,5 +1,6 @@
 import Jaune.Bridge.G2a.Consumers
 import Jaune.Run.Body
+import Jaune.Run.BodyFacts
 
 /-!
 # W2 cut D: bridges for the body run (goal `jaune-shape-and-names-v1`, gate G2a, bridge)
@@ -74,17 +75,7 @@ theorem processTransaction_receiptKeys {benv : Benv} {bout : BlockOutput} {tx : 
   cases h
   simp [hpb, hcb, BlockOutput.withGasSettlement]
 
-/-! ### Folding a list in pieces -/
-
-theorem Body.fold_append (benv : Benv) :
-    ∀ (p : Body.Prefix) (xs ys : List BodyOp),
-      Body.fold benv p (xs ++ ys) = Body.fold benv p xs >>= fun q => Body.fold benv q ys
-  | p, [], ys => rfl
-  | p, op :: xs, ys => by
-    simp only [List.cons_append, Body.fold]
-    cases Body.step benv p op with
-    | error e => rfl
-    | ok r => exact Body.fold_append benv r.2 xs ys
+/-! `Body.fold_append` is in `Jaune.Run.BodyFacts`. -/
 
 /-! ### The pre-execution system calls -/
 
@@ -162,11 +153,11 @@ theorem fold_transactions (benv : Benv) :
   | [], p, rest => rfl
   | ⟨i, tx⟩ :: l, p, rest => by
     simp only [List.map_cons, List.cons_append, Body.fold, Body.step, applyTransactions,
-      ← processTransaction_eq_b2]
-    cases h : B2.processTransaction (benv.withState p.state) p.toBlockOutput tx i with
+      ← processTransaction_eq_b2, ← B2.Transaction.run_output]
+    cases h : B2.Transaction.run (benv.withState p.state) p.toBlockOutput tx i with
     | error e => rfl
     | ok q =>
-      obtain ⟨st, b⟩ := q
+      obtain ⟨run, b⟩ := q
       simp only [bind, Except.bind, pure, Except.pure]
       rw [fold_transactions benv l]
       rfl
@@ -196,14 +187,6 @@ theorem applyTransactions_receiptKeys :
     simp only at hk
     simp [hk]
     omega
-
-theorem length_putIndex_aux {ξ : Type} : ∀ (k : Nat) (xs : List ξ),
-    (List.putIndex.aux k xs).length = xs.length
-  | _, [] => rfl
-  | k, _ :: xs => by simp [List.putIndex.aux, length_putIndex_aux (k + 1) xs]
-
-theorem length_putIndex {ξ : Type} (xs : List ξ) : xs.putIndex.length = xs.length :=
-  length_putIndex_aux 0 xs
 
 /-! ### The requests -/
 
@@ -343,7 +326,7 @@ theorem fold_postOps (benv : Benv) (p : Body.Prefix) (n : Nat) (ommers : List He
     (by
       show (withdrawalsPass _ _ _ _).2.receiptKeys.length = n
       rw [withdrawalsPass_receiptKeys]; exact hk)]
-  simp only [fold_tailOps, Body.Prefix.state_ofBlockOutput, Body.Prefix.toBlockOutput_ofBlockOutput,
+  simp only [Body.Prefix.state_ofBlockOutput, Body.Prefix.toBlockOutput_ofBlockOutput,
     Benv.withState_withState]
   rcases withdrawalsPass benv.stat.rules (benv.withState p.state) p.toBlockOutput wds with ⟨stW, bW⟩
   dsimp only

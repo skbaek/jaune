@@ -80,6 +80,13 @@ import Jaune.Bridge.G2b.FinalStep
 import Jaune.Bridge.G2b.FinalParts
 import Jaune.Bridge.G2b.FinalOutput
 import Jaune.Bridge.G2b.FinalDriver
+import Jaune.Run.BodyFactsRlp
+import Jaune.Run.BodyFacts
+import Jaune.Run.Canonical
+import Jaune.Run.BlockFacts
+import Jaune.Bridge.G2a.Canonical
+import Jaune.MessageCall.FinalGasFacts
+import Jaune.MessageCall.FinalPlainGasFacts
 import Jaune.FinalSufficiencyWalk
 import Jaune.MessageCall.FinalStateGasOps
 import Jaune.MessageCall.FinalStateGasZero
@@ -90,6 +97,9 @@ import Jaune.MessageCall.FinalMemoryAccounting
 import Jaune.MessageCall.FinalStepGasBound
 import Jaune.MessageCall.FinalPartsGas
 import Jaune.MessageCall.FinalTotality
+import Jaune.MessageCall.FinalDerivation
+import Jaune.MessageCall.FinalChronology
+import Jaune.MessageCall.FinalAdequacy
 
 namespace Jaune
 

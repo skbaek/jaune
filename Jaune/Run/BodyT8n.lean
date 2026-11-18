@@ -122,17 +122,17 @@ theorem foldTransactions_eq (benv : Benv) :
     simp only [Jaune.T8n.foldTransactions, foldTransactions]
     exact foldTransactions_eq benv rest p _ inc
   | ⟨i, .ok tx⟩ :: rest, p, rej, inc => by
-    simp only [Jaune.T8n.foldTransactions, foldTransactions, Body.step, ← processTransaction_eq_b2]
-    cases B2.processTransaction (benv.withState p.state) p.toBlockOutput tx inc.length with
+    simp only [Jaune.T8n.foldTransactions, foldTransactions, Body.step, ← processTransaction_eq_b2, ← B2.Transaction.run_output]
+    cases B2.Transaction.run (benv.withState p.state) p.toBlockOutput tx inc.length with
     | error err =>
-      simp only [bind, Except.bind]
+      simp only [Functor.map, Except.map, bind, Except.bind]
       split
       · rfl
       · exact foldTransactions_eq benv rest p _ inc
     | ok q =>
-      obtain ⟨st, b⟩ := q
+      obtain ⟨run, b⟩ := q
       simp only [bind, Except.bind, pure, Except.pure]
-      have := foldTransactions_eq benv rest (Body.Prefix.ofBlockOutput st b) rej (inc ++ [tx])
+      have := foldTransactions_eq benv rest (Body.Prefix.ofBlockOutput run.state b) rej (inc ++ [tx])
       simp only [Body.Prefix.state_ofBlockOutput, Body.Prefix.toBlockOutput_ofBlockOutput] at this
       exact this
 
