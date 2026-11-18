@@ -214,14 +214,18 @@ requirements.
 
 Jaune contains an executable specification of the Ethereum consensus layer
 for Electra and Fulu, written in pure Lean from `ethereum/consensus-specs`
-release `v1.6.1`. It passes every case of that release's official test
-vectors whose fork is Electra or Fulu, on both the minimal and mainnet
-presets, plus every general-preset case those forks use, with no
-expected-failure allowance: 23,975/23,975 in-scope cases (5,509 general,
-16,126 minimal, 2,340 mainnet). It does so under Jaune's existing trusted base
-and gate discipline: pure Lean with no FFI, the R1 to R6 integrity rules over
-the consensus modules, and axiom evidence by the repository's union walk. The
-consensus lane's commands are in [`scripts/GATES.md`](scripts/GATES.md).
+release `v1.7.0-beta.4`. It passes every case of that release's official
+test vectors whose fork is Electra or Fulu, on the minimal and mainnet
+presets and in the fork-choice compliance (`comptests`) suites, plus the
+phase0 shuffling cases and every general-preset case those forks use, with no
+expected-failure allowance: 28,030/28,030 in-scope cases (5,509 general,
+16,865 minimal, 2,712 mainnet, 2,944 comptests). The general-preset cases come
+from release `v1.6.1`, because `v1.7.0-beta.4`'s general vectors hold only 20
+`bls` cases. Gloas is in progress and is not claimed here. It does so under
+Jaune's existing trusted base and gate discipline: pure Lean with no FFI, the
+R1 to R6 integrity rules over the consensus modules, and axiom evidence by the
+repository's union walk. The consensus lane's commands are in
+[`scripts/GATES.md`](scripts/GATES.md).
 
 Not claimed:
 
