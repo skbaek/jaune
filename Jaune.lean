@@ -80,6 +80,9 @@ import Jaune.Bridge.G2b.FinalStep
 import Jaune.Bridge.G2b.FinalParts
 import Jaune.Bridge.G2b.FinalOutput
 import Jaune.Bridge.G2b.FinalDriver
+import Jaune.Run.Canonical
+import Jaune.Run.BlockFacts
+import Jaune.Bridge.G2a.Canonical
 
 namespace Jaune
 
