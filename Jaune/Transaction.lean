@@ -4724,6 +4724,43 @@ def checkBlockRlpSize (limits : BlockLimits) (rawSize : Nat) :
     else
       .ok ()
 
+/-- Import an envelope using its original wire length. The transition function supplies
+the fork semantics and keeps lookup failures outside consensus rejections. -/
+def importCore
+    (transition : BlockChain → Block → Except ImportFailure (Except TransitionError BlockChain))
+    (limits : BlockLimits) (chain : BlockChain) (candidate : CanonicalBlock) :
+    Except ImportFailure (ImportOutcome BlockChain) := do
+  match checkBlockRlpSize limits candidate.rawSize with
+  | .error error => return .inr (.block error)
+  | .ok () =>
+    match ← transition chain candidate.block with
+    | .ok next => return .inl next
+    | .error error =>
+      match error.split with
+      | .inl failure => throw failure
+      | .inr rejection => return .inr rejection
+
+private theorem importCore_eq_ok_inl
+    {transition : BlockChain → Block → Except ImportFailure (Except TransitionError BlockChain)}
+    {limits : BlockLimits} {chain next : BlockChain} {candidate : CanonicalBlock}
+    (h : importCore transition limits chain candidate = .ok (.inl next)) :
+    checkBlockRlpSize limits candidate.rawSize = .ok () ∧
+      transition chain candidate.block = .ok (.ok next) := by
+  cases hs : checkBlockRlpSize limits candidate.rawSize with
+  | error e => simp [importCore, hs, pure, Except.pure] at h
+  | ok u =>
+    cases u
+    refine ⟨rfl, ?_⟩
+    cases ht : transition chain candidate.block with
+    | error e => simp [importCore, hs, ht, bind, Except.bind] at h
+    | ok result =>
+      cases result with
+      | ok out =>
+        simpa [importCore, hs, ht, bind, Except.bind, pure, Except.pure] using h
+      | error e =>
+        cases he : e.split <;>
+          simp [importCore, hs, ht, bind, Except.bind, pure, Except.pure, he] at h
+
 /-- Block import from a canonical outer-block envelope, under an explicit rule
 set. This is the checked import core; every public import path below is a
 named raw compatibility wrapper that validates its bytes and then calls it.
@@ -4744,15 +4781,7 @@ header validation, exactly as EELS. The two failure channels are unchanged:
 `.error` is a harness-level failure, `.inr` is a block this chain rejects. -/
 def addBlockToChainCanonicalE (f : Fork) (chain : BlockChain)
     (cb : CanonicalBlock) : Except ImportFailure (ImportOutcome BlockChain) :=
-  match checkBlockRlpSize f.ruleSet.block cb.rawSize with
-  | .error err => .ok (.inr (.block err))
-  | .ok () =>
-    match stateTransitionE f chain cb.block with
-    | .error e =>
-      match e.split with
-      | .inl failure => .error failure
-      | .inr rejection => .ok (.inr rejection)
-    | .ok chain' => .ok (.inl chain')
+  importCore (fun ch block => .ok (stateTransitionE f ch block)) f.ruleSet.block chain cb
 
 /-- Canonical-envelope configured import after the containing fork lookup.
 Size rejection precedes the shared transition. Ommer lookup failures are
@@ -4760,16 +4789,8 @@ operational import failures and can never become scored block rejections. -/
 def addBlockToChainScheduledCanonicalE (cfg : ChainConfig) (f : Fork)
     (chain : BlockChain) (cb : CanonicalBlock) :
     Except ImportFailure (ImportOutcome BlockChain) :=
-  match checkBlockRlpSize f.ruleSet.block cb.rawSize with
-  | .error err => .ok (.inr (.block err))
-  | .ok () =>
-    match stateTransitionScheduledE cfg f chain cb.block with
-    | .error e => .error (ImportFailure.ofLookup e)
-    | .ok (.error e) =>
-      match e.split with
-      | .inl failure => .error failure
-      | .inr rejection => .ok (.inr rejection)
-    | .ok (.ok chain') => .ok (.inl chain')
+  (importCore (fun ch block => (stateTransitionScheduledE cfg f ch block).mapError ImportFailure.ofLookup)
+    f.ruleSet.block chain cb)
 
 /-- A scheduled ommer lookup failure stays operational at the import boundary. -/
 theorem addBlockToChainScheduledCanonicalE_lookup_error {cfg : ChainConfig} {f : Fork}
@@ -4777,23 +4798,18 @@ theorem addBlockToChainScheduledCanonicalE_lookup_error {cfg : ChainConfig} {f :
     (hsize : checkBlockRlpSize f.ruleSet.block cb.rawSize = .ok ())
     (hlookup : stateTransitionScheduledE cfg f chain cb.block = .error e) :
     addBlockToChainScheduledCanonicalE cfg f chain cb = .error (ImportFailure.ofLookup e) := by
-  simp only [addBlockToChainScheduledCanonicalE, hsize, hlookup]
+  simp [addBlockToChainScheduledCanonicalE, importCore, hsize, hlookup, Except.mapError, bind, Except.bind]
 
 theorem addBlockToChainScheduledCanonicalE_eq_ok_inl {cfg : ChainConfig} {f : Fork}
     {chain chain' : BlockChain} {cb : CanonicalBlock}
     (h : addBlockToChainScheduledCanonicalE cfg f chain cb = .ok (.inl chain')) :
     checkBlockRlpSize f.ruleSet.block cb.rawSize = .ok () ∧
       stateTransitionScheduledE cfg f chain cb.block = .ok (.ok chain') := by
-  unfold addBlockToChainScheduledCanonicalE at h
-  split at h
-  · simp at h
-  · rename_i u hsize
-    split at h
-    · simp at h
-    · split at h <;> simp_all
-    · rename_i ch hst
-      simp only [Except.ok.injEq, Sum.inl.injEq] at h
-      exact ⟨hsize, h ▸ hst⟩
+  obtain ⟨hs, ht⟩ := importCore_eq_ok_inl h
+  refine ⟨hs, ?_⟩
+  cases hrun : stateTransitionScheduledE cfg f chain cb.block with
+  | error e => simp [hrun, Except.mapError] at ht
+  | ok result => simpa [hrun, Except.mapError] using ht
 
 /-- Collapse a typed import result onto the legacy stringly channels: the
 operational failure renders on the outer `.error`, the candidate rejection on
@@ -4939,15 +4955,8 @@ theorem addBlockToChainCanonicalE_eq_ok_inl {f : Fork}
     (h : addBlockToChainCanonicalE f chain cb = .ok (.inl chain')) :
     checkBlockRlpSize f.ruleSet.block cb.rawSize = .ok () ∧
       stateTransitionE f chain cb.block = .ok chain' := by
-  unfold addBlockToChainCanonicalE at h
-  split at h
-  · simp at h
-  · rename_i u hsize
-    split at h
-    · split at h <;> simp_all
-    · rename_i hst
-      simp only [Except.ok.injEq, Sum.inl.injEq] at h
-      exact ⟨hsize, h ▸ hst⟩
+  obtain ⟨hs, ht⟩ := importCore_eq_ok_inl h
+  exact ⟨hs, Except.ok.inj ht⟩
 
 /-- Full inversion of a successful raw import: strict decode, then EIP-7934
 against the *supplied* byte length, then the transition -- in that order.

@@ -85,6 +85,8 @@ import Jaune.Run.BodyFacts
 import Jaune.Run.Canonical
 import Jaune.Run.BlockFacts
 import Jaune.Bridge.G2a.Canonical
+import Jaune.Run.Import
+import Jaune.Bridge.Import
 
 namespace Jaune
 
