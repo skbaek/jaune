@@ -107,6 +107,11 @@ import Jaune.MessageCall.FinalAdequacy
 import Jaune.MessageCall.FinalDerivationMemory
 import Jaune.MessageCall.FinalSpawnFacts
 import Jaune.MessageCall.FinalResumeFacts
+import Jaune.Instructions.Word
+import Jaune.Instructions.WordRows
+import Jaune.Instructions.WordFacts
+import Jaune.Instructions.Store
+import Jaune.Instructions.StoreFacts
 
 namespace Jaune
 
