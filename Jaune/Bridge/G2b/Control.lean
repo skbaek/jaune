@@ -196,7 +196,7 @@ theorem ofDevm_creditSelfdestructRefund (rules : ForkRules) (p : Prop) [Decidabl
 theorem ofDevm_addAccountToDelete (d : Devm) (a : Address) :
     ofDevm (addAccountToDelete d a) = (ofDevm d).addSelfDestruct a := rfl
 
-theorem Agree.assertDynamic (sevm : Sevm) (d : Devm) :
+theorem Except.Agree.assertDynamic (sevm : Sevm) (d : Devm) :
     Except.Agree (fun _ _ => True) (Jaune.assertDynamic sevm d)
       ((ofDevm d).assertDynamic (CallContext.ofSevm sevm)) :=
   Except.Agree.assert _ d
@@ -229,7 +229,7 @@ private theorem selfdestructNone_tail (sevm : Sevm) (donee : Address) (bal : U25
               ).creditSelfdestructRefund sevm.benvStat.rules
               (sevm.currentTarget ∈ s.selfDestructs)))
         else return .ok (.finished [] s)) := by
-  refine (Agree.assertDynamic sevm d₃).toExit ?_
+  refine (Except.Agree.assertDynamic sevm d₃).toExit ?_
   intro _ _ _
   rw [← ofDevm_subBal]
   rcases hsb : d₃.subBal sevm.currentTarget bal with _ | d₄
@@ -385,7 +385,7 @@ theorem ofExecution_haltRun (sevm : Sevm) {d : Devm} (ho : d.output = []) (l : H
       case flat g =>
         simp only
         exact charge d₂ _ ho₂
-    · refine (Agree.assertDynamic sevm d).toExit ?_
+    · refine (Except.Agree.assertDynamic sevm d).toExit ?_
       intro _ _ _
       refine ((Except.Agree.ofOutcome (ofOutcome_popToAdr d)).and_ok
         (P := fun p => p.2.output = []) ?_).toExit ?_
