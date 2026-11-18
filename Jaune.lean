@@ -83,6 +83,7 @@ import Jaune.Bridge.G2b.FinalDriver
 import Jaune.FinalSufficiencyWalk
 import Jaune.MessageCall.FinalStateGasOps
 import Jaune.MessageCall.FinalStateGasZero
+import Jaune.MessageCall.FinalMemoryCosts
 import Jaune.MessageCall.FinalMemoryAccounting
 
 namespace Jaune
