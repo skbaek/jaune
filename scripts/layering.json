@@ -150,6 +150,7 @@
   "Jaune.MessageCall.FinalGasFacts": "proof",
   "Jaune.MessageCall.FinalPlainGasFacts": "proof",
   "Jaune.FinalSufficiencyWalk": "proof",
+  "Jaune.CheckedSufficiencyWalk": "proof",
   "Jaune.MessageCall.FinalStateGasOps": "proof",
   "Jaune.MessageCall.FinalStateGasZero": "proof",
   "Jaune.MessageCall.FinalMemoryCosts": "proof",
