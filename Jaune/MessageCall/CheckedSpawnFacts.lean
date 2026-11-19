@@ -252,21 +252,21 @@ theorem step_spawn_create_warm {r : Frame.Running} {child : Frame} {p : Staging.
 
 /-- A prepared creation keeps its code address and a prepared call has one. -/
 theorem prepareTopLevelAmsterdam_message {state : StateGasRules} {msg : Msg} {p : Msg × Devm}
-    (h : Staging.prepareTopLevelAmsterdam state msg = .ok p) :
+    (h : prepareTopLevelAmsterdam state msg = .ok p) :
     p.1.target = msg.target ∧ (msg.target = none → p.1.codeAddress = msg.codeAddress) ∧
       (msg.target ≠ none → p.1.codeAddress ≠ none) := by
-  have hcall : ∀ {d : Devm} {p : Msg × Devm}, Staging.resolveTopLevelCallAmsterdam msg d = .ok p →
+  have hcall : ∀ {d : Devm} {p : Msg × Devm}, resolveTopLevelCallAmsterdam msg d = .ok p →
       p.1.target = msg.target ∧ p.1.codeAddress ≠ none := by
     intro d p hc
-    unfold Staging.resolveTopLevelCallAmsterdam at hc
+    unfold resolveTopLevelCallAmsterdam at hc
     obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
     cases hc
     exact ⟨rfl, by simp⟩
-  have key : ∀ d1, Staging.finishTopLevelAmsterdam state msg d1 = .ok p →
+  have key : ∀ d1, finishTopLevelAmsterdam state msg d1 = .ok p →
       p.1.target = msg.target ∧ (msg.target = none → p.1.codeAddress = msg.codeAddress) ∧
         (msg.target ≠ none → p.1.codeAddress ≠ none) := by
     intro d1 h
-    unfold Staging.finishTopLevelAmsterdam Staging.dispatchTopLevelAmsterdam at h
+    unfold finishTopLevelAmsterdam dispatchTopLevelAmsterdam at h
     generalize (if msg.tenv.stat.auths.isEmpty then d1 else d1.commitStateGas) = d2 at h
     dsimp only at h
     split at h
@@ -280,7 +280,7 @@ theorem prepareTopLevelAmsterdam_message {state : StateGasRules} {msg : Msg} {p 
       have ht : msg.target ≠ none := fun e => hsome (by simp [e])
       split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;>
         exact ⟨(hcall h).1, fun e => absurd e ht, fun _ => (hcall h).2⟩
-  unfold Staging.prepareTopLevelAmsterdam at h
+  unfold prepareTopLevelAmsterdam at h
   dsimp only at h
   split at h <;> obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h <;> exact key _ h
 
