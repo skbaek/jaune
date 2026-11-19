@@ -130,12 +130,10 @@
       "new": {"names": ["Jaune.processMessageCall"], "modules": ["Jaune.Transaction"]},
       "exempt": [],
       "maps": [
-        {"path": "delta-map-1.json", "revision": null,
-         "sha256": "efa6e653b340c97c6e57fbe8ebd362b8e1a37f3e2da9dab5ff50946ce51b14de",
-         "gap": "relocation-1 delta map (115 rows) kept with the u29 captures, not committed to Jaune"},
-        {"path": "delta-map-2.json", "revision": null,
-         "sha256": "8d980476b69b21a4f8df69423a4bfcfefc4801e8c9a33583e283a5b18d62dd4d",
-         "gap": "relocation-2 delta map (namespace Jaune.Staging -> Jaune) kept with the u29 captures, not committed to Jaune"}
+        {"path": "scripts/maps/g1-u29-delta-map-1.json", "revision": "56384d5d55e62706f9a71572f79f5bee449e0479",
+         "sha256": "efa6e653b340c97c6e57fbe8ebd362b8e1a37f3e2da9dab5ff50946ce51b14de"},
+        {"path": "scripts/maps/g1-u29-delta-map-2.json", "revision": "56384d5d55e62706f9a71572f79f5bee449e0479",
+         "sha256": "8d980476b69b21a4f8df69423a4bfcfefc4801e8c9a33583e283a5b18d62dd4d"}
       ],
       "n4_receipts": [
         {"map_sha256": "efa6e653b340c97c6e57fbe8ebd362b8e1a37f3e2da9dab5ff50946ce51b14de",
