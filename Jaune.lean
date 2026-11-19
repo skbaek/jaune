@@ -142,6 +142,13 @@ import Jaune.Instructions.WordRows
 import Jaune.Instructions.WordFacts
 import Jaune.Instructions.Store
 import Jaune.Instructions.StoreFacts
+import Jaune.Instructions.MachineSteps
+import Jaune.Instructions.Shuffle
+import Jaune.Instructions.ShuffleFacts
+import Jaune.Instructions.Push
+import Jaune.Instructions.PushFacts
+import Jaune.Instructions.Log
+import Jaune.Instructions.LogFacts
 import Jaune.Bridge.G2b.FinalPrefix
 import Jaune.Bridge.G2b.FinalRetained
 import Jaune.Run.Root
