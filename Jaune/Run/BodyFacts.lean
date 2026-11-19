@@ -95,59 +95,6 @@ theorem Body.fold_append (benv : Benv) :
 
 /-! ### What a transaction writes -/
 
-/-- The block output a transaction leaves: the gas settlement, the transaction and its receipt
-entered under `rlpKey index`, the receipt key appended, the receipt's logs appended, and an access
-list. Under a legacy schedule the settlement's execution and sender counters agree and its state
-counter is zero. -/
-theorem B2.processTransaction_output {benv : Benv} {bout : BlockOutput} {tx : Transaction}
-    {index : Nat} {q : State × BlockOutput}
-    (h : B2.processTransaction benv bout tx index = .ok q) :
-    ∃ (settlement : TransactionGasSettlement) (txBlobGasUsed : Nat)
-      (receipt : Fin 5 × Receipt),
-      q.2 = { bout.withGasSettlement settlement txBlobGasUsed with
-        transactionsTrie := bout.transactionsTrie.insert (rlpKey index) tx
-        receiptKeys := bout.receiptKeys ++ [rlpKey index]
-        receiptsTrie := bout.receiptsTrie.insert (rlpKey index) receipt
-        blockLogs := bout.blockLogs ++ receipt.2.logs
-        blockAccessListBuilder := q.2.blockAccessListBuilder } ∧
-      (benv.stat.rules.stateGas = none →
-        settlement.executionGasUsed = settlement.gasUsed ∧ settlement.stateGasUsed = 0) := by
-  unfold B2.processTransaction at h
-  obtain ⟨checked, hc, h⟩ := Except.bind_eq_ok h
-  obtain ⟨prepared, hp, h⟩ := Except.bind_eq_ok h
-  obtain ⟨run, _, h⟩ := Except.bind_eq_ok h
-  have hcb : checked.bout =
-      {bout with transactionsTrie := bout.transactionsTrie.insert (rlpKey index) tx} ∧
-      checked.benv.stat.rules = benv.stat.rules := by
-    unfold Transaction.check at hc
-    obtain ⟨_, hb, hc⟩ := Except.bind_eq_ok hc
-    cases hb
-    obtain ⟨_, _, hc⟩ := Except.bind_eq_ok hc
-    obtain ⟨⟨_, _⟩, _, hc⟩ := Except.bind_eq_ok hc
-    obtain ⟨⟨_, _, _, _⟩, _, hc⟩ := Except.bind_eq_ok hc
-    cases hc
-    exact ⟨rfl, rfl⟩
-  have hpb : prepared.bout = checked.bout ∧ prepared.benv = checked.benv := by
-    unfold Transaction.prepare at hp
-    obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-    obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-    cases hp
-    exact ⟨rfl, rfl⟩
-  unfold B2.Transaction.settle at h
-  obtain ⟨refundCounter, _, h⟩ := Except.bind_eq_ok h
-  cases h
-  refine ⟨settleTransactionGas prepared.benv.stat.rules tx.gasLimit prepared.calldataFloorGasCost
-      run.gasLeft run.stateGasLeft refundCounter run.stateGasUsed, prepared.txBlobGasUsed,
-    makeReceipt tx run.error
-      (prepared.bout.withGasSettlement (settleTransactionGas prepared.benv.stat.rules tx.gasLimit
-        prepared.calldataFloorGasCost run.gasLeft run.stateGasLeft refundCounter run.stateGasUsed)
-        prepared.txBlobGasUsed).cumulativeGasUsed run.logs, ?_, ?_⟩
-  · rw [hpb.1, hcb.1]
-    rfl
-  · intro hnone
-    rw [hpb.2, hcb.2]
-    exact settleTransactionGas_none_invariants hnone _ _ _ _ _ _
-
 /-- Each transaction record supplies the exact trie entry and logs that settlement wrote. -/
 theorem B2.Transaction.run_writes {benv : Benv} {bout out : BlockOutput} {tx : Transaction}
     {index : Nat} {r : B2.TransactionRun} (h : B2.Transaction.run benv bout tx index = .ok (r, out)) :
@@ -691,24 +638,6 @@ def outputSummary (b : BlockOutput) :
 
 theorem Except.ok_bind' {ε α β : Type} (a : α) (f : α → Except ε β) :
     (Except.ok a >>= f) = f a := rfl
-
-theorem B2.processTransaction_summary {benv : Benv} {b b' : BlockOutput} (tx : Transaction)
-    (index : Nat) (h : outputSummary b = outputSummary b') :
-    (fun q => (q.1, outputSummary q.2)) <$> B2.processTransaction benv b tx index =
-      (fun q => (q.1, outputSummary q.2)) <$> B2.processTransaction benv b' tx index := by
-  simp only [outputSummary, Prod.mk.injEq] at h
-  obtain ⟨hg, hs, hc, hb, hk⟩ := h
-  unfold B2.processTransaction Transaction.check Transaction.prepare B2.Transaction.settle
-  simp only [map_bind, bind_assoc, Except.ok_bind', pure_bind]
-  rw [checkTransaction_congr (b := {b with
-    transactionsTrie := b.transactionsTrie.insert (Rlp.Item.bytes (Nat.toBytes index)).toBytes tx})
-    (b' := {b' with
-    transactionsTrie := b'.transactionsTrie.insert (Rlp.Item.bytes (Nat.toBytes index)).toBytes tx})
-    tx hg hs hb]
-  refine bind_congr fun _ => bind_congr fun _ => bind_congr fun _ => bind_congr fun _ =>
-    bind_congr fun _ => bind_congr fun _ => bind_congr fun _ => ?_
-  simp only [Functor.map, Except.map, outputSummary, BlockOutput.withGasSettlement,
-    receiptsRead_insert, hg, hs, hc, hb, hk]
 
 theorem B2.Transaction.run_summary {benv : Benv} {b b' : BlockOutput} (tx : Transaction)
     (index : Nat) (h : outputSummary b = outputSummary b') :

@@ -285,37 +285,6 @@ theorem Transaction.prepare_canonical {checked : Transaction.Checked} {tx : Tran
   exact prepareMessage_canonical (by exact ⟨hstc, h.2⟩)
     (by exact TransientStorage.canonical_empty) hmsg
 
-/-- Settlement keeps the message run's state canonical: the fee movements are balance credits,
-then the self-destructs and the sweep only erase accounts. -/
-theorem B2.Transaction.settle_canonical {prepared : Transaction.Prepared} {tx : Transaction}
-    {index : Nat} {run : MessageRun} (h : run.state.Canonical) {p}
-    (hp : B2.Transaction.settle prepared tx index run = .ok p) : State.Canonical p.1 := by
-  unfold B2.Transaction.settle at hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  cases hp
-  exact State.Canonical.sweepTouchedAccounts (State.Canonical.settleSelfdestructs
-    (State.Canonical.addBal (State.Canonical.addBal h _ _) _ _) _ _) _ _
-
-/-- **A successful transaction leaves a canonical state**: the fee movements go through
-`incrNonce`/`subBal`/`addBal`, the call itself through `Message.run`, and settlement follows the
-fork's SELFDESTRUCT rule. -/
-theorem B2.processTransaction_canonical {benv : Benv} (h : benv.Canonical)
-    {bout : BlockOutput} {tx : Transaction} {index : Nat} {p}
-    (hp : B2.processTransaction benv bout tx index = .ok p) :
-    State.Canonical p.1 := by
-  unfold B2.processTransaction at hp
-  obtain ⟨checked, hchecked, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨prepared, hprepared, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨run, hrun, hp⟩ := Except.bind_eq_ok hp
-  have hb : checked.benv.Canonical := by
-    rw [Transaction.check_benv hchecked]
-    exact ⟨h.1, h.1⟩
-  have hm := Transaction.prepare_canonical hb hprepared
-  exact B2.Transaction.settle_canonical
-    (Message.run_canonical hm (Except.mapError_eq_ok_iff.mp hrun)) hp
-
 /-- Settlement into a transaction run keeps the message run's state canonical: the fee
 movements are balance credits, then the self-destructs and the sweep only erase accounts. -/
 theorem B2.Transaction.settleRun_canonical {checked : Transaction.Checked}

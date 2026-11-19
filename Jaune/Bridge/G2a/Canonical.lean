@@ -10,7 +10,7 @@ A sanity check, not a dependency: `Jaune.Run.Canonical` and `Jaune.Run.BlockFact
 without the bridges. Here the old statements are recovered from the new ones through the bridges,
 so the restatements say what the old ones said.
 
-* `processTransaction`: exactly, through `processTransaction_eq_b2` (the two are equal).
+* `processTransaction`: through `processTransaction_eq_b2` and `B2.Transaction.run_output`.
 * `processCheckedSystemTransaction`: through `processCheckedSystemTransaction_eq` and the output
   map `render`, whose state is the run's.
 * The block transition: off the decode-order split, through `E.stateTransitionCoreE_eq_of_not_split`
@@ -24,8 +24,14 @@ open Jaune Jaune.Staging
 /-- The old `processTransaction_canonical`, from the staged one. -/
 theorem processTransaction_canonical_of_staged {benv : Benv} (h : benv.Canonical)
     {bout : BlockOutput} {tx : Transaction} {index : Nat} {p}
-    (hp : Jaune.processTransaction benv bout tx index = .ok p) : State.Canonical p.1 :=
-  B2.processTransaction_canonical h ((processTransaction_eq_b2 benv bout tx index).trans hp)
+    (hp : Jaune.processTransaction benv bout tx index = .ok p) : State.Canonical p.1 := by
+  rw [← processTransaction_eq_b2, ← B2.Transaction.run_output] at hp
+  cases hr : B2.Transaction.run benv bout tx index with
+  | error e => rw [hr] at hp; cases hp
+  | ok r =>
+    rw [hr] at hp
+    cases hp
+    exact B2.Transaction.run_canonical h hr
 
 /-- The old `processCheckedSystemTransaction_canonical`, from the staged one. -/
 theorem processCheckedSystemTransaction_canonical_of_staged {benv : Benv} (h : benv.Canonical)
