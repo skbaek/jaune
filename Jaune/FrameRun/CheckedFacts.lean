@@ -1,5 +1,6 @@
 import Jaune.FrameRun.CheckedOrder
 import Jaune.FrameRun.CheckedAdequacy
+import Jaune.Run.BodyFacts
 import Jaune.Run.CheckedTransaction
 import Jaune.Transaction
 
@@ -187,6 +188,134 @@ def OpRun.enteredRoot : OpRun → Option Root
 def BlockRun.roots (run : BlockRun) : List Root := run.ops.filterMap OpRun.enteredRoot
 
 def BlockRun.frames (run : BlockRun) : List Frame.Run.Kept := run.roots.flatMap Root.frames
+
+/-- The sender refund and coinbase fee are credited before self-destruct settlement. The
+touched-account sweep runs on the resulting world. -/
+theorem Transaction.settleRun_state (admitted : Jaune.Transaction.Admitted) (prepared : Transaction.Prepared)
+    (tx : Jaune.Transaction) (index : Nat) (message : TopLevel.Run)
+    {record : TransactionRun} {output : BlockOutput}
+    (accepted : settleRun admitted prepared tx index message = .ok (record, output)) :
+    let block := prepared.input.message.context.block
+    let effects := message.settlement prepared.input
+    let refund := record.gasSettlement.gasLeft * prepared.effectiveGasPrice
+    let fee := record.gasSettlement.gasUsed * (prepared.effectiveGasPrice - block.baseFeePerGas)
+    record.state = sweepTouchedAccounts block.rules effects.touchedAccounts.toList
+      (settleSelfdestructs block.rules effects.accountsToDelete.toList
+        ((effects.state.addBal prepared.sender (Jaune.Nat.toU256 refund)).addBal
+          block.coinbase (Jaune.Nat.toU256 fee))) := by
+  unfold settleRun at accepted
+  obtain ⟨_, _, accepted⟩ := Except.bind_eq_ok accepted
+  cases accepted
+  rfl
+
+/-- Admission and execution use the starting world and the output summary. The signed
+record is independent of the other accumulated block output. -/
+theorem Transaction.run_summary {benv : Benv} {b b' : BlockOutput} (tx : Jaune.Transaction)
+    (index : Nat) (summary : outputSummary b = outputSummary b') :
+    (fun (record, next) => (record, outputSummary next)) <$> run benv b tx index =
+      (fun (record, next) => (record, outputSummary next)) <$> run benv b' tx index := by
+  simp only [outputSummary, Prod.mk.injEq] at summary
+  obtain ⟨hg, hs, hc, hb, hr⟩ := summary
+  unfold run Jaune.Transaction.admit Transaction.prepare Transaction.settleRun
+  simp only [map_bind, bind_assoc, Except.ok_bind', pure_bind]
+  rw [checkTransaction_congr (b := {b with
+    transactionsTrie := b.transactionsTrie.insert (Rlp.Item.bytes (Jaune.Nat.toBytes index)).toBytes tx})
+    (b' := {b' with transactionsTrie := b'.transactionsTrie.insert (Rlp.Item.bytes (Jaune.Nat.toBytes index)).toBytes tx})
+    tx hg hs hb]
+  refine bind_congr fun _ => bind_congr fun _ => bind_congr fun _ => bind_congr fun _ =>
+    bind_congr fun _ => bind_congr fun _ => ?_
+  simp only [Functor.map, pure, Except.pure, Except.map, outputSummary, BlockOutput.withGasSettlement,
+    receiptsRead_insert, hg, hs, hc, hb, hr]
+
+/-- Every operation except the access-list build and its limit check reads only the summary
+for its operation record and the next summary. -/
+theorem Body.stepRun_summary (benv : Benv) {p p' : Jaune.Body.Prefix} {op : BodyOp}
+    (noBuild : op ≠ .buildAccessList) (noLimit : op ≠ .checkAccessListLimit)
+    (summary : p.summary = p'.summary) :
+    (stepRun benv p op).map (fun (record, next) => (record, next.summary)) =
+      (stepRun benv p' op).map (fun (record, next) => (record, next.summary)) := by
+  have out : outputSummary p.toBlockOutput = outputSummary p'.toBlockOutput := congrArg Prod.snd summary
+  have state : p.state = p'.state := congrArg Prod.fst summary
+  simp only [Jaune.Body.Prefix.summary, outputSummary, Jaune.Body.Prefix.toBlockOutput, Prod.mk.injEq] at summary
+  obtain ⟨_, hg, hs, hc, hb, hr⟩ := summary
+  cases op with
+  | buildAccessList => exact absurd rfl noBuild
+  | checkAccessListLimit => exact absurd rfl noLimit
+  | transaction tx index =>
+    have same := Transaction.run_summary (benv := benv.withState p'.state) tx index out
+    simp only [stepRun, stepWith, state]
+    revert same
+    cases Transaction.run (benv.withState p'.state) p.toBlockOutput tx index <;>
+      cases Transaction.run (benv.withState p'.state) p'.toBlockOutput tx index <;>
+      intro same <;>
+      simp_all [Except.map, bind, Except.bind, pure, Except.pure, Jaune.Body.Prefix.summary]
+  | systemCall address data index =>
+    simp only [stepRun, stepWith, state]
+    cases data with
+    | error => rfl
+    | ok bytes =>
+      simp only [bind, Except.bind]
+      cases processSystemRun benv.stat.toBlockContext p'.state benv.createdAccounts address
+        (p'.state.getCode address) bytes with
+      | error => rfl
+      | ok run =>
+        simp only [Except.mapError, Except.map, pure, Except.pure, Jaune.Body.Prefix.summary, outputSummary,
+          Jaune.Body.Prefix.toBlockOutput, hg, hs, hc, hb, hr]
+  | withdrawals ws index =>
+    simp only [stepRun, stepWith, state, Except.map, pure, Except.pure, Jaune.Body.Prefix.summary,
+      outputSummary, Jaune.Body.Prefix.toBlockOutput, hg, hs, hc, hb, hr]
+  | depositRequests =>
+    have deposits : parseDepositRequests p.toBlockOutput = parseDepositRequests p'.toBlockOutput :=
+      parseDepositRequests_congr hr
+    simp only [stepRun, stepWith, deposits]
+    cases parseDepositRequests p'.toBlockOutput with
+    | error => rfl
+    | ok bytes =>
+      simp only [bind, Except.bind, Except.map, pure, Except.pure, Jaune.Body.Prefix.summary,
+        outputSummary, Jaune.Body.Prefix.toBlockOutput, state, hg, hs, hc, hb, hr]
+  | requestCall kind address index =>
+    simp only [stepRun, stepWith, state]
+    cases processCheckedSystemRun benv.stat.toBlockContext p'.state benv.createdAccounts address [] with
+    | error => rfl
+    | ok run =>
+      simp only [bind, Except.bind, Except.map, pure, Except.pure, Jaune.Body.Prefix.summary,
+        outputSummary, Jaune.Body.Prefix.toBlockOutput, hg, hs, hc, hb, hr]
+  | rewards coinbase minerReward credits =>
+    simp only [stepRun, stepWith, state, Except.map, pure, Except.pure, Jaune.Body.Prefix.summary,
+      outputSummary, Jaune.Body.Prefix.toBlockOutput, hg, hs, hc, hb, hr]
+
+/-- Starting summaries determine the recorded operations and the final summary when the
+schedule omits the two operations that read the accumulated access list. -/
+theorem Body.run_summary (benv : Benv) (ops : List BodyOp) (p p' : Jaune.Body.Prefix)
+    (schedule : ∀ op ∈ ops, op ≠ .buildAccessList ∧ op ≠ .checkAccessListLimit)
+    (summary : p.summary = p'.summary) :
+    (run benv p ops).map (fun (records, final) => (records, final.summary)) =
+      (run benv p' ops).map (fun (records, final) => (records, final.summary)) := by
+  induction ops generalizing p p' with
+  | nil => simp only [run, Except.map, summary]
+  | cons op ops ih =>
+    obtain ⟨noBuild, noLimit⟩ := schedule op (List.mem_cons_self ..)
+    have same := stepRun_summary benv noBuild noLimit summary
+    simp only [run]
+    generalize stepRun benv p op = left at same ⊢
+    generalize stepRun benv p' op = right at same ⊢
+    rcases left with err | ⟨record, next⟩ <;> rcases right with err' | ⟨record', next'⟩ <;>
+      simp only [Except.map, Except.ok.injEq, Except.error.injEq, Prod.mk.injEq] at same
+    · cases same; rfl
+    · cases same
+    · cases same
+    · obtain ⟨rfl, sameSummary⟩ := same
+      have tail := ih next next' (fun op member => schedule op (List.mem_cons_of_mem _ member)) sameSummary
+      simp only [bind, Except.bind]
+      generalize run benv next ops = left at tail ⊢
+      generalize run benv next' ops = right at tail ⊢
+      rcases left with err | ⟨records, final⟩ <;> rcases right with err' | ⟨records', final'⟩ <;>
+        simp only [Except.map, Except.ok.injEq, Except.error.injEq, Prod.mk.injEq] at tail
+      · cases tail; rfl
+      · cases tail
+      · cases tail
+      · obtain ⟨rfl, finalEq⟩ := tail
+        simp only [Except.map, pure, Except.pure, finalEq]
 
 /-- The streaming fold preserves the recording run's final prefix and its first failure. -/
 theorem Body.run_prefix (benv : Benv) (p : Jaune.Body.Prefix) (ops : List BodyOp) :
