@@ -28,6 +28,9 @@ import Jaune.MessageCall.Top
 import Jaune.MessageCall.Canonical
 import Jaune.DevmProjections
 import Jaune.Precompiles
+import Jaune.PrecompileInput
+import Jaune.PrecompileInputFacts
+import Jaune.Bridge.G2b.PrecompileInput
 import Jaune.Execution
 import Jaune.NativePrecompile
 import Jaune.Sufficiency
@@ -86,7 +89,9 @@ import Jaune.Run.Canonical
 import Jaune.Run.BlockFacts
 import Jaune.Bridge.Memory
 import Jaune.MessageCall.CheckedFrame
+import Jaune.MessageCall.CheckedContext
 import Jaune.Bridge.G2b.CheckedFrame
+import Jaune.Bridge.G2b.CheckedContext
 import Jaune.MessageCall.FrameRelations
 import Jaune.Bridge.G2b.FrameRelations
 import Jaune.Bridge.G2b.MemoryReachability
@@ -97,9 +102,14 @@ import Jaune.MessageCall.CheckedMessageOps
 import Jaune.MessageCall.CheckedParts
 import Jaune.MessageCall.CheckedStep
 import Jaune.MessageCall.CheckedDriver
+import Jaune.MessageCall.CheckedExec
 import Jaune.Bridge.G2b.CheckedIngress
 import Jaune.Bridge.G2b.CheckedSimulation
 import Jaune.Bridge.G2b.CheckedWalk
+import Jaune.Bridge.G2b.CheckedPlainArms
+import Jaune.Bridge.G2b.CheckedRowAgreement
+import Jaune.Bridge.G2b.CheckedStoreAgreement
+import Jaune.Bridge.G2b.CheckedDispatch
 import Jaune.Bridge.G2b.CheckedPlain
 import Jaune.Bridge.G2b.CheckedControl
 import Jaune.Bridge.G2b.CheckedMessageOps
@@ -161,7 +171,7 @@ import Jaune.MessageCall.CheckedStepGasBound
 import Jaune.MessageCall.CheckedPartsGas
 import Jaune.MessageCall.CheckedTotality
 import Jaune.Instructions.Word
-import Jaune.Instructions.WordRows
+import Jaune.Instructions.Table
 import Jaune.Instructions.WordFacts
 import Jaune.Instructions.Store
 import Jaune.Instructions.StoreFacts
@@ -172,6 +182,10 @@ import Jaune.Instructions.Push
 import Jaune.Instructions.PushFacts
 import Jaune.Instructions.Log
 import Jaune.Instructions.LogFacts
+import Jaune.Instructions.Memory
+import Jaune.Instructions.MemoryFacts
+import Jaune.Instructions.Read
+import Jaune.Instructions.ReadFacts
 import Jaune.Bridge.G2b.FinalPrefix
 import Jaune.Bridge.G2b.FinalRetained
 import Jaune.Run.Root
@@ -197,6 +211,12 @@ import Jaune.FrameRun.Order
 import Jaune.FrameRun.CheckedOrder
 import Jaune.Bridge.G3.FrameRun
 import Jaune.Bridge.G3.FrameViews
+import Jaune.FrameRun.CheckedFacts
+import Jaune.FrameRun.CheckedMemory
+import Jaune.MessageCall.CheckedAuditedRows
+import Jaune.CheckedSymbolicPush
+import Jaune.CheckedSymbolicArith
+import Jaune.Bridge.G2b.CheckedViews
 
 import Jaune.AccountWriteFacts
 import Jaune.Bridge.AccountWrite

@@ -177,7 +177,10 @@ def genericCreateAmsterdam.step (ctx : CallContext) (state : StateGasRules) (s :
 
 /-! ### The step -/
 
-/-- One message operation over the frame's context and state. -/
+/-- One message operation over the frame's context and state.
+
+Outside the instruction table (goal S4): a message operation opens a frame, which S4 leaves to
+the message-call parts (S1), so it keeps these explicit equations. -/
 def MessageOp.step (ctx : CallContext) (s : Frame.State) : MessageOp → MessageOp.Outcome
   | .create =>
     match ctx.block.rules.stateGas with

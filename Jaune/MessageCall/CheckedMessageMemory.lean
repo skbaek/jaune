@@ -255,22 +255,8 @@ theorem NextOp.step_memoryAccounted (r : Frame.Running) (op : Jaune.NextOp)
   cases op with
   | plain p => exact ofHalt_memory _ (PlainOp.runCore_memoryPotential _ _ _ p hn)
   | message m => exact toStep_memory _ (MessageOp.step_memoryAccounted _ _ m hn)
-  | push xs h =>
-    simp only [NextOp.step]
-    split
-    · exact halted_memory _ (Nat.le_refl _)
-    · apply ofHalt_memory
-      refine Walk.bind (Frame.State.chargeGas_memoryPotential _ (Nat.le_refl _)) ?_
-      intro t ht; exact Frame.State.push_memoryPotential _ ht
-  | dupn imm | swapn imm | exchange imm =>
-    apply ofHalt_memory
-    split
-    · refine Walk.bind (Frame.State.chargeGas_memoryPotential _ (Nat.le_refl _)) ?_
-      intro t ht
-      split
-      · exact ht
-      · split <;> first | exact ht | exact Frame.State.push_memoryPotential _ ht
-    · exact Nat.le_refl _
+  | push xs h => exact ofHalt_memory _ (Family.run_memoryPotential _ r)
+  | dupn imm | swapn imm | exchange imm => exact ofHalt_memory _ (Family.run_memoryPotential _ r)
 
 theorem step_memory_accounting_output (r : Frame.Running) (hn : r.context.block.rules.stateGas = none)
     {next : Step} (h : step r = .ok next) : next.MemoryAccounted (Machine.memoryPotential r.state.machine) := by

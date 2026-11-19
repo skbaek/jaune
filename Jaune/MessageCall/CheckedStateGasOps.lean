@@ -1,4 +1,10 @@
 import Jaune.CheckedSufficiencyWalk
+import Jaune.Instructions.WordFacts
+import Jaune.Instructions.ShuffleFacts
+import Jaune.Instructions.LogFacts
+import Jaune.Instructions.MemoryFacts
+import Jaune.Instructions.ReadFacts
+import Jaune.Instructions.StoreFacts
 
 /-! # Stack and execution-gas operations preserve the state-gas meter -/
 
@@ -216,77 +222,155 @@ theorem JumpOp.runCore_meter (pc : Nat) (ctx : CallContext) (s : Frame.State) (o
     meter_walk
 
 
-private theorem sstoreBerlin_meter (ctx : CallContext) (s : Frame.State) :
+/-- A lifted machine step keeps the meter when the step does, on both channels. -/
+private theorem liftMachine_meter {s : Frame.State}
+    {core : Machine → Except (ExceptionalHalt × Machine) Machine}
+    (h : (match core s.machine with | .ok out | .error (_, out) => out.stateGas) = s.machine.stateGas) :
     Walk (·.machine.stateGas = s.machine.stateGas) (·.machine.stateGas = s.machine.stateGas)
-      (PlainOp.sstoreBerlin ctx s) := by
-  unfold PlainOp.sstoreBerlin
-  refine Walk.bind (Frame.State.pop_meter s) ?_
-  intro ⟨key, s₁⟩ h₁
-  refine Walk.bind (Walk.meter (Frame.State.pop_meter s₁) h₁) ?_
-  intro ⟨value, s₂⟩ h₂
-  refine Walk.bind (Walk.assert (H := (·.machine.stateGas = s.machine.stateGas)) h₂) ?_
-  intro _ _
-  dsimp only at *
-  refine Walk.bind (Walk.meter (Frame.State.chargeGas_meter _ _) ?_) ?_
-  · split <;> exact h₂
-  · intro s₃ h₃
-    refine Walk.bind (Walk.assert (H := (·.machine.stateGas = s.machine.stateGas)) h₃) ?_
-    intro _ _
-    exact h₃
-
-private theorem sstoreLegacy_meter (ctx : CallContext) (s : Frame.State) :
-    Walk (·.machine.stateGas = s.machine.stateGas) (·.machine.stateGas = s.machine.stateGas)
-      (PlainOp.sstoreLegacy ctx s) := by
-  unfold PlainOp.sstoreLegacy
-  refine Walk.bind (Frame.State.pop_meter s) ?_
-  intro ⟨key, s₁⟩ h₁
-  refine Walk.bind (Walk.meter (Frame.State.pop_meter s₁) h₁) ?_
-  intro ⟨value, s₂⟩ h₂
-  refine Walk.bind (Walk.assert (H := (·.machine.stateGas = s.machine.stateGas)) h₂) ?_
-  intro _ _
-  dsimp only at *
-  refine Walk.bind (Walk.meter (Frame.State.chargeGas_meter _ _) ?_) ?_
-  · split <;> first | exact h₂ | (split <;> exact h₂)
-  · intro s₃ h₃
-    refine Walk.bind (Walk.assert (H := (·.machine.stateGas = s.machine.stateGas)) h₃) ?_
-    intro _ _
-    exact h₃
-
-
-private theorem logStep_meter (n : Fin 5) (ctx : CallContext) (m : Machine) :
-    MWalk (·.stateGas = m.stateGas) (fun p => p.1.stateGas = m.stateGas)
-      (PlainOp.logStep n ctx m) := by
-  unfold PlainOp.logStep
-  refine MWalk.bind (Machine.popToNat_meter m) ?_
-  intro ⟨start, m₁⟩ h₁
-  refine MWalk.bind (MWalk.meter (Machine.popToNat_meter m₁) h₁) ?_
-  intro ⟨size, m₂⟩ h₂
-  refine MWalk.bind (MWalk.meter (Machine.popN_meter m₂ _) h₂) ?_
-  intro ⟨topics, m₃⟩ h₃
-  refine MWalk.bind (MWalk.meter (Machine.chargeGas_meter m₃ _) h₃) ?_
-  intro m₄ h₄
-  refine MWalk.bind (MWalk.assert (H := (·.stateGas = m.stateGas)) h₄) ?_
-  intro _ _
-  exact h₄
-
-private theorem log_meter (n : Fin 5) (ctx : CallContext) (s : Frame.State) :
-    Walk (·.machine.stateGas = s.machine.stateGas) (·.machine.stateGas = s.machine.stateGas)
-      (PlainOp.liftLog (PlainOp.logStep n ctx) s) := by
-  have h := logStep_meter n ctx s.machine
-  unfold PlainOp.liftLog
+      (s.liftMachine core) := by
+  unfold Frame.State.liftMachine
   split <;> rename_i he <;> rw [he] at h <;> exact h
+
+private theorem ShuffleRow.step_stateGas (row : ShuffleRow) (o : OpcodeRules) (m : Machine) :
+    (match row.step o m with | .ok out | .error (_, out) => out.stateGas) = m.stateGas := by
+  have hf := ShuffleRow.step_frame row o m
+  cases he : row.step o m with
+  | ok out => rw [he] at hf; obtain ⟨_, _, _, rfl⟩ := hf; rfl
+  | error p => obtain ⟨e, out⟩ := p; rw [he] at hf; obtain ⟨_, _, _, rfl⟩ := hf; rfl
+
+private theorem MemoryRow.step_stateGas (row : MemoryRow) (o : OpcodeRules) (ctx : CallContext)
+    (m : Machine) :
+    (match row.step o ctx m with | .ok out | .error (_, out) => out.stateGas) = m.stateGas := by
+  cases he : row.step o ctx m with
+  | ok out => exact (MemoryRow.step_ok he).2.choose_spec.choose_spec.choose_spec.2.2.2.2.1
+  | error p =>
+    obtain ⟨e, out⟩ := p
+    rcases MemoryRow.step_error he with ⟨_, _, rfl⟩ | ⟨_, _, _, rfl⟩ | ⟨_, _, _, _, _, _, rfl⟩ |
+      ⟨_, _, _, _, _, _, _, rfl⟩ | ⟨_, _, _, _, _, _, _, _, _, _, rfl⟩ <;> rfl
+
+/-- The meter of a step of the Read or Store families, read on the machine of either channel. -/
+private def TouchMeter {τ : Type} (g : StateGasMeter) :
+    Except (ExceptionalHalt × Machine × τ) (Machine × τ) → Prop
+  | .error (_, m, _) => m.stateGas = g
+  | .ok (m, _) => m.stateGas = g
+
+/-- An `SSTORE` row with no state-gas charge or credit keeps the meter. -/
+private theorem SstoreRow.step_meter (row : SstoreRow) (isStatic : Bool) (slot : U256 → SlotView)
+    (m : Machine) (hc : ∀ a b d, row.stateGasCost a b d = 0)
+    (hr : ∀ a b d, row.stateGasRefund a b d = 0) :
+    TouchMeter m.stateGas (row.step isStatic slot m) := by
+  unfold SstoreRow.step
+  split
+  · rfl
+  · have p1 := MWalk.cases (Machine.pop_meter m)
+    split
+    · rename_i e m' he; exact p1.1 _ _ he
+    · rename_i key m₁ he
+      have e1 : m₁.stateGas = m.stateGas := p1.2 _ he
+      have p2 := MWalk.cases (Machine.pop_meter m₁)
+      split
+      · rename_i e m' he'; exact (p2.1 _ _ he').trans e1
+      · rename_i v m₂ he'
+        have e2 : m₂.stateGas = m.stateGas := (p2.2 _ he').trans e1
+        dsimp only
+        split
+        · exact e2
+        · simp only [hr, hc, Machine.creditStateGasRefund_zero, Machine.chargeStateGas_zero]
+          have p3 := MWalk.cases (Machine.chargeGas_meter m₂
+            (row.gasCost (row.tracksWarmth && (slot key).cold) v (slot key).original (slot key).current))
+          split
+          · rename_i e m' h5; exact (p3.1 _ _ h5).trans e2
+          · rename_i m₄ h5
+            have e4 := (p3.2 _ h5).trans e2
+            split
+            · exact e4
+            · exact e4
+
+/-- `TSTORE` keeps the meter. -/
+private theorem TstoreRow.step_meter (row : TstoreRow) (o : OpcodeRules) (isStatic : Bool)
+    (m : Machine) : TouchMeter m.stateGas (row.step o isStatic m) := by
+  unfold TstoreRow.step
+  split
+  · rfl
+  · split
+    · rfl
+    · have p1 := MWalk.cases (Machine.pop_meter m)
+      split
+      · rename_i e m' he; exact p1.1 _ _ he
+      · rename_i key m₁ he
+        have e1 : m₁.stateGas = m.stateGas := p1.2 _ he
+        have p2 := MWalk.cases (Machine.pop_meter m₁)
+        split
+        · rename_i e m' he'; exact (p2.1 _ _ he').trans e1
+        · rename_i v m₂ he'
+          have e2 : m₂.stateGas = m.stateGas := (p2.2 _ he').trans e1
+          have p3 := MWalk.cases (Machine.chargeGas_meter m₂ row.gasCost)
+          split
+          · rename_i e m' h5; exact (p3.1 _ _ h5).trans e2
+          · rename_i m₃ h5
+            have e3 := (p3.2 _ h5).trans e2
+            split
+            · exact e3
+            · exact e3
+
+/-- A family step keeps the incoming meter when state gas is disabled: only `SSTORE`'s state-gas
+charge and credit could move it, and its row has none without state-gas rules. -/
+theorem Family.run_meter (f : Family) (x : Frame.Running)
+    (hn : x.context.block.rules.stateGas = none) :
+    Walk (·.machine.stateGas = x.state.machine.stateGas) (·.machine.stateGas = x.state.machine.stateGas)
+      (f.run x) := by
+  cases f with
+  | word row => exact liftMachine_meter (WordRow.step_stateGas row _ _ _)
+  | shuffle row => exact liftMachine_meter (ShuffleRow.step_stateGas row _ _)
+  | memory row => exact liftMachine_meter (MemoryRow.step_stateGas row _ _ _)
+  | log row =>
+    have hf := LogRow.step_frame row x.context x.state.machine
+    show Walk _ _ (x.state.liftLog (row.step x.context x.state.machine))
+    unfold Frame.State.liftLog
+    split <;> rename_i he <;> rw [he] at hf
+    · exact hf.2.1
+    · exact hf.2.1
+  | read row =>
+    show Walk _ _ (x.state.liftRead _ _)
+    unfold Frame.State.liftRead
+    split <;> rename_i he
+    · show (Frame.State.machine _).stateGas = _
+      rw [(Frame.State.applyReadTouch_keeps _ _ _).1]
+      exact (ReadRow.step_error he).1
+    · show (Frame.State.machine _).stateGas = _
+      rw [(Frame.State.applyReadTouch_keeps _ _ _).1]
+      exact (ReadRow.step_ok he).2.choose_spec.choose_spec.2.2.1
+  | store kind =>
+    cases kind with
+    | persistent =>
+      have hs := SstoreRow.step_meter (SstoreRow.ofRules x.context.block.rules) x.context.isStatic
+        (fun k => x.state.slotView x.context k) x.state.machine
+        (by intro a b d; simp [SstoreRow.ofRules, hn]) (by intro a b d; simp [SstoreRow.ofRules, hn])
+      show Walk _ _ (x.state.liftStore _ _ _)
+      unfold Frame.State.liftStore
+      split <;> rename_i he <;> rw [he] at hs
+      all_goals
+        show (Frame.State.machine _).stateGas = _
+        rw [Frame.State.applyStoreTouch_machine]
+        exact hs
+    | transient =>
+      have hs := TstoreRow.step_meter (TstoreRow.ofRules x.context.block.rules)
+        x.context.block.rules.opcodes x.context.isStatic x.state.machine
+      show Walk _ _ (x.state.liftStore _ _ _)
+      unfold Frame.State.liftStore
+      split <;> rename_i he <;> rw [he] at hs
+      all_goals
+        show (Frame.State.machine _).stateGas = _
+        rw [Frame.State.applyStoreTouch_machine]
+        exact hs
 
 /-- A plain instruction preserves the incoming meter when state gas is disabled. The state-gas-enabled storage
 branches take a separate charge and are excluded by the rules premise. -/
 theorem PlainOp.runCore_meter (pc : Nat) (ctx : CallContext) (s : Frame.State)
     (hn : ctx.block.rules.stateGas = none) (op : Jaune.PlainOp) :
     Walk (·.machine.stateGas = s.machine.stateGas) (·.machine.stateGas = s.machine.stateGas)
-      (PlainOp.runCore pc ctx s op) := by
-  cases op <;> simp only [PlainOp.runCore, hn]
-  case sstore =>
-    split <;> first | apply sstoreBerlin_meter | apply sstoreLegacy_meter
-  case log => apply log_meter
-  all_goals meter_walk
+      (PlainOp.runCore pc ctx s op) :=
+  Family.run_meter (PlainOp.family op) ⟨pc, ctx, s⟩ hn
 
 private def exitMeter (g : StateGasMeter) : Except Fault Frame.Exit → Prop
   | .ok exit => exit.state.machine.stateGas = g
@@ -514,24 +598,9 @@ theorem NextOp.step_stateGasZero (running : Frame.Running)
   | message m =>
     exact MessageOp.Outcome.toStep_stateGasZero _ (MessageOp.step_stateGasZero hn hs m)
   | push xs h =>
-    simp only [NextOp.step]
-    split
-    · exact hs
-    · apply Step.ofHalt_stateGasZero
-      refine Walk.bind (Walk.meter (Frame.State.chargeGas_meter _ _) hs) ?_
-      intro s h
-      exact Walk.meter (Frame.State.push_meter _ _) h
+    exact Step.ofHalt_stateGasZero _ (Walk.meter (Family.run_meter _ running hn) hs)
   | dupn imm | swapn imm | exchange imm =>
-    apply Step.ofHalt_stateGasZero
-    split
-    · refine Walk.bind (Walk.meter (Frame.State.chargeGas_meter _ _) hs) ?_
-      intro s h
-      split
-      · exact h
-      · split
-        · exact h
-        · first | exact h | exact Walk.meter (Frame.State.push_meter _ _) h
-    · exact hs
+    exact Step.ofHalt_stateGasZero _ (Walk.meter (Family.run_meter _ running hn) hs)
 
 theorem step_stateGasZero {running : Frame.Running} {next : Step}
     (hn : running.context.block.rules.stateGas = none) (hs : running.state.machine.stateGas = .zero)

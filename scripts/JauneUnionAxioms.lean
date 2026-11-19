@@ -15,9 +15,12 @@ import Jaune.Check.Execution
 import Jaune.Check.Fork
 import Jaune.Check.CheckedPortAuditA
 import Jaune.Check.CheckedPortAuditB
+import Jaune.Check.CheckedRowsAudit
+import Jaune.Check.CheckedSpecAudit
 import Jaune.Check.FrameBridgeAudit
 import Jaune.Check.InstructionFamiliesAudit
 import Jaune.Check.Hash
+import Jaune.Check.InstructionsAudit
 import Jaune.Check.KeccakSpec
 import Jaune.Check.Machine
 import Jaune.Check.Precompiles
@@ -36,6 +39,7 @@ import Jaune.Run.Trace
 import Jaune.Bridge.G2a.Old.Trace
 import Jaune.Check.TraceTransaction
 import Jaune.Bridge.G2a.Old.T8n
+import Jaune.Bridge.G2b.CheckedTrace
 import Jaune.Run.BodyFactsT8n
 
 /-!

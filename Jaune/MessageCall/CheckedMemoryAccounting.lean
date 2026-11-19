@@ -1,5 +1,6 @@
 import Jaune.MessageCall.CheckedTotality
 import Jaune.MessageCall.CheckedMessageMemory
+import Jaune.PrecompileInputFacts
 
 /-! # Memory and output accounting for message calls
 
@@ -193,10 +194,10 @@ theorem enter_native_ok_output_length_lt_two_pow_160 {f : Frame} {world : World}
     (hdata : f.message.context.calldata.length < 2 ^ 160)
     (hgas : f.message.gas < 2 ^ 256 + Gas.callStipend) : exit.output.length < 2 ^ 160 := by
   unfold runPrecompile at h
-  cases hp : precompileRun (Frame.entered f f.startState world).precompileEvm adr with
+  cases hp : Precompile.run (Frame.entered f f.startState world).precompileInput adr with
   | ok cost output =>
     rw [hp] at h; cases h
-    exact precompileRun_ok_output_length_lt_two_pow_160 hp hdata hgas
+    exact Precompile.run_ok_output_length_lt_two_pow_160 hp hdata hgas
   | error reason cost =>
     rw [hp] at h
     cases reason <;> cases h <;> exact (by decide : 0 < 2 ^ 160)
@@ -204,7 +205,7 @@ theorem enter_native_ok_output_length_lt_two_pow_160 {f : Frame} {world : World}
 /-- A rejected precompile that returns an exit has no output. -/
 theorem enter_native_error_output_nil {f : Frame} {world : World} {adr : Address} {cost : Nat}
     {reason : EvmError} {e : Frame.Exit}
-    (hp : precompileRun (Frame.entered f f.startState world).precompileEvm adr = .error reason cost)
+    (hp : Precompile.run (Frame.entered f f.startState world).precompileInput adr = .error reason cost)
     (h : runPrecompile (Frame.entered f f.startState world) adr = .ok e) : e.output = [] := by
   unfold runPrecompile at h
   rw [hp] at h
@@ -354,7 +355,7 @@ theorem call_spawn_native_enter_error {child : Frame} {p : Staging.Pending} {rul
     (hp : p.target = .call i n) (htransfer : child.message.transfer child.enteredWorld = .ok world)
     (hcode : child.message.codeAddress = some adr)
     (hdispatch : (!child.message.disablePrecompiles && child.message.context.block.rules.isPrecompile adr) = true)
-    (herror : precompileRun (Frame.entered child child.startState world).precompileEvm adr = .error reason cost)
+    (herror : Precompile.run (Frame.entered child child.startState world).precompileInput adr = .error reason cost)
     (hrun : runPrecompile (Frame.entered child child.startState world) adr = .ok e) :
     enter child = .done (settle child e) ∧ ∀ x,
       (settle child e >>= resume rules p child.checkpoint) = .ok x →
@@ -613,9 +614,9 @@ theorem call_spawn_modexp_reply_bound {child : Frame} {world : World} {e : Frame
     (hg : child.message.gas < 2 ^ 256 + Gas.callStipend)
     (h : runPrecompile (Frame.entered child child.startState world) 5 = .ok e) : e.output.length < 2 ^ 160 := by
   let run := Frame.entered child child.startState world
-  change Frame.Exit.ofPrecompileResult _ (executeModexp run.precompileEvm) = .ok e at h
-  cases hr : executeModexp run.precompileEvm with
-  | ok cost output => rw [hr] at h; cases h; exact executeModexp_ok_output_length_lt_two_pow_160 hr hg
+  change Frame.Exit.ofPrecompileResult _ (Precompile.modexp run.precompileInput) = .ok e at h
+  cases hr : Precompile.modexp run.precompileInput with
+  | ok cost output => rw [hr] at h; cases h; exact Precompile.modexp_ok_output_length_lt_two_pow_160 hr hg
   | error reason cost => rw [hr] at h; cases reason <;> cases h <;> exact (by decide : 0 < 2 ^ 160)
 
 /-- Identity's output is below the call return-data bound using the input size alone. -/
@@ -623,12 +624,12 @@ theorem call_spawn_id_reply_bound {child : Frame} {world : World} {e : Frame.Exi
     (hi : child.message.context.calldata.length < 2 ^ 160)
     (h : runPrecompile (Frame.entered child child.startState world) 4 = .ok e) : e.output.length < 2 ^ 160 := by
   let run := Frame.entered child child.startState world
-  change Frame.Exit.ofPrecompileResult _ (executeId run.precompileEvm) = .ok e at h
-  cases hr : executeId run.precompileEvm with
+  change Frame.Exit.ofPrecompileResult _ (Precompile.identity run.precompileInput) = .ok e at h
+  cases hr : Precompile.identity run.precompileInput with
   | ok cost output =>
     rw [hr] at h; cases h
     change output.length < _
-    rw [(executeId_ok_output_and_cost hr).1]
+    rw [(Precompile.identity_ok_output_and_cost hr).1]
     exact hi
   | error reason cost => rw [hr] at h; cases reason <;> cases h <;> exact (by decide : 0 < 2 ^ 160)
 

@@ -1,5 +1,11 @@
 import Jaune.CheckedSufficiencyWalk
 import Jaune.Sufficiency
+import Jaune.Instructions.WordFacts
+import Jaune.Instructions.ShuffleFacts
+import Jaune.Instructions.LogFacts
+import Jaune.Instructions.MemoryFacts
+import Jaune.Instructions.ReadFacts
+import Jaune.Instructions.StoreFacts
 
 /-! Gas bounds for the plain instructions over the lifetime-grouped state. A successful
 step strictly decreases the machine's measure. An exceptional halt stays within the bound
@@ -9,369 +15,279 @@ namespace Jaune.Checked
 
 open Jaune
 
-/-- Unfold the fixed gas constants for `omega`. -/
-local macro "gas_consts" : tactic => `(tactic|
-  simp only [Gas.base, Gas.veryLow, Gas.low, Gas.mid, Gas.high, Gas.jumpdest, Gas.exp,
-    Gas.expByte, Gas.keccak256, Gas.keccak256Word, Gas.log, Gas.logData, Gas.logTopic, Gas.copy,
-    Gas.returnDataCopy, Gas.blockhash, Gas.hashOpcodeGas, Gas.warmStorageReadCost,
-    Gas.coldSloadCost, Gas.selfdestruct, Gas.callStipend, Gas.codeDeposit, Gas.initcodeWordCost,
-    Gas.sstoreSetGas, Gas.sstoreResetGas, Gas.selfdestructNewAccount] at *)
-
-/-- Close a walk leaf: unfold the walk at a value or a halt, normalise the measure, `omega`. -/
-local macro "gas_leaf" : tactic => `(tactic| first
-  | assumption
-  | omega
-  | (
-  (try simp only [Walk.ok_iff, Walk.error_iff, MWalk.ok_iff, MWalk.error_iff,
-    Frame.State.withMachine_machine, Frame.State.withWorld_machine,
-    Frame.State.withSubstate_machine, Frame.State.withTrail_machine,
-    Frame.State.liftMachinePure_machine, Machine.gasMeasure_withStack,
-    Machine.gasMeasure_withMemory, Machine.gasMeasure_withReturnData,
-    Machine.memWrite_gasMeasure, Machine.memExtends_gasMeasure, Machine.memRead_gasMeasure,
-    Frame.State.recordAccountRead, Frame.State.recordStorageRead, Frame.State.addAccessedAddress,
-    Frame.State.addAccessedStorageKey, Frame.State.setTransientValue,
-    Frame.State.withRefund, Frame.State.setStorageValue, Frame.State.creditStateGasRefund,
-    Machine.creditStateGasRefund_gasMeasure, Frame.State.memWrite, apply_ite Frame.State.machine, ite_self]
-    at *) <;>
-  (try gas_consts) <;> omega))
-
-private theorem chargePositive {s : Frame.State} {n c : Nat}
-    (h : s.machine.gasMeasure ≤ n) (hc : 0 < c) :
-    Walk (·.machine.gasMeasure ≤ n) (·.machine.gasMeasure < s.machine.gasMeasure) (s.chargeGas c) := by
-  apply Walk.mono (Frame.State.chargeGas_gas c h)
-  intro t ht
-  change t.machine.gasMeasure + c = s.machine.gasMeasure at ht
-  omega
-
-/-- One step of a gas walk. -/
-local macro "gas_step" : tactic => `(tactic| with_reducible first
-  | split
-  | (refine Walk.bind (Frame.State.pop_gas (by gas_leaf)) ?_; intro ⟨_, _⟩ _; try dsimp only at *)
-  | (refine Walk.bind (Frame.State.popToNat_gas (by gas_leaf)) ?_; intro ⟨_, _⟩ _; try dsimp only at *)
-  | (refine Walk.bind (Frame.State.popToAddress_gas (by gas_leaf)) ?_; intro ⟨_, _⟩ _;
-      try dsimp only at *)
-  | (refine Walk.bind (Frame.State.popN_gas _ (by gas_leaf)) ?_; intro ⟨_, _⟩ _; try dsimp only at *)
-  | (refine Walk.bind (chargePositive (by gas_leaf) (by
-        first | apply sstoreAmsterdamGasCost_pos | apply sstoreRegimeGasCost_pos; assumption)) ?_;
-     intro _ _)
-  | (refine Walk.bind (Frame.State.chargeGas_gas _ (by gas_leaf)) ?_; intro _ _; try dsimp only at *)
-  | (refine Walk.bind (Frame.State.chargeStateGas_gas _ (by gas_leaf)) ?_; intro _ _;
-      try dsimp only at *)
-  | (refine Walk.bind (Frame.State.push_gas _ (by gas_leaf)) ?_; intro _ _; try dsimp only at *)
-  | (refine Walk.bind (Frame.State.assertDynamic_gas _ (by gas_leaf)) ?_; intro _ _;
-      try dsimp only at *)
-  | (refine Walk.bind (Walk.assert (by gas_leaf)) ?_; intro _ _; try dsimp only at *)
-  | (refine Walk.mono (Frame.State.push_gas _ (by gas_leaf)) ?_; intro _ _)
-  | (refine Walk.mono (Frame.State.pushItem_gas _ _ (by gas_leaf)) ?_; intro _ _)
-  | (refine Walk.mono (Frame.State.applyUnary_gas _ _ (by gas_leaf)) ?_; intro _ _)
-  | (refine Walk.mono (Frame.State.applyBinary_gas _ _ (by gas_leaf)) ?_; intro _ _)
-  | (refine Walk.mono (Frame.State.applyTernary_gas _ _ (by gas_leaf)) ?_; intro _ _)
-  | (refine Walk.mono (Frame.State.chargeGas_gas _ (by gas_leaf)) ?_; intro _ _)
-  | (refine Walk.mono (Frame.State.chargeStateGas_gas _ (by gas_leaf)) ?_; intro _ _)
-  | (refine Walk.liftMachine_gas ?_)
-  | (refine MWalk.bind (Machine.pop_gas (by gas_leaf)) ?_; intro ⟨_, _⟩ _; try dsimp only at *)
-  | (refine MWalk.bind (Machine.popToNat_gas (by gas_leaf)) ?_; intro ⟨_, _⟩ _; try dsimp only at *)
-  | (refine MWalk.bind (Machine.popToAddress_gas (by gas_leaf)) ?_; intro ⟨_, _⟩ _;
-      try dsimp only at *)
-  | (refine MWalk.bind (Machine.popN_gas _ (by gas_leaf)) ?_; intro ⟨_, _⟩ _; try dsimp only at *)
-  | (refine MWalk.bind (Machine.chargeGas_gas _ (by gas_leaf)) ?_; intro _ _; try dsimp only at *)
-  | (refine MWalk.bind (MWalk.assert (by gas_leaf)) ?_; intro _ _; try dsimp only at *)
-  | (refine MWalk.mono (Machine.push_gas _ (by gas_leaf)) ?_; intro _ _)
-  | (refine MWalk.mono (Machine.pushItem_gas _ _ (by gas_leaf)) ?_; intro _ _)
-  | (refine MWalk.mono (Machine.applyUnary_gas _ _ (by gas_leaf)) ?_; intro _ _)
-  | (refine MWalk.mono (Machine.applyBinary_gas _ _ (by gas_leaf)) ?_; intro _ _)
-  | (refine MWalk.mono (Machine.applyTernary_gas _ _ (by gas_leaf)) ?_; intro _ _)
-  | (refine MWalk.mono (Machine.chargeGas_gas _ (by gas_leaf)) ?_; intro _ _)
-  | gas_leaf)
-
-open Lean Elab Tactic Meta in
-/-- Select the walk rule using the head of the next operation. Matching against every
-primitive by reduction would repeatedly unfold the calculation inside its operands. -/
-elab "gas_head_step" : tactic => withMainContext do
-  let target ← instantiateMVars (← getMainTarget)
-  let onMachine := target.isAppOf ``MWalk
-  unless onMachine || target.isAppOf ``Walk do throwError "not a walk"
-  let x := target.appArg!.headBeta
-  let bind := x.isAppOf ``Bind.bind
-  let operation := if bind then (x.getArg! 4).headBeta else x
-  let some head := operation.getAppFn.constName? | throwError "not a named operation"
-  if head == ``Frame.State.liftMachine && !bind then
-    evalTactic (← `(tactic| apply Walk.liftMachine_gas))
-    return
-  let (rule, arity, pair) ← match head with
-    | ``Frame.State.pop => pure (mkIdent ``Frame.State.pop_gas, 0, true)
-    | ``Frame.State.popToNat => pure (mkIdent ``Frame.State.popToNat_gas, 0, true)
-    | ``Frame.State.popToAddress => pure (mkIdent ``Frame.State.popToAddress_gas, 0, true)
-    | ``Frame.State.popN => pure (mkIdent ``Frame.State.popN_gas, 1, true)
-    | ``Frame.State.chargeGas => pure (mkIdent ``Frame.State.chargeGas_gas, 1, false)
-    | ``Frame.State.chargeStateGas => pure (mkIdent ``Frame.State.chargeStateGas_gas, 1, false)
-    | ``Frame.State.push => pure (mkIdent ``Frame.State.push_gas, 1, false)
-    | ``Frame.State.pushItem => pure (mkIdent ``Frame.State.pushItem_gas, 2, false)
-    | ``Frame.State.applyUnary => pure (mkIdent ``Frame.State.applyUnary_gas, 2, false)
-    | ``Frame.State.applyBinary => pure (mkIdent ``Frame.State.applyBinary_gas, 2, false)
-    | ``Frame.State.applyTernary => pure (mkIdent ``Frame.State.applyTernary_gas, 2, false)
-    | ``Frame.State.assertDynamic => pure (mkIdent ``Frame.State.assertDynamic_gas, 1, false)
-    | ``Machine.pop => pure (mkIdent ``Machine.pop_gas, 0, true)
-    | ``Machine.popToNat => pure (mkIdent ``Machine.popToNat_gas, 0, true)
-    | ``Machine.popToAddress => pure (mkIdent ``Machine.popToAddress_gas, 0, true)
-    | ``Machine.popN => pure (mkIdent ``Machine.popN_gas, 1, true)
-    | ``Machine.chargeGas => pure (mkIdent ``Machine.chargeGas_gas, 1, false)
-    | ``Machine.chargeStateGas => pure (mkIdent ``Machine.chargeStateGas_gas, 1, false)
-    | ``Machine.push => pure (mkIdent ``Machine.push_gas, 1, false)
-    | ``Machine.pushItem => pure (mkIdent ``Machine.pushItem_gas, 2, false)
-    | ``Machine.applyUnary => pure (mkIdent ``Machine.applyUnary_gas, 2, false)
-    | ``Machine.applyBinary => pure (mkIdent ``Machine.applyBinary_gas, 2, false)
-    | ``Machine.applyTernary => pure (mkIdent ``Machine.applyTernary_gas, 2, false)
-    | ``Except.assert => pure (mkIdent (if onMachine then ``MWalk.assert else ``Walk.assert), 0, false)
-    | _ => throwError "not a gas primitive"
-  let fact ← match arity with
-    | 0 => `($rule (by gas_leaf))
-    | 1 => `($rule _ (by gas_leaf))
-    | _ => `($rule _ _ (by gas_leaf))
-  let combinator := mkIdent (if onMachine then (if bind then ``MWalk.bind else ``MWalk.mono)
-    else (if bind then ``Walk.bind else ``Walk.mono))
-  if pair then
-    evalTactic (← `(tactic| (refine $combinator $fact ?_; intro ⟨_, _⟩ _; try dsimp only at *)))
-  else
-    evalTactic (← `(tactic| (refine $combinator $fact ?_; intro _ _; try dsimp only at *)))
-
-local macro "gas_walk" : tactic => `(tactic| repeat' gas_step)
-
 private abbrev PlainGas (s : Frame.State) (n : Nat) :=
   Walk (ε := ExceptionalHalt) (α := Frame.State) (·.machine.gasMeasure ≤ n) (·.machine.gasMeasure < s.machine.gasMeasure)
 
-private theorem logStep_gas (n : Fin 5) (ctx : CallContext) (m : Machine) {bound : Nat}
-    (h : m.gasMeasure ≤ bound) :
-    MWalk (·.gasMeasure ≤ bound) (fun p => p.1.gasMeasure < m.gasMeasure) (PlainOp.logStep n ctx m) := by
-  unfold PlainOp.logStep
-  gas_walk
+/-! ### One gas walk per family (S4)
 
-private theorem log_gas (n : Fin 5) (ctx : CallContext) (s : Frame.State) {bound : Nat}
-    (h : s.machine.gasMeasure ≤ bound) : PlainGas s bound (PlainOp.liftLog (PlainOp.logStep n ctx) s) := by
-  have law := logStep_gas n ctx s.machine h
-  unfold PlainOp.liftLog
-  cases eqn : PlainOp.logStep n ctx s.machine with
-  | error e => rcases e with ⟨reason, m⟩; rw [eqn] at law; exact law
-  | ok result => rcases result with ⟨m, log⟩; rw [eqn] at law; exact law
+Each family's step either halts within the input's measure or continues strictly below it, given
+that the row's charge is positive; the table lemmas say which rows have a positive charge. -/
 
-private theorem balance_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) {n : Nat}
-    (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.runCore pc ctx s .balance) := by
-  have valid := BenvStat.rules_valid ctx.block
-  have cold := valid.gas.1
-  cases access : ctx.block.rules.access with
-  | flat g =>
-    have pos := (valid.flatAccess access).1
-    simp only [PlainGas, PlainOp.runCore, access]
-    gas_walk
-  | eip2929 =>
-    simp only [PlainGas, PlainOp.runCore, access]
-    gas_walk
+private theorem plainGas_of {s : Frame.State} {n : Nat}
+    {x : Except (ExceptionalHalt × Frame.State) Frame.State} (h : s.machine.gasMeasure ≤ n)
+    (law : Walk (·.machine.gasMeasure ≤ s.machine.gasMeasure)
+      (·.machine.gasMeasure < s.machine.gasMeasure) x) : PlainGas s n x :=
+  Walk.mono' law (fun _ ht => ht.trans h) (fun _ ht => ht)
 
-private theorem extcodesize_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) {n : Nat}
-    (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.runCore pc ctx s .extcodesize) := by
-  have valid := BenvStat.rules_valid ctx.block
-  have cold := valid.gas.1
-  cases access : ctx.block.rules.access with
-  | flat g =>
-    have pos := (valid.flatAccess access).2.1
-    simp only [PlainGas, PlainOp.runCore, access]
-    gas_walk
-  | eip2929 =>
-    simp only [PlainGas, PlainOp.runCore, access]
-    gas_walk
+private theorem liftMachine_law {s : Frame.State}
+    {core : Machine → Except (ExceptionalHalt × Machine) Machine}
+    (herr : ∀ e out, core s.machine = .error (e, out) → out.gasMeasure ≤ s.machine.gasMeasure)
+    (hok : ∀ out, core s.machine = .ok out → out.gasMeasure < s.machine.gasMeasure) :
+    Walk (·.machine.gasMeasure ≤ s.machine.gasMeasure)
+      (·.machine.gasMeasure < s.machine.gasMeasure) (s.liftMachine core) := by
+  unfold Frame.State.liftMachine
+  split
+  · rename_i e m he; exact herr _ _ he
+  · rename_i m he; exact hok _ he
 
-private theorem extcodecopy_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) {n : Nat}
-    (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.runCore pc ctx s .extcodecopy) := by
-  have valid := BenvStat.rules_valid ctx.block
-  have cold := valid.gas.1
-  cases access : ctx.block.rules.access with
-  | flat g =>
-    have pos := (valid.flatAccess access).2.1
-    simp only [PlainGas, PlainOp.runCore, access]
-    gas_walk
-  | eip2929 =>
-    simp only [PlainGas, PlainOp.runCore, access]
-    gas_walk
+theorem WordRow.run_gas (row : WordRow) (hpos : ∀ args, 0 < row.cost args) (x : Frame.Running)
+    {n : Nat} (h : x.state.machine.gasMeasure ≤ n) : PlainGas x.state n ((Family.word row).run x) := by
+  apply plainGas_of h
+  apply liftMachine_law
+  · intro e out he
+    have hl := WordRow.step_gasMeasure_le row x.context.block.rules.opcodes ⟨x.pc, x.context⟩
+      x.state.machine
+    rw [he] at hl
+    exact hl
+  · intro out he
+    exact WordRow.step_gasMeasure_lt_of_ok hpos he
 
-private theorem extcodehash_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) {n : Nat}
-    (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.runCore pc ctx s .extcodehash) := by
-  have valid := BenvStat.rules_valid ctx.block
-  have cold := valid.gas.1
-  cases access : ctx.block.rules.access with
-  | flat g =>
-    have pos := (valid.flatAccess access).2.2.1
-    simp only [PlainGas, PlainOp.runCore, access]
-    gas_walk
-  | eip2929 =>
-    simp only [PlainGas, PlainOp.runCore, access]
-    gas_walk
+theorem ShuffleRow.run_gas (row : ShuffleRow) (hpos : 0 < row.cost) (x : Frame.Running)
+    {n : Nat} (h : x.state.machine.gasMeasure ≤ n) :
+    PlainGas x.state n ((Family.shuffle row).run x) := by
+  apply plainGas_of h
+  apply liftMachine_law
+  · intro e out he
+    have hf := ShuffleRow.step_frame row x.context.block.rules.opcodes x.state.machine
+    rw [he] at hf
+    obtain ⟨_, _, hg, rfl⟩ := hf
+    simp only [Machine.gasMeasure]
+    omega
+  · intro out he
+    exact ShuffleRow.step_gasMeasure_lt_of_ok hpos he
 
-private theorem sload_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) {n : Nat}
-    (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.runCore pc ctx s .sload) := by
-  have valid := BenvStat.rules_valid ctx.block
-  have cold := valid.gas.1
-  cases access : ctx.block.rules.access with
-  | flat g =>
-    have pos := (valid.flatAccess access).2.2.2.1
-    simp only [PlainGas, PlainOp.runCore, access]
-    gas_walk
-  | eip2929 =>
-    simp only [PlainGas, PlainOp.runCore, access]
-    gas_walk
-
-private theorem selfbalance_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) {n : Nat}
-    (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.runCore pc ctx s .selfbalance) := by
-  simp only [PlainGas, PlainOp.runCore]
-  gas_walk
-
-private theorem tload_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) {n : Nat}
-    (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.runCore pc ctx s .tload) := by
-  simp only [PlainGas, PlainOp.runCore]
-  gas_walk
-
-private theorem tstore_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) {n : Nat}
-    (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.runCore pc ctx s .tstore) := by
-  simp only [PlainGas, PlainOp.runCore]
-  gas_walk
-
-private theorem sstoreBerlin_gas (ctx : CallContext) (s : Frame.State) {n : Nat}
-    (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.sstoreBerlin ctx s) := by
-  unfold PlainGas PlainOp.sstoreBerlin
-  gas_walk
-
-private theorem sstoreLegacy_gas (ctx : CallContext) (s : Frame.State) {n : Nat}
-    (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.sstoreLegacy ctx s) := by
-  have hv := (BenvStat.rules_valid ctx.block).access
-  unfold PlainGas PlainOp.sstoreLegacy
-  gas_walk
-
-private theorem storageWrite_gas (s : Frame.State) (rules : ForkRules) (ct : Address)
-    (key val : U256) (cost stateCost : Nat) {start bound : Nat} (hs : s.machine.gasMeasure = start)
-    (hb : start ≤ bound) (hp : 0 < cost) :
-    Walk (·.machine.gasMeasure ≤ bound) (fun t : Frame.State => t.machine.gasMeasure < start) (do
-      let t ← s.chargeGas cost
-      let u ← t.chargeStateGas stateCost
-      pure ((u.recordAccountRead rules ct).setStorageValue ct key val)) := by
-  apply Walk.bind (chargePositive (hs.trans_le hb) hp)
-  intro t ht
-  change t.machine.gasMeasure < s.machine.gasMeasure at ht
-  apply Walk.bind (Frame.State.chargeStateGas_gas _ (by omega))
-  intro u hu
-  change u.machine.gasMeasure = t.machine.gasMeasure at hu
-  change u.machine.gasMeasure < start
-  omega
-
-private theorem sstoreAmsterdam_gas (state : StateGasRules) (ctx : CallContext) (s : Frame.State)
-    {n : Nat} (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.sstoreAmsterdam state ctx s) := by
-  unfold PlainGas PlainOp.sstoreAmsterdam
-  apply Walk.bind (Frame.State.assertDynamic_gas ctx h)
-  intro _ _
-  apply Walk.bind (Frame.State.pop_gas h)
-  rintro ⟨key, t⟩ ht
-  change t.machine.gasMeasure = s.machine.gasMeasure at ht
-  apply Walk.bind (Frame.State.pop_gas (ht.trans_le h))
-  rintro ⟨val, u⟩ hu
-  change u.machine.gasMeasure = t.machine.gasMeasure at hu
-  apply Walk.bind (Walk.assert ((hu.trans ht).trans_le h))
-  intro _ _
-  apply storageWrite_gas _ _ _ _ _ _ _ _ h (sstoreAmsterdamGasCost_pos _ _ _ _ _)
-  simp only [Frame.State.creditStateGasRefund, Frame.State.liftMachinePure_machine,
-    Machine.creditStateGasRefund_gasMeasure, Frame.State.withRefund, Frame.State.withSubstate_machine,
-    Frame.State.recordStorageRead, Frame.State.withTrail_machine, apply_ite Frame.State.machine,
-    Frame.State.addAccessedStorageKey, ite_self]
-  exact hu.trans ht
-
-private theorem fixedCost_gas {s : Frame.State} {n c : Nat}
-    {body : Except (ExceptionalHalt × Frame.State) Frame.State} (hc : 0 < c)
-    (law : Walk (·.machine.gasMeasure ≤ n) (·.machine.gasMeasure + c = s.machine.gasMeasure) body) :
-    PlainGas s n body := by
-  apply Walk.mono law
-  intro t ht
-  change t.machine.gasMeasure + c = s.machine.gasMeasure at ht
-  omega
-
-private theorem gatedMachine_gas {s : Frame.State} {n cost : Nat}
-    (enabled : Bool) (core : Machine → Except (ExceptionalHalt × Machine) Machine)
-    (h : s.machine.gasMeasure ≤ n) (pos : 0 < cost)
-    (law : MWalk (·.gasMeasure ≤ n) (·.gasMeasure + cost = s.machine.gasMeasure) (core s.machine)) :
-    PlainGas s n (s.liftMachine (fun m => if enabled then core m else PlainOp.unavailable m)) := by
-  apply Walk.liftMachine_gas
-  cases enabled with
-  | false => exact h
-  | true =>
-    apply MWalk.mono law
-    intro t ht
-    change t.gasMeasure + cost = s.machine.gasMeasure at ht
-    change t.gasMeasure < s.machine.gasMeasure
+theorem MemoryRow.run_gas (row : MemoryRow) (hpos : ∀ args, 0 < row.base args) (x : Frame.Running)
+    {n : Nat} (h : x.state.machine.gasMeasure ≤ n) :
+    PlainGas x.state n ((Family.memory row).run x) := by
+  apply plainGas_of h
+  apply liftMachine_law
+  · intro e out he
+    rcases MemoryRow.step_error he with ⟨_, _, rfl⟩ | ⟨_, _, _, rfl⟩ | ⟨_, _, _, _, _, _, rfl⟩ |
+      ⟨_, _, _, _, _, _, _, rfl⟩ | ⟨_, _, _, _, _, _, _, _, _, _, rfl⟩ <;>
+      simp only [Machine.gasMeasure] <;> omega
+  · intro out he
+    obtain ⟨_, args, rest, pushed, _, hg, _, _, hsg, _⟩ := MemoryRow.step_ok he
+    have := hpos args
+    simp only [Machine.gasMeasure, hsg]
     omega
 
-/-- Elaborate the longer machine walks separately so each opcode checks independently. -/
-local macro "plain_machine_walk " name:ident " for " op:term : command =>
-  `(private theorem $name (pc : Nat) (ctx : CallContext) (s : Frame.State) {n : Nat}
-      (h : s.machine.gasMeasure ≤ n) : PlainGas s n (PlainOp.runCore pc ctx s $op) := by
-      simp only [PlainGas, PlainOp.runCore]
-      repeat' (first | gas_head_step | gas_step))
+theorem LogRow.run_gas (row : LogRow) (hpos : 0 < row.base) (x : Frame.Running)
+    {n : Nat} (h : x.state.machine.gasMeasure ≤ n) : PlainGas x.state n ((Family.log row).run x) := by
+  apply plainGas_of h
+  have hf := LogRow.step_frame row x.context x.state.machine
+  show Walk _ _ (x.state.liftLog (row.step x.context x.state.machine))
+  unfold Frame.State.liftLog
+  split <;> rename_i he <;> rw [he] at hf
+  · obtain ⟨hg, hsg, _⟩ := hf
+    show Machine.gasMeasure _ ≤ _
+    simp only [Frame.State.withMachine_machine, Machine.gasMeasure, hsg]
+    omega
+  · exact LogRow.step_gasMeasure_lt_of_ok hpos he
 
-plain_machine_walk calldataload_gas for .calldataload
-plain_machine_walk blockhash_gas for .blockhash
-plain_machine_walk pop_gas for .pop
-plain_machine_walk gas_gas for .gas
-plain_machine_walk mload_gas for .mload
-plain_machine_walk mstore_gas for .mstore
-plain_machine_walk mstore8_gas for .mstore8
-plain_machine_walk calldatacopy_gas for .calldatacopy
-plain_machine_walk codecopy_gas for .codecopy
-plain_machine_walk returndatacopy_gas for .returndatacopy
-plain_machine_walk mcopy_gas for .mcopy
-plain_machine_walk keccak256_gas for .keccak256
-plain_machine_walk exp_gas for .exp
-plain_machine_walk blobhash_gas for .blobhash
+/-- A Read step halts within the measure and, at a positive price, continues below it. -/
+private def TouchGas {τ : Type} (g : Nat) : Except (ExceptionalHalt × Machine × τ) (Machine × τ) → Prop
+  | .error (_, m, _) => m.gasMeasure ≤ g
+  | .ok (m, _) => m.gasMeasure < g
+
+private theorem ReadTarget.pop_gas (t : ReadTarget) (m : Machine) :
+    MWalk (ε := ExceptionalHalt) (·.gasMeasure ≤ m.gasMeasure)
+      (fun p => p.2.gasMeasure = m.gasMeasure) (t.pop m) := by
+  cases t with
+  | account => exact Machine.popToAddress_gas (Nat.le_refl _)
+  | slot => exact Machine.pop_gas (Nat.le_refl _)
+  | transient => exact Machine.pop_gas (Nat.le_refl _)
+  | recipient => rfl
+
+private theorem ReadRow.step_gas (row : ReadRow) (rules : ForkRules) (ctx : CallContext)
+    (v : ReadView) (m : Machine) (hpos : ∀ key, 0 < (row.price.quote rules ctx v key).1) :
+    TouchGas m.gasMeasure (row.step rules ctx v m) := by
+  rcases row with ⟨avail, target, price, result⟩
+  unfold ReadRow.step
+  dsimp only
+  split
+  · exact Nat.le_refl _
+  · have hpop := MWalk.cases (ReadTarget.pop_gas target m)
+    split
+    · rename_i e m' hp; exact hpop.1 _ _ hp
+    · rename_i key m₁ hp
+      have e₁ : m₁.gasMeasure = m.gasMeasure := hpop.2 _ hp
+      have hp₀ : 0 < (price.quote rules ctx v key).1 := hpos key
+      cases result with
+      | push f =>
+        simp only [ReadResult.finish]
+        have hc := MWalk.cases (Machine.chargeGas_gas (price.quote rules ctx v key).1 (Nat.le_refl m₁.gasMeasure))
+        split
+        · rename_i e m' he; exact (hc.1 _ _ he).trans e₁.le
+        · rename_i m₂ he
+          have e₂ : m₂.gasMeasure + _ = m₁.gasMeasure := hc.2 _ he
+          have hq := MWalk.cases (Machine.push_gas (f ctx v.world key) (Nat.le_refl m₂.gasMeasure))
+          split
+          · rename_i e m' he'
+            have := hq.1 _ _ he'
+            show Machine.gasMeasure _ ≤ _
+            omega
+          · rename_i m₃ he'
+            have := hq.2 _ he'
+            show Machine.gasMeasure _ < _
+            omega
+      | copyCode perWord =>
+        simp only [ReadResult.finish]
+        have p1 := MWalk.cases (Machine.popToNat_gas (Nat.le_refl m₁.gasMeasure))
+        split
+        · rename_i e m' he; exact (p1.1 _ _ he).trans e₁.le
+        · rename_i d m₂ he
+          have e₂ : m₂.gasMeasure = m₁.gasMeasure := p1.2 _ he
+          have p2 := MWalk.cases (Machine.popToNat_gas (Nat.le_refl m₂.gasMeasure))
+          split
+          · rename_i e m' he'; exact ((p2.1 _ _ he').trans e₂.le).trans e₁.le
+          · rename_i o m₃ he'
+            have e₃ : m₃.gasMeasure = m₂.gasMeasure := p2.2 _ he'
+            have p3 := MWalk.cases (Machine.popToNat_gas (Nat.le_refl m₃.gasMeasure))
+            split
+            · rename_i e m' he''
+              exact (((p3.1 _ _ he'').trans e₃.le).trans e₂.le).trans e₁.le
+            · rename_i k m₄ he''
+              have e₄ : m₄.gasMeasure = m₃.gasMeasure := p3.2 _ he''
+              split
+              · rename_i e m' h5
+                have := (MWalk.cases (Machine.chargeGas_gas _ (Nat.le_refl m₄.gasMeasure))).1 _ _ h5
+                show Machine.gasMeasure _ ≤ _
+                omega
+              · rename_i m₅ h5
+                have := (MWalk.cases (Machine.chargeGas_gas _ (Nat.le_refl m₄.gasMeasure))).2 _ h5
+                show Machine.gasMeasure _ < _
+                simp only [Machine.memWrite_gasMeasure]
+                omega
+
+private theorem quote_account_pos (warm cold : ForkRules → Nat) (flat : ForkRules → FlatAccessGas → Nat)
+    (rules : ForkRules) (ctx : CallContext) (v : ReadView) (a : Address)
+    (hw : 0 < warm rules) (hc : 0 < cold rules) (hf : ∀ g, rules.access = .flat g → 0 < flat rules g) :
+    0 < ((ReadPrice.account warm cold flat).quote rules ctx v a).1 := by
+  simp only [ReadPrice.quote]
+  split
+  · split <;> assumption
+  · exact hf _ ‹_›
+
+private theorem quote_slot_pos (warm cold : ForkRules → Nat) (flat : ForkRules → FlatAccessGas → Nat)
+    (rules : ForkRules) (ctx : CallContext) (v : ReadView) (k : U256)
+    (hw : 0 < warm rules) (hc : 0 < cold rules) (hf : ∀ g, rules.access = .flat g → 0 < flat rules g) :
+    0 < ((ReadPrice.slot warm cold flat).quote rules ctx v k).1 := by
+  simp only [ReadPrice.quote]
+  split
+  · split <;> assumption
+  · exact hf _ ‹_›
+
+/-- Under valid rules every Read row's quoted price is positive. -/
+private theorem readRow?_price_pos {op : Jaune.PlainOp} {row : ReadRow}
+    (hrow : PlainOp.readRow? op = some row) (ctx : CallContext) (v : ReadView) (key : row.target.Key) :
+    0 < (row.price.quote ctx.block.rules ctx v key).1 := by
+  have valid := BenvStat.rules_valid ctx.block
+  have cold := valid.gas.1
+  cases op <;> simp only [PlainOp.readRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at hrow <;>
+    subst hrow
+  case balance | extcodesize | extcodecopy | extcodehash =>
+    apply quote_account_pos
+    · simp only [Gas.warmStorageReadCost]; omega
+    · omega
+    · intro g hg
+      obtain ⟨_, _, _, _, _⟩ := valid.flatAccess hg
+      omega
+  case sload =>
+    apply quote_slot_pos
+    · simp only [Gas.warmStorageReadCost]; omega
+    · simp only [Gas.coldSloadCost]; omega
+    · intro g hg
+      obtain ⟨_, _, _, _, _⟩ := valid.flatAccess hg
+      omega
+  case selfbalance | tload =>
+    simp only [ReadPrice.quote, Gas.low, Gas.warmStorageReadCost]; omega
+
+theorem ReadRow.run_gas (row : ReadRow) (x : Frame.Running)
+    (hpos : ∀ key, 0 < (row.price.quote x.context.block.rules x.context x.state.readView key).1)
+    {n : Nat} (h : x.state.machine.gasMeasure ≤ n) : PlainGas x.state n ((Family.read row).run x) := by
+  apply plainGas_of h
+  have hs := ReadRow.step_gas row x.context.block.rules x.context x.state.readView x.state.machine hpos
+  show Walk _ _ (x.state.liftRead _ _)
+  unfold Frame.State.liftRead
+  split <;> rename_i he <;> rw [he] at hs
+  · show Machine.gasMeasure (Frame.State.machine _) ≤ _
+    rw [(Frame.State.applyReadTouch_keeps _ _ _).1]
+    exact hs
+  · show Machine.gasMeasure (Frame.State.machine _) < _
+    rw [(Frame.State.applyReadTouch_keeps _ _ _).1]
+    exact hs
+
+theorem PlainOp.sstore_run_gas (x : Frame.Running) {n : Nat} (h : x.state.machine.gasMeasure ≤ n) :
+    PlainGas x.state n ((Family.store .persistent).run x) := by
+  apply plainGas_of h
+  cases hr : (Family.store .persistent).run x with
+  | ok s' =>
+    exact PlainOp.sstore_run_gasMeasure_lt x (BenvStat.rules_valid x.context.block).access hr
+  | error p =>
+    obtain ⟨e, s'⟩ := p
+    show s'.machine.gasMeasure ≤ _
+    revert hr
+    show x.state.liftStore _ _ _ = _ → _
+    unfold Frame.State.liftStore
+    split
+    · rename_i e' m t he
+      intro hr
+      cases hr
+      rw [Frame.State.applyStoreTouch_machine]
+      exact (SstoreRow.step_error he).2.2.2.1
+    · intro hr; cases hr
+
+theorem PlainOp.tstore_run_gas (x : Frame.Running) {n : Nat} (h : x.state.machine.gasMeasure ≤ n) :
+    PlainGas x.state n ((Family.store .transient).run x) := by
+  apply plainGas_of h
+  cases hr : (Family.store .transient).run x with
+  | ok s' => exact PlainOp.tstore_run_gasMeasure_lt x hr
+  | error p =>
+    obtain ⟨e, s'⟩ := p
+    show s'.machine.gasMeasure ≤ _
+    revert hr
+    show x.state.liftStore _ _ _ = _ → _
+    unfold Frame.State.liftStore
+    split
+    · rename_i e' m t he
+      intro hr
+      cases hr
+      rw [Frame.State.applyStoreTouch_machine]
+      exact (TstoreRow.step_error he).2.2.2.2.1
+    · intro hr; cases hr
 
 /-- Each plain instruction either halts within the input gas bound or continues with a strictly
-smaller measure. This includes the state-gas spill in both bounds. -/
+smaller measure. This includes the state-gas spill in both bounds. A corollary of the families'
+gas walks and the table's positivity lemmas. -/
 theorem PlainOp.runCore_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) (op : Jaune.PlainOp)
     {n : Nat} (h : s.machine.gasMeasure ≤ n) :
     Walk (·.machine.gasMeasure ≤ n) (·.machine.gasMeasure < s.machine.gasMeasure)
       (PlainOp.runCore pc ctx s op) := by
-  cases op
-  case calldataload => exact calldataload_gas pc ctx s h
-  case blockhash => exact blockhash_gas pc ctx s h
-  case pop => exact pop_gas pc ctx s h
-  case gas => exact gas_gas pc ctx s h
-  case mload => exact mload_gas pc ctx s h
-  case mstore => exact mstore_gas pc ctx s h
-  case mstore8 => exact mstore8_gas pc ctx s h
-  case calldatacopy => exact calldatacopy_gas pc ctx s h
-  case codecopy => exact codecopy_gas pc ctx s h
-  case returndatacopy => exact returndatacopy_gas pc ctx s h
-  case mcopy => exact mcopy_gas pc ctx s h
-  case keccak256 => exact keccak256_gas pc ctx s h
-  case exp => exact exp_gas pc ctx s h
-  case blobhash => exact blobhash_gas pc ctx s h
-  case log k => exact log_gas k ctx s h
-  case balance => exact balance_gas pc ctx s h
-  case extcodesize => exact extcodesize_gas pc ctx s h
-  case extcodehash => exact extcodehash_gas pc ctx s h
-  case extcodecopy => exact extcodecopy_gas pc ctx s h
-  case selfbalance => exact selfbalance_gas pc ctx s h
-  case sload => exact sload_gas pc ctx s h
-  case tload => exact tload_gas pc ctx s h
-  case tstore => exact tstore_gas pc ctx s h
-  case sstore =>
-    simp only [PlainOp.runCore]
-    split
-    · split <;> first | apply sstoreBerlin_gas ctx s h | apply sstoreLegacy_gas ctx s h
-    · exact sstoreAmsterdam_gas _ ctx s h
-  all_goals simp only [PlainOp.runCore]
-  all_goals try first
-    | exact fixedCost_gas (by decide) (Frame.State.pushItem_gas _ _ h)
-    | exact fixedCost_gas (by decide) (Frame.State.applyUnary_gas _ _ h)
-    | exact fixedCost_gas (by decide) (Frame.State.applyBinary_gas _ _ h)
-    | exact fixedCost_gas (by decide) (Frame.State.applyTernary_gas _ _ h)
-  all_goals try with_reducible first
-    | exact gatedMachine_gas _ _ h (by decide) (Machine.applyBinary_gas _ _ h)
-    | exact gatedMachine_gas _ _ h (by decide) (Machine.applyUnary_gas _ _ h)
-    | exact gatedMachine_gas _ _ h (by decide) (Machine.pushItem_gas _ _ h)
-  all_goals gas_walk
+  show PlainGas s n ((PlainOp.family op).run ⟨pc, ctx, s⟩)
+  cases hf : PlainOp.family op with
+  | word row => exact WordRow.run_gas row (PlainOp.wordRow?_cost_pos (PlainOp.wordRow?_eq_some.2 hf)) _ h
+  | shuffle row =>
+    exact ShuffleRow.run_gas row (PlainOp.shuffleRow?_cost (PlainOp.shuffleRow?_eq_some.2 hf)).2 _ h
+  | memory row =>
+    exact MemoryRow.run_gas row (PlainOp.memoryRow?_base_pos (PlainOp.memoryRow?_eq_some.2 hf)) _ h
+  | log row =>
+    exact LogRow.run_gas row (PlainOp.logRow?_prices (PlainOp.logRow?_eq_some.2 hf)).2.2.2 _ h
+  | read row =>
+    exact ReadRow.run_gas row ⟨pc, ctx, s⟩
+      (readRow?_price_pos (PlainOp.readRow?_eq_some.2 hf) ctx s.readView) h
+  | store kind =>
+    cases kind with
+    | persistent => exact PlainOp.sstore_run_gas ⟨pc, ctx, s⟩ h
+    | transient => exact PlainOp.tstore_run_gas ⟨pc, ctx, s⟩ h
 
 end Jaune.Checked

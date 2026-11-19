@@ -76,7 +76,8 @@ include henterWith
 
 theorem Frame.runTop_toLegacy_of_parts (f : Frame) :
     Staging.Frame.runTop f.toLegacy = Frame.runTop f := by
-  unfold Staging.Frame.runTop Frame.runTop
+  rw [Frame.runTop_eq]
+  unfold Staging.Frame.runTop
   rw [show f.toLegacy.checkpoint = f.checkpoint.toLegacy from rfl, henterWith]
   cases enterWith f f.checkpoint with
   | done x => rfl

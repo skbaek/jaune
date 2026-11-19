@@ -1,5 +1,5 @@
 import Jaune.Instructions.Word
-import Jaune.Instructions.WordRows
+import Jaune.MessageCall.CheckedPlain
 
 namespace Jaune.Checked
 
@@ -398,12 +398,12 @@ theorem PlainOp.wordList_nodup : PlainOp.wordList.Nodup := by decide
 
 theorem PlainOp.wordRow?_isSome_iff (op : Jaune.PlainOp) :
     (PlainOp.wordRow? op).isSome = true ↔ op ∈ PlainOp.wordList := by
-  cases op <;> simp [PlainOp.wordRow?, PlainOp.wordList]
+  cases op <;> simp [PlainOp.wordRow?, PlainOp.family, PlainOp.wordList]
 
 theorem PlainOp.wordRow?_cost_pos {op : Jaune.PlainOp} {row : WordRow}
     (h : PlainOp.wordRow? op = some row) (args : Words row.arity) :
     0 < row.cost args := by
-  cases op <;> simp only [PlainOp.wordRow?, Option.some.injEq, reduceCtorEq] at h <;> subst h
+  cases op <;> simp only [PlainOp.wordRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at h <;> subst h
   case exp =>
     rcases args with ⟨_, exponent⟩
     dsimp only
@@ -418,7 +418,7 @@ theorem PlainOp.wordRow?_gasFree {op : Jaune.PlainOp} {row : WordRow}
     (h : PlainOp.wordRow? op = some row) (hne : op ≠ .gas)
     (args : Words row.arity) (env : Word.Env) (mem : Nat) (rd : Bytes) (g₁ g₂ : Nat) :
     row.result.map (· args ⟨env, mem, rd, g₁⟩) = row.result.map (· args ⟨env, mem, rd, g₂⟩) := by
-  cases op <;> simp only [PlainOp.wordRow?, Option.some.injEq, reduceCtorEq] at h
+  cases op <;> simp only [PlainOp.wordRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at h
   all_goals first | exact absurd rfl hne | (subst h; rfl)
 
 theorem PlainOp.wordRow?_pcFree {op : Jaune.PlainOp} {row : WordRow}
@@ -426,7 +426,7 @@ theorem PlainOp.wordRow?_pcFree {op : Jaune.PlainOp} {row : WordRow}
     (args : Words row.arity) (pc₁ pc₂ : Nat) (ctx : CallContext) (mem : Nat) (rd : Bytes) (g : Nat) :
     row.result.map (· args ⟨⟨pc₁, ctx⟩, mem, rd, g⟩) =
       row.result.map (· args ⟨⟨pc₂, ctx⟩, mem, rd, g⟩) := by
-  cases op <;> simp only [PlainOp.wordRow?, Option.some.injEq, reduceCtorEq] at h
+  cases op <;> simp only [PlainOp.wordRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at h
   all_goals first | exact absurd rfl hne | (subst h; rfl)
 
 /-- The exact rule fields a word row reads from `ForkRules`: its availability flag in `opcodes`,
@@ -437,150 +437,24 @@ def PlainOp.wordRuleReads (op : Jaune.PlainOp) (rules : ForkRules) : Bool × Opt
   | some row =>
     (row.available rules.opcodes, match op with | .blobbasefee => some rules.blob | _ => none)
 
-private theorem liftMachine_congr {ε : Type} {f g : Machine → Except (ε × Machine) Machine}
+theorem Frame.State.liftMachine_congr {ε : Type} {f g : Machine → Except (ε × Machine) Machine}
     (s : Frame.State) (h : f s.machine = g s.machine) : s.liftMachine f = s.liftMachine g := by
   unfold Frame.State.liftMachine
   rw [h]
 
-/-- **Bridge (50 plain word opcodes):** every row in `PlainOp.wordRow?`, lifted via
-`Frame.State.liftMachine`, equals `Checked.PlainOp.runCore` for every `pc`, `CallContext`,
-and `Frame.State` (hence every `Fork`). -/
-theorem PlainOp.wordRow?_runCore_eq {op : Jaune.PlainOp} {row : WordRow}
-    (hrow : PlainOp.wordRow? op = some row) (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftMachine (row.step ctx.block.rules.opcodes ⟨pc, ctx⟩) = PlainOp.runCore pc ctx s op := by
-  cases op <;> simp only [PlainOp.wordRow?, Option.some.injEq, reduceCtorEq] at hrow <;> subst hrow <;>
-    dsimp only [PlainOp.runCore, Frame.State.pushItem, Frame.State.applyUnary,
-      Frame.State.applyBinary, Frame.State.applyTernary]
-  case address | origin | caller | callvalue | calldatasize | codesize | gasprice |
-      returndatasize | number | timestamp | gaslimit | prevrandao | coinbase | msize | pc =>
-    exact liftMachine_congr s (WordRow.context_step _ _ _ _ s.machine _ (fun _ => rfl))
-  case iszero | not =>
-    exact liftMachine_congr s (WordRow.unary_step ..)
-  case eq | lt | gt | slt | sgt | and | or | xor | signextend | byte | add | sub | mul |
-      div | sdiv | mod | smod =>
-    exact liftMachine_congr s (WordRow.binary_step ..)
-  case addmod | mulmod =>
-    exact liftMachine_congr s (WordRow.ternary_step ..)
-  case basefee =>
-    refine liftMachine_congr s ?_
-    by_cases ha : ctx.block.rules.opcodes.baseFee
-    · simp only [ha, ↓reduceIte, WordRow.step, WordRow.context, Machine.popWords,
-        Machine.pushItem, bind, Except.bind]
-      cases hg : s.machine.chargeGas Gas.base <;> rfl
-    · simp only [ha, Bool.false_eq_true, ↓reduceIte]
-      exact WordRow.step_unavailable (by simp [ha])
-  case blobbasefee =>
-    refine liftMachine_congr s ?_
-    by_cases ha : ctx.block.rules.opcodes.blobBaseFee
-    · simp only [ha, ↓reduceIte, WordRow.step, WordRow.context, Machine.popWords,
-        Machine.pushItem, bind, Except.bind]
-      cases hg : s.machine.chargeGas Gas.base <;> rfl
-    · simp only [ha, Bool.false_eq_true, ↓reduceIte]
-      exact WordRow.step_unavailable (by simp [ha])
-  case chainid =>
-    refine liftMachine_congr s ?_
-    by_cases ha : ctx.block.rules.opcodes.chainId
-    · simp only [ha, ↓reduceIte, WordRow.step, WordRow.context, Machine.popWords,
-        Machine.pushItem, bind, Except.bind]
-      cases hg : s.machine.chargeGas Gas.base <;> rfl
-    · simp only [ha, Bool.false_eq_true, ↓reduceIte]
-      exact WordRow.step_unavailable (by simp [ha])
-  case slotnum =>
-    refine liftMachine_congr s ?_
-    by_cases ha : ctx.block.rules.opcodes.slotnum
-    · simp only [ha, ↓reduceIte, WordRow.step, WordRow.context, Machine.popWords,
-        Machine.pushItem, bind, Except.bind]
-      cases hg : s.machine.chargeGas Gas.base <;> rfl
-    · simp only [ha, Bool.false_eq_true, ↓reduceIte]
-      exact WordRow.step_unavailable (by simp [ha])
-  case gas =>
-    refine liftMachine_congr s ?_
-    simp only [WordRow.step, WordRow.context, Machine.popWords, ↓reduceIte, bind, Except.bind]
-  case blobhash =>
-    refine liftMachine_congr s ?_
-    by_cases ha : ctx.block.rules.opcodes.blobHash
-    · simp only [ha, ↓reduceIte, WordRow.step, Machine.popWords, bind, Except.bind]
-      cases hp : s.machine.pop with
-      | error err => rfl
-      | ok pair =>
-        obtain ⟨x, m'⟩ := pair
-        dsimp only
-    · simp only [ha, Bool.false_eq_true, ↓reduceIte]
-      exact WordRow.step_unavailable (by simp [ha])
-  case calldataload =>
-    refine liftMachine_congr s ?_
-    simp only [WordRow.step, Machine.popWords, ↓reduceIte, bind, Except.bind]
-    cases hp : s.machine.pop with
-    | error err => rfl
-    | ok pair =>
-      obtain ⟨x, m'⟩ := pair
-      dsimp only
-  case blockhash =>
-    refine liftMachine_congr s ?_
-    simp only [WordRow.step, Machine.popWords, ↓reduceIte, bind, Except.bind]
-    cases hp : s.machine.pop with
-    | error err => rfl
-    | ok pair =>
-      obtain ⟨x, m'⟩ := pair
-      dsimp only
-  case shl | shr | sar =>
-    refine liftMachine_congr s ?_
-    by_cases ha : ctx.block.rules.opcodes.shifts
-    · simp only [ha, ↓reduceIte, WordRow.step, WordRow.binary, Machine.popWords,
-        Machine.applyBinary, Machine.pushItem, bind, Except.bind, pure, Except.pure]
-      cases hx : s.machine.pop with
-      | error err => rfl
-      | ok p1 =>
-        obtain ⟨x, next⟩ := p1
-        dsimp only
-        cases hy : next.pop with
-        | error err => rfl
-        | ok p2 =>
-          obtain ⟨y, last⟩ := p2
-          dsimp only
-          cases hg : last.chargeGas Gas.veryLow <;> rfl
-    · simp only [ha, Bool.false_eq_true, ↓reduceIte]
-      exact WordRow.step_unavailable (by simp [ha])
-  case clz =>
-    refine liftMachine_congr s ?_
-    by_cases ha : ctx.block.rules.opcodes.clz
-    · simp only [ha, ↓reduceIte, WordRow.step, WordRow.unary, Machine.popWords,
-        Machine.applyUnary, Machine.pushItem, bind, Except.bind]
-      cases hx : s.machine.pop with
-      | error err => rfl
-      | ok pair =>
-        obtain ⟨x, next⟩ := pair
-        dsimp only
-        cases hg : next.chargeGas Gas.low <;> rfl
-    · simp only [ha, Bool.false_eq_true, ↓reduceIte]
-      exact WordRow.step_unavailable (by simp [ha])
-  case exp =>
-    refine liftMachine_congr s ?_
-    simp only [WordRow.step, Machine.popWords, ↓reduceIte, bind, Except.bind, pure, Except.pure]
-    cases hx : s.machine.pop with
-    | error err => rfl
-    | ok p1 =>
-      obtain ⟨base, m₁⟩ := p1
-      dsimp only
-      cases hy : m₁.pop with
-      | error err => rfl
-      | ok p2 =>
-        obtain ⟨exponent, m₂⟩ := p2
-        dsimp only
-  case pop =>
-    refine liftMachine_congr s ?_
-    simp only [WordRow.step, Machine.popWords, ↓reduceIte, bind, Except.bind, pure, Except.pure]
-    cases hx : s.machine.pop with
-    | error err => rfl
-    | ok pair =>
-      dsimp only
-      cases hg : pair.2.chargeGas Gas.base <;> rfl
+/-- A Word row is the table's row of a Word family member. -/
+theorem PlainOp.wordRow?_eq_some {op : Jaune.PlainOp} {row : WordRow} :
+    PlainOp.wordRow? op = some row ↔ PlainOp.family op = .word row := by
+  unfold PlainOp.wordRow?
+  cases PlainOp.family op <;> simp
 
+/-- **Table lemma (50 plain word opcodes):** every row in `PlainOp.wordRow?`, lifted via
+`Frame.State.liftMachine`, is `PlainOp.run`, by the definition of the dispatch. -/
 theorem PlainOp.wordRow?_run_eq {op : Jaune.PlainOp} {row : WordRow}
     (hrow : PlainOp.wordRow? op = some row) (r : Frame.Running) :
     r.state.liftMachine (row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩) =
-      PlainOp.run r op :=
-  PlainOp.wordRow?_runCore_eq hrow r.pc r.context r.state
+      PlainOp.run r op := by
+  simp only [PlainOp.run, PlainOp.runCore, PlainOp.wordRow?_eq_some.1 hrow, Family.run]
 
 theorem PlainOp.wordRow?_run_fork_eq (f : Fork) {op : Jaune.PlainOp} {row : WordRow}
     (hrow : PlainOp.wordRow? op = some row) (r : Frame.Running)
@@ -604,9 +478,9 @@ theorem PlainOp.word_run_congr_fork {op : Jaune.PlainOp} (hword : (PlainOp.wordR
   | none => simp [hrow] at hword
   | some row =>
     rw [← PlainOp.wordRow?_run_eq hrow, ← PlainOp.wordRow?_run_eq hrow]
-    refine liftMachine_congr r.state ?_
+    refine Frame.State.liftMachine_congr r.state ?_
     simp only [PlainOp.wordRuleReads, hrow, Prod.mk.injEq] at h
-    cases op <;> simp only [PlainOp.wordRow?, Option.some.injEq, reduceCtorEq] at hrow <;> subst hrow
+    cases op <;> simp only [PlainOp.wordRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at hrow <;> subst hrow
     case some.blobbasefee =>
       simp only [WordRow.step, WordRow.context, BenvStat.rules, Option.some.injEq] at h ⊢
       simp only [h.1, h.2]

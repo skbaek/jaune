@@ -1,4 +1,5 @@
 import Jaune.MessageCall.CheckedStateGasOps
+import Jaune.MessageCall.CheckedExec
 
 /-!
 # Disabled state gas at a frame boundary
@@ -88,7 +89,7 @@ theorem runPrecompile_stateGasZero {running : Frame.Running} (address : Address)
     {exit : Frame.Exit} (h : running.state.StateGasZero)
     (hr : runPrecompile running address = .ok exit) : exit.state.StateGasZero := by
   unfold runPrecompile at hr
-  cases hp : precompileRun running.precompileEvm address with
+  cases hp : Precompile.run running.precompileInput address with
   | ok cost output => rw [hp] at hr; cases hr; exact h
   | error reason cost => rw [hp] at hr; cases reason <;> cases hr <;> exact h
 
