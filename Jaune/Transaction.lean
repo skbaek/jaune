@@ -1,4 +1,5 @@
 import Jaune.Transaction.Parts
+import Jaune.Run.Canonical
 import Jaune.Sufficiency
 import Jaune.MessageCall.Canonical
 -- `List.IsChain` itself is Batteries; its infix/suffix closure lemmas, which
@@ -2351,156 +2352,6 @@ theorem addBlockToChainUsing_preserves_chainId
 -- successful block transition. Every lemma states the success channel; the
 -- error channel at this layer carries no state.
 
-private theorem chargeNewAuthorityAmsterdam_canonical {state : StateGasRules}
-    {authority : Address} {devm : Devm} (h : devm.Canonical) :
-    (chargeNewAuthorityAmsterdam state authority devm).Canonical := by
-  unfold chargeNewAuthorityAmsterdam
-  split
-  · exact liftMachExecution_canonical h
-  · exact h
-
-private theorem chargePaidAccountWriteAmsterdam_canonical
-    {state : StateGasRules} {authority : Address} {devm : Devm}
-    {paidWrites : AdrSet} (h : devm.Canonical) :
-    (chargePaidAccountWriteAmsterdam state authority devm paidWrites).CanonicalOn
-      (fun r => r.1.Canonical) := by
-  unfold chargePaidAccountWriteAmsterdam
-  split
-  · exact h
-  · exact Except.CanonicalOn.bind (chargeGas_canonical h) (fun _ hd => hd)
-
-private theorem chargeAuthBaseAmsterdam_canonical {state : StateGasRules}
-    {msg : Msg} {authority target : Address} {devm : Devm}
-    {delegationSetFor : AdrSet} (h : devm.Canonical) :
-    (chargeAuthBaseAmsterdam state msg authority target devm
-      delegationSetFor).CanonicalOn (fun r => r.1.Canonical) := by
-  unfold chargeAuthBaseAmsterdam
-  split
-  · exact h
-  · dsimp only
-    split
-    · exact Except.CanonicalOn.bind (liftMachExecution_canonical h)
-        (fun _ hd => hd)
-    · exact h
-
-private theorem applyValidatedDelegationAmsterdam_canonical
-    {state : StateGasRules} {msg : Msg} {authority target : Address}
-    {devm : Devm} {paidWrites delegationSetFor : AdrSet}
-    (h : devm.Canonical) :
-    (applyValidatedDelegationAmsterdam state msg authority target devm
-      paidWrites delegationSetFor).CanonicalOn (fun r => r.1.Canonical) := by
-  unfold applyValidatedDelegationAmsterdam
-  refine Except.CanonicalOn.bind (chargeNewAuthorityAmsterdam_canonical h)
-    fun devm hdevm => ?_
-  refine Except.CanonicalOn.bind
-    (chargePaidAccountWriteAmsterdam_canonical hdevm) fun r hr => ?_
-  obtain ⟨devm, paidWrites⟩ := r
-  refine Except.CanonicalOn.bind
-    (chargeAuthBaseAmsterdam_canonical hr) fun r hr => ?_
-  obtain ⟨devm, delegationSetFor, codeToSet⟩ := r
-  exact Devm.Canonical.incrNonce (Devm.Canonical.setCode hr authority codeToSet)
-    authority
-
-private theorem setDelegationAmsterdamStep_canonical
-    {state : StateGasRules} {msg : Msg} {auth : Authorization} {devm : Devm}
-    {paidWrites delegationSetFor : AdrSet} (h : devm.Canonical) :
-    (setDelegationAmsterdamStep state msg auth devm paidWrites
-      delegationSetFor).CanonicalOn (fun r => r.1.Canonical) := by
-  unfold setDelegationAmsterdamStep
-  split
-  · exact h
-  · split
-    · exact h
-    · cases hr : recoverAuthority auth with
-      | error error =>
-        cases error <;> simp only <;> exact h
-      | ok authority =>
-        dsimp only
-        have ha := addAccessedAddress_canonical (a := authority) h
-        split
-        · exact ha
-        · split
-          · exact ha
-          · exact applyValidatedDelegationAmsterdam_canonical ha
-
-private theorem setDelegationAmsterdamLoop_canonical
-    {state : StateGasRules} {msg : Msg} {auths : List Authorization} {devm : Devm}
-    {paidWrites delegationSetFor : AdrSet} (h : devm.Canonical) :
-    (setDelegationAmsterdamLoop state msg auths devm paidWrites
-      delegationSetFor).CanonicalOn (fun r => r.1.Canonical) := by
-  induction auths generalizing devm paidWrites delegationSetFor with
-  | nil => exact h
-  | cons auth auths ih =>
-    unfold setDelegationAmsterdamLoop
-    exact Except.CanonicalOn.bind (setDelegationAmsterdamStep_canonical h)
-      (fun r hr => ih hr)
-
-private theorem setDelegationAmsterdam_canonical {state : StateGasRules}
-    {msg : Msg} {devm : Devm} (h : devm.Canonical) :
-    (setDelegationAmsterdam state msg devm).Canonical := by
-  unfold setDelegationAmsterdam
-  exact Except.CanonicalOn.bind (setDelegationAmsterdamLoop_canonical h)
-    (fun _ hr => hr)
-
-private theorem preparedTopLevelMessage_canonical {msg : Msg} {devm : Devm}
-    (hm : msg.Canonical) (hd : devm.Canonical) :
-    (preparedTopLevelMessage msg devm).Canonical := by
-  exact ⟨⟨hd.1, hm.1.2⟩, hd.2⟩
-
-private theorem resolveTopLevelCallAmsterdam_canonical {msg : Msg}
-    {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
-    (resolveTopLevelCallAmsterdam msg devm).CanonicalOn
-      (fun r => r.1.Canonical ∧ r.2.Canonical) := by
-  unfold resolveTopLevelCallAmsterdam
-  rcases msg.benv.stat.rules.delegationCost devm msg.currentTarget
-    with ⟨delegated, codeAddress, accessCost⟩
-  refine Except.CanonicalOn.bind (chargeGas_canonical hd)
-    fun charged hcharged => ?_
-  have hfinished := completeDelegationAccess_canonical hcharged delegated codeAddress
-  exact ⟨preparedTopLevelMessage_canonical hm hfinished, hfinished⟩
-
-private theorem dispatchTopLevelAmsterdam_canonical {state : StateGasRules}
-    {msg : Msg} {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
-    (dispatchTopLevelAmsterdam state msg devm).CanonicalOn
-      (fun r => r.1.Canonical ∧ r.2.Canonical) := by
-  unfold dispatchTopLevelAmsterdam
-  split
-  · dsimp only
-    split
-    · exact hd
-    · split
-      · exact Except.CanonicalOn.bind (liftMachExecution_canonical hd)
-          (fun charged hcharged =>
-            ⟨preparedTopLevelMessage_canonical hm hcharged, hcharged⟩)
-      · exact ⟨preparedTopLevelMessage_canonical hm hd, hd⟩
-  · dsimp only
-    split
-    · exact Except.CanonicalOn.bind (liftMachExecution_canonical hd)
-        (fun _ hcharged => resolveTopLevelCallAmsterdam_canonical hm hcharged)
-    · exact resolveTopLevelCallAmsterdam_canonical hm hd
-
-private theorem finishTopLevelAmsterdam_canonical {state : StateGasRules}
-    {msg : Msg} {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
-    (finishTopLevelAmsterdam state msg devm).CanonicalOn
-      (fun r => r.1.Canonical ∧ r.2.Canonical) := by
-  unfold finishTopLevelAmsterdam
-  split
-  · exact dispatchTopLevelAmsterdam_canonical hm hd
-  · exact dispatchTopLevelAmsterdam_canonical hm
-      (Devm.Canonical.of_world_eq hd rfl)
-
-private theorem prepareTopLevelAmsterdam_canonical {state : StateGasRules}
-    {msg : Msg} (hm : msg.Canonical) :
-    (prepareTopLevelAmsterdam state msg).CanonicalOn
-      (fun r => r.1.Canonical ∧ r.2.Canonical) := by
-  unfold prepareTopLevelAmsterdam
-  have hi := initDevm_canonical hm
-  dsimp only
-  split
-  · exact finishTopLevelAmsterdam_canonical hm hi
-  · exact Except.CanonicalOn.bind (setDelegationAmsterdam_canonical hi)
-      (fun _ hd => finishTopLevelAmsterdam_canonical hm hd)
-
 /-! ### The prepared top-level state -/
 
 private theorem liftMachExecution_ok_meta {core : Mach → Footprint.Outcome Mach Unit} {d d' : Devm}
@@ -2769,7 +2620,7 @@ private theorem processTopLevelAmsterdam_canonical {state : StateGasRules}
     (hp : processTopLevelAmsterdam state msg isCreate = .ok p) :
     State.Canonical p.1 := by
   unfold processTopLevelAmsterdam at hp
-  have hprepare := prepareTopLevelAmsterdam_canonical (state := state) hm
+  have hprepare := Staging.prepareTopLevelAmsterdam_canonical (state := state) hm
   cases hprep : prepareTopLevelAmsterdam state msg with
   | error failure =>
     rw [hprep] at hp

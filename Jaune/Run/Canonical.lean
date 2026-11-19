@@ -23,8 +23,8 @@ Where the new types differ the statement follows them:
   which ask of the block environment only its original state (`benv.stat.Canonical`): the step
   reads the prefix's state in place of the environment's.
 
-The Amsterdam preparation helpers are proved here over their staged copies (`Jaune.Run.Message`),
-privately, as `Jaune.Transaction` proves them privately over its own copies.
+The Amsterdam preparation canonicals are proved here, publicly, over the public preparation
+helpers of `Jaune.Transaction.Parts`; `Jaune.Transaction` uses them.
 
 Staged under `Jaune.Staging` (the transaction under `Jaune.Staging.B2`, the block transition under
 `Jaune.Staging.E`), beside the definitions they speak of.
@@ -36,7 +36,7 @@ open Jaune
 
 /-! ### The Amsterdam preparation -/
 
-private theorem chargeNewAuthorityAmsterdam_canonical {state : StateGasRules}
+theorem chargeNewAuthorityAmsterdam_canonical {state : StateGasRules}
     {authority : Address} {devm : Devm} (h : devm.Canonical) :
     (chargeNewAuthorityAmsterdam state authority devm).Canonical := by
   unfold chargeNewAuthorityAmsterdam
@@ -44,7 +44,7 @@ private theorem chargeNewAuthorityAmsterdam_canonical {state : StateGasRules}
   · exact liftMachExecution_canonical h
   · exact h
 
-private theorem chargePaidAccountWriteAmsterdam_canonical
+theorem chargePaidAccountWriteAmsterdam_canonical
     {state : StateGasRules} {authority : Address} {devm : Devm}
     {paidWrites : AdrSet} (h : devm.Canonical) :
     (chargePaidAccountWriteAmsterdam state authority devm paidWrites).CanonicalOn
@@ -54,7 +54,7 @@ private theorem chargePaidAccountWriteAmsterdam_canonical
   · exact h
   · exact Except.CanonicalOn.bind (chargeGas_canonical h) (fun _ hd => hd)
 
-private theorem chargeAuthBaseAmsterdam_canonical {state : StateGasRules}
+theorem chargeAuthBaseAmsterdam_canonical {state : StateGasRules}
     {msg : Msg} {authority target : Address} {devm : Devm}
     {delegationSetFor : AdrSet} (h : devm.Canonical) :
     (chargeAuthBaseAmsterdam state msg authority target devm
@@ -68,7 +68,7 @@ private theorem chargeAuthBaseAmsterdam_canonical {state : StateGasRules}
         (fun _ hd => hd)
     · exact h
 
-private theorem applyValidatedDelegationAmsterdam_canonical
+theorem applyValidatedDelegationAmsterdam_canonical
     {state : StateGasRules} {msg : Msg} {authority target : Address}
     {devm : Devm} {paidWrites delegationSetFor : AdrSet}
     (h : devm.Canonical) :
@@ -86,7 +86,7 @@ private theorem applyValidatedDelegationAmsterdam_canonical
   exact Devm.Canonical.incrNonce (Devm.Canonical.setCode hr authority codeToSet)
     authority
 
-private theorem setDelegationAmsterdamStep_canonical
+theorem setDelegationAmsterdamStep_canonical
     {state : StateGasRules} {msg : Msg} {auth : Authorization} {devm : Devm}
     {paidWrites delegationSetFor : AdrSet} (h : devm.Canonical) :
     (setDelegationAmsterdamStep state msg auth devm paidWrites
@@ -108,7 +108,7 @@ private theorem setDelegationAmsterdamStep_canonical
           · exact ha
           · exact applyValidatedDelegationAmsterdam_canonical ha
 
-private theorem setDelegationAmsterdamLoop_canonical
+theorem setDelegationAmsterdamLoop_canonical
     {state : StateGasRules} {msg : Msg} {auths : List Authorization} {devm : Devm}
     {paidWrites delegationSetFor : AdrSet} (h : devm.Canonical) :
     (setDelegationAmsterdamLoop state msg auths devm paidWrites
@@ -120,19 +120,19 @@ private theorem setDelegationAmsterdamLoop_canonical
     exact Except.CanonicalOn.bind (setDelegationAmsterdamStep_canonical h)
       (fun r hr => ih hr)
 
-private theorem setDelegationAmsterdam_canonical {state : StateGasRules}
+theorem setDelegationAmsterdam_canonical {state : StateGasRules}
     {msg : Msg} {devm : Devm} (h : devm.Canonical) :
     (setDelegationAmsterdam state msg devm).Canonical := by
   unfold setDelegationAmsterdam
   exact Except.CanonicalOn.bind (setDelegationAmsterdamLoop_canonical h)
     (fun _ hr => hr)
 
-private theorem preparedTopLevelMessage_canonical {msg : Msg} {devm : Devm}
+theorem preparedTopLevelMessage_canonical {msg : Msg} {devm : Devm}
     (hm : msg.Canonical) (hd : devm.Canonical) :
     (preparedTopLevelMessage msg devm).Canonical := by
   exact ⟨⟨hd.1, hm.1.2⟩, hd.2⟩
 
-private theorem resolveTopLevelCallAmsterdam_canonical {msg : Msg}
+theorem resolveTopLevelCallAmsterdam_canonical {msg : Msg}
     {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
     (resolveTopLevelCallAmsterdam msg devm).CanonicalOn
       (fun r => r.1.Canonical ∧ r.2.Canonical) := by
@@ -144,7 +144,7 @@ private theorem resolveTopLevelCallAmsterdam_canonical {msg : Msg}
   have hfinished := completeDelegationAccess_canonical hcharged delegated codeAddress
   exact ⟨preparedTopLevelMessage_canonical hm hfinished, hfinished⟩
 
-private theorem dispatchTopLevelAmsterdam_canonical {state : StateGasRules}
+theorem dispatchTopLevelAmsterdam_canonical {state : StateGasRules}
     {msg : Msg} {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
     (dispatchTopLevelAmsterdam state msg devm).CanonicalOn
       (fun r => r.1.Canonical ∧ r.2.Canonical) := by
@@ -164,7 +164,7 @@ private theorem dispatchTopLevelAmsterdam_canonical {state : StateGasRules}
         (fun _ hcharged => resolveTopLevelCallAmsterdam_canonical hm hcharged)
     · exact resolveTopLevelCallAmsterdam_canonical hm hd
 
-private theorem finishTopLevelAmsterdam_canonical {state : StateGasRules}
+theorem finishTopLevelAmsterdam_canonical {state : StateGasRules}
     {msg : Msg} {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
     (finishTopLevelAmsterdam state msg devm).CanonicalOn
       (fun r => r.1.Canonical ∧ r.2.Canonical) := by
@@ -174,7 +174,7 @@ private theorem finishTopLevelAmsterdam_canonical {state : StateGasRules}
   · exact dispatchTopLevelAmsterdam_canonical hm
       (Devm.Canonical.of_world_eq hd rfl)
 
-private theorem prepareTopLevelAmsterdam_canonical {state : StateGasRules}
+theorem prepareTopLevelAmsterdam_canonical {state : StateGasRules}
     {msg : Msg} (hm : msg.Canonical) :
     (prepareTopLevelAmsterdam state msg).CanonicalOn
       (fun r => r.1.Canonical ∧ r.2.Canonical) := by
