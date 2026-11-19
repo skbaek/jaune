@@ -532,6 +532,9 @@ class Comparison:
         self.generated_left = self.left.keys() - before['roots']
         self.generated_right = self.right.keys() - after['roots']
         self.pairs, self.reverse, self.checked = {}, {}, set()
+        self.aux_pairs, self.aux_left, self.aux_right = set(), set(), set()
+        self.realized_matcher_pairs = set()
+        self.holder_pairs = []
         # Modules (after naming) that a relocation row links: a row moves its
         # declaration, and checks or generated constants may move with it,
         # between its two modules and nowhere else.
@@ -540,6 +543,13 @@ class Comparison:
         for source, target in mapping.relocations.values():
             self.relocated_modules |= {mapping.module(source), target}
             self.join(mapping.module(source), target)
+        self._reloc_targets = {self.mapping(k) for k in self.mapping.relocations}
+        owners = before.get('owners') or {}
+        for private in self.mapping.public_from:
+            user = MAP.split_private(private)[2]
+            mod = owners.get(private) or MAP.split_private(private)[0]
+            if mod and self.module_of(private, mod) != self.mapping.module(mod):
+                self._reloc_targets.add(self.mapping(user))
 
     def respell_name_literals(self, name, value):
         """A `Name` literal (`Lean.Name.mkStrN "A" ... "Z"`) whose full name is
@@ -944,6 +954,155 @@ class Comparison:
             return target
         return self.mapping.module(module)
 
+    RELOC_AUX_LEAF = re.compile(
+        r'^(match_\d+|_sparseCasesOn_\d+|eq_\d+|eq_def|else_eq|splitter|congr_simp|_sunfold|_unsafe_rec|_f)$'
+    )
+    MATCHER_LEAF = re.compile(r'^match_\d+$')
+    DOWNSTREAM_EQ_LEAF = re.compile(r'^(eq_\d+|eq_def|else_eq|splitter|congr_simp)$')
+
+    def is_downstream_reloc_eq(self, name, side):
+        """A downstream realized equation or splitter auxiliary of a declaration
+        in a relocation component (never an anonymous instance or csimp
+        replacement), whose references to relocated-component `.match_N`
+        helpers may reindex when modules split."""
+        if not self.mapping.relocations:
+            return False
+        table = self.left if side == 'before' else self.right
+        generated = self.generated_left if side == 'before' else self.generated_right
+        if name not in generated:
+            return False
+        base = name.rsplit('@', 1)[0]
+        if '.' not in base:
+            return False
+        parent, leaf = base.rsplit('.', 1)
+        if not self.DOWNSTREAM_EQ_LEAF.match(leaf):
+            return False
+        attrs = table[name].get('attributes') or {}
+        if attrs.get('instance') is not None or attrs.get('csimp'):
+            return False
+        snapshot = self.before if side == 'before' else self.after
+        roots = snapshot['roots']
+        owners = snapshot.get('owners') or {}
+        private = MAP.split_private(parent) if parent.startswith('_private.') else None
+        raw_bases = [parent]
+        if private is not None:
+            raw_bases.append(private[2])
+        cands = []
+        for b in raw_bases:
+            cands.append(b)
+            if '.' in b and self.MATCHER_LEAF.match(b.rsplit('.', 1)[1]):
+                cands.append(b.rsplit('.', 1)[0])
+        for decl in cands:
+            if decl in roots and decl in owners:
+                mod = owners[decl]
+                mapped = self.mapping.module(mod) if side == 'before' else mod
+                if mapped in self.relocated_modules:
+                    return True
+            if side == 'before':
+                for p in self.mapping.public_from:
+                    pm = MAP.split_private(p)
+                    if pm and pm[2] == decl:
+                        mod = owners.get(p) or pm[0]
+                        if self.mapping.module(mod) in self.relocated_modules:
+                            return True
+        return False
+
+    def reloc_matcher_component(self, name, side):
+        """If `name` is `.match_N` on a declaration belonging to a relocated
+        module component, return that component identifier; otherwise None."""
+        if not self.mapping.relocations or '.' not in name:
+            return None
+        parent, leaf = name.rsplit('.', 1)
+        if not self.MATCHER_LEAF.match(leaf):
+            return None
+        snapshot = self.before if side == 'before' else self.after
+        roots = snapshot['roots']
+        owners = snapshot.get('owners') or {}
+        if parent not in roots or parent not in owners:
+            return None
+        owner = owners[parent]
+        mapped = self.mapping.module(owner) if side == 'before' else owner
+        if mapped not in self.relocated_modules:
+            return None
+        return self.component(owner, side)
+
+    def is_reloc_aux(self, name, side):
+        """A compiler-generated pattern-match or equation auxiliary scoped
+        entirely to relocation-linked modules (never an anonymous instance or
+        csimp replacement), which Lean's per-module deduplication cache may
+        split across a module boundary."""
+        if not self.mapping.relocations:
+            return False
+        table = self.left if side == 'before' else self.right
+        generated = self.generated_left if side == 'before' else self.generated_right
+        if name not in generated:
+            return False
+        leaf = name.rsplit('@', 1)[0].rsplit('.', 1)[-1]
+        if not self.RELOC_AUX_LEAF.match(leaf):
+            return False
+        attrs = table[name].get('attributes') or {}
+        if attrs.get('instance') is not None or attrs.get('csimp'):
+            return False
+        holders = (self.before if side == 'before' else self.after).get('holders') or {}
+        mods = holders.get(name)
+        if not mods:
+            return False
+        mapped = {self.mapping.module(m) if side == 'before' else m for m in mods}
+        return bool(mapped <= self.relocated_modules)
+
+    def is_promoted_matcher(self, a, b=None):
+        """A `match_N` helper of a `private` declaration promoted via
+        `public_from`: Lean gives private matchers `semireducible` and public
+        matchers `instanceReducible`."""
+        if a not in self.generated_left or not a.startswith('_private.') or '.' not in a:
+            return False
+        parent, leaf = a.rsplit('.', 1)
+        if not (self.MATCHER_LEAF.match(leaf) and parent in self.mapping.public_from):
+            return False
+        if b is None:
+            return True
+        return (b in self.generated_right and not b.startswith('_private.') and
+                self.MATCHER_LEAF.match(b.rsplit('.', 1)[-1]) is not None)
+
+    def is_realized_reloc_matcher(self, b, a=None):
+        """An unexported `match_N` of a relocated declaration realized on demand
+        behind its `eq_def`, paired to a verified generated matcher of that
+        declaration on the before side."""
+        if not self.mapping.relocations or b in self.right or '.' not in b or b.startswith('_private.'):
+            return False
+        parent, leaf = b.rsplit('.', 1)
+        if not (self.MATCHER_LEAF.match(leaf) and parent in self._reloc_targets):
+            return False
+        if a is None:
+            return True
+        if a not in self.generated_left or '.' not in a:
+            return False
+        ap, aleaf = a.rsplit('.', 1)
+        return bool(self.MATCHER_LEAF.match(aleaf) and self.name(ap) == parent)
+
+    def pair_realized_matcher(self, a, new_parent):
+        if a in self.pairs or a in self.aux_left:
+            return True
+        for exported in sorted(self.generated_right):
+            if exported.rsplit('.', 1)[0] == new_parent and self.MATCHER_LEAF.match(exported.rsplit('.', 1)[-1]):
+                saved = self.save()
+                try:
+                    self.pair(a, exported)
+                    return True
+                except Mismatch:
+                    self.restore(saved)
+        return False
+
+    def coarse_record(self, name, side):
+        rec = (self.left if side == 'before' else self.right)[name]
+        norm = self.normalize(rec, side, True, downstream_eq=self.is_downstream_reloc_eq(name, side))
+        if side == 'before' and self.is_promoted_matcher(name):
+            attrs = dict(norm.get('attributes') or {})
+            if attrs.get('reducibility') == 'Lean.ReducibilityStatus.semireducible':
+                attrs['reducibility'] = 'Lean.ReducibilityStatus.instanceReducible'
+                norm = dict(norm, attributes=attrs)
+        return encoded(norm)
+
     def compare(self, left, right, path):
         if isinstance(left, list) and len(left) == 4 and left[0] == 'unhygienicIdentifier':
             if not (isinstance(right, list) and len(right) == 4 and right[0] == 'unhygienicIdentifier'):
@@ -1000,12 +1159,31 @@ class Comparison:
             if not isinstance(right, list) or len(right) != 2 or right[0] != 'name':
                 raise Mismatch(f'{path}: name reference changed kind')
             a, b = left[1], right[1]
+            if (self.holder_pairs and
+                    self.is_downstream_reloc_eq(self.holder_pairs[-1][0], 'before') and
+                    self.is_downstream_reloc_eq(self.holder_pairs[-1][1], 'after')):
+                ca = self.reloc_matcher_component(a, 'before')
+                cb = self.reloc_matcher_component(b, 'after')
+                if ca is not None and cb is not None and ca == cb:
+                    self.realized_matcher_pairs.add((a, b))
+                    return
             if a in self.generated_left:
+                holder = self.holders[-1] if self.holders else None
+                if (b not in self.generated_right and holder is not None and
+                        self.is_reloc_aux(holder, 'before') and
+                        self.is_realized_reloc_matcher(b, a) and
+                        self.pair_realized_matcher(a, b.rsplit('.', 1)[0])):
+                    return
                 if b not in self.generated_right:
                     raise Mismatch(f'{path}: generated reference became named/external')
                 self.pair(a, b)
             elif self.name(a) != b:
                 raise Mismatch(f'{path}: reference {a} became {b}')
+            return
+        if (path.endswith('.attributes.reducibility') and
+                left == 'Lean.ReducibilityStatus.semireducible' and
+                right == 'Lean.ReducibilityStatus.instanceReducible' and
+                self.holder_pairs and self.is_promoted_matcher(*self.holder_pairs[-1])):
             return
         if type(left) is not type(right):
             raise Mismatch(f'{path}: node kind changed')
@@ -1023,16 +1201,32 @@ class Comparison:
             raise Mismatch(f'{path}: {left!r} became {right!r}')
 
     def pair(self, a, b):
-        if self.pairs.get(a, b) != b or self.reverse.get(b, a) != a:
-            raise Mismatch(f'inconsistent generated-constant correspondence: {a}, {b}')
-        self.pairs[a], self.reverse[b] = b, a
+        left_holders, right_holders = self.before.get('holders'), self.after.get('holders')
+        same_reloc_component = (
+            left_holders is not None and right_holders is not None and
+            {self.component(m, 'before') for m in left_holders.get(a, ())} ==
+            {self.component(m, 'after') for m in right_holders.get(b, ())}
+        )
+        if self.is_reloc_aux(a, 'before') and self.is_reloc_aux(b, 'after') and same_reloc_component:
+            if a in self.pairs or b in self.reverse:
+                raise Mismatch(f'inconsistent generated-constant correspondence: {a}, {b}')
+            self.aux_pairs.add((a, b))
+            self.aux_left.add(a)
+            self.aux_right.add(b)
+        else:
+            if (self.pairs.get(a, b) != b or self.reverse.get(b, a) != a or
+                    a in self.aux_left or b in self.aux_right):
+                raise Mismatch(f'inconsistent generated-constant correspondence: {a}, {b}')
+            self.pairs[a], self.reverse[b] = b, a
         if (a, b) in self.checked:
             return
         self.checked.add((a, b))
         self.holders.append(a)
+        self.holder_pairs.append((a, b))
         try:
             self.compare(self.left[a], self.right[b], f'constant {a}')
         finally:
+            self.holder_pairs.pop()
             self.holders.pop()
 
     GUARD_TOKEN = re.compile(r"(?<![\w.'?!])[A-Za-z_][\w'?!]*(?:\.[A-Za-z_][\w'?!]*)*")
@@ -1076,9 +1270,30 @@ class Comparison:
             return spellings.pop() if spellings else token
         return self.GUARD_TOKEN.sub(one, text)
 
-    def normalize(self, value, side, coarse=False):
+    def aux_canonical(self):
+        if not hasattr(self, '_aux_rep_cache') or self._aux_rep_key != len(self.aux_pairs):
+            parent = {}
+            def find(x):
+                while parent.get(x, x) != x:
+                    x = parent[x]
+                return x
+            rights = defaultdict(set)
+            for a, b in self.aux_pairs:
+                parent.setdefault(a, a)
+                parent.setdefault(b, b)
+                ra, rb = find(a), find(b)
+                if ra != rb:
+                    parent[rb] = ra
+            for _, b in self.aux_pairs:
+                rights[find(b)].add(b)
+            rep = {r: min(bs) for r, bs in rights.items()}
+            self._aux_rep_cache = ({x: rep[find(x)] for x in parent}, len(self.aux_pairs))
+            self._aux_rep_key = len(self.aux_pairs)
+        return self._aux_rep_cache[0]
+
+    def normalize(self, value, side, coarse=False, downstream_eq=False):
         if isinstance(value, dict):
-            return {k: self.normalize(v, side, coarse) for k, v in value.items()}
+            return {k: self.normalize(v, side, coarse, downstream_eq) for k, v in value.items()}
         if not isinstance(value, list):
             return value
         if (side == 'before' and len(value) == 3 and value[:2] == ['syntax', 'Lean.guardMsgsCmd'] and
@@ -1093,35 +1308,45 @@ class Comparison:
                 respelled = ['syntax', 'null', [['syntax', 'Lean.Parser.Command.docComment',
                                                  [doc[2][0][2][0], ['atom', self.respell_message(text, 'guard_msgs')]]]]]
                 return ['syntax', 'Lean.guardMsgsCmd',
-                        [respelled] + [self.normalize(item, side, coarse) for item in value[2][1:]]]
+                        [respelled] + [self.normalize(item, side, coarse, downstream_eq) for item in value[2][1:]]]
         if len(value) == 4 and value[0] == 'unhygienicIdentifier':
             if coarse:  # bucketing only; the exact rule runs in compare()
-                return ['unhygienicIdentifier', self.normalize(value[3], side, coarse)]
+                return ['unhygienicIdentifier', self.normalize(value[3], side, coarse, downstream_eq)]
             # Outside a compared constant (guards, checks) no source range can
             # bind it: the spelling is compared as written.
             spelling = value[1]
             return ['unhygienicIdentifier', spelling, self.raw_marker(value[2], value[1]),
-                    self.normalize(value[3], side, coarse)]
+                    self.normalize(value[3], side, coarse, downstream_eq)]
         if len(value) == 5 and value[0] == 'quotedIdentifier':
             spelling, raw = (self.quoted(value, 'normalize') if side == 'before'
                              else (value[2], self.raw_marker(value[3], value[2])))
-            return ['quotedIdentifier', self.normalize(value[1], side, coarse), spelling, raw,
-                    self.normalize(value[4], side, coarse)]
+            return ['quotedIdentifier', self.normalize(value[1], side, coarse, downstream_eq), spelling, raw,
+                    self.normalize(value[4], side, coarse, downstream_eq)]
         if len(value) == 2 and value[0] == 'name':
             name = value[1]
             generated = self.generated_left if side == 'before' else self.generated_right
+            if coarse and downstream_eq and self.reloc_matcher_component(name, side) is not None:
+                return ['generated']
+            if coarse and side == 'after' and self.is_realized_reloc_matcher(name):
+                return ['generated']
             if name in generated and coarse:
                 return ['generated']
-            return ['name', self.pairs[name] if side == 'before' and name in generated
+            if not coarse and name in (self.aux_left if side == 'before' else self.aux_right):
+                rep = self.aux_canonical().get(name)
+                if rep is not None:
+                    return ['name', rep]
+            mapped_gen = self.pairs.get(name)
+            return ['name', mapped_gen if side == 'before' and name in generated and mapped_gen is not None
                     else self.name(name) if side == 'before' else name]
-        return [self.normalize(item, side, coarse) for item in value]
+        return [self.normalize(item, side, coarse, downstream_eq) for item in value]
 
     def compare_imports(self):
         """Direct imports of every module that no relocation row touches are
         unchanged under module rows. Imports of relocation modules may change
         (a moved declaration brings its imports), elsewhere only by edges to
         relocation modules (a user of the moved declaration imports its new
-        module)."""
+        module), except `Batteries.Tactic.OpenPrivate` when a private helper was
+        promoted via `public_from`."""
         touched = self.relocated_modules
         after = self.after.get('modules') or {}
         for module, imports in sorted((self.before.get('modules') or {}).items()):
@@ -1133,6 +1358,8 @@ class Comparison:
             expected = [[self.mapping.module(entry[0])] + list(entry[1:]) for entry in imports
                         if self.mapping.module(entry[0]) not in touched]
             actual = [list(entry) for entry in after[target] if entry[0] not in touched]
+            if self.mapping.public_from and 'Batteries.Tactic.OpenPrivate' not in [e[0] for e in actual]:
+                expected = [e for e in expected if e[0] != 'Batteries.Tactic.OpenPrivate']
             if expected != actual:
                 raise Mismatch(f'module {module}: direct imports changed: expected '
                                f'{[e[0] for e in expected]}, found {[e[0] for e in actual]}')
@@ -1156,10 +1383,13 @@ class Comparison:
     def save(self):
         """Every piece of state a speculative `pair()` may change."""
         return (self.pairs.copy(), self.reverse.copy(), self.checked.copy(), set(self.reviewed_used),
-                set(self.reviewed_here), dict(self.unhygienic_sites), list(self.respelled_literals))
+                set(self.reviewed_here), dict(self.unhygienic_sites), list(self.respelled_literals),
+                set(self.aux_pairs), set(self.aux_left), set(self.aux_right),
+                set(self.realized_matcher_pairs))
 
     def restore(self, saved):
-        (self.pairs, self.reverse, self.checked, used, here, sites, literals) = saved
+        (self.pairs, self.reverse, self.checked, used, here, sites, literals,
+         self.aux_pairs, self.aux_left, self.aux_right, self.realized_matcher_pairs) = saved
         # reviewed_used is shared with the caller across environments: restore in place.
         self.reviewed_used.clear()
         self.reviewed_used.update(used)
@@ -1200,22 +1430,34 @@ class Comparison:
                        for n in self.before['roots']):
                 self.fail(f'relocation row {row} names no authored constant in scope')
         # Generated constants are not compared by name. Match their finite
-        # kernel/attribute graphs bijectively, including unreferenced nodes.
+        # kernel/attribute graphs bijectively (modulo relocation-scoped pattern
+        # and equation auxiliaries, which Lean may split across module boundaries).
+        left_holders, right_holders = self.before.get('holders'), self.after.get('holders')
         buckets = defaultdict(list)
         for name in sorted(self.generated_right):
             try:
-                buckets[encoded(self.normalize(self.right[name], 'after', True))].append(name)
+                buckets[self.coarse_record(name, 'after')].append(name)
             except Mismatch as error:
                 self.fail(f'constant {name} (after): {error}')
         for name in sorted(self.generated_left):
-            if name in self.pairs:
+            if name in self.pairs or name in self.aux_left:
                 continue
             try:
-                key = encoded(self.normalize(self.left[name], 'before', True))
+                key = self.coarse_record(name, 'before')
             except Mismatch as error:
                 self.fail(f'constant {name}: {error}')
                 continue
-            candidates = [n for n in buckets[key] if n not in self.reverse]
+            is_aux = self.is_reloc_aux(name, 'before')
+            fresh = [n for n in buckets[key] if n not in self.reverse and n not in self.aux_right]
+            shared = [n for n in buckets[key] if n in self.aux_right] if is_aux else []
+            candidates = fresh + shared
+            if (self.is_downstream_reloc_eq(name, 'before') and left_holders is not None and
+                    right_holders is not None and name in left_holders):
+                wanted_holders = {self.component(m, 'before') for m in left_holders[name]}
+                same_h = [c for c in candidates if c in right_holders and
+                          {self.component(m, 'after') for m in right_holders[c]} == wanted_holders]
+                other_h = [c for c in candidates if c not in same_h]
+                candidates = same_h + other_h
             # Try the same (mapped) name first: for a compiler-named declaration
             # (an anonymous instance) its comparison explains a failure. A
             # generated auxiliary (`P.match_5`) is tried first as its renamed
@@ -1223,7 +1465,7 @@ class Comparison:
             # matchers of different modules must not cross (a preference only;
             # equality and holders are still checked).
             same, same_error = self.preferred_generated(name), None
-            if same in self.generated_right and same not in self.reverse:
+            if same in self.generated_right and same not in self.reverse and (is_aux or same not in self.aux_right):
                 candidates = [n for n in candidates if n != same]
                 saved = self.save()
                 try:
@@ -1242,13 +1484,31 @@ class Comparison:
             else:
                 self.fail(f'no verified generated-constant match for {name}' +
                                (f'; same-name comparison: {same_error}' if same_error else ''))
-        if self.right.keys() != self.reverse.keys():
+        left_buckets = None
+        for name in sorted(self.generated_right):
+            if name in self.reverse or name in self.aux_right:
+                continue
+            if not self.is_reloc_aux(name, 'after'):
+                continue
+            if left_buckets is None:
+                left_buckets = defaultdict(list)
+                for lname in sorted(self.generated_left):
+                    if self.is_reloc_aux(lname, 'before'):
+                        left_buckets[self.coarse_record(lname, 'before')].append(lname)
+            key = self.coarse_record(name, 'after')
+            for candidate in left_buckets[key]:
+                saved = self.save()
+                try:
+                    self.pair(candidate, name)
+                    break
+                except Mismatch:
+                    self.restore(saved)
+        if self.right.keys() != (self.reverse.keys() | self.aux_right):
             self.fail('additional generated constants after renaming')
         # Generated constants (equation lemmas, compiler-named instances) stay
         # in the modules that hold them, up to module and relocation rows.
-        left_holders, right_holders = self.before.get('holders'), self.after.get('holders')
         if left_holders is not None and right_holders is not None:
-            for a, b in sorted(self.pairs.items()):
+            for a, b in sorted(self.pairs.items() | self.aux_pairs):
                 if a not in self.generated_left or a not in left_holders or b not in right_holders:
                     continue
                 was = {self.component(m, 'before') for m in left_holders[a]}
@@ -1288,6 +1548,7 @@ class Comparison:
             raise Mismatch(f'{len(self.problems)} mismatch(es):\n' + '\n'.join(self.problems))
         return dict(status='OK', scope='exported-modules',
                     authored_constants=len(self.before['roots']), generated_constants=len(self.generated_left),
+                    relocated_auxiliary_pairs=len(self.aux_pairs),
                     guards=len(self.before['guards']), attribute_commands=len(self.before['attributes']),
                     checked_commands=len(self.before.get('checks', [])),
                     derived_literals_respelled=self.respelled_literals)

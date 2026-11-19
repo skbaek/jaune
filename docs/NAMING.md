@@ -541,6 +541,22 @@ relocation row moves it to the row's target; an unrecorded move fails
 comparison, as does a relocation row whose source module is wrong. A
 generated constant must stay in the modules that hold it (several, for a
 realized copy), up to module rows and relocation links (below).
+When a `relocation` row splits Lean's per-module pattern-match or equation
+auxiliary deduplication across linked modules (`match_N`, `_sparseCasesOn_N`,
+`eq_N`, `eq_def`, `else_eq`, `splitter`, `congr_simp`, `_sunfold`,
+`_unsafe_rec`, `_f`; never an anonymous `instance` or `@[csimp]`), matching
+relocation-scoped auxiliaries pair onto equal kernel/attribute records within
+those linked modules; every other generated constant remains a one-to-one
+bijection. Promoting a `private` declaration via `public_from` accounts for
+Lean's `semireducible -> instanceReducible` status change on its `match_N`
+helpers, and an unexported `match_N` realized behind a relocated declaration's
+`eq_def` must still match an exported verified `match_N` of that declaration.
+Likewise, when a downstream realized equation/splitter auxiliary of a relocated
+declaration (never an anonymous `instance` or `@[csimp]`) names a relocated-component
+`.match_N` helper, its before/after matcher references must belong to the same
+relocation component and all remaining kernel/attribute terms and holder modules stay
+exact; and under a non-empty `public_from` promotion only, a non-relocated module may
+drop `Batteries.Tactic.OpenPrivate` from its direct imports.
 
 Effective attributes include simp direction/priority, unfolding entries,
 `csimp` and its replacement, inline settings, reducibility, instance priority/

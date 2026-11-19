@@ -905,6 +905,225 @@ class NamingFidelityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'no exported modules'):
             CHECK.read_exports([])
 
+    def _reloc_split_case(self, leaf='match_1', third_module=False, bad_body=False,
+                          instance_attr=None, extra_right=False, with_reloc=True):
+        shared_b = 'N.moved.' + leaf
+        copy_a = 'N.stay.' + leaf
+        copy_b = 'N.moved.' + leaf
+        b_consts = {
+            'N.moved': constant(ref(shared_b)),
+            'N.stay': constant(ref(shared_b)),
+            shared_b: constant(7, dict(instance=instance_attr)) if instance_attr else constant(7),
+        }
+        a_consts = {
+            'N.moved': constant(ref(copy_b)),
+            'N.stay': constant(ref(copy_a)),
+            copy_a: constant(7, dict(instance=instance_attr)) if instance_attr else constant(7),
+            copy_b: constant(9 if bad_body else 7, dict(instance=instance_attr)) if instance_attr else constant(9 if bad_body else 7),
+        }
+        if extra_right:
+            a_consts['N.stay.match_2'] = constant(8)
+        self.before = snapshot(b_consts, ['N.moved', 'N.stay'])
+        self.after = snapshot(a_consts, ['N.moved', 'N.stay'])
+        self.before['owners'] = {'N.moved': 'A', 'N.stay': 'A'}
+        self.after['owners'] = {'N.moved': 'B' if with_reloc else 'A', 'N.stay': 'A'}
+        self.before['holders'] = {shared_b: {'A'}}
+        self.after['holders'] = {copy_a: {'C' if third_module else 'A'}, copy_b: {'B'}}
+        if extra_right:
+            self.after['holders']['N.stay.match_2'] = {'A'}
+        self.renames = self.entries(('N.moved', 'N.moved', 'relocation', dict(from_module='A', to_module='B'))) if with_reloc else self.entries()
+
+    def test_relocation_auxiliary_split_across_linked_modules(self):
+        for leaf in ('match_1', '_sparseCasesOn_1'):
+            self._reloc_split_case(leaf=leaf)
+            result = self.run_check()
+            self.assertEqual(result['status'], 'OK')
+            self.assertEqual(result['relocated_auxiliary_pairs'], 2)
+
+    def test_relocation_auxiliary_split_controls_bite(self):
+        # Controls: without relocation row, third module C, changed body, or instance attr all fail.
+        for bad_kwargs in (dict(with_reloc=False), dict(third_module=True), dict(bad_body=True), dict(instance_attr='inst')):
+            self._reloc_split_case(**bad_kwargs)
+            with self.assertRaises(CHECK.Mismatch):
+                self.run_check()
+
+    def test_relocation_extra_unmatched_after_auxiliary_fails(self):
+        self._reloc_split_case(extra_right=True)
+        with self.assertRaisesRegex(CHECK.Mismatch, 'additional generated constants'):
+            self.run_check()
+
+    def test_promoted_private_matcher_reducibility_status(self):
+        priv_f = '_private.A.0.N.f'
+        priv_m = priv_f + '.match_1'
+        self.before = snapshot({priv_f: constant(ref(priv_m)), priv_m: constant(7, dict(reducibility='Lean.ReducibilityStatus.semireducible'))}, [priv_f])
+        self.after = snapshot({'N.f': constant(ref('N.f.match_1')), 'N.f.match_1': constant(7, dict(reducibility='Lean.ReducibilityStatus.instanceReducible'))}, ['N.f'])
+        self.before['owners'], self.after['owners'] = {priv_f: 'A'}, {'N.f': 'B'}
+        self.before['holders'], self.after['holders'] = {priv_m: {'A'}}, {'N.f.match_1': {'B'}}
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', dict(from_module='A', to_module='B', public_from=priv_f)))
+        self.assertEqual(self.run_check()['status'], 'OK')
+        # Without public_from or on a non-matcher suffix, semireducible -> instanceReducible fails.
+        priv_p = priv_f + '.proof_1'
+        self.before = snapshot({priv_f: constant(ref(priv_p)), priv_p: constant(7, dict(reducibility='Lean.ReducibilityStatus.semireducible'))}, [priv_f])
+        self.after = snapshot({'N.f': constant(ref('N.f.proof_1')), 'N.f.proof_1': constant(7, dict(reducibility='Lean.ReducibilityStatus.instanceReducible'))}, ['N.f'])
+        self.before['holders'], self.after['holders'] = {priv_p: {'A'}}, {'N.f.proof_1': {'B'}}
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+        self.before = snapshot({priv_f: constant(ref(priv_m)), priv_m: constant(7, dict(reducibility='Lean.ReducibilityStatus.semireducible'))}, [priv_f])
+        self.after = snapshot({'N.f': constant(ref('N.f.match_1')), 'N.f.match_1': constant(7, dict(reducibility='Lean.ReducibilityStatus.instanceReducible'))}, ['N.f'])
+        self.before['holders'], self.after['holders'] = {priv_m: {'A'}}, {'N.f.match_1': {'B'}}
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', dict(from_module='A', to_module='B')))
+        with self.assertRaisesRegex(CHECK.Mismatch, 'authored constant set'):
+            self.run_check()
+
+    def test_realized_relocated_matcher_behind_eq_def(self):
+        priv_f = '_private.A.0.N.f'
+        priv_m2 = priv_f + '.match_2'
+        priv_eq = priv_f + '.eq_def'
+        self.before = snapshot({priv_f: constant(ref(priv_m2)), priv_m2: constant(7), priv_eq: constant(ref(priv_m2))}, [priv_f])
+        self.after = snapshot({'N.f': constant(ref('N.f.match_2')), 'N.f.match_2': constant(7), 'N.f.eq_def': constant(ref('N.f.match_3'))}, ['N.f'])
+        self.before['owners'], self.after['owners'] = {priv_f: 'A'}, {'N.f': 'B'}
+        self.before['holders'] = {priv_m2: {'A'}, priv_eq: {'A'}}
+        self.after['holders'] = {'N.f.match_2': {'B'}, 'N.f.eq_def': {'A'}}
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', dict(from_module='A', to_module='B', public_from=priv_f)))
+        self.assertEqual(self.run_check()['status'], 'OK')
+        # Control: fails when exported N.f.match_2 has a different body or when N.f did not relocate.
+        self.after['constants']['N.f.match_2'] = constant(99)
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+        self.after['constants']['N.f.match_2'] = constant(7)
+        self.before['roots'] = {priv_f}
+        self.after['roots'] = {'N.f'}
+        self.before['owners'], self.after['owners'] = {priv_f: 'A'}, {'N.f': 'A'}
+        self.after['holders']['N.f.match_2'] = {'A'}
+        self.renames = self.entries(('N.f', 'N.f', 'declaration', dict(public_from=priv_f)))
+        with self.assertRaisesRegex(CHECK.Mismatch, 'no verified generated-constant match|generated reference'):
+            self.run_check()
+
+    def test_open_private_import_drop_under_public_from_and_controls(self):
+        priv_f = '_private.A.0.N.f'
+        self.before = snapshot({priv_f: constant()}, [priv_f])
+        self.after = snapshot({'N.f': constant()}, ['N.f'])
+        self.before['owners'], self.after['owners'] = {priv_f: 'A'}, {'N.f': 'B'}
+        self.before['modules'] = {'A': [], 'C': [['A', False], ['Batteries.Tactic.OpenPrivate', False]]}
+        self.after['modules'] = {'A': [], 'B': [], 'C': [['B', False]]}
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', dict(from_module='A', to_module='B', public_from=priv_f)))
+        self.assertEqual(self.run_check()['status'], 'OK')
+        # Control 1: dropping Batteries.Tactic.OpenPrivate without public_from fails.
+        self.before = snapshot({'N.f': constant()}, ['N.f'])
+        self.after = snapshot({'N.f': constant()}, ['N.f'])
+        self.before['owners'], self.after['owners'] = {'N.f': 'A'}, {'N.f': 'B'}
+        self.before['modules'] = {'A': [], 'C': [['A', False], ['Batteries.Tactic.OpenPrivate', False]]}
+        self.after['modules'] = {'A': [], 'B': [], 'C': [['B', False]]}
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', dict(from_module='A', to_module='B')))
+        with self.assertRaisesRegex(CHECK.Mismatch, 'direct imports changed'):
+            self.run_check()
+        # Control 2: adding Batteries.Tactic.OpenPrivate under public_from fails.
+        self.before = snapshot({priv_f: constant()}, [priv_f])
+        self.after = snapshot({'N.f': constant()}, ['N.f'])
+        self.before['owners'], self.after['owners'] = {priv_f: 'A'}, {'N.f': 'B'}
+        self.before['modules'] = {'A': [], 'C': [['A', False]]}
+        self.after['modules'] = {'A': [], 'B': [], 'C': [['B', False], ['Batteries.Tactic.OpenPrivate', False]]}
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', dict(from_module='A', to_module='B', public_from=priv_f)))
+        with self.assertRaisesRegex(CHECK.Mismatch, 'direct imports changed'):
+            self.run_check()
+        # Control 3: dropping another import under public_from fails.
+        self.before['modules'] = {'A': [], 'C': [['A', False], ['Jaune.Other', False]]}
+        self.after['modules'] = {'A': [], 'B': [], 'C': [['B', False]]}
+        with self.assertRaisesRegex(CHECK.Mismatch, 'direct imports changed'):
+            self.run_check()
+
+    def test_downstream_realized_reloc_eq_matcher_and_controls(self):
+        # Downstream module C realizes N.stay.eq_1 / _private.C.0.N.stay.match_5.eq_1
+        # referencing shifted match_k of declarations in relocation component {A, B}.
+        self.before = snapshot({
+            'N.moved': constant(1),
+            'N.stay': constant(ref('N.stay.match_1')),
+            'N.stay.match_1': constant(10),
+            'N.stay.match_3': constant(11),
+            'N.stay.eq_1': constant(ref('N.stay.match_1')),
+            '_private.C.0.N.stay.match_5.eq_1': constant(ref('N.stay.match_1')),
+        }, ['N.moved', 'N.stay'])
+        self.after = snapshot({
+            'N.moved': constant(1),
+            'N.stay': constant(ref('N.stay.match_1')),
+            'N.stay.match_1': constant(10),
+            'N.stay.match_3': constant(11),
+            'N.stay.eq_1': constant(ref('N.stay.match_3')),
+            '_private.C.0.N.stay.match_9.eq_1': constant(ref('N.stay.match_3')),
+        }, ['N.moved', 'N.stay'])
+        self.before['owners'] = {'N.moved': 'A', 'N.stay': 'A'}
+        self.after['owners'] = {'N.moved': 'B', 'N.stay': 'A'}
+        self.before['holders'] = {
+            'N.stay.match_1': {'A'}, 'N.stay.match_3': {'A'},
+            'N.stay.eq_1': {'C'}, '_private.C.0.N.stay.match_5.eq_1': {'C'},
+        }
+        self.after['holders'] = {
+            'N.stay.match_1': {'A'}, 'N.stay.match_3': {'A'},
+            'N.stay.eq_1': {'C'}, '_private.C.0.N.stay.match_9.eq_1': {'C'},
+        }
+        self.renames = self.entries(('N.moved', 'N.moved', 'relocation', dict(from_module='A', to_module='B')))
+        self.assertEqual(self.run_check()['status'], 'OK')
+        # Control (a): mutating another constant/payload inside eq_1 fails.
+        self.after['constants']['N.stay.eq_1'] = constant([ref('N.stay.match_3'), ref('Nat')])
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+        self.after['constants']['N.stay.eq_1'] = constant(ref('N.stay.match_3'))
+        # Control (b): changing downstream holder C -> D fails.
+        self.after['holders']['N.stay.eq_1'] = {'D'}
+        with self.assertRaisesRegex(CHECK.Mismatch, "became \\['D'\\]"):
+            self.run_check()
+        self.after['holders']['N.stay.eq_1'] = {'C'}
+        # Control (c): referencing a matcher in a non-relocated module Z fails.
+        self.before['constants']['N.z'] = constant(1)
+        self.after['constants']['N.z'] = constant(1)
+        self.before['constants']['N.stay.eq_1'] = constant(ref('N.z.match_1'))
+        self.before['roots'].add('N.z')
+        self.after['roots'].add('N.z')
+        self.before['owners']['N.z'], self.after['owners']['N.z'] = 'Z', 'Z'
+        with self.assertRaisesRegex(CHECK.Mismatch, 'reference N.z.match_1 became N.stay.match_3'):
+            self.run_check()
+        # Control (d): changing matcher reference inside an authored consumer fails.
+        self.before['constants']['N.stay.eq_1'] = constant(ref('N.stay.match_1'))
+        self.before['constants']['N.consumer'] = constant(ref('N.stay.match_1'))
+        self.after['constants']['N.consumer'] = constant(ref('N.stay.match_3'))
+        self.before['roots'].add('N.consumer')
+        self.after['roots'].add('N.consumer')
+        self.before['owners']['N.consumer'], self.after['owners']['N.consumer'] = 'C', 'C'
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
+    def test_downstream_eq_prefers_same_holder_component_under_public_from(self):
+        priv_f = '_private.A.0.N.f'
+        self.before = snapshot({
+            priv_f: constant(ref(priv_f + '.match_2')),
+            priv_f + '.match_2': constant(10),
+            '_private.A.0.N.f.match_2.eq_1': constant(ref(priv_f + '.match_2')),
+            '_private.Bridge.0.N.f.match_3.eq_1': constant(ref(priv_f + '.match_3')),
+        }, [priv_f])
+        self.after = snapshot({
+            'N.f': constant(ref('N.f.match_2')),
+            'N.f.match_2': constant(10),
+            '_private.A.0.N.f.match_3.eq_1': constant(ref('N.f.match_3')),
+            '_private.Bridge.0.N.f.match_3.eq_1': constant(ref('N.f.match_3')),
+        }, ['N.f'])
+        self.before['owners'], self.after['owners'] = {priv_f: 'A'}, {'N.f': 'B'}
+        self.before['holders'] = {
+            priv_f + '.match_2': {'A'},
+            '_private.A.0.N.f.match_2.eq_1': {'A'},
+            '_private.Bridge.0.N.f.match_3.eq_1': {'Bridge'},
+        }
+        self.after['holders'] = {
+            'N.f.match_2': {'B'},
+            '_private.A.0.N.f.match_3.eq_1': {'A'},
+            '_private.Bridge.0.N.f.match_3.eq_1': {'Bridge'},
+        }
+        self.renames = self.entries(('N.f', 'N.f', 'relocation', dict(from_module='A', to_module='B', public_from=priv_f)))
+        self.assertEqual(self.run_check()['status'], 'OK')
+        # Control: missing holder on Bridge still fails.
+        self.after['holders']['_private.Bridge.0.N.f.match_3.eq_1'] = {'Other'}
+        with self.assertRaisesRegex(CHECK.Mismatch, "became \\['Other'\\]"):
+            self.run_check()
+
 
 if __name__ == '__main__':
     unittest.main()
