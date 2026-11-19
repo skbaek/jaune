@@ -1053,6 +1053,153 @@ local instance instLawfulMonadEST (ε σ : Type) : LawfulMonad (EST ε σ) := .m
 local instance instLawfulMonadEIO (ε : Type) : LawfulMonad (EIO ε) :=
   inferInstanceAs (LawfulMonad (EST ε IO.RealWorld))
 
+section Template
+
+omit [Checked.LegacyTransaction]
+
+variable (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State) (trace frames : IO.FS.Handle)
+  (left right : Checked.LegacyTransaction)
+
+local notation "jsonSink" => TraceJson.sink cfg state trace frames
+
+private theorem instruction_template (context : Trace.Context) (msg : Checked.Message)
+    (r : Checked.Frame.Running) (step : Except Fault Checked.Step) :
+    jsonSink (.instruction context (Checked.Trace.evm (msg.toLegacy left.template) r)
+        (@Checked.Trace.step left step)) =
+      jsonSink (.instruction context (Checked.Trace.evm (msg.toLegacy right.template) r)
+        (@Checked.Trace.step right step)) := by
+  cases step with
+  | error => rfl
+  | ok step => cases step <;> rfl
+
+private theorem entered_template (context : Trace.Context) (f g : Frame) (e e' : Frame.Entry) :
+    jsonSink (.entered context f e) = jsonSink (.entered context g e') := rfl
+
+private theorem settled_template (context : Trace.Context) (f : Checked.Frame)
+    (result : Except Fault Frame.Result) :
+    jsonSink (.settled context (@Checked.Trace.frame left f) result) =
+      jsonSink (.settled context (@Checked.Trace.frame right f) result) := by
+  cases result with
+  | error => rfl
+  | ok result => cases result <;> rfl
+
+/-- The JSON sink reads the typed message and frame observations in each emitted row.
+The transaction template affects neither the stream nor the numbering of frames. -/
+private theorem execFueled_json_template (fuel : Nat) :
+    ∀ (msg : Checked.Message) (r : Checked.Frame.Running) (context : Trace.Context) (nextFrame : Nat),
+      Checked.Trace.CertifiedResult.nextFrame <$>
+        @Checked.Trace.execFueled left IO _ jsonSink (msg.toLegacy left.template) r fuel context nextFrame =
+      Checked.Trace.CertifiedResult.nextFrame <$>
+        @Checked.Trace.execFueled right IO _ jsonSink (msg.toLegacy right.template) r fuel context nextFrame := by
+  induction fuel with
+  | zero =>
+    intro msg r context nextFrame
+    rw [@checked_zero left, @checked_zero right]
+  | succ fuel ih =>
+    intro msg r context nextFrame
+    have instruction := instruction_template cfg state trace frames left right context msg r
+    have entered (context : Trace.Context) (f g : Frame) (e e' : Frame.Entry) :=
+      entered_template cfg state trace frames context f g e e'
+    have settled := settled_template cfg state trace frames left right
+    cases hs : Checked.step r with
+    | error fault =>
+      rw [@checked_fault left _ _ _ _ _ _ _ _ hs, @checked_fault right _ _ _ _ _ _ _ _ hs, instruction]
+    | ok step =>
+      cases step with
+      | exit result =>
+        rw [@checked_exit left _ _ _ _ _ _ _ _ hs, @checked_exit right _ _ _ _ _ _ _ _ hs, instruction]
+      | next pc s =>
+        rw [@checked_next left _ _ _ _ _ _ _ _ _ hs, @checked_next right _ _ _ _ _ _ _ _ _ hs, instruction]
+        exact bind_congr fun _ => ih msg _ context nextFrame
+      | spawn child pending pc =>
+        let childContext := {context with frame := nextFrame, depth := context.depth + 1}
+        cases he : Checked.enter child with
+        | done result =>
+          have sameEntry := entered childContext (@Checked.Trace.frame left child)
+            (@Checked.Trace.frame right child) (.done result) (.done result)
+          rcases hr : Checked.Trace.resumed r.context.block.rules child pending result with fault | ⟨halt, s⟩ | s
+          · rw [@checked_done_stop left _ _ _ _ _ _ _ _ _ _ _ _ hs he hr (by intro s h; cases h),
+                @checked_done_stop right _ _ _ _ _ _ _ _ _ _ _ _ hs he hr (by intro s h; cases h),
+                instruction, sameEntry, settled]
+          · rw [@checked_done_stop left _ _ _ _ _ _ _ _ _ _ _ _ hs he hr (by intro s h; cases h),
+                @checked_done_stop right _ _ _ _ _ _ _ _ _ _ _ _ hs he hr (by intro s h; cases h),
+                instruction, sameEntry, settled]
+          · rw [@checked_done_ok left _ _ _ _ _ _ _ _ _ _ _ _ hs he hr,
+                @checked_done_ok right _ _ _ _ _ _ _ _ _ _ _ _ hs he hr, instruction, sameEntry, settled]
+            exact bind_congr fun _ => bind_congr fun _ => bind_congr fun _ => bind_congr fun _ =>
+              ih msg _ context (nextFrame + 1)
+        | run cr =>
+          have sameEntry := entered childContext (@Checked.Trace.frame left child)
+            (@Checked.Trace.frame right child) (.run (Checked.Trace.evm (@Checked.Frame.toLegacy child left).message cr))
+            (.run (Checked.Trace.evm (@Checked.Frame.toLegacy child right).message cr))
+          have childTrace : Checked.Trace.CertifiedResult.nextFrame <$>
+              @Checked.Trace.execFueled left IO _ jsonSink (@Checked.Frame.toLegacy child left).message
+                cr fuel childContext (nextFrame + 1) =
+              Checked.Trace.CertifiedResult.nextFrame <$>
+                @Checked.Trace.execFueled right IO _ jsonSink (@Checked.Frame.toLegacy child right).message
+                  cr fuel childContext (nextFrame + 1) :=
+            ih child.message cr childContext (nextFrame + 1)
+          cases hx : (Checked.execFueled cr fuel).run with
+          | none =>
+            rw [@checked_run_none left _ _ _ _ _ _ _ _ _ _ _ hs he hx,
+                @checked_run_none right _ _ _ _ _ _ _ _ _ _ _ hs he hx, instruction, sameEntry, childTrace]
+          | some result =>
+            rcases hr : Checked.Trace.resumed r.context.block.rules child pending
+              (result >>= Checked.settle child) with fault | ⟨halt, s⟩ | s
+            · rw [@checked_run_stop left _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr (by intro s h; cases h),
+                  @checked_run_stop right _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr (by intro s h; cases h),
+                  instruction, sameEntry, childTrace, settled]
+            · rw [@checked_run_stop left _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr (by intro s h; cases h),
+                  @checked_run_stop right _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr (by intro s h; cases h),
+                  instruction, sameEntry, childTrace, settled]
+            · rw [@checked_run_ok left _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr,
+                  @checked_run_ok right _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr,
+                  instruction, sameEntry, childTrace, settled]
+              exact bind_congr fun _ => bind_congr fun _ => bind_congr fun n =>
+                bind_congr fun _ => bind_congr fun _ => ih msg _ context n
+
+/-- Changing projection-only transaction metadata preserves the entire traced frame action. -/
+theorem runFrame_json_template (f : Checked.Frame) (runId : String) :
+    @Checked.Trace.runFrame left IO _ jsonSink f runId =
+      @Checked.Trace.runFrame right IO _ jsonSink f runId := by
+  let context : Trace.Context := ⟨runId, 0, 1⟩
+  unfold Checked.Trace.runFrame
+  dsimp only
+  split
+  next result _ =>
+    rw [entered_template cfg state trace frames context (@Checked.Trace.frame left f)
+      (@Checked.Trace.frame right f) (.done result) (.done result)]
+    rw [settled_template cfg state trace frames left right]
+  next r _ =>
+    rw [entered_template cfg state trace frames context (@Checked.Trace.frame left f)
+      (@Checked.Trace.frame right f) (.run (Checked.Trace.evm (@Checked.Frame.toLegacy f left).message r))
+      (.run (Checked.Trace.evm (@Checked.Frame.toLegacy f right).message r))]
+    refine bind_congr fun _ => ?_
+    rw [checked_execution_bind, checked_execution_bind, @checked_exec left, @checked_exec right]
+    have driver : Checked.Trace.CertifiedResult.nextFrame <$>
+        @Checked.Trace.execFueled left IO _ jsonSink (@Checked.Frame.toLegacy f left).message
+          r (sufficientFuel r.state.machine.gasMeasure) context 1 =
+        Checked.Trace.CertifiedResult.nextFrame <$>
+        @Checked.Trace.execFueled right IO _ jsonSink (@Checked.Frame.toLegacy f right).message
+          r (sufficientFuel r.state.machine.gasMeasure) context 1 :=
+      execFueled_json_template cfg state trace frames left right _ f.message r context 1
+    rw [driver]
+    exact bind_congr fun _ => by
+      rw [settled_template cfg state trace frames left right]
+
+/-- Authorization reporting and frame tracing do not depend on the transaction template. -/
+private theorem runPrepared_json_template (reportRefund : Nat → IO Unit)
+    (prepared : Checked.TopLevel.Preparation) (runId : String) :
+    @Checked.Trace.runPrepared left IO _ jsonSink reportRefund prepared runId =
+      @Checked.Trace.runPrepared right IO _ jsonSink reportRefund prepared runId := by
+  cases prepared with
+  | refused => rfl
+  | frame f refund =>
+    simp only [Checked.Trace.runPrepared]
+    rw [runFrame_json_template cfg state trace frames left right]
+
+end Template
+
 /-- **Byte-identical serialisation.** For every checked frame, the checked tracer through the
 JSON sink makes the same row writes as the `Devm` tracer through it on the frame's projection,
 and returns the same result. -/
@@ -1086,6 +1233,27 @@ theorem runFrame_json_top (cfg : TraceJson.Config) (state : IO.Ref TraceJson.Sta
   letI : Checked.LegacyTransaction := ⟨msg.tenv.stat⟩
   change (fun x => (x.value, x.nextFrame)) <$> Checked.Trace.runFrame _ _ _ = _
   rw [runFrame_json, frame_topFrame]
+
+omit [Checked.LegacyTransaction] in
+private theorem directFrame_eq (msg : Msg) :
+    Checked.Trace.topFrame msg msg.target.isNone =
+      ⟨(Checked.TopLevel.Input.ofLegacy msg).message, (Checked.TopLevel.Input.ofLegacy msg).checkpoint⟩ := by
+  rw [Checked.TopLevel.Input.ofLegacy_checkpoint]
+  rfl
+
+omit [Checked.LegacyTransaction] in
+/-- Tracing the directly initialized Checked frame has the old message scope's JSON effects
+and settled result. The message scope enters the frame without transaction preparation. -/
+theorem runDirectFrame_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
+    (trace frames : IO.FS.Handle) (template : Checked.LegacyTransaction) (msg : Msg) (runId : String) :
+    let input := Checked.TopLevel.Input.ofLegacy msg
+    (fun x => (x.value, x.nextFrame)) <$> @Checked.Trace.runFrame template IO _
+        (TraceJson.sink cfg state trace frames) ⟨input.message, input.checkpoint⟩ runId =
+      (fun x => (x.value, x.nextFrame)) <$> Trace.runFrame
+        (TraceJson.sink cfg state trace frames) (Frame.ofTop msg msg.target.isNone) runId := by
+  dsimp only
+  rw [← directFrame_eq msg, runFrame_json_template cfg state trace frames template ⟨msg.tenv.stat⟩]
+  exact runFrame_json_top cfg state trace frames msg msg.target.isNone runId
 
 /-- The Checked result and the observation consumed by the current transaction settlement. -/
 structure MessageResult (msg : Msg) extends TraceTransaction.Certified (TopLevel.run msg) where
@@ -1177,6 +1345,152 @@ theorem runMessage_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State
         | solve | simp only [bind_assoc, pure_bind]
         | split <;> rename_i he' <;> rw [he] at he' <;> cases he'
           simp only [bind_assoc, pure_bind]
+
+omit [Checked.LegacyTransaction] in
+/-- Native top-level preparation and tracing have the exact JSON and refund effects of
+the waiting message, for any choice of projection-only transaction metadata. -/
+theorem runInput_json_observe (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
+    (trace frames : IO.FS.Handle) (template : Checked.LegacyTransaction)
+    (authorizationRefund : Nat → IO Unit) (msg : Msg) (runId : String) :
+    (fun _ => ()) <$> @Checked.Trace.runInput template IO _
+        (TraceJson.sink cfg state trace frames)
+        (if msg.benv.stat.rules.stateGas.isNone && msg.target.isSome
+          then authorizationRefund else fun _ => pure ())
+        (Checked.TopLevel.Input.ofLegacy msg) runId =
+      (fun _ => ()) <$> TraceTransaction.runMessage
+        (TraceJson.sink cfg state trace frames) authorizationRefund msg runId := by
+  rw [← runMessage_json]
+  cases hp : TopLevel.prepare msg with
+  | error fault =>
+    have native : Checked.TopLevel.prepareNative (.ofLegacy msg) = .error fault := by
+      rw [Checked.TopLevel.prepareNative_observe]
+      unfold Checked.TopLevel.prepare
+      split <;> rename_i h <;> rw [hp] at h <;> cases h
+      rfl
+    unfold Checked.Trace.runInput runMessage
+    split <;> rename_i h <;> rw [native] at h <;> cases h
+    split <;> rename_i h <;> rw [hp] at h <;> cases h
+    simp only [map_pure]
+  | ok prepared =>
+    let checked := Checked.TopLevel.ofPreparation msg prepared hp
+    have native : Checked.TopLevel.prepareNative (.ofLegacy msg) = .ok (.ofWaiting checked) := by
+      rw [Checked.TopLevel.prepareNative_observe]
+      unfold Checked.TopLevel.prepare
+      split <;> rename_i h <;> rw [hp] at h <;> cases h
+      rfl
+    have prep : (Checked.TopLevel.Prepared.ofWaiting checked).toPreparation = checked := by
+      cases checked <;> rfl
+    let waitingTemplate : Checked.LegacyTransaction := ⟨match prepared with
+      | .frame frame _ => frame.message.context.tx
+      | .refused .. => msg.tenv.stat⟩
+    unfold Checked.Trace.runInput runMessage
+    split <;> rename_i h <;> rw [native] at h <;> cases h
+    generalize (if msg.benv.stat.rules.stateGas.isNone && msg.target.isSome
+      then authorizationRefund else fun _ => pure () : Nat → IO Unit) = report
+    split <;> rename_i h <;> rw [hp] at h <;> cases h
+    simp only [map_bind, map_pure]
+    rw [prep, runPrepared_json_template cfg state trace frames template waitingTemplate]
+
+omit [Checked.LegacyTransaction] in
+/-- The production signed-transaction tracer has the same JSON and refund effects as the
+waiting tracer, including admission failures, preparation refusals and immediate exits. -/
+theorem runNativeTransaction_json_effects (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
+    (trace frames : IO.FS.Handle) (template : Checked.LegacyTransaction)
+    (authorizationRefund : Nat → IO Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction)
+    (index : Nat) (runId : String) :
+    (fun _ => ()) <$> @Checked.Trace.runTransaction template IO _
+        (TraceJson.sink cfg state trace frames) authorizationRefund benv bout tx index runId =
+      (fun _ => ()) <$> TraceTransaction.runTransaction
+        (TraceJson.sink cfg state trace frames) authorizationRefund benv bout tx index runId := by
+  unfold Checked.Trace.runTransaction TraceTransaction.runTransaction
+  split
+  next error ha =>
+    split <;> rename_i h <;> rw [ha] at h <;> cases h
+    simp only [map_pure]
+  next admitted ha =>
+    cases hp : Transaction.prepare admitted tx index with
+    | error error =>
+      have hn : Checked.Transaction.prepare admitted.benv.stat.toBlockContext
+          admitted.benv.stat.origState admitted tx = .error error := by
+        rw [Checked.Transaction.prepare_observe admitted tx index, hp]
+        rfl
+      split <;> rename_i h <;> rw [hn] at h <;> cases h
+      split <;> rename_i h <;> rw [ha] at h <;> cases h
+      split <;> rename_i h <;> rw [hp] at h <;> cases h
+      simp only [map_pure]
+    | ok prepared =>
+      have hn : Checked.Transaction.prepare admitted.benv.stat.toBlockContext
+          admitted.benv.stat.origState admitted tx = .ok (.ofLegacy prepared) := by
+        rw [Checked.Transaction.prepare_observe admitted tx index, hp]
+        rfl
+      split <;> rename_i h <;> rw [hn] at h <;> cases h
+      split <;> rename_i h <;> rw [ha] at h <;> cases h
+      split <;> rename_i h <;> rw [hp] at h <;> cases h
+      simp only [← bind_pure_comp, bind_assoc, pure_bind]
+      have input : (Checked.Transaction.Prepared.ofLegacy prepared).input =
+          Checked.TopLevel.Input.ofLegacy prepared.msg := rfl
+      have refund : ((Checked.TopLevel.Input.ofLegacy prepared.msg).message.context.block.rules.stateGas.isNone &&
+          (Checked.TopLevel.Input.ofLegacy prepared.msg).message.target.isSome) =
+          (prepared.msg.benv.stat.rules.stateGas.isNone && prepared.msg.target.isSome) := rfl
+      rw [input, refund]
+      simpa only [← bind_pure_comp] using
+        runInput_json_observe cfg state trace frames template authorizationRefund prepared.msg runId
+
+omit [Checked.LegacyTransaction] in
+private theorem waitingMessage_of_success {benv bout tx index run output}
+    (traced : TraceTransaction.TransactionResult benv bout tx index)
+    (h : Transaction.run benv bout tx index = .ok (run, output)) :
+    traced.messageRun = some run.message := by
+  unfold Transaction.run at h
+  obtain ⟨admitted, ha, h⟩ := Except.bind_eq_ok h
+  obtain ⟨prepared, hp, h⟩ := Except.bind_eq_ok h
+  obtain ⟨message, hm, hs⟩ := Except.bind_eq_ok h
+  have hmessage : TopLevel.run prepared.msg = .ok message := by
+    cases hw : TopLevel.run prepared.msg <;> rw [hw] at hm <;> cases hm
+    rfl
+  unfold Transaction.settleRun at hs
+  obtain ⟨_, _, hs⟩ := Except.bind_eq_ok hs
+  cases hs
+  rw [traced.observes]
+  simp only [TraceTransaction.prepareTransaction, ha, bind, Except.bind, hp, Except.toOption,
+    Option.bind, hmessage]
+
+omit [Checked.LegacyTransaction] in
+/-- Both signed tracers produce the same JSON effects and the same observations consumed by
+the transaction summary, including the final state, block output, return bytes and halt. -/
+theorem runNativeTransaction_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
+    (trace frames : IO.FS.Handle) (template : Checked.LegacyTransaction)
+    (authorizationRefund : Nat → IO Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction)
+    (index : Nat) (runId : String) :
+    let native (r : Checked.Trace.TransactionResult benv bout tx index) :=
+      (r.value.map (fun (run, out) => ((run.state, out), run.message.settlement run.entry))).map
+        (fun (out, effects) => (out, some effects))
+    let waiting (r : TraceTransaction.TransactionResult benv bout tx index) :=
+      r.value.map (fun out => (out, r.messageRun.map Checked.TopLevel.Settlement.ofLegacy))
+    native <$> @Checked.Trace.runTransaction template IO _
+        (TraceJson.sink cfg state trace frames) authorizationRefund benv bout tx index runId =
+      waiting <$> TraceTransaction.runTransaction
+        (TraceJson.sink cfg state trace frames) authorizationRefund benv bout tx index runId := by
+  intro native waiting
+  let observed := ((Transaction.run benv bout tx index).map
+    (fun (run, out) => ((run.state, out), Checked.TopLevel.Settlement.ofLegacy run.message))).map
+      (fun (out, effects) => (out, some effects))
+  have hl : native = (fun _ : Unit => observed) ∘ (fun _ => ()) := by
+    funext result
+    dsimp only [native, observed, Function.comp_apply]
+    rw [result.erases, Checked.Transaction.run_settlement_observe]
+  have hr : waiting = (fun _ : Unit => observed) ∘ (fun _ => ()) := by
+    funext result
+    dsimp only [waiting, observed, Function.comp_apply]
+    rw [result.erases]
+    cases h : Transaction.run benv bout tx index with
+    | error => rfl
+    | ok value =>
+      rcases value with ⟨run, out⟩
+      rw [waitingMessage_of_success result h]
+      rfl
+  rw [hl, hr]
+  simp only [comp_map, runNativeTransaction_json_effects]
 
 /-! ### The transaction boundary -/
 

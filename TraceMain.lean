@@ -48,7 +48,7 @@ private def decodeBenv (input : Json) (fork : Fork) (rules : ForkRules) : IO Ben
       slotNumber := env.slotNumber } }
   return benv
 
-private def decodeMessage (input : Json) (benv : Benv) (rules : ForkRules) : IO Msg := do
+private def decodeMessage (input : Json) (benv : Benv) (rules : ForkRules) : IO Checked.Frame := do
   let j ← required input "message"
   T8n.requireKnownFields "trace message" j ["kind", "caller", "address", "gas", "value",
     "input", "origin", "gasPrice", "stateGas", "static", "transferValue", "disablePrecompiles",
@@ -83,31 +83,35 @@ private def decodeMessage (input : Json) (benv : Benv) (rules : ForkRules) : IO 
   let stateGas ← T8n.natOr j "stateGas" 0
   if rules.stateGas.isNone && stateGas != 0 then
     throw (IO.userError "stateGas requires a fork with state gas")
-  let msg : Msg := { (default : Msg) with
-    benv := benv
-    tenv := { (default : Tenv) with stat := { (default : TenvStat) with
-      origin := origin, gasPrice := (← T8n.natOr j "gasPrice" 0), gas := gas,
-      stateGasReservoir := stateGas } }
-    caller := caller
-    target := if kind == "call" then some address else none
-    currentTarget := address
-    gas := gas
-    value := value.toU256
-    data := if kind == "call" then data else []
-    codeAddress := if kind == "call" then some address else none
-    code := if kind == "call" then benv.state.getCode address else ⟨data.toArray⟩
-    depth := 1024
-    shouldTransferValue := (← boolOr j "transferValue" true)
-    isStatic := (← boolOr j "static" false)
-    disablePrecompiles := (← boolOr j "disablePrecompiles" false)
-    accessedAddresses := accessed
-    accessedStorageKeys := keys
+  let gasPrice ← T8n.natOr j "gasPrice" 0
+  let transfersValue ← boolOr j "transferValue" true
+  let isStatic ← boolOr j "static" false
+  let disablePrecompiles ← boolOr j "disablePrecompiles" false
+  let call := kind == "call"
+  let target := if call then some address else none
+  let message : Checked.Message := {
+    context := {
+      caller
+      recipient := address
+      value := value.toU256
+      calldata := if call then data else []
+      code := if call then benv.state.getCode address else ⟨data.toArray⟩
+      depthLeft := 1024
+      isStatic
+      block := benv.stat.toBlockContext
+      tx := { origin, gasPrice, blobVersionedHashes := hashes, originalState := benv.stat.origState } }
+    kind := if call then .call else .create
+    target
+    codeAddress := target
+    gas
+    transfersValue
+    disablePrecompiles
     stateGasGrant := stateGas }
-  return { msg with tenv := { msg.tenv with stat := {
-    msg.tenv.stat with blobVersionedHashes := hashes } } }
+  let world : World := ⟨benv.state, .empty, benv.storageWrites⟩
+  return ⟨message, message.initialCheckpoint world accessed keys benv.createdAccounts .emptyWithCapacity⟩
 
 private inductive Input where
-  | message (msg : Msg)
+  | message (frame : Checked.Frame)
   | transaction (benv : Benv) (tx : Transaction)
 
 private def writeRow (cfg : TraceJson.Config) (handle : IO.FS.Handle) (row : Json) : IO Unit := do
@@ -151,9 +155,8 @@ def run (inputPath outputPath : String) : IO Unit := do
   let frames ← IO.FS.Handle.mk (directory / "frames.jsonl") .write
   let state ← IO.mkRef ({} : TraceJson.State)
   let details ← match selected with
-    | .message msg => do
-      let frame := Checked.Trace.topFrame msg msg.target.isNone
-      let _ ← @Checked.Trace.runFrame ⟨msg.tenv.stat⟩ IO _
+    | .message frame => do
+      let _ ← @Checked.Trace.runFrame ⟨default⟩ IO _
         (TraceJson.sink cfg state trace frames) frame runId
       if !(← state.get).closed then throw (IO.userError "trace did not complete")
       pure [("scope", Json.str "message"), ("outcome", Json.str "executed"),

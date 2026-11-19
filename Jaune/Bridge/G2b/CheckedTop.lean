@@ -1178,12 +1178,24 @@ theorem Transaction.settleRun_observe {admitted : Jaune.Transaction.Admitted} {t
     TopLevel.settlement_observe hm hr, TopLevel.refundCounter_observe hm hr]
   cases (TopLevel.observe prepared.msg preparation checked).refundCounter <;> rfl
 
-/-- Both signed runners produce the same final world and block output, with identical errors
-at admission, preparation, execution and settlement. -/
-theorem Transaction.run_observe (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction)
+private theorem Transaction.settleRun_effects {admitted : Jaune.Transaction.Admitted}
+    {prepared : Transaction.Prepared} {tx : Jaune.Transaction} {index : Nat}
+    {checked : TopLevel.Run} {result : TransactionRun} {output : BlockOutput}
+    (h : settleRun admitted prepared tx index checked = .ok (result, output)) :
+    result.message.settlement result.entry = checked.settlement prepared.input := by
+  unfold settleRun at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  cases h
+  rfl
+
+/-- The signed runners agree on the final world, block output and settled message effects.
+Errors agree at admission, preparation, execution and settlement. -/
+theorem Transaction.run_settlement_observe (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction)
     (index : Nat) :
-    (run benv bout tx index).map (fun (result, output) => (result.state, output)) =
-      (Jaune.Transaction.run benv bout tx index).map (fun (result, output) => (result.state, output)) := by
+    (run benv bout tx index).map
+      (fun (result, output) => ((result.state, output), result.message.settlement result.entry)) =
+    (Jaune.Transaction.run benv bout tx index).map
+      (fun (result, output) => ((result.state, output), TopLevel.Settlement.ofLegacy result.message)) := by
   unfold run Jaune.Transaction.run
   cases ha : Jaune.Transaction.admit benv bout tx index with
   | error => rfl
@@ -1207,9 +1219,22 @@ theorem Transaction.run_observe (benv : Benv) (bout : BlockOutput) (tx : Jaune.T
         | ok checked =>
           simp only [Except.mapError, Except.map, bind, Except.bind]
           rw [← Transaction.settleRun_observe hp hm hr]
-          cases settleRun admitted (Prepared.ofLegacy prepared) tx index checked with
+          cases hs : settleRun admitted (Prepared.ofLegacy prepared) tx index checked with
           | error => rfl
-          | ok output => cases output; rfl
+          | ok output =>
+            rcases output with ⟨result, out⟩
+            have effects := (Transaction.settleRun_effects hs).trans (TopLevel.settlement_observe hm hr)
+            exact congrArg (fun x => Except.ok ((result.state, out), x)) effects
+
+/-- Both signed runners produce the same final world and block output, with identical errors. -/
+theorem Transaction.run_observe (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction)
+    (index : Nat) :
+    (run benv bout tx index).map (fun (result, output) => (result.state, output)) =
+      (Jaune.Transaction.run benv bout tx index).map (fun (result, output) => (result.state, output)) := by
+  have h := congrArg (Except.map Prod.fst) (Transaction.run_settlement_observe benv bout tx index)
+  generalize run benv bout tx index = checked at h ⊢
+  generalize Jaune.Transaction.run benv bout tx index = waiting at h ⊢
+  rcases checked with e | ⟨r, b⟩ <;> rcases waiting with e | ⟨r, b⟩ <;> exact h
 
 /-- The original state extracted from a successful signed transaction is the world before
 admission. Any entered frame therefore sees the block prefix that led to this transaction. -/
