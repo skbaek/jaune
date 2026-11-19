@@ -13,8 +13,6 @@ Old side = cut D's `Staging.stateTransitionCoreE` (`Jaune.Run.Body`), whose own 
   check fails first with the same reason and text.
 * `E.stateTransitionCoreE_eq`: **the bridge.** The staged block transition equals cut D's, for every
   error embedding, fork, chain, block and ommer check, on the whole result.
-* `BlockRun.run_final`, `E.stateTransitionCoreE_eq_run`: the run keeps what the
-  streaming fold keeps, and the transition reads the block run's commitments.
 * `E.stateTransitionCoreE_difference`: cut E composed with cut D's difference theorem (decode
   before the system calls, decision 14) and W2-T's (an unknown type byte is an invalid block,
   decision 16), against `ba15f397`'s `stateTransitionCoreE`: equal except on
@@ -80,69 +78,6 @@ theorem E.stateTransitionCoreE_eq_of_not_split {ε : Type} (embed : TransitionEr
       stateTransitionCoreE embed f ch block checkOmmers := by
   rw [E.stateTransitionCoreE_eq,
     Jaune.Bridge.G2a.stateTransitionCoreE_eq_of_not_split embed f ch block checkOmmers h]
-
-/-! ### The block run -/
-
-/-- The block run's final prefix is the importer's body. -/
-theorem BlockRun.run_final (f : Fork) (ch : BlockChain) (block : Block) :
-    BlockRun.final <$> BlockRun.run f ch block =
-      Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers
-        block.withdrawals := by
-  unfold BlockRun.run Body.importer
-  simp only [bind, Except.bind]
-  cases block.transactions.mapM (decodeTransaction (initBlockEnvironment f ch block.header).stat.rules) with
-  | error e => rfl
-  | ok txs =>
-    have h := (Body.fold_eq_run (initBlockEnvironment f ch block.header)
-      (Body.Prefix.init (initBlockEnvironment f ch block.header).state)
-      (Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals)).symm
-    dsimp only
-    cases hr : Body.run (initBlockEnvironment f ch block.header)
-        (Body.Prefix.init (initBlockEnvironment f ch block.header).state)
-        (Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals) with
-    | error e => rw [hr] at h; exact h
-    | ok sq => rw [hr] at h; exact h
-
-theorem BlockRun.run_fork {f : Fork} {ch : BlockChain} {block : Block} {r : BlockRun}
-    (h : BlockRun.run f ch block = .ok r) : r.fork = f := by
-  unfold BlockRun.run at h
-  simp only [bind, Except.bind] at h
-  split at h
-  · cases h
-  · split at h
-    · cases h
-    · cases h; rfl
-
-/-- **The transition over the block run.** The staged transition validates the header, checks the
-ommers, runs the block, checks the run's commitments, and appends the block with the run's final
-state. -/
-theorem E.stateTransitionCoreE_eq_run {ε : Type} (embed : TransitionError → ε) (f : Fork)
-    (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
-    E.stateTransitionCoreE embed f ch block checkOmmers = (do
-      Except.mapError embed (validateHeader f.ruleSet ch block.header)
-      checkOmmers ()
-      let r ← Except.mapError embed (BlockRun.run f ch block)
-      Except.mapError (embed ∘ TransitionError.block) (Block.check block.header r.commitments)
-      .ok ⟨appendBlock ch.blocks block, r.final.state, ch.chainId⟩) := by
-  unfold E.stateTransitionCoreE
-  have h := BlockRun.run_final f ch block
-  cases hr : BlockRun.run f ch block with
-  | error e =>
-    rw [hr] at h
-    rw [← h]
-    rfl
-  | ok r =>
-    rw [hr] at h
-    rw [← h]
-    have hf : r.fork = f := BlockRun.run_fork hr
-    cases hv : validateHeader f.ruleSet ch block.header with
-    | error e => rfl
-    | ok u =>
-      cases ho : checkOmmers () with
-      | error e => simp only [bind, Except.bind, Except.mapError]
-      | ok u' =>
-        simp only [bind, Except.bind, Except.mapError, Functor.map, Except.map,
-          BlockRun.commitments, hf]
 
 /-! ### The composed difference theorem against `ba15f397` -/
 

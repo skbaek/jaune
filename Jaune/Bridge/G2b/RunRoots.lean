@@ -1,7 +1,7 @@
 import Jaune.Run.Root
 import Jaune.Run.Block
 import Jaune.Bridge.G2b.FinalDriver
-import Jaune.Bridge.G2a.Block
+import Jaune.Run.BlockFacts
 
 namespace Jaune.Staging
 
@@ -60,7 +60,7 @@ theorem E.exists_blockRun {ε : Type} {embed : TransitionError → ε} {fork : F
     {parent post : BlockChain} {block : Block} {ommers : Unit → Except ε Unit}
     (h : E.stateTransitionCoreE embed fork parent block ommers = .ok post) :
     ∃ run, BlockRun.run fork parent block = .ok run ∧ run.final.state = post.state := by
-  rw [Jaune.Bridge.G2a.E.stateTransitionCoreE_eq_run] at h
+  rw [E.stateTransitionCoreE_eq_run] at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨run, hr, h⟩ := Except.bind_eq_ok h
