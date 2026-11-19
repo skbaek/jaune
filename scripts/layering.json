@@ -72,6 +72,8 @@
   "Jaune.Bridge.Memory": "bridge",
   "Jaune.MessageCall.CheckedFrame": "specification",
   "Jaune.Bridge.G2b.CheckedFrame": "bridge",
+  "Jaune.MessageCall.CheckedContext": "specification",
+  "Jaune.Bridge.G2b.CheckedContext": "bridge",
   "Jaune.MessageCall.FrameRelations": "proof",
   "Jaune.Bridge.G2b.FrameRelations": "bridge",
   "Jaune.Bridge.G2b.MemoryReachability": "bridge",

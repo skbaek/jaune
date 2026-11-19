@@ -1,6 +1,7 @@
 import AxiomAudit
 import Jaune.Bridge.G2b.PrecompileInput
 import Jaune.PrecompileInputFacts
+import Jaune.Bridge.G2b.CheckedContext
 
 /-! Axiom audit for the G2b Checked specification completion (u71): the precompile-input bridge
 and its wrappers, and the output-length facts ported to the precompile input. -/
@@ -33,3 +34,7 @@ and its wrappers, and the output-length facts ported to the precompile input. -/
 #expect_axioms Jaune.Precompile.modexp_ok_output_length_le [Quot.sound, propext]
 #expect_axioms Jaune.Precompile.modexp_ok_selected_cost [Quot.sound, propext]
 #expect_axioms Jaune.Precompile.identity_ok_output_and_cost []
+#union_axioms_of_modules Jaune.MessageCall.CheckedContext
+#union_axioms_of_modules Jaune.Bridge.G2b.CheckedContext
+#expect_axioms Jaune.CallContext.toChecked_eq_of_reads [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.CallContext.toChecked_originalState [Classical.choice, Quot.sound, propext]
