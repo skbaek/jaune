@@ -154,12 +154,11 @@
         {"decision": "G1 landing deviation (master, 2026-11-18)", "covers": "old-side-location",
          "text": "G1's old sides waited as Jaune.Legacy.* inside specification modules as well as in Jaune/Bridge/*; not accepted as a pattern (from G2 on, old sides move to Jaune/Bridge/G2a and G2b, decision jsn-g2-order)."}
       ],
-      "gaps": [
-        "old-side closure from 210683f3 to gate/g1 is N4-checked only across the two relocation commits (80751a2b, c75ad132); the commits between 210683f3 and 6893f89d have no closure comparison"
-      ],
+      "gaps": [],
       "notes": [
         "Anchor processMessageCall (gate anchor); block transition by congruence (processMessageCall_eq_legacy, decision jsn-block-anchor-composition). Inputs: every Msg, every Fork. Observation: the whole result, plain Eq.",
-        "Post-tag chain acf1e0b7 -> c3239790 (deletes, renames D2/D2b with N4 OK, documents) audited by the master on 2026-11-18; it follows the tag and does not touch the old side at the tag."
+        "Post-tag chain acf1e0b7 -> c3239790 (deletes, renames D2/D2b with N4 OK, documents) audited by the master on 2026-11-18; it follows the tag and does not touch the old side at the tag.",
+        "Mode B compares the complete old-side closure from 210683f3 to gate/g1 under both archived u29 maps. It binds both clean endpoint captures in scripts/bridge-ledger-receipts/G1.json."
       ]
     }
   ],
