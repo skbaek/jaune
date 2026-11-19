@@ -125,47 +125,66 @@ def Transaction.run (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction) 
   settleRun admitted prepared tx index message
 
 /-- Request-producing calls require code and a successful settlement. -/
-def processCheckedSystemTransaction (block : BlockContext) (state : State) (createdAccounts : AdrSet)
-    (target : Address) (data : Bytes) : Except TransitionError TopLevel.Settlement := do
+def processCheckedSystemRun (block : BlockContext) (state : State) (createdAccounts : AdrSet)
+    (target : Address) (data : Bytes) : Except TransitionError SystemRun := do
   let code := state.getCode target
   if code.isEmpty then
     .error <| .block <| .systemContractEmpty <| .text
       s!"system contract address {target.toHex} holds no code"
-  let run ← (processSystemTransaction block state createdAccounts target code data).mapError
+  let run ← (processSystemRun block state createdAccounts target code data).mapError
     (fun fault => TransitionError.vm fault.toEvmError)
-  match run.error with
+  match run.settlement.error with
   | some halt => .error <| .block <| .systemContractCallFailed target halt
   | none => .ok run
 
+def processCheckedSystemTransaction (block : BlockContext) (state : State) (createdAccounts : AdrSet)
+    (target : Address) (data : Bytes) : Except TransitionError TopLevel.Settlement :=
+  (processCheckedSystemRun block state createdAccounts target data).map SystemRun.settlement
+
+/-- What one accepted operation records, beside its next prefix. -/
+inductive OpRun where
+  | systemCall (index : Nat) (address : Address) (run : SystemRun)
+  | transaction (run : TransactionRun)
+  | withdrawals (index : Nat) (ws : List Withdrawal)
+  | depositRequests (requests : Bytes)
+  | requestCall (index : Nat) (type : UInt8) (address : Address) (run : SystemRun)
+  | rewards (coinbase : Address) (minerReward : Nat) (credits : List (Address × Nat))
+  | buildAccessList (list : BlockAccessList)
+  | checkAccessListLimit
+
 namespace Body
 
-/-- Record the prefix after one body operation. Every execution starts from the prefix state. -/
-def step (benv : Benv) (p : Jaune.Body.Prefix) : BodyOp → Except TransitionError Jaune.Body.Prefix
+/-- Execute one operation from the prefix state. The streaming runner discards the operation
+record, while the recording runner keeps it. -/
+@[inline] def stepWith {α : Type} (observe : OpRun → Jaune.Body.Prefix → α)
+    (benv : Benv) (p : Jaune.Body.Prefix) : BodyOp → Except TransitionError α
   | .systemCall address data index => do
     let data ← data
-    let run ← (processSystemTransaction benv.stat.toBlockContext p.state benv.createdAccounts
+    let message ← (processSystemRun benv.stat.toBlockContext p.state benv.createdAccounts
       address (p.state.getCode address) data).mapError (fun fault => TransitionError.vm fault.toEvmError)
-    pure { p with
+    let run := message.settlement
+    pure <| observe (.systemCall index address message) { p with
       state := run.state
       blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules index p.state run.state
         (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList }
   | .transaction tx index => do
     let (run, bout) ← Transaction.run (benv.withState p.state) p.toBlockOutput tx index
-    pure (Jaune.Body.Prefix.ofBlockOutput run.state bout)
+    pure <| observe (.transaction run) (Jaune.Body.Prefix.ofBlockOutput run.state bout)
   | .withdrawals ws index =>
     let state := processWithdrawalsState p.state ws
-    pure { p with
+    pure <| observe (.withdrawals index ws) { p with
       state
       withdrawalsTrie := processWithdrawalsTrie p.withdrawalsTrie ws
       blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules index p.state state
         (ws.map Withdrawal.address) [] [] }
   | .depositRequests => do
     let deposits ← parseDepositRequests p.toBlockOutput
-    pure { p with
+    pure <| observe (.depositRequests deposits) { p with
       requests := if deposits.length > 0 then p.requests ++ [depositRequestType ++ deposits] else p.requests }
   | .requestCall type address index => do
-    let run ← processCheckedSystemTransaction benv.stat.toBlockContext p.state benv.createdAccounts address []
-    pure { p with
+    let message ← processCheckedSystemRun benv.stat.toBlockContext p.state benv.createdAccounts address []
+    let run := message.settlement
+    pure <| observe (.requestCall index type address message) { p with
       state := run.state
       requests := if run.returnData.length > 0 then p.requests ++ [[type] ++ run.returnData] else p.requests
       blockAccessListBuilder := match benv.stat.rules.blockAccessListRules with
@@ -173,15 +192,53 @@ def step (benv : Benv) (p : Jaune.Body.Prefix) : BodyOp → Except TransitionErr
         | some _ => p.blockAccessListBuilder.incorporate index p.state run.state
             (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList }
   | .rewards coinbase minerReward credits =>
-    pure { p with state := creditAll credits (p.state.addBal coinbase minerReward.toU256) }
+    pure <| observe (.rewards coinbase minerReward credits)
+      { p with state := creditAll credits (p.state.addBal coinbase minerReward.toU256) }
   | .buildAccessList =>
     let list := match benv.stat.rules.blockAccessListRules with
       | none => []
       | some _ => p.blockAccessListBuilder.build
-    pure { p with blockAccessList := list }
+    pure <| observe (.buildAccessList list) { p with blockAccessList := list }
   | .checkAccessListLimit => do
     checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit p.blockAccessList
-    pure p
+    pure (observe .checkAccessListLimit p)
+
+/-- The streaming step holds only the next prefix. -/
+def step (benv : Benv) (p : Jaune.Body.Prefix) (op : BodyOp) : Except TransitionError Jaune.Body.Prefix :=
+  stepWith (fun _ next => next) benv p op
+
+/-- Keep the record of the same operation executed by the streaming step. -/
+def stepRun (benv : Benv) (p : Jaune.Body.Prefix) (op : BodyOp) :
+    Except TransitionError (OpRun × Jaune.Body.Prefix) :=
+  stepWith Prod.mk benv p op
+
+theorem stepRun_prefix (benv : Benv) (p : Jaune.Body.Prefix) (op : BodyOp) :
+    (stepRun benv p op).map Prod.snd = step benv p op := by
+  cases op <;> simp only [stepRun, step, stepWith]
+  case systemCall address data index =>
+    cases data with
+    | error => rfl
+    | ok bytes =>
+      simp only [bind, Except.bind]
+      cases processSystemRun benv.stat.toBlockContext p.state benv.createdAccounts
+        address (p.state.getCode address) bytes <;> rfl
+  case transaction tx index =>
+    cases Transaction.run (benv.withState p.state) p.toBlockOutput tx index <;> rfl
+  case depositRequests => cases parseDepositRequests p.toBlockOutput <;> rfl
+  case requestCall type address index =>
+    cases processCheckedSystemRun benv.stat.toBlockContext p.state benv.createdAccounts address [] <;> rfl
+  case checkAccessListLimit =>
+    cases checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit p.blockAccessList <;> rfl
+  all_goals rfl
+
+/-- The executed operations in order, together with their final prefix. -/
+def run (benv : Benv) : Jaune.Body.Prefix → List BodyOp →
+    Except TransitionError (List OpRun × Jaune.Body.Prefix)
+  | p, [] => .ok ([], p)
+  | p, op :: ops => do
+    let (record, next) ← stepRun benv p op
+    let (records, final) ← run benv next ops
+    pure (record :: records, final)
 
 /-- Decode before executing the importer operations, including pre-execution system calls. -/
 def importer (benv : Benv) (txs : List (Bytes ⊕ Jaune.Transaction)) (ommers : List Header)
@@ -190,6 +247,25 @@ def importer (benv : Benv) (txs : List (Bytes ⊕ Jaune.Transaction)) (ommers : 
   (Jaune.Body.ops benv decoded ommers wds).foldlM (step benv) (Jaune.Body.Prefix.init benv.state)
 
 end Body
+
+/-- A block's decoded transactions and ordered Checked operations over its parent. -/
+structure BlockRun where
+  fork : Fork
+  parent : BlockChain
+  block : Block
+  transactions : List Jaune.Transaction
+  ops : List OpRun
+  final : Jaune.Body.Prefix
+
+def BlockRun.benv (run : BlockRun) : Benv :=
+  initBlockEnvironment run.fork run.parent run.block.header
+
+def BlockRun.run (fork : Fork) (parent : BlockChain) (block : Block) : Except TransitionError BlockRun := do
+  let benv := initBlockEnvironment fork parent block.header
+  let decoded ← block.transactions.mapM (decodeTransaction benv.stat.rules)
+  let (ops, final) ← Body.run benv (Jaune.Body.Prefix.init benv.state)
+    (Jaune.Body.ops benv decoded block.ommers block.withdrawals)
+  pure ⟨fork, parent, block, decoded, ops, final⟩
 
 /-- Validate the header and ommers, execute the Checked body, then check its commitments. -/
 def stateTransitionCoreE {ε : Type} (embed : TransitionError → ε)

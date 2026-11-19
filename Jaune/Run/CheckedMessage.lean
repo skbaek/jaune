@@ -325,12 +325,24 @@ def Run.settlement (run : Run) (input : Input) : Settlement :=
 
 end TopLevel
 
+/-- The actual message and input of a protocol system call. -/
+structure SystemRun where
+  input : TopLevel.Input
+  message : TopLevel.Run
+
+def SystemRun.settlement (run : SystemRun) : TopLevel.Settlement :=
+  run.message.settlement run.input
+
 /-- Run a protocol system call on its current world and validate the refund counter. -/
-def processSystemTransaction (block : BlockContext) (state : State) (createdAccounts : AdrSet)
-    (target : Address) (code : ByteArray) (data : Bytes) : Except Fault TopLevel.Settlement := do
+def processSystemRun (block : BlockContext) (state : State) (createdAccounts : AdrSet)
+    (target : Address) (code : ByteArray) (data : Bytes) : Except Fault SystemRun := do
   let input := TopLevel.systemInput block state createdAccounts target code data
   let run ← TopLevel.runNative input
   let _ ← run.refundCounter
-  pure (run.settlement input)
+  pure ⟨input, run⟩
+
+def processSystemTransaction (block : BlockContext) (state : State) (createdAccounts : AdrSet)
+    (target : Address) (code : ByteArray) (data : Bytes) : Except Fault TopLevel.Settlement :=
+  (processSystemRun block state createdAccounts target code data).map SystemRun.settlement
 
 end Jaune.Checked

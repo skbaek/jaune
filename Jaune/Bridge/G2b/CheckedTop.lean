@@ -2,6 +2,8 @@ import Jaune.Bridge.G2b.CheckedDriver
 import Jaune.Bridge.G2b.CheckedIngress
 import Jaune.Bridge.G2b.CheckedReached
 import Jaune.Bridge.G2b.CheckedContext
+import Jaune.Bridge.G2b.KeptHistory
+import Jaune.FrameRun.CheckedFacts
 import Jaune.Implementation.CheckedCachedDriver
 import Jaune.Bridge.G2b.FinalDriver
 import Jaune.MessageCall.SpawnFacts
@@ -1115,14 +1117,14 @@ theorem processSystemTransaction_observe (benv : Benv) (target : Address) (code 
     (data : Bytes) :
     processSystemTransaction benv.stat.toBlockContext benv.state benv.createdAccounts target code data =
       (Jaune.processSystemTransaction benv target code data).map TopLevel.Settlement.ofLegacy := by
-  unfold processSystemTransaction
+  unfold processSystemTransaction processSystemRun
   dsimp only
   rw [TopLevel.systemInput_observe, TopLevel.runNative_observe]
   let msg := TopLevel.systemCallMessage benv target code data
   change (do
     let checked ← TopLevel.run msg
     let _ ← checked.refundCounter
-    pure (checked.settlement (.ofLegacy msg))) = (do
+    pure (⟨.ofLegacy msg, checked⟩ : SystemRun)).map SystemRun.settlement = (do
     let waiting ← Jaune.TopLevel.run msg
     let _ ← waiting.refundCounter
     pure waiting).map TopLevel.Settlement.ofLegacy
@@ -1135,9 +1137,9 @@ theorem processSystemTransaction_observe (benv : Benv) (target : Address) (code 
     cases hr : (TopLevel.ofPreparation msg prepared hp).run with
     | error => rfl
     | ok checked =>
-      simp only [Except.map, bind, Except.bind]
-      rw [TopLevel.settlement_observe hp hr, TopLevel.refundCounter_observe hp hr]
-      cases (TopLevel.observe msg prepared checked).refundCounter <;> rfl
+      simp only [Except.map, bind, Except.bind, pure, Except.pure]
+      rw [← TopLevel.refundCounter_observe hp hr]
+      cases paid : checked.refundCounter <;> simp only [paid, SystemRun.settlement, TopLevel.settlement_observe hp hr]
 
 /-- The waiting settlement retains the pre-debit environment. Message preparation changes only
 its dynamic state before entry, leaving all block data and the transaction snapshot in place. -/
@@ -1269,57 +1271,74 @@ theorem Transaction.run_frame_originalState {benv : Benv} {bout : BlockOutput} {
 theorem processCheckedSystemTransaction_observe (benv : Benv) (target : Address) (data : Bytes) :
     processCheckedSystemTransaction benv.stat.toBlockContext benv.state benv.createdAccounts target data =
       (Jaune.processCheckedSystemTransaction benv target data).map TopLevel.Settlement.ofLegacy := by
-  unfold processCheckedSystemTransaction Jaune.processCheckedSystemTransaction
-  dsimp only
-  split <;> rename_i h
-  · simp only [h, ↓reduceIte, bind, Except.bind, Except.map]
-  · simp only [h, ↓reduceIte, bind, Except.bind]
-    rw [processSystemTransaction_observe]
-    cases Jaune.processSystemTransaction benv target (benv.state.getCode target) data with
-    | error => rfl
-    | ok run =>
-      simp only [Except.map, Except.mapError]
-      change (match run.error with
+  unfold processCheckedSystemTransaction processCheckedSystemRun Jaune.processCheckedSystemTransaction
+  by_cases code : (benv.state.getCode target).isEmpty = true
+  · simp [code, bind, Except.bind, Except.map]
+  · simp only [code, Bool.false_eq_true, ↓reduceIte, bind, Except.bind]
+    have observed := processSystemTransaction_observe benv target (benv.state.getCode target) data
+    unfold processSystemTransaction at observed
+    generalize processSystemRun benv.stat.toBlockContext benv.state benv.createdAccounts target
+      (benv.state.getCode target) data = checked at observed ⊢
+    generalize Jaune.processSystemTransaction benv target (benv.state.getCode target) data = waiting at observed ⊢
+    cases checked <;> cases waiting <;> simp only [Except.map, Except.ok.injEq, Except.error.injEq] at observed
+    · cases observed; rfl
+    · cases observed
+    · cases observed
+    · rename_i run legacy
+      change (show Except TransitionError SystemRun from match run.settlement.error with
         | some halt => .error (.block (.systemContractCallFailed target halt))
-        | none => .ok (TopLevel.Settlement.ofLegacy run) :
-        Except TransitionError TopLevel.Settlement) = _
-      cases run.error <;> rfl
+        | none => .ok run).map SystemRun.settlement = _
+      rw [observed, show (TopLevel.Settlement.ofLegacy legacy).error = legacy.error from rfl]
+      cases halt : legacy.error <;> simp only [Except.mapError, Except.map, halt, observed]
 
 /-- Every single Checked operation produces the same prefix and errors as the waiting body. -/
 theorem Body.step_observe (benv : Benv) (p : Jaune.Body.Prefix) (op : BodyOp) :
     step benv p op = (Jaune.Body.step benv p op).map Prod.snd := by
   cases op
   case systemCall address data index =>
-    simp only [step, Jaune.Body.step, Jaune.processUncheckedSystemTransaction]
+    simp only [step, stepWith, Jaune.Body.step, Jaune.processUncheckedSystemTransaction]
     cases data with
     | error => rfl
     | ok bytes =>
       simp only [bind, Except.bind]
       rw [show (benv.withState p.state).state.getCode address = p.state.getCode address from rfl]
-      rw [show processSystemTransaction benv.stat.toBlockContext p.state benv.createdAccounts
-          address (p.state.getCode address) bytes =
-          (Jaune.processSystemTransaction (benv.withState p.state) address (p.state.getCode address) bytes).map
-            TopLevel.Settlement.ofLegacy from processSystemTransaction_observe (benv.withState p.state) ..]
-      cases Jaune.processSystemTransaction (benv.withState p.state) address (p.state.getCode address) bytes <;>
-        simp only [Except.mapError, Except.map, TopLevel.Settlement.ofLegacy, pure, Except.pure]
+      have observed := processSystemTransaction_observe (benv.withState p.state) address (p.state.getCode address) bytes
+      change (processSystemRun benv.stat.toBlockContext p.state benv.createdAccounts address
+        (p.state.getCode address) bytes).map SystemRun.settlement = _ at observed
+      generalize processSystemRun benv.stat.toBlockContext p.state benv.createdAccounts address
+        (p.state.getCode address) bytes = checked at observed ⊢
+      generalize Jaune.processSystemTransaction (benv.withState p.state) address (p.state.getCode address)
+        bytes = waiting at observed ⊢
+      cases checked <;> cases waiting <;> simp only [Except.map, Except.ok.injEq, Except.error.injEq] at observed
+      · cases observed; rfl
+      · cases observed
+      · cases observed
+      · simp only [Except.mapError, Except.map, pure, Except.pure, observed, TopLevel.Settlement.ofLegacy]
   case transaction tx index =>
     have h := congrArg (Except.map fun (state, out) => Jaune.Body.Prefix.ofBlockOutput state out)
       (Transaction.run_observe (benv.withState p.state) p.toBlockOutput tx index)
-    simp only [step, Jaune.Body.step]
+    simp only [step, stepWith, Jaune.Body.step]
     generalize Checked.Transaction.run (benv.withState p.state) p.toBlockOutput tx index = native at h ⊢
     generalize Jaune.Transaction.run (benv.withState p.state) p.toBlockOutput tx index = waiting at h ⊢
     rcases native with fault | ⟨run, out⟩ <;> rcases waiting with fault | ⟨run, out⟩ <;> exact h
   case requestCall type address index =>
-    simp only [step, Jaune.Body.step]
-    rw [show processCheckedSystemTransaction benv.stat.toBlockContext p.state benv.createdAccounts address [] =
-        (Jaune.processCheckedSystemTransaction (benv.withState p.state) address []).map
-          TopLevel.Settlement.ofLegacy from processCheckedSystemTransaction_observe (benv.withState p.state) ..]
-    cases Jaune.processCheckedSystemTransaction (benv.withState p.state) address [] <;> rfl
+    simp only [step, stepWith, Jaune.Body.step]
+    have observed := processCheckedSystemTransaction_observe (benv.withState p.state) address []
+    change (processCheckedSystemRun benv.stat.toBlockContext p.state benv.createdAccounts address
+      []).map SystemRun.settlement = _ at observed
+    generalize processCheckedSystemRun benv.stat.toBlockContext p.state benv.createdAccounts address
+      [] = checked at observed ⊢
+    generalize Jaune.processCheckedSystemTransaction (benv.withState p.state) address [] = waiting at observed ⊢
+    cases checked <;> cases waiting <;> simp only [Except.map, Except.ok.injEq, Except.error.injEq] at observed
+    · cases observed; rfl
+    · cases observed
+    · cases observed
+    · simp only [bind, Except.bind, Except.map, pure, Except.pure, observed, TopLevel.Settlement.ofLegacy]; rfl
   case depositRequests =>
-    simp only [step, Jaune.Body.step]
+    simp only [step, stepWith, Jaune.Body.step]
     cases parseDepositRequests p.toBlockOutput <;> rfl
   case checkAccessListLimit =>
-    simp only [step, Jaune.Body.step]
+    simp only [step, stepWith, Jaune.Body.step]
     cases checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit p.blockAccessList <;> rfl
   all_goals rfl
 
@@ -1349,5 +1368,19 @@ theorem stateTransitionCoreE_observe {ε : Type} (embed : TransitionError → ε
       Jaune.stateTransitionCoreE embed f ch block checkOmmers := by
   unfold stateTransitionCoreE Jaune.stateTransitionCoreE
   simp only [Body.importer_observe]
+
+/-- The configured importer witnesses a Checked step, including each scheduled ommer lookup. -/
+theorem KeptStep.of_transition {cfg : ChainConfig} {parent post : BlockChain} {block : Block}
+    (accepted : stateTransitionUsing cfg parent block = .ok post) :
+    ∃ fork, KeptStep cfg fork parent block post := by
+  obtain ⟨fork, waiting⟩ := Staging.KeptStep.of_transition accepted
+  exact ⟨fork, waiting.chainId, waiting.forkAt,
+    (stateTransitionCoreE_observe _ _ _ _ _).trans waiting.accepted⟩
+
+theorem KeptHistory.of_configured_fold {cfg : ChainConfig} {start current post : BlockChain}
+    {blocks : List KeptBlock} (prior : KeptHistory cfg start blocks current) (inputs : List Block)
+    (accepted : inputs.foldlM (stateTransitionUsing cfg) current = .ok post) :
+    ∃ suffix, suffix.map KeptBlock.block = inputs ∧ KeptHistory cfg start (blocks ++ suffix) post :=
+  KeptHistory.of_fold (fun h => KeptStep.of_transition h) prior inputs accepted
 
 end Jaune.Checked
