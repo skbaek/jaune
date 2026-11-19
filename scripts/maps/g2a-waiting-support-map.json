@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "retired_tokens": [],
+  "allowed_abbreviations": [],
+  "entries": [
+    {
+      "old": "Jaune.State.set",
+      "new": "Jaune.Bridge.OldAccount.set",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Machine",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.State.setPresent",
+      "new": "Jaune.Bridge.OldAccount.setPresent",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Machine",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.State.setAccount",
+      "new": "Jaune.Bridge.OldAccount.setAccount",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Machine",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.State.setBal",
+      "new": "Jaune.Bridge.OldAccount.setBal",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Machine",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.State.setCode",
+      "new": "Jaune.Bridge.OldAccount.setCode",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Machine",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.State.incrNonce",
+      "new": "Jaune.Bridge.OldAccount.incrNonce",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Machine",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.State.setStor",
+      "new": "Jaune.Bridge.OldAccount.setStor",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Machine",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.State.setStorVal",
+      "new": "Jaune.Bridge.OldAccount.setStorVal",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Machine",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.Benv.clearStorageWritesIfEmpty",
+      "new": "Jaune.Bridge.OldAccount.clearBenv",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Machine",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.Devm.clearStorageWritesIfEmpty",
+      "new": "Jaune.Bridge.OldAccount.clearDevm",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Machine",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.World.clearStorageWritesIfEmpty",
+      "new": "Jaune.Bridge.OldAccount.clearWorld",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.MessageCall",
+      "to_module": "Jaune.Bridge.AccountWrite"
+    },
+    {
+      "old": "Jaune.T8n.foldTransactions",
+      "new": "Jaune.Bridge.G2a.Old.T8n.foldTransactions",
+      "kind": "relocation",
+      "layer": "adapter",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.T8n",
+      "to_module": "Jaune.Bridge.G2a.Old.T8n"
+    },
+    {
+      "old": "Jaune.T8n.runStateTest",
+      "new": "Jaune.Bridge.G2a.Old.T8n.runStateTest",
+      "kind": "relocation",
+      "layer": "adapter",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.T8n",
+      "to_module": "Jaune.Bridge.G2a.Old.T8n"
+    },
+    {
+      "old": "Jaune.T8n.runBlockchain",
+      "new": "Jaune.Bridge.G2a.Old.T8n.runBlockchain",
+      "kind": "relocation",
+      "layer": "adapter",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.T8n",
+      "to_module": "Jaune.Bridge.G2a.Old.T8n"
+    },
+    {
+      "old": "Jaune.addBlockToChainCanonicalE",
+      "new": "Jaune.Bridge.Import.addBlockToChainCanonicalE",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Transaction",
+      "to_module": "Jaune.Bridge.Import"
+    },
+    {
+      "old": "Jaune.addBlockToChainScheduledCanonicalE",
+      "new": "Jaune.Bridge.Import.addBlockToChainScheduledCanonicalE",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Transaction",
+      "to_module": "Jaune.Bridge.Import"
+    }
+  ]
+}

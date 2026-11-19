@@ -5,7 +5,9 @@
 -- specification module defines only the specification (goal
 -- `jaune-shape-and-names-v1`, unit W0). The default build compiles this module
 -- through `JauneChecks.lean`.
+import AxiomAudit
 import Jaune.Transaction
+import Jaune.Run.BodyFacts
 import Jaune.Check.Machine
 
 namespace Jaune
@@ -2348,3 +2350,6 @@ private def touchSelfdestructThenFund (fork : Fork) : Option (U256 × U256) :=
 
 end Jaune
 
+#expect_axioms Jaune.Bytes.toExceptTransaction_unknown_typeNotSupported [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.decodeTransaction_unknown_typeNotSupported [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Transaction.settleRun_state [Classical.choice, Quot.sound, propext]

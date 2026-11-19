@@ -18,7 +18,6 @@ import Jaune.Check.CheckedPortAuditB
 import Jaune.Check.CheckedRowsAudit
 import Jaune.Check.CheckedSpecAudit
 import Jaune.Check.FrameBridgeAudit
-import Jaune.Check.G2aBridgeAudit
 import Jaune.Check.InstructionFamiliesAudit
 import Jaune.Check.Hash
 import Jaune.Check.InstructionsAudit
@@ -37,9 +36,6 @@ import Jaune.StaticcallEffects
 import Jaune.TraceTransaction
 import Jaune.MessageCall.TraceJson
 import Jaune.Run.Trace
-import Jaune.Bridge.G2a.Old.Trace
-import Jaune.Check.TraceTransaction
-import Jaune.Bridge.G2a.Old.T8n
 import Jaune.Bridge.G2b.CheckedTrace
 import Jaune.Run.BodyFactsT8n
 

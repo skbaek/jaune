@@ -131,7 +131,7 @@ def module_source(git, rev, module):
     return None, None
 
 
-SCOPE = re.compile(r'^\s*(namespace|section|end)\b[ \t]*([^\s]*)')
+SCOPE = re.compile(r'^\s*(namespace|section|mutual|end)\b[ \t]*([^\s]*)')
 DECL = re.compile(r"^\s*(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe|nonrec)\s+)*"
                   r"(?:theorem|lemma|def|abbrev|instance|structure|inductive|class|opaque|axiom)\s+"
                   r"([A-Za-z_][\w'!?.]*)")
@@ -194,7 +194,7 @@ def declared_names(source):
             word, arg = scope.groups()
             if word == 'namespace' and arg:
                 scopes.append(arg.split('.'))
-            elif word == 'section':
+            elif word in ('section', 'mutual'):
                 scopes.append([])
             elif word == 'end' and scopes:
                 scopes.pop()

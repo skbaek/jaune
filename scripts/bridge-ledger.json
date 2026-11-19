@@ -2,13 +2,37 @@
   "schema_version": 1,
   "goal": "jaune-shape-and-names-v1",
   "about": "X1 bridge ledger, machine-checked by scripts/check-bridge-ledger.py (Mode A every catalogue run; Mode B --closure once per gate at its tag candidate). Revisions are full commit shas; `record` fields cite the goal's evidence by its own relative names.",
-  "standard_axioms": ["Classical.choice", "Quot.sound", "propext"],
+  "standard_axioms": [
+    "Classical.choice",
+    "Quot.sound",
+    "propext"
+  ],
   "gates": {
-    "G0a": {"tag": "gate/g0a", "commit": "904d7fff568f538d6d53cf6a7141be935a3bd00c", "status": "tagged"},
-    "G0b": {"tag": "gate/g0b", "commit": "d8f34ae4c1ca2726886b1d02b9b65ca05304c876", "status": "tagged"},
-    "G1": {"tag": "gate/g1", "commit": "acf1e0b744565a0a524bfe1b22ce3a81ca731897", "status": "tagged"},
-    "G2a": {"tag": "gate/g2a", "commit": null, "status": "pending"},
-    "G2b": {"tag": "gate/g2b", "commit": null, "status": "pending"}
+    "G0a": {
+      "tag": "gate/g0a",
+      "commit": "904d7fff568f538d6d53cf6a7141be935a3bd00c",
+      "status": "tagged"
+    },
+    "G0b": {
+      "tag": "gate/g0b",
+      "commit": "d8f34ae4c1ca2726886b1d02b9b65ca05304c876",
+      "status": "tagged"
+    },
+    "G1": {
+      "tag": "gate/g1",
+      "commit": "acf1e0b744565a0a524bfe1b22ce3a81ca731897",
+      "status": "tagged"
+    },
+    "G2a": {
+      "tag": "gate/g2a",
+      "commit": null,
+      "status": "pending"
+    },
+    "G2b": {
+      "tag": "gate/g2b",
+      "commit": null,
+      "status": "pending"
+    }
   },
   "entries": [
     {
@@ -25,18 +49,27 @@
         "at_tag": [],
         "modules_at_tag": []
       },
-      "new": {"names": [], "modules": []},
+      "new": {
+        "names": [],
+        "modules": []
+      },
       "exempt": [],
       "maps": [
-        {"path": "scripts/naming-map.json", "revision": "904d7fff568f538d6d53cf6a7141be935a3bd00c",
-         "sha256": "6dea531b8ed5764a22664cb8adfdba40a1c0be9ce6542293f57d01cb216ab1ee"}
+        {
+          "path": "scripts/naming-map.json",
+          "revision": "904d7fff568f538d6d53cf6a7141be935a3bd00c",
+          "sha256": "6dea531b8ed5764a22664cb8adfdba40a1c0be9ce6542293f57d01cb216ab1ee"
+        }
       ],
       "n4_receipts": [
-        {"map_sha256": "6dea531b8ed5764a22664cb8adfdba40a1c0be9ce6542293f57d01cb216ab1ee",
-         "before_candidate": "89bcd3f9e288a9a0f0e9ed6f6e98a944b7a25248",
-         "after_candidate": "784cff2792279f2e4d16107e3a44b559731c9319",
-         "status": "OK", "environments": 28,
-         "record": "g0a-fix/u16-report.md section 4; raw g0a-fix/n4b (naming-candidate.py compare --collect-all, exit 0, 229 affected modules, wall 1431.9 s)"}
+        {
+          "map_sha256": "6dea531b8ed5764a22664cb8adfdba40a1c0be9ce6542293f57d01cb216ab1ee",
+          "before_candidate": "89bcd3f9e288a9a0f0e9ed6f6e98a944b7a25248",
+          "after_candidate": "784cff2792279f2e4d16107e3a44b559731c9319",
+          "status": "OK",
+          "environments": 28,
+          "record": "g0a-fix/u16-report.md section 4; raw g0a-fix/n4b (naming-candidate.py compare --collect-all, exit 0, 229 affected modules, wall 1431.9 s)"
+        }
       ],
       "accepted": [],
       "gaps": [],
@@ -54,23 +87,52 @@
       "theorem": "Jaune.G0b.processCheckedSystemTransaction_bridge",
       "module": "Jaune.Bridge.G0b",
       "audit": [
-        {"kind": "union_walk", "file": "scripts/JauneUnionAxioms.lean"},
-        {"kind": "receipt", "axioms": ["propext", "Classical.choice", "Quot.sound"], "record": "lean_verify at the tag, g0b/u18-report.md section 3"}
+        {
+          "kind": "union_walk",
+          "file": "scripts/JauneUnionAxioms.lean"
+        },
+        {
+          "kind": "receipt",
+          "axioms": [
+            "propext",
+            "Classical.choice",
+            "Quot.sound"
+          ],
+          "record": "lean_verify at the tag, g0b/u18-report.md section 3"
+        }
       ],
       "old": {
         "revision": "01241ec74e71a213c394e530c2101a7354fdd7e6",
-        "roots": ["Jaune.processCheckedSystemTransaction"],
-        "modules": ["Jaune.Transaction"],
-        "at_tag": ["Jaune.G0b.processCheckedSystemTransaction"],
-        "modules_at_tag": ["Jaune.Bridge.G0b"]
+        "roots": [
+          "Jaune.processCheckedSystemTransaction"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.G0b.processCheckedSystemTransaction"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G0b"
+        ]
       },
-      "new": {"names": ["Jaune.processCheckedSystemTransaction"], "modules": ["Jaune.Transaction"]},
+      "new": {
+        "names": [
+          "Jaune.processCheckedSystemTransaction"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ]
+      },
       "exempt": [],
       "maps": [],
       "n4_receipts": [],
       "accepted": [
-        {"decision": "jsn-g0b-review-triage", "covers": "closure",
-         "text": "N4 was not run on the old side's dependency closure between 01241ec7 and the tag; the closure gained constructors and classifier/detail/tag arms in the same commit (review finding F3). The old bodies are byte-identical and both sides elaborate in one environment."}
+        {
+          "decision": "jsn-g0b-review-triage",
+          "covers": "closure",
+          "text": "N4 was not run on the old side's dependency closure between 01241ec7 and the tag; the closure gained constructors and classifier/detail/tag arms in the same commit (review finding F3). The old bodies are byte-identical and both sides elaborate in one environment."
+        }
       ],
       "gaps": [],
       "notes": [
@@ -86,23 +148,52 @@
       "theorem": "Jaune.G0b.validateOmmerWithParent_bridge",
       "module": "Jaune.Bridge.G0b",
       "audit": [
-        {"kind": "union_walk", "file": "scripts/JauneUnionAxioms.lean"},
-        {"kind": "receipt", "axioms": ["propext", "Classical.choice", "Quot.sound"], "record": "lean_verify at the tag, g0b/u18-report.md section 3"}
+        {
+          "kind": "union_walk",
+          "file": "scripts/JauneUnionAxioms.lean"
+        },
+        {
+          "kind": "receipt",
+          "axioms": [
+            "propext",
+            "Classical.choice",
+            "Quot.sound"
+          ],
+          "record": "lean_verify at the tag, g0b/u18-report.md section 3"
+        }
       ],
       "old": {
         "revision": "01241ec74e71a213c394e530c2101a7354fdd7e6",
-        "roots": ["Jaune.validateOmmerWithParent"],
-        "modules": ["Jaune.Transaction"],
-        "at_tag": ["Jaune.G0b.validateOmmerWithParent"],
-        "modules_at_tag": ["Jaune.Bridge.G0b"]
+        "roots": [
+          "Jaune.validateOmmerWithParent"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.G0b.validateOmmerWithParent"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G0b"
+        ]
       },
-      "new": {"names": ["Jaune.validateOmmerWithParent"], "modules": ["Jaune.Transaction"]},
+      "new": {
+        "names": [
+          "Jaune.validateOmmerWithParent"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ]
+      },
       "exempt": [],
       "maps": [],
       "n4_receipts": [],
       "accepted": [
-        {"decision": "jsn-g0b-review-triage", "covers": "closure",
-         "text": "As G0b-1: no N4 on the old side's closure between 01241ec7 and the tag (review finding F3); bodies byte-identical, both sides elaborate in one environment."}
+        {
+          "decision": "jsn-g0b-review-triage",
+          "covers": "closure",
+          "text": "As G0b-1: no N4 on the old side's closure between 01241ec7 and the tag (review finding F3); bodies byte-identical, both sides elaborate in one environment."
+        }
       ],
       "gaps": [],
       "notes": [
@@ -117,48 +208,3359 @@
       "theorem": "Jaune.processMessageCall_legacy",
       "module": "Jaune.Bridge.Top",
       "audit": [
-        {"kind": "union_walk", "file": "scripts/JauneUnionAxioms.lean"},
-        {"kind": "receipt", "axioms": ["propext", "Classical.choice", "Quot.sound"], "record": "#print axioms, w1/u29-report.md"}
+        {
+          "kind": "union_walk",
+          "file": "scripts/JauneUnionAxioms.lean"
+        },
+        {
+          "kind": "receipt",
+          "axioms": [
+            "propext",
+            "Classical.choice",
+            "Quot.sound"
+          ],
+          "record": "#print axioms, w1/u29-report.md"
+        }
       ],
       "old": {
         "revision": "210683f34a2378627ce50062e56cddeb81312f2e",
-        "roots": ["Jaune.processMessageCall"],
-        "modules": ["Jaune.Transaction"],
-        "at_tag": ["Jaune.Legacy.processMessageCall"],
-        "modules_at_tag": ["Jaune.Transaction"]
+        "roots": [
+          "Jaune.processMessageCall"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Legacy.processMessageCall"
+        ],
+        "modules_at_tag": [
+          "Jaune.Transaction"
+        ]
       },
-      "new": {"names": ["Jaune.processMessageCall"], "modules": ["Jaune.Transaction"]},
+      "new": {
+        "names": [
+          "Jaune.processMessageCall"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ]
+      },
       "exempt": [],
       "maps": [
-        {"path": "scripts/maps/g1-u29-delta-map-1.json", "revision": "56384d5d55e62706f9a71572f79f5bee449e0479",
-         "sha256": "efa6e653b340c97c6e57fbe8ebd362b8e1a37f3e2da9dab5ff50946ce51b14de"},
-        {"path": "scripts/maps/g1-u29-delta-map-2.json", "revision": "56384d5d55e62706f9a71572f79f5bee449e0479",
-         "sha256": "8d980476b69b21a4f8df69423a4bfcfefc4801e8c9a33583e283a5b18d62dd4d"}
+        {
+          "path": "scripts/maps/g1-u29-delta-map-1.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "efa6e653b340c97c6e57fbe8ebd362b8e1a37f3e2da9dab5ff50946ce51b14de"
+        },
+        {
+          "path": "scripts/maps/g1-u29-delta-map-2.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "8d980476b69b21a4f8df69423a4bfcfefc4801e8c9a33583e283a5b18d62dd4d"
+        }
       ],
       "n4_receipts": [
-        {"map_sha256": "efa6e653b340c97c6e57fbe8ebd362b8e1a37f3e2da9dab5ff50946ce51b14de",
-         "before_candidate": "6893f89ddd0ec090bd889ebaa40acb3c4483431f",
-         "after_candidate": "80751a2b687fc75e734787fce990cb62084ab5f2",
-         "status": "RESIDUAL",
-         "residual": "one mismatch only: the hand-edited #guard_msgs expected text in Examples.Arithmetic (NextOp.step -> Legacy.NextOp.step, Step.cont -> Legacy.Step.cont), in the Examples and ExecutionAxioms environments",
-         "record": "w1/u29-report.md N4 table; before = 6893f89d plus reviewed sites"},
-        {"map_sha256": "8d980476b69b21a4f8df69423a4bfcfefc4801e8c9a33583e283a5b18d62dd4d",
-         "before_candidate": "8e8989be1a70c8f96baeed3445ca07d2cb9f2414",
-         "after_candidate": "c75ad1325ff6bc7f89363f377183db1d775dc14a",
-         "status": "OK", "environments": 29,
-         "record": "w1/u29-report.md N4 table (24 affected modules, 1 excluded importer)"}
+        {
+          "map_sha256": "efa6e653b340c97c6e57fbe8ebd362b8e1a37f3e2da9dab5ff50946ce51b14de",
+          "before_candidate": "6893f89ddd0ec090bd889ebaa40acb3c4483431f",
+          "after_candidate": "80751a2b687fc75e734787fce990cb62084ab5f2",
+          "status": "RESIDUAL",
+          "residual": "one mismatch only: the hand-edited #guard_msgs expected text in Examples.Arithmetic (NextOp.step -> Legacy.NextOp.step, Step.cont -> Legacy.Step.cont), in the Examples and ExecutionAxioms environments",
+          "record": "w1/u29-report.md N4 table; before = 6893f89d plus reviewed sites"
+        },
+        {
+          "map_sha256": "8d980476b69b21a4f8df69423a4bfcfefc4801e8c9a33583e283a5b18d62dd4d",
+          "before_candidate": "8e8989be1a70c8f96baeed3445ca07d2cb9f2414",
+          "after_candidate": "c75ad1325ff6bc7f89363f377183db1d775dc14a",
+          "status": "OK",
+          "environments": 29,
+          "record": "w1/u29-report.md N4 table (24 affected modules, 1 excluded importer)"
+        }
       ],
       "accepted": [
-        {"decision": "jsn-w1-u29-accept", "covers": "trace",
-         "text": "Trace observation: the message path is proved (runFrame_json_legacy, exec_json_legacy, w1/u27-report.md); the Amsterdam transaction path is covered by check-trace.py only."},
-        {"decision": "G1 landing deviation (master, 2026-11-18)", "covers": "old-side-location",
-         "text": "G1's old sides waited as Jaune.Legacy.* inside specification modules as well as in Jaune/Bridge/*; not accepted as a pattern (from G2 on, old sides move to Jaune/Bridge/G2a and G2b, decision jsn-g2-order)."}
+        {
+          "decision": "jsn-w1-u29-accept",
+          "covers": "trace",
+          "text": "Trace observation: the message path is proved (runFrame_json_legacy, exec_json_legacy, w1/u27-report.md); the Amsterdam transaction path is covered by check-trace.py only."
+        },
+        {
+          "decision": "G1 landing deviation (master, 2026-11-18)",
+          "covers": "old-side-location",
+          "text": "G1's old sides waited as Jaune.Legacy.* inside specification modules as well as in Jaune/Bridge/*; not accepted as a pattern (from G2 on, old sides move to Jaune/Bridge/G2a and G2b, decision jsn-g2-order)."
+        }
       ],
       "gaps": [],
       "notes": [
         "Anchor processMessageCall (gate anchor); block transition by congruence (processMessageCall_eq_legacy, decision jsn-block-anchor-composition). Inputs: every Msg, every Fork. Observation: the whole result, plain Eq.",
         "Post-tag chain acf1e0b7 -> c3239790 (deletes, renames D2/D2b with N4 OK, documents) audited by the master on 2026-11-18; it follows the tag and does not touch the old side at the tag.",
         "Mode B compares the complete old-side closure from 210683f3 to gate/g1 under both archived u29 maps. It binds both clean endpoint captures in scripts/bridge-ledger-receipts/G1.json."
+      ]
+    },
+    {
+      "id": "G2a-account-set",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.State.set_eq_oldAccount",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.State.set"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.set"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.State.set"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical writer for every state and argument."
+      ]
+    },
+    {
+      "id": "G2a-account-setPresent",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.State.setPresent_eq_oldAccount",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.State.setPresent"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.setPresent"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.State.setPresent"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical writer for every state and argument."
+      ]
+    },
+    {
+      "id": "G2a-account-setAccount",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.State.setAccount_eq_oldAccount",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.State.setAccount"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.setAccount"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.State.setAccount"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical writer for every state and argument."
+      ]
+    },
+    {
+      "id": "G2a-account-setBal",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.State.setBal_eq_oldAccount",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.State.setBal"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.setBal"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.State.setBal"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical writer for every state and argument."
+      ]
+    },
+    {
+      "id": "G2a-account-setCode",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.State.setCode_eq_oldAccount",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.State.setCode"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.setCode"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.State.setCode"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical writer for every state and argument."
+      ]
+    },
+    {
+      "id": "G2a-account-incrNonce",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.State.incrNonce_eq_oldAccount",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.State.incrNonce"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.incrNonce"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.State.incrNonce"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical writer for every state and argument."
+      ]
+    },
+    {
+      "id": "G2a-account-setStor",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.State.setStor_eq_oldAccount",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.State.setStor"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.setStor"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.State.setStor"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical writer for every state and argument."
+      ]
+    },
+    {
+      "id": "G2a-account-setStorVal",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.State.setStorVal_eq_oldAccount",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.State.setStorVal"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.setStorVal"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.State.setStorVal"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical writer for every state and argument."
+      ]
+    },
+    {
+      "id": "G2a-account-clearBenv",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Benv.clearStorageWritesIfEmpty_eq",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.Benv.clearStorageWritesIfEmpty"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.clearBenv"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.Benv.clearStorageWritesIfEmpty"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical storage-write clearing body."
+      ]
+    },
+    {
+      "id": "G2a-account-clearDevm",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Devm.clearStorageWritesIfEmpty_eq",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.Devm.clearStorageWritesIfEmpty"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.clearDevm"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.Devm.clearStorageWritesIfEmpty"
+        ],
+        "modules": [
+          "Jaune.Machine"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical storage-write clearing body."
+      ]
+    },
+    {
+      "id": "G2a-account-clearWorld",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.World.clearStorageWritesIfEmpty_eq",
+      "module": "Jaune.Bridge.AccountWrite",
+      "audit": [
+        {
+          "kind": "union_modules",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.World.clearStorageWritesIfEmpty"
+        ],
+        "modules": [
+          "Jaune.MessageCall"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.OldAccount.clearWorld"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.AccountWrite"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.World.clearStorageWritesIfEmpty"
+        ],
+        "modules": [
+          "Jaune.MessageCall"
+        ]
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Unconditional equality with the historical storage-write clearing body."
+      ]
+    },
+    {
+      "id": "G2a-1",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.processMessageCall_eq",
+      "module": "Jaune.Bridge.G2a.Run",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.processMessageCall"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.processMessageCall"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Transaction"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.TopLevel.run"
+        ],
+        "modules": [
+          "Jaune.Run.Message"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Full message observation for every input through the bridge projection."
+      ]
+    },
+    {
+      "id": "G2a-2",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.processTransaction_eq_b2",
+      "module": "Jaune.Bridge.G2a.Consumers",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.processTransaction"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.processTransaction"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Transaction"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.Transaction.run"
+        ],
+        "modules": [
+          "Jaune.Run.Settle"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Full state and body output after settlement. The two inlined account-clear expressions belong in the waiting old definition."
+      ]
+    },
+    {
+      "id": "G2a-3",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.processSystemTransaction_eq",
+      "module": "Jaune.Bridge.G2a.Consumers",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.processSystemTransaction"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.processSystemTransaction"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.processSystemTransaction"
+        ],
+        "modules": [
+          "Jaune.Run.SystemCall"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Equality of the full result, through the run output view where applicable."
+      ]
+    },
+    {
+      "id": "G2a-4",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.processUncheckedSystemTransaction_eq",
+      "module": "Jaune.Bridge.G2a.Consumers",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.processUncheckedSystemTransaction"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.processUncheckedSystemTransaction"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.processUncheckedSystemTransaction"
+        ],
+        "modules": [
+          "Jaune.Run.SystemCall"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Equality of the full result, through the run output view where applicable."
+      ]
+    },
+    {
+      "id": "G2a-5",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.processCheckedSystemTransaction_eq",
+      "module": "Jaune.Bridge.G2a.Consumers",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.processCheckedSystemTransaction"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.processCheckedSystemTransaction"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.processCheckedSystemTransaction"
+        ],
+        "modules": [
+          "Jaune.Run.SystemCall"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Equality of the full result, through the run output view where applicable."
+      ]
+    },
+    {
+      "id": "G2a-6",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.runRequestContracts_eq",
+      "module": "Jaune.Bridge.G2a.Consumers",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.runRequestContracts"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.runRequestContracts"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.runRequestContracts"
+        ],
+        "modules": [
+          "Jaune.Run.SystemCall"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Equality of the full result, through the run output view where applicable."
+      ]
+    },
+    {
+      "id": "G2a-7",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.processGeneralPurposeRequestsAt_eq",
+      "module": "Jaune.Bridge.G2a.Consumers",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.processGeneralPurposeRequestsAt"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.processGeneralPurposeRequestsAt"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.processGeneralPurposeRequestsAt"
+        ],
+        "modules": [
+          "Jaune.Run.SystemCall"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Equality of the full result, through the run output view where applicable."
+      ]
+    },
+    {
+      "id": "G2a-8",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.processGeneralPurposeRequests_eq",
+      "module": "Jaune.Bridge.G2a.Consumers",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.processGeneralPurposeRequests"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.processGeneralPurposeRequests"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.processGeneralPurposeRequests"
+        ],
+        "modules": [
+          "Jaune.Run.SystemCall"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Equality of the full result, through the run output view where applicable."
+      ]
+    },
+    {
+      "id": "G2a-9",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.beaconRootsCall_eq",
+      "module": "Jaune.Bridge.G2a.Consumers",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.beaconRootsCall"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.beaconRootsCall"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.beaconRootsCall"
+        ],
+        "modules": [
+          "Jaune.Run.SystemCall"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Equality of the full result, through the run output view where applicable."
+      ]
+    },
+    {
+      "id": "G2a-10",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.historyStorageCall_eq",
+      "module": "Jaune.Bridge.G2a.Consumers",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.historyStorageCall"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.historyStorageCall"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.historyStorageCall"
+        ],
+        "modules": [
+          "Jaune.Run.SystemCall"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Equality of the full result, through the run output view where applicable."
+      ]
+    },
+    {
+      "id": "G2a-11",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.applyBody_eq_of_not_split",
+      "module": "Jaune.Bridge.G2a.Body",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.applyBody"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.applyBody"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.applyBody"
+        ],
+        "modules": [
+          "Jaune.Run.Body"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Full equality off the decision 14 split."
+      ]
+    },
+    {
+      "id": "G2a-12",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.applyBody_of_split",
+      "module": "Jaune.Bridge.G2a.Body",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.applyBody"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.applyBody"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.applyBody"
+        ],
+        "modules": [
+          "Jaune.Run.Body"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Decision 14. Old rejection comes from the system calls, new rejection comes from decoding the whole list."
+      ]
+    },
+    {
+      "id": "G2a-13",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.stateTransitionCoreE_eq_of_not_split",
+      "module": "Jaune.Bridge.G2a.Body",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.stateTransitionCoreE"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.stateTransitionCoreE"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.Bridge.G2a.Phased.stateTransitionCoreE"
+        ],
+        "modules": [
+          "Jaune.Bridge.G2a.Phased"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Phased transition auxiliary. The public importer comparison is E.stateTransitionCoreE_eq_of_not_split.",
+        "Decision 16 is recorded by the pre-decoder composed theorem at 5871922e and the checked decoder cut at a8e1bd07. Its historical decoder and rejection-type closure disposition is pending."
+      ]
+    },
+    {
+      "id": "G2a-14",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.stateTransitionCoreE_of_split",
+      "module": "Jaune.Bridge.G2a.Body",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.stateTransitionCoreE"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.stateTransitionCoreE"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.Bridge.G2a.Phased.stateTransitionCoreE"
+        ],
+        "modules": [
+          "Jaune.Bridge.G2a.Phased"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Phased transition auxiliary. The public importer equality off the split is E.stateTransitionCoreE_eq_of_not_split (G2a-15); pre-cut E.stateTransitionCoreE_difference was verified at 5871922e (2de507f8) and superseded by decision 16 (a8e1bd07).",
+        "Decision 16 is recorded by the pre-decoder composed theorem at 5871922e and the checked decoder cut at a8e1bd07. Its historical decoder and rejection-type closure disposition is pending."
+      ]
+    },
+    {
+      "id": "G2a-15",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.E.stateTransitionCoreE_eq_of_not_split",
+      "module": "Jaune.Bridge.G2a.Block",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.stateTransitionCoreE"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.stateTransitionCoreE"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.Body"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.stateTransitionCoreE"
+        ],
+        "modules": [
+          "Jaune.Run.Block"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Public block transition equals the ba15f397 transition off the decision 14 split. Decision 16 (a8e1bd07) supersedes the pre-cut composed difference theorem recorded at 5871922e (2de507f8)."
+      ]
+    },
+    {
+      "id": "G2a-t8n-foldTransactions",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.Old.T8n.foldTransactions_eq",
+      "module": "Jaune.Bridge.G2a.Old.T8n",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.T8n.foldTransactions"
+        ],
+        "modules": [
+          "Jaune.T8n"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.T8n.foldTransactions"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.T8n"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.T8n.foldTransactions"
+        ],
+        "modules": [
+          "Jaune.T8n"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Whole adapter observation, including rejects, state and commitments."
+      ]
+    },
+    {
+      "id": "G2a-t8n-runStateTest",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.Old.T8n.runStateTest_eq",
+      "module": "Jaune.Bridge.G2a.Old.T8n",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.T8n.runStateTest"
+        ],
+        "modules": [
+          "Jaune.T8n"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.T8n.runStateTest"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.T8n"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.T8n.runStateTest"
+        ],
+        "modules": [
+          "Jaune.T8n"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Whole adapter observation, including rejects, state and commitments."
+      ]
+    },
+    {
+      "id": "G2a-t8n-runBlockchain",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Bridge.G2a.Old.T8n.runBlockchain_eq",
+      "module": "Jaune.Bridge.G2a.Old.T8n",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.T8n.runBlockchain"
+        ],
+        "modules": [
+          "Jaune.T8n"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.G2a.Old.T8n.runBlockchain"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.G2a.Old.T8n"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.T8n.runBlockchain"
+        ],
+        "modules": [
+          "Jaune.T8n"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Whole adapter observation, including rejects, state and commitments."
+      ]
+    },
+    {
+      "id": "G2a-import-addBlockToChainCanonicalE",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Staging.canonicalImport_eq",
+      "module": "Jaune.Bridge.Import",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.addBlockToChainCanonicalE"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.Import.addBlockToChainCanonicalE"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.Import"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.addBlockToChainCanonicalE"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        },
+        {
+          "name": "Jaune.stateTransitionCoreE",
+          "replacement": "Jaune.stateTransitionCoreE",
+          "bridged_by": "G2a-15"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Whole typed import result. The historical transition call remains part of the closure."
+      ]
+    },
+    {
+      "id": "G2a-import-addBlockToChainScheduledCanonicalE",
+      "gate": "G2a",
+      "kind": "theorem",
+      "theorem": "Jaune.Staging.scheduledCanonicalImport_eq",
+      "module": "Jaune.Bridge.Import",
+      "audit": [
+        {
+          "kind": "expect_axioms",
+          "file": "Jaune/Check/G2aBridgeAudit.lean"
+        }
+      ],
+      "old": {
+        "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+        "roots": [
+          "Jaune.addBlockToChainScheduledCanonicalE"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ],
+        "at_tag": [
+          "Jaune.Bridge.Import.addBlockToChainScheduledCanonicalE"
+        ],
+        "modules_at_tag": [
+          "Jaune.Bridge.Import"
+        ]
+      },
+      "new": {
+        "names": [
+          "Jaune.addBlockToChainScheduledCanonicalE"
+        ],
+        "modules": [
+          "Jaune.Transaction"
+        ]
+      },
+      "exempt": [
+        {
+          "name": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Benv.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearBenv"
+        },
+        {
+          "name": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.Devm.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearDevm"
+        },
+        {
+          "name": "Jaune.State.incrNonce",
+          "replacement": "Jaune.State.incrNonce",
+          "bridged_by": "G2a-account-incrNonce"
+        },
+        {
+          "name": "Jaune.State.set",
+          "replacement": "Jaune.State.set",
+          "bridged_by": "G2a-account-set"
+        },
+        {
+          "name": "Jaune.State.setBal",
+          "replacement": "Jaune.State.setBal",
+          "bridged_by": "G2a-account-setBal"
+        },
+        {
+          "name": "Jaune.State.setCode",
+          "replacement": "Jaune.State.setCode",
+          "bridged_by": "G2a-account-setCode"
+        },
+        {
+          "name": "Jaune.State.setPresent",
+          "replacement": "Jaune.State.setPresent",
+          "bridged_by": "G2a-account-setPresent"
+        },
+        {
+          "name": "Jaune.State.setStor",
+          "replacement": "Jaune.State.setStor",
+          "bridged_by": "G2a-account-setStor"
+        },
+        {
+          "name": "Jaune.State.setStorVal",
+          "replacement": "Jaune.State.setStorVal",
+          "bridged_by": "G2a-account-setStorVal"
+        },
+        {
+          "name": "Jaune.World.clearStorageWritesIfEmpty",
+          "replacement": "Jaune.World.clearStorageWritesIfEmpty",
+          "bridged_by": "G2a-account-clearWorld"
+        },
+        {
+          "name": "Jaune.stateTransitionCoreE",
+          "replacement": "Jaune.stateTransitionCoreE",
+          "bridged_by": "G2a-15"
+        }
+      ],
+      "maps": [
+        {
+          "path": "scripts/maps/g2a-lower-delta-map.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"
+        },
+        {
+          "path": "scripts/maps/g2a-swap-delta-map-v3.json",
+          "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b",
+          "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"
+        },
+        {
+          "path": "scripts/maps/g2a-waiting-support-map.json",
+          "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725",
+          "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312",
+          "before_candidate": "67d177768e8321a00da08532216f7c72a6debf6c",
+          "after_candidate": "de05cd290d766b2c69a7b0b9aa062f4b34d28d70",
+          "status": "OK",
+          "environments": 31,
+          "record": "g2-plan/u61-n4-0-report.md (lower/compare-final-v2.json sha256 f344ee4e; after-clean snapshot captured at 67d17776 + candidate.patch = de05cd29)"
+        },
+        {
+          "map_sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a",
+          "before_candidate": "09987e343eea0b049fff1cb5c3fa46a3c4181903",
+          "after_candidate": "5871922e3b60a3efa66f85ac3c2aab53a042aa0a",
+          "status": "OK",
+          "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Whole typed import result. The historical transition call remains part of the closure."
       ]
     }
   ],
@@ -170,24 +3572,56 @@
     "theorem": "Jaune.Bridge.G2a.<name>_eq",
     "module": "Jaune.Bridge.G2a.<Module>",
     "audit": [
-      {"kind": "expect_axioms", "file": "Jaune/Check/G2aBridgeAudit.lean"}
+      {
+        "kind": "expect_axioms",
+        "file": "Jaune/Check/G2aBridgeAudit.lean"
+      }
     ],
     "old": {
       "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
-      "roots": ["Jaune.<oldRoot>"],
-      "modules": ["Jaune.<OldModule>"],
-      "at_tag": ["Jaune.Bridge.G2a.Old.<oldRoot>"],
-      "modules_at_tag": ["Jaune.Bridge.G2a.Old.<Module>"]
+      "roots": [
+        "Jaune.<oldRoot>"
+      ],
+      "modules": [
+        "Jaune.<OldModule>"
+      ],
+      "at_tag": [
+        "Jaune.Bridge.G2a.Old.<oldRoot>"
+      ],
+      "modules_at_tag": [
+        "Jaune.Bridge.G2a.Old.<Module>"
+      ]
     },
-    "new": {"names": ["Jaune.<newName>"], "modules": ["Jaune.<NewModule>"]},
+    "new": {
+      "names": [
+        "Jaune.<newName>"
+      ],
+      "modules": [
+        "Jaune.<NewModule>"
+      ]
+    },
     "exempt": [
-      {"name": "Jaune.<editedHelper>", "replacement": "Jaune.<replacementAtTag>", "bridged_by": "G2a-M"}
+      {
+        "name": "Jaune.<editedHelper>",
+        "replacement": "Jaune.<replacementAtTag>",
+        "bridged_by": "G2a-M"
+      }
     ],
     "maps": [
-      {"path": "scripts/maps/<map>.json", "revision": "<full sha>", "sha256": "<sha256>"}
+      {
+        "path": "scripts/maps/<map>.json",
+        "revision": "<full sha>",
+        "sha256": "<sha256>"
+      }
     ],
     "n4_receipts": [
-      {"map_sha256": "<sha256>", "before_candidate": "<full sha>", "after_candidate": "<full sha>", "status": "OK", "record": "<goal evidence>"}
+      {
+        "map_sha256": "<sha256>",
+        "before_candidate": "<full sha>",
+        "after_candidate": "<full sha>",
+        "status": "OK",
+        "record": "<goal evidence>"
+      }
     ],
     "accepted": [],
     "gaps": [],
