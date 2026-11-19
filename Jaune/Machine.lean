@@ -1046,6 +1046,8 @@ def type4ContractCreationTag : String := "Type4ContractCreationError"
 /-- A typed transaction whose type the fork does not admit (unit U5's
 `maxType`; goal U11a gave it its own reason). -/
 def typePreForkTag : String := "TypePreForkError"
+/-- A typed transaction whose type byte is not supported by EIP-2718 (decision 16). -/
+def typeNotSupportedTag : String := "TypeNotSupportedError"
 def emptyAuthorizationListTag : String := "EmptyAuthorizationListError"
 
 ------------------- BLOCK-REJECTION REASONS --------------------

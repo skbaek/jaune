@@ -40,10 +40,11 @@ def transactionExceptionTags : List String :=
     type3BlobCountExceededTag, type3BlobCountLimitExceededTag,
     type3ContractCreationTag,
     type3InvalidBlobVersionedHashTag, type3ZeroBlobsTag,
-    type4ContractCreationTag, emptyAuthorizationListTag, typePreForkTag ]
+    type4ContractCreationTag, emptyAuthorizationListTag, typePreForkTag,
+    typeNotSupportedTag ]
 
-#guard transactionExceptionTags.length = 22
-#guard transactionExceptionTags.eraseDups.length = 22
+#guard transactionExceptionTags.length = 23
+#guard transactionExceptionTags.eraseDups.length = 23
 #guard transactionExceptionTags.all fun t =>
   (transactionExceptionTags.filter fun u => t.isPrefixOf u).length = 1
 
