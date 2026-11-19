@@ -22,6 +22,16 @@
       "source": "Plain English (rule 4). Historical canonical import witness for the G2a bridge ledger.",
       "from_module": "Jaune.Transaction",
       "to_module": "Jaune.Bridge.Import"
+    },
+    {
+      "old": "Jaune.splitScheduled",
+      "new": "Jaune.Bridge.Import.splitScheduled",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical canonical import witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Transaction",
+      "to_module": "Jaune.Bridge.Import"
     }
   ]
 }

@@ -1,4 +1,3 @@
-import Batteries.Tactic.OpenPrivate
 import Jaune.Bridge.G2a.Block
 import Jaune.Run.Import
 
@@ -8,9 +7,14 @@ proofs carry the existing block result equality through size checking and both
 import error channels, under the block bridge's decode-order hypothesis.
 -/
 
-open private Jaune.splitScheduled from Jaune.Transaction
-
 namespace Jaune.Bridge.Import
+
+private def splitScheduled {α : Type} :
+    Except (RulesLookupError ⊕ TransitionError) α →
+      Except RulesLookupError (Except TransitionError α)
+  | .error (.inl e) => .error e
+  | .error (.inr e) => .ok (.error e)
+  | .ok a => .ok (.ok a)
 
 def stateTransitionE (f : Fork) (chain : BlockChain) (block : Block) :
     Except TransitionError BlockChain :=
@@ -20,7 +24,7 @@ def stateTransitionE (f : Fork) (chain : BlockChain) (block : Block) :
 def stateTransitionScheduledE (cfg : ChainConfig) (f : Fork)
     (chain : BlockChain) (block : Block) :
     Except RulesLookupError (Except TransitionError BlockChain) :=
-  Jaune.splitScheduled <| Bridge.G2a.Old.stateTransitionCoreE Sum.inr f chain block
+  splitScheduled <| Bridge.G2a.Old.stateTransitionCoreE Sum.inr f chain block
     (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet chain block.header block.ommers)
 
 def addBlockToChainCanonicalE (f : Fork) (chain : BlockChain)
@@ -80,7 +84,7 @@ theorem importScheduled_eq (cfg : ChainConfig) (fork : Fork) (chain : BlockChain
   unfold importScheduled importCore Bridge.Import.addBlockToChainScheduledCanonicalE
   have htransition : stateTransitionScheduledE cfg fork chain candidate.block =
       Bridge.Import.stateTransitionScheduledE cfg fork chain candidate.block :=
-    congrArg Jaune.splitScheduled
+    congrArg Bridge.Import.splitScheduled
       (Bridge.G2a.E.stateTransitionCoreE_eq_of_not_split Sum.inr fork chain candidate.block _ h)
   cases checkBlockRlpSize fork.ruleSet.block candidate.rawSize with
   | error e => rfl
