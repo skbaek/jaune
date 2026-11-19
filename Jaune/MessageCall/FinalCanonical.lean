@@ -230,6 +230,12 @@ private theorem setBalance_canonical {s : Frame.State} (h : Frame.State.Canonica
     (a : Address) (v : U256) : Frame.State.Canonical (s.setBalance a v) :=
   ⟨h.1.setBal a v, h.2⟩
 
+private theorem selfdestructRefund_canonical {s : Frame.State} (h : Frame.State.Canonical s)
+    (rules : ForkRules) (p : Prop) [Decidable p] (a : Address) :
+    Frame.State.Canonical ((s.addSelfDestruct a).creditSelfdestructRefund rules p) := by
+  unfold Frame.State.creditSelfdestructRefund
+  split <;> exact h
+
 private theorem selfdestruct_canonical (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s) :
     ExitCanonical (HaltOp.run ctx s .selfdestruct) := by
   cases hs : ctx.block.rules.stateGas with
@@ -251,9 +257,13 @@ private theorem selfdestruct_canonical (ctx : CallContext) {s : Frame.State} (h 
       | some w =>
         simp only [Option.map]
         have hw : Frame.State.Canonical (u.withWorld w) := World.Canonical.subtractBalance hu hb
-        have hc := creditBeneficiary_canonical hw ctx.block.rules donee (t.balance ctx.recipient)
-        repeat' split
-        all_goals first | exact hc | (unfold Frame.State.creditSelfdestructRefund; split <;> exact setBalance_canonical hc _ _)
+        -- Dispatch each branch by its shape and leave the credited value to unification: a
+        -- failed or value-checking `exact` would `whnf` through `State.writeAccount` inside
+        -- `creditBeneficiary`.
+        split
+        · exact selfdestructRefund_canonical
+            (setBalance_canonical (creditBeneficiary_canonical hw _ _ _) _ _) _ _ _
+        · exact creditBeneficiary_canonical hw _ _ _
   | some state =>
     simp only [HaltOp.run, hs]
     apply catchHalt_canonical
