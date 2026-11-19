@@ -29,7 +29,7 @@ Each mirrors the `Benv` function of the same name field for field, on the world 
 /-- Forget an empty account's storage writes: `Benv.clearStorageWritesIfEmpty` on the world. -/
 def World.clearStorageWritesIfEmpty (w : World) (a : Address) : World :=
   { w with storageWrites :=
-      if (w.state.get a).isEmpty then w.storageWrites.eraseAddress a else w.storageWrites }
+      w.storageWrites.clearIfEmpty w.state a }
 
 /-- The set-up a creation makes at its new address before its initcode runs:
 `processCreateMessage.msg` on the world. The storage is cleared together with its write keys

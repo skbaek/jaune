@@ -283,8 +283,7 @@ theorem chargeDeposit_committed (rules : ForkRules) (code : Bytes) {d : Devm} {k
     simp_all [CS, Devm.withGasLeft, Devm.setMach]
 
 theorem Devm.setCode_mach (d : Devm) (a : Address) (code : ByteArray) :
-    (d.setCode a code).mach = d.mach := by
-  unfold Devm.setCode Devm.clearStorageWritesIfEmpty; split <;> rfl
+    (d.setCode a code).mach = d.mach := rfl
 
 /-- A deposit keeps the committed spill, on both channels. -/
 theorem depositCode_committed (rules : ForkRules) (a : Address) (code : Bytes) {d : Devm}

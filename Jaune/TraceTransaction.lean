@@ -184,12 +184,10 @@ def finishTransaction (prepared : PreparedTransaction) (tx : Transaction) (index
   let transactionFee := settlement.gasUsed * priorityFeePerGas
   let state := state.addBal sender gasRefundAmount.toU256
   let storageWrites :=
-    if (state.get sender).isEmpty then txOutput.storageWrites.eraseAddress sender
-    else txOutput.storageWrites
+    txOutput.storageWrites.clearIfEmpty state sender
   let state := state.addBal benv.stat.coinbase transactionFee.toU256
   let storageWrites :=
-    if (state.get benv.stat.coinbase).isEmpty then storageWrites.eraseAddress benv.stat.coinbase
-    else storageWrites
+    storageWrites.clearIfEmpty state benv.stat.coinbase
   let storageWrites := txOutput.accountsToDelete.toList.foldl
     (fun writes a => writes.eraseAddress a) storageWrites
   let state := settleSelfdestructs benv.stat.rules

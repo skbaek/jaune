@@ -1,4 +1,5 @@
 import Jaune.Exec
+import Jaune.Memory
 
 namespace Jaune
 
@@ -47,26 +48,6 @@ private theorem ceilDiv32_le {a b : Nat} (h : a ≤ b) :
   simp only [ceilDiv]
   split <;> split <;> omega
 
-private theorem le_ceilDiv32_mul (n : Nat) : n ≤ 32 * ceilDiv n 32 := by
-  simp only [ceilDiv]
-  split <;> omega
-
-theorem memExtSize_ge (current index size : Nat) :
-    current ≤ memExtSize current index size := by
-  simp only [memExtSize]
-  split
-  · exact Nat.le_refl _
-  · have h := le_ceilDiv32_mul current
-    have hm := Nat.le_max_left (ceilDiv current 32) (ceilDiv (index + size) 32)
-    omega
-
-theorem memExtsSize_ge (current : Nat) (pairs : List (Nat × Nat)) :
-    current ≤ memExtsSize current pairs := by
-  induction pairs generalizing current with
-  | nil => exact Nat.le_refl _
-  | cons pair pairs ih =>
-    exact Nat.le_trans (memExtSize_ge current pair.1 pair.2) (ih _)
-
 theorem calculateMemoryGasCost_mono {a b : Nat} (h : a ≤ b) :
     calculateMemoryGasCost a ≤ calculateMemoryGasCost b := by
   have hw := ceilDiv32_le h
@@ -102,14 +83,6 @@ theorem charged_memExtends_accounting {before charged : Devm}
     rw [hm]
   rw [Devm.memExtends_gasMeasure, hs]
   simp only [Devm.extCost] at hg
-  omega
-
-/-- A nonempty access is covered by the actual rounded expansion. -/
-theorem memExtSize_access_le (current index size : Nat) (hsize : size ≠ 0) :
-    index + size ≤ memExtSize current index size := by
-  simp only [memExtSize, ite_eq_right hsize]
-  have h := le_ceilDiv32_mul (index + size)
-  have hm := Nat.le_max_right (ceilDiv current 32) (ceilDiv (index + size) 32)
   omega
 
 /-- A copy into a prepaid window does not expand memory. Empty copies need
@@ -356,16 +329,27 @@ theorem HaltOp.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Halt
                   cases hrun
                   exact hcharged
                 · simp only [hb] at hrun
-                  split at hrun
-                  · cases hrun
-                    dsimp only
-                    simp only [creditSelfdestructRefund_memory,
-                      creditSelfdestructRefund_output]
-                    exact ⟨(Devm.creditBeneficiary_memory _ _ _ _).trans hcharged.1,
-                      (Devm.creditBeneficiary_output _ _ _ _).trans hcharged.2⟩
-                  · cases hrun
-                    exact ⟨(Devm.creditBeneficiary_memory _ _ _ _).trans hcharged.1,
-                      (Devm.creditBeneficiary_output _ _ _ _).trans hcharged.2⟩
+                  -- Rewrite world-only projections before closing so `whnf` does not unfold
+                  -- `State.writeAccount` or `KeySet.clearIfEmpty`.
+                  have hmDel : ∀ (d : Devm) a, (addAccountToDelete d a).memory = d.memory :=
+                    fun _ _ => rfl
+                  have hoDel : ∀ (d : Devm) a, (addAccountToDelete d a).output = d.output :=
+                    fun _ _ => rfl
+                  have hmBal : ∀ (d : Devm) a v, (d.setBal a v).memory = d.memory :=
+                    fun _ _ _ => rfl
+                  have hoBal : ∀ (d : Devm) a v, (d.setBal a v).output = d.output :=
+                    fun _ _ _ => rfl
+                  have hmClear : ∀ (d : Devm) a,
+                      (d.clearStorageWritesIfEmpty a).memory = d.memory := fun _ _ => rfl
+                  have hoClear : ∀ (d : Devm) a,
+                      (d.clearStorageWritesIfEmpty a).output = d.output := fun _ _ => rfl
+                  have hmState : ∀ (d : Devm) s, (d.withState s).memory = d.memory := fun _ _ => rfl
+                  have hoState : ∀ (d : Devm) s, (d.withState s).output = d.output := fun _ _ => rfl
+                  split at hrun <;> cases hrun <;>
+                    simp only [creditSelfdestructRefund_memory, creditSelfdestructRefund_output,
+                      hmDel, hoDel, hmBal, hoBal, Devm.creditBeneficiary_memory,
+                      Devm.creditBeneficiary_output, hmClear, hoClear, hmState, hoState] <;>
+                    exact hcharged
               · simp only [assertDynamic, Except.assert, hd] at hrun
                 cases hrun
                 exact hcharged
