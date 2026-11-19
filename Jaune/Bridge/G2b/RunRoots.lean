@@ -1,7 +1,7 @@
 import Jaune.Run.Root
 import Jaune.Run.Block
 import Jaune.Bridge.G2b.FinalDriver
-import Jaune.Run.BlockFacts
+import Jaune.Run.BodyFacts
 
 namespace Jaune.Staging
 

@@ -1,4 +1,5 @@
 import Jaune.Run.Body
+import Jaune.Run.Block
 import Jaune.Run.BodyFactsRlp
 
 /-!
@@ -873,5 +874,68 @@ theorem Body.run_summary (benv : Benv) :
         revert this
         cases Body.run benv q ops <;> cases Body.run benv q' ops <;> intro this <;>
           simp_all [Functor.map, Except.map, pure, Except.pure]
+
+/-! ### The block run -/
+
+/-- The block run's final prefix is the importer's body. -/
+theorem BlockRun.run_final (f : Fork) (ch : BlockChain) (block : Block) :
+    BlockRun.final <$> BlockRun.run f ch block =
+      Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers
+        block.withdrawals := by
+  unfold BlockRun.run Body.importer
+  simp only [bind, Except.bind]
+  cases block.transactions.mapM (decodeTransaction (initBlockEnvironment f ch block.header).stat.rules) with
+  | error e => rfl
+  | ok txs =>
+    have h := (Body.fold_eq_run (initBlockEnvironment f ch block.header)
+      (Body.Prefix.init (initBlockEnvironment f ch block.header).state)
+      (Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals)).symm
+    dsimp only
+    cases hr : Body.run (initBlockEnvironment f ch block.header)
+        (Body.Prefix.init (initBlockEnvironment f ch block.header).state)
+        (Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals) with
+    | error e => rw [hr] at h; exact h
+    | ok sq => rw [hr] at h; exact h
+
+theorem BlockRun.run_fork {f : Fork} {ch : BlockChain} {block : Block} {r : BlockRun}
+    (h : BlockRun.run f ch block = .ok r) : r.fork = f := by
+  unfold BlockRun.run at h
+  simp only [bind, Except.bind] at h
+  split at h
+  · cases h
+  · split at h
+    · cases h
+    · cases h; rfl
+
+/-- **The transition over the block run.** The staged transition validates the header, checks the
+ommers, runs the block, checks the run's commitments, and appends the block with the run's final
+state. -/
+theorem E.stateTransitionCoreE_eq_run {ε : Type} (embed : TransitionError → ε) (f : Fork)
+    (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
+    E.stateTransitionCoreE embed f ch block checkOmmers = (do
+      Except.mapError embed (validateHeader f.ruleSet ch block.header)
+      checkOmmers ()
+      let r ← Except.mapError embed (BlockRun.run f ch block)
+      Except.mapError (embed ∘ TransitionError.block) (Block.check block.header r.commitments)
+      .ok ⟨appendBlock ch.blocks block, r.final.state, ch.chainId⟩) := by
+  unfold E.stateTransitionCoreE
+  have h := BlockRun.run_final f ch block
+  cases hr : BlockRun.run f ch block with
+  | error e =>
+    rw [hr] at h
+    rw [← h]
+    rfl
+  | ok r =>
+    rw [hr] at h
+    rw [← h]
+    have hf : r.fork = f := BlockRun.run_fork hr
+    cases hv : validateHeader f.ruleSet ch block.header with
+    | error e => rfl
+    | ok u =>
+      cases ho : checkOmmers () with
+      | error e => simp only [bind, Except.bind, Except.mapError]
+      | ok u' =>
+        simp only [bind, Except.bind, Except.mapError, Functor.map, Except.map,
+          BlockRun.commitments, hf]
 
 end Jaune.Staging
