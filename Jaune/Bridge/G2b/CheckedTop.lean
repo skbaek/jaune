@@ -1,6 +1,7 @@
 import Jaune.Bridge.G2b.CheckedDriver
 import Jaune.Bridge.G2b.CheckedIngress
 import Jaune.Bridge.G2b.CheckedReached
+import Jaune.Bridge.G2b.CheckedContext
 import Jaune.Implementation.CheckedCachedDriver
 import Jaune.Bridge.G2b.FinalDriver
 import Jaune.Bridge.G2a.Run
@@ -82,6 +83,94 @@ def prepare (msg : Msg) : Except Fault Preparation :=
     .ok (.frame (Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp)) refund)
 
 def run (msg : Msg) : Except Fault Run := prepare msg >>= Preparation.run
+
+private theorem setDelegationLoop_preserves_block {auths : List Authorization} {msg : Msg}
+    {refund : U256} {out : Msg × U256} (h : setDelegationLoop auths msg refund = .ok out) :
+    out.1.benv.stat = msg.benv.stat := by
+  induction auths generalizing msg refund with
+  | nil => cases h; rfl
+  | cons auth auths ih =>
+    rw [setDelegationLoop] at h
+    obtain ⟨⟨next, refund'⟩, hstep, hrest⟩ := Except.bind_eq_ok h
+    have hblock : next.benv.stat = msg.benv.stat := by
+      unfold setDelegationStep at hstep
+      split at hstep
+      · cases hstep; rfl
+      split at hstep
+      · cases hstep; rfl
+      split at hstep
+      · cases hstep; rfl
+      · cases hstep
+      · dsimp only at hstep
+        split at hstep
+        · cases hstep; rfl
+        · split at hstep <;> cases hstep <;> rfl
+    exact (ih hrest).trans hblock
+
+private theorem authorize_preserves_block {msg : Msg} {out : Msg × Nat}
+    (h : processMessageCall.authorize msg = .ok out) : out.1.benv.stat = msg.benv.stat := by
+  unfold processMessageCall.authorize at h
+  split at h
+  · cases h; rfl
+  · obtain ⟨⟨delegated, refund⟩, hd, h⟩ := Except.bind_eq_ok h
+    cases h
+    unfold setDelegation at hd
+    obtain ⟨⟨next, r⟩, hn, hd⟩ := Except.bind_eq_ok hd
+    dsimp only at hd
+    split at hd <;> cases hd
+    exact setDelegationLoop_preserves_block hn
+
+private theorem amsterdam_preserves_block {msg : Msg} {rules : StateGasRules} {out : Msg × Devm}
+    (h : prepareTopLevelAmsterdam rules msg = .ok out) : out.1.benv.stat = msg.benv.stat := by
+  rw [← Jaune.Bridge.G2a.prepareTopLevelAmsterdam_eq] at h
+  suffices ∀ start, Staging.finishTopLevelAmsterdam rules msg start = .ok out →
+      out.1.benv.stat = msg.benv.stat by
+    unfold Staging.prepareTopLevelAmsterdam at h
+    dsimp only at h
+    split at h <;> obtain ⟨start, _, h⟩ := Except.bind_eq_ok h <;> exact this start h
+  intro start h
+  unfold Staging.finishTopLevelAmsterdam at h
+  dsimp only at h
+  generalize (if msg.tenv.stat.auths.isEmpty then start else start.commitStateGas) = committed at h
+  unfold Staging.dispatchTopLevelAmsterdam at h
+  dsimp only at h
+  split at h
+  · split at h
+    · cases h
+    · split at h <;> obtain ⟨charged, _, h⟩ := Except.bind_eq_ok h <;> cases h <;> rfl
+  · split at h <;> obtain ⟨charged, _, h⟩ := Except.bind_eq_ok h
+    all_goals
+      unfold Staging.resolveTopLevelCallAmsterdam at h
+      obtain ⟨charged', _, h⟩ := Except.bind_eq_ok h
+      cases h
+      rfl
+
+/-- The frame sees the transaction's original state after all top-level preparation,
+including authorization writes and delegation resolution. -/
+theorem run_frame_originalState {msg : Msg} {f : Frame} {refund : Nat} {result : Frame.TopRun}
+    (h : run msg = .ok (.frame f refund result)) :
+    f.message.context.toChecked.tx.originalState = msg.benv.stat.origState := by
+  obtain ⟨prep, hp, hr⟩ := Except.bind_eq_ok h
+  unfold prepare at hp
+  split at hp
+  · cases hp
+  · split at hp <;> cases hp <;> cases hr
+  · rename_i legacy authorized hlegacy
+    cases hp
+    simp only [Preparation.run] at hr
+    cases fRun : (Frame.ofLegacy legacy (Staging.TopLevel.prepare_frame_memory_wf hlegacy)).runTopWithRoot
+    all_goals rw [fRun] at hr
+    · cases hr
+    · cases hr
+      change legacy.message.context.block.origState = msg.benv.stat.origState
+      have hframe := Jaune.Bridge.G2a.Staging.TopLevel.prepare_topFrame hlegacy
+      cases hframe with
+      | create => rfl
+      | call _ _ ha =>
+        change (Msg.resolveCodeDelegation _).benv.stat.origState = _
+        unfold Msg.resolveCodeDelegation
+        split <;> exact congrArg BenvStat.origState (authorize_preserves_block ha)
+      | amsterdam _ ha => exact congrArg BenvStat.origState (amsterdam_preserves_block ha)
 
 private def frameOutput (msg : Msg) (f : Jaune.Frame) (refund : Nat) (r : Frame.Result) :
     Except EvmError (Jaune.State × MsgCallOutput) :=

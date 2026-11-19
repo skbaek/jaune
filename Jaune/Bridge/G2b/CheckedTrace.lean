@@ -1185,6 +1185,25 @@ private theorem processTransaction_prepared (benv : Benv) (bout : BlockOutput)
   unfold Staging.processTransaction Staging.TraceTransaction.prepareTransaction
   simp only [bind_assoc, Jaune.Bridge.G2a.processMessageCall_eq]
 
+private theorem prepared_originalState {benv : Benv} {bout : BlockOutput} {tx : Transaction}
+    {index : Nat} {prepared : Staging.Transaction.Prepared}
+    (h : Staging.TraceTransaction.prepareTransaction benv bout tx index = .ok prepared) :
+    prepared.msg.benv.stat.origState = benv.state := by
+  obtain ⟨checked, hc, hp⟩ := Except.bind_eq_ok h
+  have hchecked : checked.benv.stat.origState = benv.state := by
+    unfold Staging.Transaction.check at hc
+    obtain ⟨_, _, hc⟩ := Except.bind_eq_ok hc
+    obtain ⟨_, _, hc⟩ := Except.bind_eq_ok hc
+    obtain ⟨⟨_, _⟩, _, hc⟩ := Except.bind_eq_ok hc
+    obtain ⟨⟨_, _, _, _⟩, _, hc⟩ := Except.bind_eq_ok hc
+    cases hc; rfl
+  unfold Staging.Transaction.prepare at hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨msg, hm, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  unfold prepareMessage at hm
+  cases tx.type.to? <;> cases hm <;> exact hchecked
+
 /-- The Checked transaction trace retains the message needed to interpret its
 typed run. The certificate refers to the current staged transaction value. -/
 structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat)
@@ -1193,6 +1212,24 @@ structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction
   observes : messageRun =
     (Staging.TraceTransaction.prepareTransaction benv bout tx index).toOption.bind fun prepared =>
       (Checked.TopLevel.run prepared.msg).toOption.map fun run => (prepared.msg, run)
+
+/-- A retained transaction frame uses the state at transaction entry as its
+SSTORE baseline. In a block body, the caller supplies the current prefix state
+in `benv`, including the effects of preceding operations. -/
+theorem TransactionResult.frame_originalState {benv bout tx index}
+    (result : TransactionResult benv bout tx index) {msg : Msg} {f : Checked.Frame}
+    {refund : Nat} {run : Checked.Frame.TopRun}
+    (h : result.messageRun = some (msg, .frame f refund run)) :
+    f.message.context.toChecked.tx.originalState = benv.state := by
+  rw [result.observes] at h
+  cases hp : Staging.TraceTransaction.prepareTransaction benv bout tx index with
+  | error => rw [hp] at h; cases h
+  | ok prepared =>
+    rw [hp] at h
+    cases hr : Checked.TopLevel.run prepared.msg <;> simp only [Except.toOption, Option.bind, hr, Option.map] at h
+    · cases h
+    · cases h
+      exact (Checked.TopLevel.run_frame_originalState hr).trans (prepared_originalState hp)
 
 /-- Trace one Checked message and settle its result through the transaction's
 shared preparation and the checked bridge to staging settlement. -/
