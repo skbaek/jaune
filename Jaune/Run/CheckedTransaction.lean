@@ -152,6 +152,17 @@ def step (benv : Benv) (p : Jaune.Body.Prefix) : BodyOp → Except TransitionErr
   | .transaction tx index => do
     let (run, bout) ← Transaction.run (benv.withState p.state) p.toBlockOutput tx index
     pure (Jaune.Body.Prefix.ofBlockOutput run.state bout)
+  | .withdrawals ws index =>
+    let state := processWithdrawalsState p.state ws
+    pure { p with
+      state
+      withdrawalsTrie := processWithdrawalsTrie p.withdrawalsTrie ws
+      blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules index p.state state
+        (ws.map Withdrawal.address) [] [] }
+  | .depositRequests => do
+    let deposits ← parseDepositRequests p.toBlockOutput
+    pure { p with
+      requests := if deposits.length > 0 then p.requests ++ [depositRequestType ++ deposits] else p.requests }
   | .requestCall type address index => do
     let run ← processCheckedSystemTransaction benv.stat.toBlockContext p.state benv.createdAccounts address []
     pure { p with
@@ -161,7 +172,16 @@ def step (benv : Benv) (p : Jaune.Body.Prefix) : BodyOp → Except TransitionErr
         | none => p.blockAccessListBuilder
         | some _ => p.blockAccessListBuilder.incorporate index p.state run.state
             (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList }
-  | op => (Jaune.Body.step benv p op).map Prod.snd
+  | .rewards coinbase minerReward credits =>
+    pure { p with state := creditAll credits (p.state.addBal coinbase minerReward.toU256) }
+  | .buildAccessList =>
+    let list := match benv.stat.rules.blockAccessListRules with
+      | none => []
+      | some _ => p.blockAccessListBuilder.build
+    pure { p with blockAccessList := list }
+  | .checkAccessListLimit => do
+    checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit p.blockAccessList
+    pure p
 
 /-- Decode before executing the importer operations, including pre-execution system calls. -/
 def importer (benv : Benv) (txs : List (Bytes ⊕ Jaune.Transaction)) (ommers : List Header)

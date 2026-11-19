@@ -14,9 +14,8 @@
 --
 -- `stateTransitionE` validates the sealed header, derives the `Benv` from
 -- the chain and header, runs the body, and checks the header's commitments.
--- The transition tool builds its `Benv` from `env` and shares the
--- importer's body operations through `Body.step` and `Body.fold`. It emits the
--- resulting state and commitments for the caller.
+-- The transition tool builds its `Benv` from `env` and runs the Checked
+-- body operations. It emits the resulting state and commitments for the caller.
 --
 -- The one genuinely new piece of control flow is the reject-and-continue
 -- fold. Block import stops at the first failing transaction because a
@@ -26,6 +25,7 @@
 -- state.
 
 import Jaune.Transaction
+import Jaune.Run.CheckedTransaction
 import Jaune.FixtureException
 import Jaune.Adapter.IO
 
@@ -910,10 +910,8 @@ def operational : TransitionError → Bool
   | .internal _ => true
   | _ => false
 
-/-- The reject-and-continue fold: the one piece of control flow a transition
-tool needs that a block importer must not have. Every arm runs the body's
-transaction step (`Body.step`) unchanged from the prefix so far, and a rejected
-transaction is rolled back by not threading its prefix.
+/-- Run the body's transaction step from each prefix, keeping the prefix before
+a rejected transaction.
 
 A rejected transaction leaves no trace in the block: each accepted transaction
 is processed at the count of transactions accepted before it, so the ones that
@@ -922,19 +920,22 @@ trie, the receipts trie and the block-level access list alike. Rejections are
 still reported under their position in the input. This is the target's rule
 since ethereum/execution-specs#3849 (rejected transactions are numbered out)
 and #3361 (the body lists only accepted transactions). -/
-def foldTransactions (benv : Benv) :
+def foldTransactionsWith (step : Body.Prefix → BodyOp → Except TransitionError Body.Prefix) :
     List (Nat × TransactionParse Transaction) → Body.Prefix → List Rejection →
       List Transaction →
       Except TransitionError (Body.Prefix × List Rejection × List Transaction)
   | [], p, rej, inc => .ok ⟨p, rej, inc⟩
   | ⟨i, .error e⟩ :: rest, p, rej, inc =>
-    foldTransactions benv rest p (rej ++ [⟨i, .parse e⟩]) inc
+    foldTransactionsWith step rest p (rej ++ [⟨i, .parse e⟩]) inc
   | ⟨i, .ok tx⟩ :: rest, p, rej, inc =>
-    match Body.step benv p (.transaction tx inc.length) with
-    | .ok ⟨_, q⟩ => foldTransactions benv rest q rej (inc ++ [tx])
+    match step p (.transaction tx inc.length) with
+    | .ok q => foldTransactionsWith step rest q rej (inc ++ [tx])
     | .error err =>
       if operational err then .error err
-      else foldTransactions benv rest p (rej ++ [⟨i, .execution err⟩]) inc
+      else foldTransactionsWith step rest p (rej ++ [⟨i, .execution err⟩]) inc
+
+/-- The transition tool's signed-transaction fold uses the Checked body step. -/
+def foldTransactions (benv : Benv) := foldTransactionsWith (Checked.Body.step benv)
 
 /-- State-test mode: exactly one transaction from the empty prefix, no system
 operations, no withdrawals, no requests. -/
@@ -1029,24 +1030,30 @@ the goal, as renumbered by ethereum/execution-specs#3849). The list is built
 after the requests and the item rule is applied to it; a violation is the
 `blockException` of a result that still carries the list, as the target
 assigns `block_output.block_access_list` before validating it. -/
-def runBlockchain (benv : Benv) (txs : List (TransactionParse Transaction))
-    (wds : List Withdrawal) (reward : Option Nat := none) (ommers : List T8nOmmer := []) :
-    Except TransitionError Outcome := do
-  let p ← Body.fold benv (Body.Prefix.init benv.state) (preOps benv)
-  let ⟨p, rej, inc⟩ ← foldTransactions benv txs.putIndex p [] []
-  let p ← Body.fold benv p (postOps benv inc.length wds reward ommers)
+def runBlockchainWith (step : Body.Prefix → BodyOp → Except TransitionError Body.Prefix)
+    (benv : Benv) (txs : List (TransactionParse Transaction)) (wds : List Withdrawal)
+    (reward : Option Nat) (ommers : List T8nOmmer) : Except TransitionError Outcome := do
+  let p ← (preOps benv).foldlM step (Body.Prefix.init benv.state)
+  let ⟨p, rej, inc⟩ ← foldTransactionsWith step txs.putIndex p [] []
+  let p ← (postOps benv inc.length wds reward ommers).foldlM step p
   let requests :=
-    if benv.stat.rules.header.requestsHash then Body.fold benv p (requestOps benv inc.length)
+    if benv.stat.rules.header.requestsHash then (requestOps benv inc.length).foldlM step p
     else .ok p
   match requests with
   | .ok q => do
-    let ⟨_, q⟩ ← Body.step benv q .buildAccessList
-    match Body.step benv q .checkAccessListLimit with
+    let q ← step q .buildAccessList
+    match step q .checkAccessListLimit with
     | .ok _ => .ok ⟨q.state, q.toBlockOutput, rej, none, inc⟩
     | .error (.block reason) => .ok ⟨q.state, q.toBlockOutput, rej, some reason, inc⟩
     | .error err => .error err
   | .error (.block reason) => .ok ⟨p.state, p.toBlockOutput, rej, some reason, inc⟩
   | .error err => .error err
+
+/-- Run the blockchain-mode operation sequence through the Checked body. -/
+def runBlockchain (benv : Benv) (txs : List (TransactionParse Transaction))
+    (wds : List Withdrawal) (reward : Option Nat := none) (ommers : List T8nOmmer := []) :
+    Except TransitionError Outcome :=
+  runBlockchainWith (Checked.Body.step benv) benv txs wds reward ommers
 
 -- Focused EIP-7928 carry tests for the two block frontends. The request
 -- addresses are the first two pinned Amsterdam request contracts; their test

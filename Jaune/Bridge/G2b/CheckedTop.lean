@@ -1290,9 +1290,16 @@ theorem Body.step_observe (benv : Benv) (p : Jaune.Body.Prefix) (op : BodyOp) :
         (Jaune.processCheckedSystemTransaction (benv.withState p.state) address []).map
           TopLevel.Settlement.ofLegacy from processCheckedSystemTransaction_observe (benv.withState p.state) ..]
     cases Jaune.processCheckedSystemTransaction (benv.withState p.state) address [] <;> rfl
+  case depositRequests =>
+    simp only [step, Jaune.Body.step]
+    cases parseDepositRequests p.toBlockOutput <;> rfl
+  case checkAccessListLimit =>
+    simp only [step, Jaune.Body.step]
+    cases checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit p.blockAccessList <;> rfl
   all_goals rfl
 
-private theorem Body.fold_observe (benv : Benv) (p : Jaune.Body.Prefix) (ops : List BodyOp) :
+/-- A sequence of Checked operations preserves the full waiting fold. -/
+theorem Body.fold_observe (benv : Benv) (p : Jaune.Body.Prefix) (ops : List BodyOp) :
     ops.foldlM (step benv) p = Jaune.Body.fold benv p ops := by
   induction ops generalizing p with
   | nil => rfl
