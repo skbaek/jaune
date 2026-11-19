@@ -22,7 +22,7 @@ preparation lemmas below are stated over them. This module stages the new messag
 A G2a bridge relates it to the existing message call.
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 open Jaune
 
@@ -32,30 +32,30 @@ Every preparation error comes from a gas charge (an out-of-gas halt), the creati
 halt) or authority recovery (a cryptographic failure). -/
 
 /-- An error a top-level preparation may raise: an exceptional halt or a cryptographic failure. -/
-def PreparationError : EvmError → Prop
+def Staging.PreparationError : EvmError → Prop
   | .halt _ => True
   | .crypto _ => True
   | _ => False
 
 /-- A computation whose every error is a `PreparationError`. -/
-structure PreparationErrors {α : Type} (x : Except (EvmError × Devm) α) : Prop where
-  of : ∀ e d, x = .error (e, d) → PreparationError e
+structure Staging.PreparationErrors {α : Type} (x : Except (EvmError × Devm) α) : Prop where
+  of : ∀ e d, x = .error (e, d) → Staging.PreparationError e
 
-theorem PreparationErrors.ok {α : Type} (a : α) :
-    PreparationErrors (.ok a : Except (EvmError × Devm) α) :=
+theorem Staging.PreparationErrors.ok {α : Type} (a : α) :
+    Staging.PreparationErrors (.ok a : Except (EvmError × Devm) α) :=
   ⟨fun _ _ h => by cases h⟩
 
-theorem PreparationErrors.halt {α : Type} (reason : ExceptionalHalt) (d : Devm) :
-    PreparationErrors (.error (.halt reason, d) : Except (EvmError × Devm) α) :=
+theorem Staging.PreparationErrors.halt {α : Type} (reason : ExceptionalHalt) (d : Devm) :
+    Staging.PreparationErrors (.error (.halt reason, d) : Except (EvmError × Devm) α) :=
   ⟨fun _ _ h => by cases h; trivial⟩
 
-theorem PreparationErrors.crypto {α : Type} (reason : CryptoError) (d : Devm) :
-    PreparationErrors (.error (.crypto reason, d) : Except (EvmError × Devm) α) :=
+theorem Staging.PreparationErrors.crypto {α : Type} (reason : CryptoError) (d : Devm) :
+    Staging.PreparationErrors (.error (.crypto reason, d) : Except (EvmError × Devm) α) :=
   ⟨fun _ _ h => by cases h; trivial⟩
 
-theorem PreparationErrors.bind {α β : Type} {x : Except (EvmError × Devm) α}
-    {f : α → Except (EvmError × Devm) β} (hx : PreparationErrors x)
-    (hf : ∀ a, PreparationErrors (f a)) : PreparationErrors (x >>= f) := by
+theorem Staging.PreparationErrors.bind {α β : Type} {x : Except (EvmError × Devm) α}
+    {f : α → Except (EvmError × Devm) β} (hx : Staging.PreparationErrors x)
+    (hf : ∀ a, Staging.PreparationErrors (f a)) : Staging.PreparationErrors (x >>= f) := by
   refine ⟨fun e d h => ?_⟩
   cases hxa : x with
   | error p =>
@@ -66,13 +66,13 @@ theorem PreparationErrors.bind {α β : Type} {x : Except (EvmError × Devm) α}
     rw [hxa] at h
     exact (hf a).of e d h
 
-theorem PreparationErrors.ite {α : Type} {c : Prop} [Decidable c]
-    {x y : Except (EvmError × Devm) α} (hx : PreparationErrors x) (hy : PreparationErrors y) :
-    PreparationErrors (if c then x else y) := by
+theorem Staging.PreparationErrors.ite {α : Type} {c : Prop} [Decidable c]
+    {x y : Except (EvmError × Devm) α} (hx : Staging.PreparationErrors x) (hy : Staging.PreparationErrors y) :
+    Staging.PreparationErrors (if c then x else y) := by
   split <;> assumption
 
-theorem chargeGas_preparationErrors (cost : Nat) (devm : Devm) :
-    PreparationErrors (chargeGas cost devm) := by
+theorem Staging.chargeGas_preparationErrors (cost : Nat) (devm : Devm) :
+    Staging.PreparationErrors (chargeGas cost devm) := by
   refine ⟨fun e d h => ?_⟩
   simp only [chargeGas, liftMachExecution, Footprint.toExecution, liftMach, Footprint.liftOutcome,
     Mach.chargeGas] at h
@@ -80,8 +80,8 @@ theorem chargeGas_preparationErrors (cost : Nat) (devm : Devm) :
   obtain ⟨rfl, -⟩ := h
   trivial
 
-theorem chargeStateGas_preparationErrors (amount : Nat) (devm : Devm) :
-    PreparationErrors (chargeStateGas amount devm) := by
+theorem Staging.chargeStateGas_preparationErrors (amount : Nat) (devm : Devm) :
+    Staging.PreparationErrors (chargeStateGas amount devm) := by
   refine ⟨fun e d h => ?_⟩
   simp only [chargeStateGas, liftMachExecution, Footprint.toExecution, liftMach,
     Footprint.liftOutcome, Mach.chargeStateGas] at h
@@ -93,121 +93,121 @@ theorem chargeStateGas_preparationErrors (amount : Nat) (devm : Devm) :
       obtain ⟨rfl, -⟩ := h
       trivial
 
-theorem chargeNewAuthorityAmsterdam_preparationErrors (state : StateGasRules)
+theorem Staging.chargeNewAuthorityAmsterdam_preparationErrors (state : StateGasRules)
     (authority : Address) (devm : Devm) :
-    PreparationErrors (chargeNewAuthorityAmsterdam state authority devm) := by
+    Staging.PreparationErrors (chargeNewAuthorityAmsterdam state authority devm) := by
   unfold chargeNewAuthorityAmsterdam
-  exact .ite (chargeStateGas_preparationErrors _ _) (.ok _)
+  exact .ite (Staging.chargeStateGas_preparationErrors _ _) (.ok _)
 
-theorem chargePaidAccountWriteAmsterdam_preparationErrors (state : StateGasRules)
+theorem Staging.chargePaidAccountWriteAmsterdam_preparationErrors (state : StateGasRules)
     (authority : Address) (devm : Devm) (paidWrites : AdrSet) :
-    PreparationErrors (chargePaidAccountWriteAmsterdam state authority devm paidWrites) := by
+    Staging.PreparationErrors (chargePaidAccountWriteAmsterdam state authority devm paidWrites) := by
   unfold chargePaidAccountWriteAmsterdam
-  exact .ite (.ok _) (.bind (chargeGas_preparationErrors _ _) fun _ => .ok _)
+  exact .ite (.ok _) (.bind (Staging.chargeGas_preparationErrors _ _) fun _ => .ok _)
 
-theorem chargeAuthBaseAmsterdam_preparationErrors (state : StateGasRules) (msg : Msg)
+theorem Staging.chargeAuthBaseAmsterdam_preparationErrors (state : StateGasRules) (msg : Msg)
     (authority target : Address) (devm : Devm) (delegationSetFor : AdrSet) :
-    PreparationErrors
+    Staging.PreparationErrors
       (chargeAuthBaseAmsterdam state msg authority target devm delegationSetFor) := by
   unfold chargeAuthBaseAmsterdam
   dsimp only
-  exact .ite (.ok _) (.ite (.bind (chargeStateGas_preparationErrors _ _) fun _ => .ok _)
+  exact .ite (.ok _) (.ite (.bind (Staging.chargeStateGas_preparationErrors _ _) fun _ => .ok _)
     (.bind (.ok _) fun _ => .ok _))
 
-theorem applyValidatedDelegationAmsterdam_preparationErrors (state : StateGasRules)
+theorem Staging.applyValidatedDelegationAmsterdam_preparationErrors (state : StateGasRules)
     (msg : Msg) (authority target : Address) (devm : Devm)
     (paidWrites delegationSetFor : AdrSet) :
-    PreparationErrors (applyValidatedDelegationAmsterdam state msg authority target devm
+    Staging.PreparationErrors (applyValidatedDelegationAmsterdam state msg authority target devm
       paidWrites delegationSetFor) := by
   unfold applyValidatedDelegationAmsterdam
-  exact .bind (chargeNewAuthorityAmsterdam_preparationErrors ..) fun _ =>
-    .bind (chargePaidAccountWriteAmsterdam_preparationErrors ..) fun _ =>
-      .bind (chargeAuthBaseAmsterdam_preparationErrors ..) fun _ => .ok _
+  exact .bind (Staging.chargeNewAuthorityAmsterdam_preparationErrors ..) fun _ =>
+    .bind (Staging.chargePaidAccountWriteAmsterdam_preparationErrors ..) fun _ =>
+      .bind (Staging.chargeAuthBaseAmsterdam_preparationErrors ..) fun _ => .ok _
 
-theorem setDelegationAmsterdamStep_preparationErrors (state : StateGasRules) (msg : Msg)
+theorem Staging.setDelegationAmsterdamStep_preparationErrors (state : StateGasRules) (msg : Msg)
     (auth : Authorization) (devm : Devm) (paidWrites delegationSetFor : AdrSet) :
-    PreparationErrors
+    Staging.PreparationErrors
       (setDelegationAmsterdamStep state msg auth devm paidWrites delegationSetFor) := by
   unfold setDelegationAmsterdamStep
   refine .ite (.ok _) (.ite (.ok _) ?_)
   split
   · exact .ok _
   · exact .crypto _ _
-  · exact .ite (.ok _) (.ite (.ok _) (applyValidatedDelegationAmsterdam_preparationErrors ..))
+  · exact .ite (.ok _) (.ite (.ok _) (Staging.applyValidatedDelegationAmsterdam_preparationErrors ..))
 
-theorem setDelegationAmsterdamLoop_preparationErrors (state : StateGasRules) (msg : Msg)
+theorem Staging.setDelegationAmsterdamLoop_preparationErrors (state : StateGasRules) (msg : Msg)
     (auths : List Authorization) (devm : Devm) (paidWrites delegationSetFor : AdrSet) :
-    PreparationErrors
+    Staging.PreparationErrors
       (setDelegationAmsterdamLoop state msg auths devm paidWrites delegationSetFor) := by
   induction auths generalizing devm paidWrites delegationSetFor with
   | nil => exact .ok _
   | cons auth auths ih =>
-    exact .bind (setDelegationAmsterdamStep_preparationErrors ..) fun _ => ih ..
+    exact .bind (Staging.setDelegationAmsterdamStep_preparationErrors ..) fun _ => ih ..
 
-theorem setDelegationAmsterdam_preparationErrors (state : StateGasRules) (msg : Msg)
-    (devm : Devm) : PreparationErrors (setDelegationAmsterdam state msg devm) := by
+theorem Staging.setDelegationAmsterdam_preparationErrors (state : StateGasRules) (msg : Msg)
+    (devm : Devm) : Staging.PreparationErrors (setDelegationAmsterdam state msg devm) := by
   unfold setDelegationAmsterdam
-  exact .bind (setDelegationAmsterdamLoop_preparationErrors ..) fun _ => .ok _
+  exact .bind (Staging.setDelegationAmsterdamLoop_preparationErrors ..) fun _ => .ok _
 
-theorem resolveTopLevelCallAmsterdam_preparationErrors (msg : Msg) (devm : Devm) :
-    PreparationErrors (resolveTopLevelCallAmsterdam msg devm) := by
+theorem Staging.resolveTopLevelCallAmsterdam_preparationErrors (msg : Msg) (devm : Devm) :
+    Staging.PreparationErrors (resolveTopLevelCallAmsterdam msg devm) := by
   unfold resolveTopLevelCallAmsterdam
-  exact .bind (chargeGas_preparationErrors _ _) fun _ => .ok _
+  exact .bind (Staging.chargeGas_preparationErrors _ _) fun _ => .ok _
 
-theorem dispatchTopLevelAmsterdam_preparationErrors (state : StateGasRules) (msg : Msg)
-    (devm : Devm) : PreparationErrors (dispatchTopLevelAmsterdam state msg devm) := by
+theorem Staging.dispatchTopLevelAmsterdam_preparationErrors (state : StateGasRules) (msg : Msg)
+    (devm : Devm) : Staging.PreparationErrors (dispatchTopLevelAmsterdam state msg devm) := by
   unfold dispatchTopLevelAmsterdam
   dsimp only
   exact .ite (.ite (.halt _ _)
-      (.ite (.bind (chargeStateGas_preparationErrors _ _) fun _ => .ok _)
+      (.ite (.bind (Staging.chargeStateGas_preparationErrors _ _) fun _ => .ok _)
         (.bind (.ok _) fun _ => .ok _)))
-    (.ite (.bind (chargeStateGas_preparationErrors _ _)
-        fun _ => resolveTopLevelCallAmsterdam_preparationErrors _ _)
-      (.bind (.ok _) fun _ => resolveTopLevelCallAmsterdam_preparationErrors _ _))
+    (.ite (.bind (Staging.chargeStateGas_preparationErrors _ _)
+        fun _ => Staging.resolveTopLevelCallAmsterdam_preparationErrors _ _)
+      (.bind (.ok _) fun _ => Staging.resolveTopLevelCallAmsterdam_preparationErrors _ _))
 
-theorem prepareTopLevelAmsterdam_preparationErrors (state : StateGasRules) (msg : Msg) :
-    PreparationErrors (prepareTopLevelAmsterdam state msg) := by
+theorem Staging.prepareTopLevelAmsterdam_preparationErrors (state : StateGasRules) (msg : Msg) :
+    Staging.PreparationErrors (prepareTopLevelAmsterdam state msg) := by
   unfold prepareTopLevelAmsterdam finishTopLevelAmsterdam
   dsimp only
   split
-  · exact .bind (.ok _) fun _ => dispatchTopLevelAmsterdam_preparationErrors ..
-  · exact .bind (setDelegationAmsterdam_preparationErrors ..) fun _ =>
-      dispatchTopLevelAmsterdam_preparationErrors ..
+  · exact .bind (.ok _) fun _ => Staging.dispatchTopLevelAmsterdam_preparationErrors ..
+  · exact .bind (Staging.setDelegationAmsterdam_preparationErrors ..) fun _ =>
+      Staging.dispatchTopLevelAmsterdam_preparationErrors ..
 
 /-- **A top-level Amsterdam preparation fails only by an exceptional halt or a cryptographic
 failure.** -/
-theorem prepareTopLevelAmsterdam_error {state : StateGasRules} {msg : Msg} {e : EvmError}
+theorem Staging.prepareTopLevelAmsterdam_error {state : StateGasRules} {msg : Msg} {e : EvmError}
     {d : Devm} (h : prepareTopLevelAmsterdam state msg = .error (e, d)) :
     (∃ reason, e = .halt reason) ∨ (∃ reason, e = .crypto reason) := by
-  have := (prepareTopLevelAmsterdam_preparationErrors state msg).of e d h
-  cases e <;> simp_all [PreparationError]
+  have := (Staging.prepareTopLevelAmsterdam_preparationErrors state msg).of e d h
+  cases e <;> simp_all [Staging.PreparationError]
 
 /-- **A top-level Amsterdam preparation never reverts.** -/
-theorem prepareTopLevelAmsterdam_error_ne_revert (state : StateGasRules) (msg : Msg)
+theorem Staging.prepareTopLevelAmsterdam_error_ne_revert (state : StateGasRules) (msg : Msg)
     (d : Devm) : prepareTopLevelAmsterdam state msg ≠ .error (.revert, d) :=
-  fun h => by simpa using prepareTopLevelAmsterdam_error h
+  fun h => by simpa using Staging.prepareTopLevelAmsterdam_error h
 
 /-! ### The ordinary top-level authorization fails only by a fault -/
 
 /-- An `EvmError` that is a fault: cryptographic or internal. -/
-def EvmError.IsFault : EvmError → Prop
+def Staging.EvmError.IsFault : EvmError → Prop
   | .crypto _ => True
   | .internal _ => True
   | _ => False
 
 /-- An `EvmError` known to be a fault, as one. -/
-def EvmError.toFault : (e : EvmError) → EvmError.IsFault e → Fault
+def Staging.EvmError.toFault : (e : EvmError) → Staging.EvmError.IsFault e → Fault
   | .crypto reason, _ => .crypto reason
   | .internal reason, _ => .internal reason
   | .halt _, h => h.elim
   | .revert, h => h.elim
 
-@[simp] theorem EvmError.toFault_toEvmError (e : EvmError) (h : EvmError.IsFault e) :
-    (EvmError.toFault e h).toEvmError = e := by
+@[simp] theorem Staging.EvmError.toFault_toEvmError (e : EvmError) (h : Staging.EvmError.IsFault e) :
+    (Staging.EvmError.toFault e h).toEvmError = e := by
   cases e <;> first | rfl | exact h.elim
 
-theorem setDelegationStep_error_isFault {auth : Authorization} {msg : Msg} {r : U256}
-    {e : EvmError} (h : setDelegationStep auth msg r = .error e) : EvmError.IsFault e := by
+theorem Staging.setDelegationStep_error_isFault {auth : Authorization} {msg : Msg} {r : U256}
+    {e : EvmError} (h : setDelegationStep auth msg r = .error e) : Staging.EvmError.IsFault e := by
   unfold setDelegationStep at h
   split at h
   · cases h
@@ -221,8 +221,8 @@ theorem setDelegationStep_error_isFault {auth : Authorization} {msg : Msg} {r : 
         · cases h
         · split at h <;> cases h
 
-theorem setDelegationLoop_error_isFault {auths : List Authorization} {msg : Msg} {r : U256}
-    {e : EvmError} (h : setDelegationLoop auths msg r = .error e) : EvmError.IsFault e := by
+theorem Staging.setDelegationLoop_error_isFault {auths : List Authorization} {msg : Msg} {r : U256}
+    {e : EvmError} (h : setDelegationLoop auths msg r = .error e) : Staging.EvmError.IsFault e := by
   induction auths generalizing msg r with
   | nil => cases h
   | cons auth auths ih =>
@@ -231,19 +231,19 @@ theorem setDelegationLoop_error_isFault {auths : List Authorization} {msg : Msg}
     | error e' =>
       rw [hs] at h
       cases h
-      exact setDelegationStep_error_isFault hs
+      exact Staging.setDelegationStep_error_isFault hs
     | ok p =>
       rw [hs] at h
       exact ih h
 
-theorem setDelegation_error_isFault {msg : Msg} {e : EvmError}
-    (h : setDelegation msg = .error e) : EvmError.IsFault e := by
+theorem Staging.setDelegation_error_isFault {msg : Msg} {e : EvmError}
+    (h : setDelegation msg = .error e) : Staging.EvmError.IsFault e := by
   unfold setDelegation at h
   cases hl : setDelegationLoop msg.tenv.stat.auths msg 0 with
   | error e' =>
     rw [hl] at h
     cases h
-    exact setDelegationLoop_error_isFault hl
+    exact Staging.setDelegationLoop_error_isFault hl
   | ok p =>
     rw [hl] at h
     simp only [bind, Except.bind] at h
@@ -252,8 +252,8 @@ theorem setDelegation_error_isFault {msg : Msg} {e : EvmError}
     · cases h
 
 /-- **The ordinary top-level authorization fails only by a fault.** -/
-theorem processMessageCall.authorize_error_isFault {msg : Msg} {e : EvmError}
-    (h : processMessageCall.authorize msg = .error e) : EvmError.IsFault e := by
+theorem Staging.processMessageCall.authorize_error_isFault {msg : Msg} {e : EvmError}
+    (h : processMessageCall.authorize msg = .error e) : Staging.EvmError.IsFault e := by
   unfold processMessageCall.authorize at h
   split at h
   · cases h
@@ -261,7 +261,7 @@ theorem processMessageCall.authorize_error_isFault {msg : Msg} {e : EvmError}
     | error e' =>
       rw [hs] at h
       cases h
-      exact setDelegation_error_isFault hs
+      exact Staging.setDelegation_error_isFault hs
     | ok p =>
       rw [hs] at h
       cases h
@@ -269,7 +269,7 @@ theorem processMessageCall.authorize_error_isFault {msg : Msg} {e : EvmError}
 /-! ### The preparation and the run -/
 
 /-- What a top-level message is prepared into: a frame to run, or a refusal before any frame. -/
-inductive TopLevel.Preparation : Type
+inductive Staging.TopLevel.Preparation : Type
   /-- Run this frame. Its checkpoint is the state the message was prepared on: `initDevm` of the
   message (a creation without state gas), of the authorized and delegation-resolved message (a
   call without state gas), or the state `prepareTopLevelAmsterdam` returns. A call without state
@@ -282,47 +282,47 @@ inductive TopLevel.Preparation : Type
 
 /-- Prepare a top-level message under Amsterdam's rules: a halt during preparation is a
 refusal, and preparation never reverts. -/
-def TopLevel.prepare.amsterdam (state : StateGasRules) (msg : Msg) (isCreate : Bool) :
-    Except Fault TopLevel.Preparation :=
+def Staging.TopLevel.prepare.amsterdam (state : StateGasRules) (msg : Msg) (isCreate : Bool) :
+    Except Fault Staging.TopLevel.Preparation :=
   match h : prepareTopLevelAmsterdam state msg with
   | .error (.halt reason, devm) => .ok (.refused reason devm)
-  | .error (.revert, devm) => absurd h (prepareTopLevelAmsterdam_error_ne_revert state msg devm)
+  | .error (.revert, devm) => absurd h (Staging.prepareTopLevelAmsterdam_error_ne_revert state msg devm)
   | .error (.crypto reason, _) => .error (.crypto reason)
   | .error (.internal reason, _) => .error (.internal reason)
   | .ok (prepared, devm) =>
     .ok (.frame ⟨Message.ofTop prepared isCreate, Frame.State.ofDevm devm⟩ 0)
 
 /-- Prepare a top-level creation. -/
-def TopLevel.prepare.create (msg : Msg) : Except Fault TopLevel.Preparation :=
+def Staging.TopLevel.prepare.create (msg : Msg) : Except Fault Staging.TopLevel.Preparation :=
   match msg.benv.stat.rules.stateGas with
   | none =>
     if accountHasCodeOrNonce msg.benv.state msg.currentTarget then
       .ok (.refused (.addressCollision .none) (initDevm msg))
     else
       .ok (.frame (Frame.ofTop msg true) 0)
-  | some state => TopLevel.prepare.amsterdam state msg true
+  | some state => Staging.TopLevel.prepare.amsterdam state msg true
 
 /-- Prepare a top-level call. -/
-def TopLevel.prepare.call (msg : Msg) : Except Fault TopLevel.Preparation :=
+def Staging.TopLevel.prepare.call (msg : Msg) : Except Fault Staging.TopLevel.Preparation :=
   match msg.benv.stat.rules.stateGas with
   | none =>
     match h : processMessageCall.authorize msg with
-    | .error e => .error (EvmError.toFault e (processMessageCall.authorize_error_isFault h))
+    | .error e => .error (Staging.EvmError.toFault e (Staging.processMessageCall.authorize_error_isFault h))
     | .ok (delegated, authorizationRefund) =>
       .ok (.frame (Frame.ofTop (TopLevel.resolveCodeDelegation delegated) false) authorizationRefund)
-  | some state => TopLevel.prepare.amsterdam state msg false
+  | some state => Staging.TopLevel.prepare.amsterdam state msg false
 
 /-- Prepare a top-level message: a creation when it has no target, otherwise a call. -/
-def TopLevel.prepare (msg : Msg) : Except Fault TopLevel.Preparation :=
-  if msg.target.isNone then TopLevel.prepare.create msg else TopLevel.prepare.call msg
+def Staging.TopLevel.prepare (msg : Msg) : Except Fault Staging.TopLevel.Preparation :=
+  if msg.target.isNone then Staging.TopLevel.prepare.create msg else Staging.TopLevel.prepare.call msg
 
 /-- A top-level message run: the message as handed, its preparation, the machine its frame
 entered the interpreter with, and the frame's result. -/
-structure MessageRun : Type where
+structure Staging.MessageRun : Type where
   /-- The message as handed. Its world is what a refusal reports. -/
   entry : Msg
   /-- The frame to run, or the refusal. -/
-  preparation : TopLevel.Preparation
+  preparation : Staging.TopLevel.Preparation
   /-- The machine the frame entered the interpreter with: none for a refusal, and for a frame
   that finished at entry (a precompile, a failed transfer or creation check). -/
   root : Option Evm
@@ -331,8 +331,8 @@ structure MessageRun : Type where
 
 /-- Run a top-level message: prepare it, then enter the frame from its checkpoint, run the code
 and settle, as `Frame.runTop` does. -/
-def Message.run (msg : Msg) : Except Fault MessageRun := do
-  let preparation ← TopLevel.prepare msg
+def Staging.Message.run (msg : Msg) : Except Fault Staging.MessageRun := do
+  let preparation ← Staging.TopLevel.prepare msg
   match preparation with
   | .refused .. => pure ⟨msg, preparation, none, none⟩
   | .frame f _ =>
@@ -348,7 +348,7 @@ def Message.run (msg : Msg) : Except Fault MessageRun := do
 `Frame.output` (with its authorization refund) or, with state gas, by `Frame.outputAmsterdam`. A
 refusal without state gas reports the message's state with a collision halt; with state gas it is
 `settleTopLevelPreparationFailure`'s halt. -/
-def MessageRun.output (run : MessageRun) : Except EvmError (State × MsgCallOutput) :=
+def Staging.MessageRun.output (run : Staging.MessageRun) : Except EvmError (State × MsgCallOutput) :=
   match run.preparation, run.result with
   | .frame f authorizationRefund, some r =>
     match run.entry.benv.stat.rules.stateGas with
@@ -368,15 +368,15 @@ def MessageRun.output (run : MessageRun) : Except EvmError (State × MsgCallOutp
     | some _ => settleTopLevelPreparationFailure run.entry (.halt reason) halted
 
 /-- The top-level message call: the run, then what it hands the transaction. -/
-def processMessageCall (msg : Msg) : Except EvmError (State × MsgCallOutput) := do
-  let run ← (Message.run msg).mapError Fault.toEvmError
-  MessageRun.output run
+def Staging.processMessageCall (msg : Msg) : Except EvmError (State × MsgCallOutput) := do
+  let run ← (Staging.Message.run msg).mapError Fault.toEvmError
+  Staging.MessageRun.output run
 
 /-- `Message.run` records a result exactly for a frame. -/
-theorem Message.run_result {msg : Msg} {run : MessageRun} (h : Message.run msg = .ok run) :
+theorem Staging.Message.run_result {msg : Msg} {run : Staging.MessageRun} (h : Staging.Message.run msg = .ok run) :
     run.entry = msg ∧
       ((∃ f a, run.preparation = .frame f a) ↔ run.result.isSome) := by
-  unfold Message.run at h
+  unfold Staging.Message.run at h
   obtain ⟨p, -, h⟩ := Except.bind_eq_ok h
   cases p with
   | refused reason halted =>
@@ -392,4 +392,4 @@ theorem Message.run_result {msg : Msg} {run : MessageRun} (h : Message.run msg =
       cases h
       simp
 
-end Jaune.Staging
+end Jaune

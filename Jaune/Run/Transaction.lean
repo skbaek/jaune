@@ -20,14 +20,14 @@ Staged under `Jaune.Staging`
 until the switch commit; the bridges are in gate G2a's bridge modules.
 -/
 
-namespace Jaune.Staging
+namespace Jaune
 
 open Jaune
 
 /-! ### The phases -/
 
 /-- What a transaction's admission checks establish. -/
-structure Transaction.Checked : Type where
+structure Staging.Transaction.Checked : Type where
   /-- The block environment with the transaction begun. -/
   benv : Benv
   /-- The block output with the transaction entered in the transaction trie. -/
@@ -41,8 +41,8 @@ structure Transaction.Checked : Type where
 
 /-- Begin the transaction, enter it in the transaction trie (before validation, as the trie
 counts every candidate), and run the admission checks. -/
-def Transaction.check (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
-    Except TransitionError Transaction.Checked := do
+def Staging.Transaction.check (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+    Except TransitionError Staging.Transaction.Checked := do
   let benv := benv.beginTransaction
   let bout ← .ok {bout with
     transactionsTrie := bout.transactionsTrie.insert (Rlp.Item.bytes index.toBytes).toBytes tx}
@@ -61,7 +61,7 @@ def Transaction.check (benv : Benv) (bout : BlockOutput) (tx : Transaction) (ind
 
 /-- What crosses from a prepared transaction to its settlement: the checked environment and
 output, the values settlement reads, and the top-level message. -/
-structure Transaction.Prepared : Type where
+structure Staging.Transaction.Prepared : Type where
   benv : Benv
   bout : BlockOutput
   sender : Address
@@ -72,8 +72,8 @@ structure Transaction.Prepared : Type where
 
 /-- Charge the fee and bump the sender's nonce, then build the transaction environment and the
 top-level message. -/
-def Transaction.prepare (checked : Transaction.Checked) (tx : Transaction) (index : Nat) :
-    Except TransitionError Transaction.Prepared := do
+def Staging.Transaction.prepare (checked : Staging.Transaction.Checked) (tx : Transaction) (index : Nat) :
+    Except TransitionError Staging.Transaction.Prepared := do
   let benv := checked.benv
   let sender := checked.sender
   let effectiveGasPrice := checked.effectiveGasPrice
@@ -117,7 +117,7 @@ def Transaction.prepare (checked : Transaction.Checked) (tx : Transaction) (inde
 writes of emptied and deleted accounts, settle the self-destructs, sweep the touched empty
 accounts, then record the gas, the receipt and the logs, and incorporate the block access list at
 `index + 1`. -/
-def Transaction.settle (prepared : Transaction.Prepared) (tx : Transaction) (index : Nat)
+def Staging.Transaction.settle (prepared : Staging.Transaction.Prepared) (tx : Transaction) (index : Nat)
     (state : State) (txOutput : MsgCallOutput) :
     Except TransitionError (State × BlockOutput) := do
   let benv := prepared.benv
@@ -170,11 +170,11 @@ def Transaction.settle (prepared : Transaction.Prepared) (tx : Transaction) (ind
   .ok ⟨state, {bout with blockAccessListBuilder := bal}⟩
 
 /-- One transaction: check, prepare, the top-level message call, settle. -/
-def processTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+def Staging.processTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
     Except TransitionError (State × BlockOutput) := do
-  let checked ← Transaction.check benv bout tx index
-  let prepared ← Transaction.prepare checked tx index
-  let ⟨state, output⟩ ← Except.mapError TransitionError.vm (processMessageCall prepared.msg)
-  Transaction.settle prepared tx index state output
+  let checked ← Staging.Transaction.check benv bout tx index
+  let prepared ← Staging.Transaction.prepare checked tx index
+  let ⟨state, output⟩ ← Except.mapError TransitionError.vm (Staging.processMessageCall prepared.msg)
+  Staging.Transaction.settle prepared tx index state output
 
-end Jaune.Staging
+end Jaune

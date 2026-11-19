@@ -10,17 +10,17 @@ The bridge at the traced transaction's value: the staged traced transaction retu
 `processTransaction` result. The old drivers of `Jaune.TraceTransaction` move here at the switch.
 -/
 
-namespace Jaune.Staging.TraceTransaction
+namespace Jaune
 
 open Jaune Jaune.Staging
 
 /-- **Bridge at the traced transaction's value.** For every monad, sink and input, the value the
 staged traced transaction returns is today's `processTransaction` result, and so the value
 `Jaune.TraceTransaction.runTransaction` returns. -/
-theorem runTransaction_value_eq {benv : Benv} {bout : BlockOutput} {tx : Transaction}
-    {index : Nat} (result : TransactionResult benv bout tx index)
+theorem Staging.TraceTransaction.runTransaction_value_eq {benv : Benv} {bout : BlockOutput} {tx : Transaction}
+    {index : Nat} (result : Staging.TraceTransaction.TransactionResult benv bout tx index)
     (old : Jaune.TraceTransaction.TransactionResult benv bout tx index) :
     result.value = old.value := by
-  rw [result.erases, B2.Transaction.run_output, old.erases, Bridge.G2a.processTransaction_eq_b2]
+  rw [result.erases, Staging.B2.Transaction.run_output, old.erases, Bridge.G2a.processTransaction_eq_b2]
 
-end Jaune.Staging.TraceTransaction
+end Jaune

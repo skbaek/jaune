@@ -286,12 +286,12 @@ theorem prepareTopLevelAmsterdam_message {state : StateGasRules} {msg : Msg} {p 
 
 private theorem prepare_amsterdam_coherent {state : StateGasRules} {msg : Msg} {f : Frame}
     {refund : Nat} (hcode : msg.codeAddress = none ↔ msg.target = none)
-    (h : TopLevel.prepare.amsterdam state msg msg.target.isNone = .ok (.frame f refund)) :
+    (h : Staging.TopLevel.prepare.amsterdam state msg msg.target.isNone = .ok (.frame f refund)) :
     f.message.KindCoherent := by
-  unfold TopLevel.prepare.amsterdam at h
+  unfold Staging.TopLevel.prepare.amsterdam at h
   split at h
   · cases h
-  · exact absurd (by assumption) (prepareTopLevelAmsterdam_error_ne_revert _ _ _)
+  · exact absurd (by assumption) (Staging.prepareTopLevelAmsterdam_error_ne_revert _ _ _)
   · cases h
   · cases h
   rename_i prepared d hp
@@ -305,11 +305,11 @@ private theorem prepare_amsterdam_coherent {state : StateGasRules} {msg : Msg} {
 /-- A prepared top-level frame has a creation kind exactly when its code address is absent. -/
 theorem TopLevel.prepare_kindCoherent {benv : Benv} {tenv : Tenv} {tx : Transaction} {msg : Msg}
     {f : Frame} {refund : Nat} (hm : prepareMessage benv tenv tx = .ok msg)
-    (h : TopLevel.prepare msg = .ok (.frame f refund)) : f.message.KindCoherent := by
+    (h : Staging.TopLevel.prepare msg = .ok (.frame f refund)) : f.message.KindCoherent := by
   have hcode := prepareMessage_codeAddress_eq_none_iff hm
   cases ht : msg.target with
   | none =>
-    simp only [TopLevel.prepare, ht, Option.isNone_none, ↓reduceIte, TopLevel.prepare.create] at h
+    simp only [Staging.TopLevel.prepare, ht, Option.isNone_none, ↓reduceIte, Staging.TopLevel.prepare.create] at h
     cases hs : msg.benv.stat.rules.stateGas with
     | none =>
       simp only [hs] at h
@@ -322,8 +322,8 @@ theorem TopLevel.prepare_kindCoherent {benv : Benv} {tenv : Tenv} {tx : Transact
       apply prepare_amsterdam_coherent hcode
       simpa only [ht, Option.isNone_none] using h
   | some a =>
-    simp only [TopLevel.prepare, ht, Option.isNone_some, Bool.false_eq_true, ↓reduceIte,
-      TopLevel.prepare.call] at h
+    simp only [Staging.TopLevel.prepare, ht, Option.isNone_some, Bool.false_eq_true, ↓reduceIte,
+      Staging.TopLevel.prepare.call] at h
     cases hs : msg.benv.stat.rules.stateGas with
     | none =>
       simp only [hs] at h

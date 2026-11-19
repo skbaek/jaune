@@ -166,30 +166,30 @@ theorem prepareTopLevelAmsterdam_memory_wf {state : StateGasRules} {msg : Msg} {
 
 /-- Every frame handed to the interpreter by top-level preparation starts with empty memory. -/
 theorem TopLevel.prepare_frame_emptyMemory {msg : Msg} {f : Frame} {refund : Nat}
-    (hp : TopLevel.prepare msg = .ok (.frame f refund)) : f.checkpoint.machine.memory = Mem.empty := by
+    (hp : Staging.TopLevel.prepare msg = .ok (.frame f refund)) : f.checkpoint.machine.memory = Mem.empty := by
   have amsterdam : ∀ (state : StateGasRules) (isCreate : Bool),
-      TopLevel.prepare.amsterdam state msg isCreate = .ok (.frame f refund) →
+      Staging.TopLevel.prepare.amsterdam state msg isCreate = .ok (.frame f refund) →
         f.checkpoint.machine.memory = Mem.empty := by
     intro state isCreate hp
-    unfold TopLevel.prepare.amsterdam at hp
+    unfold Staging.TopLevel.prepare.amsterdam at hp
     split at hp
     · cases hp
     · rename_i devm he
-      exact absurd he (prepareTopLevelAmsterdam_error_ne_revert state msg devm)
+      exact absurd he (Staging.prepareTopLevelAmsterdam_error_ne_revert state msg devm)
     · cases hp
     · cases hp
     · rename_i prepared devm he
       cases hp
       exact prepareTopLevelAmsterdam_emptyMemory he
-  unfold TopLevel.prepare at hp
+  unfold Staging.TopLevel.prepare at hp
   split at hp
-  · unfold TopLevel.prepare.create at hp
+  · unfold Staging.TopLevel.prepare.create at hp
     split at hp
     · split at hp
       · cases hp
       · cases hp; rfl
     · exact amsterdam _ _ hp
-  · unfold TopLevel.prepare.call at hp
+  · unfold Staging.TopLevel.prepare.call at hp
     split at hp
     · split at hp
       · cases hp
@@ -197,7 +197,7 @@ theorem TopLevel.prepare_frame_emptyMemory {msg : Msg} {f : Frame} {refund : Nat
     · exact amsterdam _ _ hp
 
 theorem TopLevel.prepare_frame_memory_wf {msg : Msg} {f : Frame} {refund : Nat}
-    (hp : TopLevel.prepare msg = .ok (.frame f refund)) : f.checkpoint.machine.memory.Wf := by
+    (hp : Staging.TopLevel.prepare msg = .ok (.frame f refund)) : f.checkpoint.machine.memory.Wf := by
   rw [TopLevel.prepare_frame_emptyMemory hp]
   exact Mem.wf_empty
 

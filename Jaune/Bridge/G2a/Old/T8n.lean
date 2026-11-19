@@ -141,11 +141,11 @@ open Jaune.Staging Jaune.Bridge.G2a
 /-! ### Bridges -/
 
 @[simp] private theorem toBlockOutput_blockAccessListBuilder
-    (p : Body.Prefix) : p.toBlockOutput.blockAccessListBuilder = p.accessList := rfl
+    (p : Staging.Body.Prefix) : p.toBlockOutput.blockAccessListBuilder = p.accessList := rfl
 
-theorem fold_requestOps (benv : Benv) (p : Body.Prefix) (n : Nat) :
-    Body.fold benv p (Jaune.T8n.requestOps benv n) =
-      (fun r => Body.Prefix.ofBlockOutput r.1 r.2) <$>
+theorem fold_requestOps (benv : Benv) (p : Staging.Body.Prefix) (n : Nat) :
+    Staging.Body.fold benv p (Jaune.T8n.requestOps benv n) =
+      (fun r => Staging.Body.Prefix.ofBlockOutput r.1 r.2) <$>
         Jaune.processGeneralPurposeRequestsAt (n + 1) (benv.withState p.state) p.toBlockOutput := by
   have h := fold_requests benv (n + 1) p []
   simp only [List.append_nil] at h
@@ -155,7 +155,7 @@ theorem fold_requestOps (benv : Benv) (p : Body.Prefix) (n : Nat) :
     rfl
 
 theorem foldTransactions_eq (benv : Benv) :
-    ∀ (l : List (Nat × TransactionParse Transaction)) (p : Body.Prefix) (rej : List Rejection)
+    ∀ (l : List (Nat × TransactionParse Transaction)) (p : Staging.Body.Prefix) (rej : List Rejection)
       (inc : List Transaction),
       Jaune.Bridge.G2a.Old.T8n.foldTransactions l (benv.withState p.state) p.toBlockOutput rej inc =
         (fun r => (benv.withState r.1.state, r.1.toBlockOutput, r.2.1, r.2.2)) <$>
@@ -165,8 +165,8 @@ theorem foldTransactions_eq (benv : Benv) :
     simp only [Jaune.Bridge.G2a.Old.T8n.foldTransactions, Jaune.T8n.foldTransactions]
     exact foldTransactions_eq benv rest p _ inc
   | ⟨i, .ok tx⟩ :: rest, p, rej, inc => by
-    simp only [Jaune.Bridge.G2a.Old.T8n.foldTransactions, Jaune.T8n.foldTransactions, Body.step, ← processTransaction_eq_b2, ← B2.Transaction.run_output]
-    cases B2.Transaction.run (benv.withState p.state) p.toBlockOutput tx inc.length with
+    simp only [Jaune.Bridge.G2a.Old.T8n.foldTransactions, Jaune.T8n.foldTransactions, Staging.Body.step, ← processTransaction_eq_b2, ← Staging.B2.Transaction.run_output]
+    cases Staging.B2.Transaction.run (benv.withState p.state) p.toBlockOutput tx inc.length with
     | error err =>
       simp only [Functor.map, Except.map, bind, Except.bind]
       split
@@ -175,8 +175,8 @@ theorem foldTransactions_eq (benv : Benv) :
     | ok q =>
       obtain ⟨run, b⟩ := q
       simp only [bind, Except.bind, pure, Except.pure]
-      have := foldTransactions_eq benv rest (Body.Prefix.ofBlockOutput run.state b) rej (inc ++ [tx])
-      simp only [Body.Prefix.state_ofBlockOutput, Body.Prefix.toBlockOutput_ofBlockOutput] at this
+      have := foldTransactions_eq benv rest (Staging.Body.Prefix.ofBlockOutput run.state b) rej (inc ++ [tx])
+      simp only [Staging.Body.Prefix.state_ofBlockOutput, Staging.Body.Prefix.toBlockOutput_ofBlockOutput] at this
       exact this
 
 theorem runStateTest_eq (benv : Benv) (txs : List (TransactionParse Transaction)) :
@@ -185,24 +185,24 @@ theorem runStateTest_eq (benv : Benv) (txs : List (TransactionParse Transaction)
   cases txs with
   | nil => rfl
   | cons t rest =>
-    have h := foldTransactions_eq benv [⟨0, t⟩] (Body.Prefix.init benv.state) [] []
+    have h := foldTransactions_eq benv [⟨0, t⟩] (Staging.Body.Prefix.init benv.state) [] []
     simp only [Body.Prefix.state_init, Benv.withState_self] at h
     dsimp only
-    rw [show (BlockOutput.init) = (Body.Prefix.init benv.state).toBlockOutput from rfl, h]
-    cases Jaune.T8n.foldTransactions benv [⟨0, t⟩] (Body.Prefix.init benv.state) [] [] <;> rfl
+    rw [show (BlockOutput.init) = (Staging.Body.Prefix.init benv.state).toBlockOutput from rfl, h]
+    cases Jaune.T8n.foldTransactions benv [⟨0, t⟩] (Staging.Body.Prefix.init benv.state) [] [] <;> rfl
 
 theorem foldTransactions_eq_withState (benv : Benv) (l : List (Nat × TransactionParse Transaction))
     (s : State) (b : BlockOutput) :
     Jaune.Bridge.G2a.Old.T8n.foldTransactions l (benv.withState s) b [] [] =
       (fun r => (benv.withState r.1.state, r.1.toBlockOutput, r.2.1, r.2.2)) <$>
-        Jaune.T8n.foldTransactions benv l (Body.Prefix.ofBlockOutput s b) [] [] :=
-  foldTransactions_eq benv l (Body.Prefix.ofBlockOutput s b) [] []
+        Jaune.T8n.foldTransactions benv l (Staging.Body.Prefix.ofBlockOutput s b) [] [] :=
+  foldTransactions_eq benv l (Staging.Body.Prefix.ofBlockOutput s b) [] []
 
 theorem payT8nRewards_eq (r : Nat) (coinbase : Address) (ommers : List T8nOmmer) (st : State) :
     payT8nRewards r coinbase ommers st =
-      creditAll (ommers.map fun ommer => (ommer.address, (8 - ommer.delta) * r / 8))
+      Staging.creditAll (ommers.map fun ommer => (ommer.address, (8 - ommer.delta) * r / 8))
         (st.addBal coinbase (r + ommers.length * (r / 32)).toU256) := by
-  simp only [payT8nRewards, creditAll, List.foldl_map]
+  simp only [payT8nRewards, Staging.creditAll, List.foldl_map]
 
 /-- The tail of `T8n.runBlockchain` after the pre-execution calls (copied from it, with the block
 environment `benv.withState s` and the builder `bal` those calls produced) is the new driver's tail
@@ -240,15 +240,15 @@ theorem runBlockchain_tail_eq (benv : Benv) (txs : List (TransactionParse Transa
       | .error err => .error err : Except TransitionError Outcome) =
     (do
       let ⟨p, rej, inc⟩ ← Jaune.T8n.foldTransactions benv txs.putIndex
-        (Body.Prefix.ofBlockOutput s {BlockOutput.init with blockAccessListBuilder := bal}) [] []
-      let p ← Body.fold benv p (Jaune.T8n.postOps benv inc.length wds reward ommers)
+        (Staging.Body.Prefix.ofBlockOutput s {BlockOutput.init with blockAccessListBuilder := bal}) [] []
+      let p ← Staging.Body.fold benv p (Jaune.T8n.postOps benv inc.length wds reward ommers)
       let requests :=
-        if benv.stat.rules.header.requestsHash then Body.fold benv p (Jaune.T8n.requestOps benv inc.length)
+        if benv.stat.rules.header.requestsHash then Staging.Body.fold benv p (Jaune.T8n.requestOps benv inc.length)
         else .ok p
       match requests with
       | .ok q => do
-        let ⟨_, q⟩ ← Body.step benv q .buildAccessList
-        match Body.step benv q .checkAccessListLimit with
+        let ⟨_, q⟩ ← Staging.Body.step benv q .buildAccessList
+        match Staging.Body.step benv q .checkAccessListLimit with
         | .ok _ => .ok ⟨q.state, q.toBlockOutput, rej, none, inc⟩
         | .error (.block reason) => .ok ⟨q.state, q.toBlockOutput, rej, some reason, inc⟩
         | .error err => .error err
@@ -256,7 +256,7 @@ theorem runBlockchain_tail_eq (benv : Benv) (txs : List (TransactionParse Transa
       | .error err => .error err) := by
   rw [foldTransactions_eq_withState]
   cases Jaune.T8n.foldTransactions benv txs.putIndex
-      (Body.Prefix.ofBlockOutput s {BlockOutput.init with blockAccessListBuilder := bal}) [] [] with
+      (Staging.Body.Prefix.ofBlockOutput s {BlockOutput.init with blockAccessListBuilder := bal}) [] [] with
   | error e => rfl
   | ok r =>
     obtain ⟨q, rej, inc⟩ := r
@@ -264,9 +264,9 @@ theorem runBlockchain_tail_eq (benv : Benv) (txs : List (TransactionParse Transa
     cases reward <;> cases hw : benv.stat.rules.header.withdrawalsRoot <;>
       cases hr : benv.stat.rules.header.requestsHash <;>
       simp only [Jaune.T8n.postOps, hw, hr, Bool.false_eq_true, ↓reduceIte, List.nil_append, List.append_nil,
-        List.cons_append, Body.fold, Body.step, payT8nRewards_eq, pure, Except.pure, fold_requestOps,
+        List.cons_append, Staging.Body.fold, Staging.Body.step, payT8nRewards_eq, pure, Except.pure, fold_requestOps,
         Benv.withState_stat, Benv.withState_state, Benv.withState_withState, processWithdrawals,
-        BlockOutput.withWithdrawalsTrie, Body.Prefix.toBlockOutput, Body.Prefix.ofBlockOutput,
+        BlockOutput.withWithdrawalsTrie, Staging.Body.Prefix.toBlockOutput, Staging.Body.Prefix.ofBlockOutput,
         Functor.map, Except.map]
     all_goals
       rcases benv.stat.rules.blockAccessListRules with _ | v <;> simp only [bind, Except.bind]
@@ -288,7 +288,7 @@ theorem runBlockchain_eq (benv : Benv) (txs : List (TransactionParse Transaction
   cases hh : benv.stat.rules.systemCalls.historyStorage <;>
     cases hb : benv.stat.rules.systemCalls.beaconRoots <;>
     simp only [Bool.false_eq_true, ↓reduceIte, List.nil_append, List.append_nil, fold_systemCall,
-      List.singleton_append, List.cons_append, Body.fold, Body.Prefix.state_init,
+      List.singleton_append, List.cons_append, Staging.Body.fold, Body.Prefix.state_init,
       Benv.withState_self]
   · exact (runBlockchain_tail_eq benv txs wds reward ommers benv.state {}).symm
   · simp only [bind, Except.bind, pure, Except.pure, Functor.map, Except.map, Except.mapError,
@@ -312,7 +312,7 @@ theorem runBlockchain_eq (benv : Benv) (txs : List (TransactionParse Transaction
     | error e => rfl
     | ok run =>
       simp only [bind, Except.bind, pure, Except.pure, Functor.map, Except.map, Except.mapError,
-        Benv.withState_stat, Benv.withState_state, Body.step, render,
+        Benv.withState_stat, Benv.withState_state, Staging.Body.step, render,
         processUncheckedSystemTransaction_eq, Body.Prefix.state_init]
       cases Staging.processUncheckedSystemTransaction (benv.withState run.state) beaconRootsAddress
         benv.stat.parentBeaconBlockRoot.toBytes with

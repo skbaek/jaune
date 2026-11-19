@@ -9,8 +9,8 @@ structure KeptBlock where
   parent : BlockChain
   block : Block
   post : BlockChain
-  run : BlockRun
-  executed : BlockRun.run fork parent block = .ok run
+  run : Staging.BlockRun
+  executed : Staging.BlockRun.run fork parent block = .ok run
   finalState : run.final.state = post.state
 
 def KeptBlock.frames (block : KeptBlock) : List Exec.Frame := block.run.frames
@@ -21,7 +21,7 @@ structure KeptStep (cfg : ChainConfig) (fork : Fork) (parent : BlockChain) (bloc
     (post : BlockChain) : Prop where
   chainId : cfg.checkChainId parent = .ok ()
   forkAt : cfg.forkAt block.header.number block.header.timestamp = .ok fork
-  accepted : E.stateTransitionCoreE (Sum.inr (α := RulesLookupError)) fork parent block
+  accepted : Staging.E.stateTransitionCoreE (Sum.inr (α := RulesLookupError)) fork parent block
     (fun _ => checkBlockOmmersScheduledE cfg fork.ruleSet parent block.header block.ommers) = .ok post
 
 theorem KeptStep.of_transition {cfg : ChainConfig} {parent post : BlockChain} {block : Block}

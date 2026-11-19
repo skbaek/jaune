@@ -349,14 +349,14 @@ theorem processMessageCall.topFrame_kindCoherent {benv : Benv} {tenv : Tenv} {tx
 
 end Jaune
 
-namespace Jaune.Staging
+namespace Jaune
 
 /-! ### Every frame a top-level message call runs is a `processMessageCall.TopFrame`
 
 This closes the gap left at W1 (u36). It is stated over the staged run, whose frame is the one
 `TopLevel.prepare` returns; its Amsterdam case is the public preparation itself. -/
 
-theorem TopLevel.prepare.amsterdam_topFrame {state : StateGasRules} {msg : Msg}
+theorem Staging.TopLevel.prepare.amsterdam_topFrame {state : StateGasRules} {msg : Msg}
     (hs : msg.benv.stat.rules.stateGas = some state) {f : Frame} {a : Nat}
     (h : Staging.TopLevel.prepare.amsterdam state msg msg.target.isNone = .ok (.frame f a)) :
     processMessageCall.TopFrame msg f := by
@@ -372,7 +372,7 @@ theorem TopLevel.prepare.amsterdam_topFrame {state : StateGasRules} {msg : Msg}
     exact .amsterdam hs (p := (prepared, devm)) hp
 
 /-- **Every frame the top-level preparation returns is a `processMessageCall.TopFrame`.** -/
-theorem TopLevel.prepare_topFrame {msg : Msg} {f : Frame} {a : Nat}
+theorem Staging.TopLevel.prepare_topFrame {msg : Msg} {f : Frame} {a : Nat}
     (h : Staging.TopLevel.prepare msg = .ok (.frame f a)) : processMessageCall.TopFrame msg f := by
   unfold Staging.TopLevel.prepare at h
   by_cases ht : msg.target.isNone
@@ -412,7 +412,7 @@ theorem TopLevel.prepare_topFrame {msg : Msg} {f : Frame} {a : Nat}
 
 /-- **Every frame a top-level message run runs is a `processMessageCall.TopFrame`.** This closes
 the gap left at W1 (u36): `processMessageCall` runs only frames the relation names. -/
-theorem Message.run_topFrame {msg : Msg} {run : Staging.MessageRun} (h : Staging.Message.run msg = .ok run)
+theorem Staging.Message.run_topFrame {msg : Msg} {run : Staging.MessageRun} (h : Staging.Message.run msg = .ok run)
     {f : Frame} {a : Nat} (hf : run.preparation = .frame f a) :
     processMessageCall.TopFrame msg f := by
   unfold Staging.Message.run at h
@@ -430,4 +430,4 @@ theorem Message.run_topFrame {msg : Msg} {run : Staging.MessageRun} (h : Staging
   subst this
   exact Staging.TopLevel.prepare_topFrame hp
 
-end Jaune.Staging
+end Jaune

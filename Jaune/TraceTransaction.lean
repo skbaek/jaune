@@ -7,12 +7,12 @@ Each traced message operation runs the top frame with `Trace.runFrame` and
 renders its settled result exactly as `processMessageCall` does, so its
 certificate is the public operation itself.
 -/
-namespace Jaune.TraceTransaction
+namespace Jaune
 open Jaune
 
 /-- Successful monadic observations carry the value of the existing pure
 boundary. The expected value appears only in a type and an erased proof. -/
-structure Certified {α : Type} (expected : α) where
+structure TraceTransaction.Certified {α : Type} (expected : α) where
   value : α
   erases : value = expected
 
@@ -20,9 +20,9 @@ structure Certified {α : Type} (expected : α) where
 failure returns its existing result without inventing an entered code frame;
 transaction routing must still record that run's terminal outcome. The prepared
 frame is traced like any top-level frame: its checkpoint is the prepared state. -/
-def runTopLevelAmsterdam {m : Type → Type} [Monad m] (sink : Trace.Sink m)
+def TraceTransaction.runTopLevelAmsterdam {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (state : StateGasRules) (msg : Msg) (isCreate : Bool) (runId : String) :
-    m (Certified (processTopLevelAmsterdam state msg isCreate)) := do
+    m (TraceTransaction.Certified (processTopLevelAmsterdam state msg isCreate)) := do
   match hprep : prepareTopLevelAmsterdam state msg with
   | .error ⟨error, devm⟩ =>
     pure ⟨settleTopLevelPreparationFailure msg error devm, by
@@ -37,16 +37,16 @@ def runTopLevelAmsterdam {m : Type → Type} [Monad m] (sink : Trace.Sink m)
 
 /-- The successful return of the actual monadic driver projects to the public
 operation, including preparation errors and precompile/transfer boundaries. -/
-theorem runTopLevelAmsterdam_erasure {state : StateGasRules} {msg : Msg} {isCreate : Bool}
-    (result : Certified (processTopLevelAmsterdam state msg isCreate)) :
+theorem TraceTransaction.runTopLevelAmsterdam_erasure {state : StateGasRules} {msg : Msg} {isCreate : Bool}
+    (result : TraceTransaction.Certified (processTopLevelAmsterdam state msg isCreate)) :
     result.value = processTopLevelAmsterdam state msg isCreate := result.erases
 
-def runMessageCreate {m : Type → Type} [Monad m] (sink : Trace.Sink m)
+def TraceTransaction.runMessageCreate {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (msg : Msg) (runId : String) :
-    m (Certified (processMessageCall.create msg)) := do
+    m (TraceTransaction.Certified (processMessageCall.create msg)) := do
   match hfork : msg.benv.stat.rules.stateGas with
   | some state =>
-    let result ← runTopLevelAmsterdam sink state msg true runId
+    let result ← TraceTransaction.runTopLevelAmsterdam sink state msg true runId
     pure ⟨result.value, by
       simpa only [processMessageCall.create, hfork] using result.erases⟩
   | none =>
@@ -67,12 +67,12 @@ def runMessageCreate {m : Type → Type} [Monad m] (sink : Trace.Sink m)
         simp only [processMessageCall.create, hfork, hcollision, value, result.erases, frame]
         rfl⟩
 
-def runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
+def TraceTransaction.runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (msg : Msg) (runId : String) :
-    m (Certified (processMessageCall.call msg)) := do
+    m (TraceTransaction.Certified (processMessageCall.call msg)) := do
   match hfork : msg.benv.stat.rules.stateGas with
   | some state =>
-    let result ← runTopLevelAmsterdam sink state msg false runId
+    let result ← TraceTransaction.runTopLevelAmsterdam sink state msg false runId
     pure ⟨result.value, by
       simpa only [processMessageCall.call, hfork] using result.erases⟩
   | none =>
@@ -91,20 +91,20 @@ def runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
         rfl⟩
 
 /-- Trace the exact message operation invoked by `processTransaction`. -/
-def runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
+def TraceTransaction.runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (msg : Msg) (runId : String) :
-    m (Certified (processMessageCall msg)) := do
+    m (TraceTransaction.Certified (processMessageCall msg)) := do
   if htarget : msg.target.isNone then
-    let result ← runMessageCreate sink msg runId
+    let result ← TraceTransaction.runMessageCreate sink msg runId
     pure ⟨result.value, by
       simpa [processMessageCall, htarget] using result.erases⟩
   else
-    let result ← runMessageCall sink authorizationRefund msg runId
+    let result ← TraceTransaction.runMessageCall sink authorizationRefund msg runId
     pure ⟨result.value, by
       simpa [processMessageCall, htarget] using result.erases⟩
 
 /-- Values crossing the existing transaction's execution boundary. -/
-structure PreparedTransaction where
+structure TraceTransaction.PreparedTransaction where
   benv : Benv
   bout : BlockOutput
   sender : Address
@@ -113,8 +113,8 @@ structure PreparedTransaction where
   calldataFloorGasCost : Nat
   msg : Msg
 
-def prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
-    Except TransitionError PreparedTransaction := do
+def TraceTransaction.prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+    Except TransitionError TraceTransaction.PreparedTransaction := do
   let benv := benv.beginTransaction
   let bout ← .ok {bout with
     transactionsTrie := bout.transactionsTrie.insert (Rlp.Item.bytes index.toBytes).toBytes tx}
@@ -163,7 +163,7 @@ def prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (in
   let msg ← prepareMessage {benv with state := state} tenv tx
   pure ⟨benv, bout, sender, effectiveGasPrice, txBlobGasUsed, calldataFloorGasCost, msg⟩
 
-def finishTransaction (prepared : PreparedTransaction) (tx : Transaction) (index : Nat)
+def TraceTransaction.finishTransaction (prepared : TraceTransaction.PreparedTransaction) (tx : Transaction) (index : Nat)
     (state : State) (txOutput : MsgCallOutput) :
     Except TransitionError (State × BlockOutput) := do
   let benv := prepared.benv
@@ -216,41 +216,41 @@ def finishTransaction (prepared : PreparedTransaction) (tx : Transaction) (index
   .ok ⟨state, {bout with blockAccessListBuilder := bal}⟩
 
 /-- The local preparation/settlement split is exactly the public pipeline. -/
-theorem processTransaction_eq (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+theorem TraceTransaction.processTransaction_eq (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
     Jaune.processTransaction benv bout tx index = (do
-      let prepared ← prepareTransaction benv bout tx index
+      let prepared ← TraceTransaction.prepareTransaction benv bout tx index
       let ⟨state, output⟩ ← Except.mapError TransitionError.vm (Jaune.processMessageCall prepared.msg)
-      finishTransaction prepared tx index state output) := by
-  simp only [Jaune.processTransaction, prepareTransaction, finishTransaction,
+      TraceTransaction.finishTransaction prepared tx index state output) := by
+  simp only [Jaune.processTransaction, TraceTransaction.prepareTransaction, TraceTransaction.finishTransaction,
     bind_assoc, pure_bind]
   rfl
 
 /-- Transaction result plus the observed message output needed by a trace
 summary. A validation/preparation rejection can have no message output. -/
-structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat)
-    extends Certified (Jaune.processTransaction benv bout tx index) where
+structure TraceTransaction.TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat)
+    extends TraceTransaction.Certified (Jaune.processTransaction benv bout tx index) where
   messageOutput : Option MsgCallOutput
 
 /-- Execute one real transaction with synchronous instruction observations.
 Validation, fee/nonce preparation, message execution, gas/receipt settlement,
 SELFDESTRUCT and block-access bookkeeping are connected to the public pipeline
 by the certificate. The original transaction executor is never run a second time. -/
-def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
+def TraceTransaction.runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) (runId : String) :
-    m (TransactionResult benv bout tx index) := do
-  match hprep : prepareTransaction benv bout tx index with
+    m (TraceTransaction.TransactionResult benv bout tx index) := do
+  match hprep : TraceTransaction.prepareTransaction benv bout tx index with
   | .error error =>
     pure {
       value := .error error
       messageOutput := none
       erases := by
-        rw [processTransaction_eq, hprep]
+        rw [TraceTransaction.processTransaction_eq, hprep]
         rfl }
   | .ok prepared =>
-    let message ← runMessage sink authorizationRefund prepared.msg runId
+    let message ← TraceTransaction.runMessage sink authorizationRefund prepared.msg runId
     let value : Except TransitionError (State × BlockOutput) := do
       let ⟨state, output⟩ ← Except.mapError TransitionError.vm message.value
-      finishTransaction prepared tx index state output
+      TraceTransaction.finishTransaction prepared tx index state output
     let observed := match message.value with
       | .error _ => none
       | .ok ⟨_, output⟩ => some output
@@ -258,21 +258,21 @@ def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
       value := value
       messageOutput := observed
       erases := by
-        rw [processTransaction_eq, hprep]
+        rw [TraceTransaction.processTransaction_eq, hprep]
         simp only [value, message.erases]
         rfl }
 
 /-- Universal execution projection of the actual transaction trace driver. -/
-theorem runTransaction_erasure {benv : Benv} {bout : BlockOutput} {tx : Transaction} {index : Nat}
-    (result : TransactionResult benv bout tx index) :
+theorem TraceTransaction.runTransaction_erasure {benv : Benv} {bout : BlockOutput} {tx : Transaction} {index : Nat}
+    (result : TraceTransaction.TransactionResult benv bout tx index) :
     result.value = Jaune.processTransaction benv bout tx index := result.erases
 
-theorem runTransaction_id_erasure (sink : Trace.Sink Id)
+theorem TraceTransaction.runTransaction_id_erasure (sink : Trace.Sink Id)
     (authorizationRefund : Nat → Id Unit) (benv : Benv)
     (bout : BlockOutput) (tx : Transaction) (index : Nat) (runId : String) :
-    (runTransaction sink authorizationRefund benv bout tx index runId).value =
+    (TraceTransaction.runTransaction sink authorizationRefund benv bout tx index runId).value =
       Jaune.processTransaction benv bout tx index :=
-  (runTransaction sink authorizationRefund benv bout tx index runId).erases
+  (TraceTransaction.runTransaction sink authorizationRefund benv bout tx index runId).erases
 
 /-! ### EIP-161: the sweep runs in transaction settlement
 
@@ -281,14 +281,14 @@ these checks pin that `processTransaction` sweeps the touched accounts its
 message call reports: an account holding only storage is erased under Gray
 Glacier and kept under Prague. -/
 
-private def sweepGuardAdr : Address := 0x2000
+private def TraceTransaction.sweepGuardAdr : Address := 0x2000
 
-private def sweepGuardSurvives (fork : Fork) : Bool :=
-  let state := State.setStorVal .empty sweepGuardAdr 1 1
+private def TraceTransaction.sweepGuardSurvives (fork : Fork) : Bool :=
+  let state := State.setStorVal .empty TraceTransaction.sweepGuardAdr 1 1
   let benv : Benv := { (default : Benv) with
     state := state
     stat := { (default : BenvStat) with fork := fork, origState := state } }
-  let prepared : PreparedTransaction :=
+  let prepared : TraceTransaction.PreparedTransaction :=
     ⟨benv, .init, 0x5000, 0, 0, 0, default⟩
   let tx : Transaction := {
     nonce := 0
@@ -306,12 +306,12 @@ private def sweepGuardSurvives (fork : Fork) : Bool :=
     accountsToDelete := .emptyWithCapacity
     error := none
     returnData := []
-    touchedAccounts := (.emptyWithCapacity : AdrSet).insert sweepGuardAdr }
-  match finishTransaction prepared tx 0 state out with
-  | .ok (post, _) => post[sweepGuardAdr]?.isSome
+    touchedAccounts := (.emptyWithCapacity : AdrSet).insert TraceTransaction.sweepGuardAdr }
+  match TraceTransaction.finishTransaction prepared tx 0 state out with
+  | .ok (post, _) => post[TraceTransaction.sweepGuardAdr]?.isSome
   | .error _ => true
 
-#guard !sweepGuardSurvives .grayGlacier
-#guard sweepGuardSurvives .prague
+#guard !TraceTransaction.sweepGuardSurvives .grayGlacier
+#guard TraceTransaction.sweepGuardSurvives .prague
 
-end Jaune.TraceTransaction
+end Jaune

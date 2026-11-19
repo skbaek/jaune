@@ -25,13 +25,13 @@ open Jaune Jaune.Staging
 theorem processTransaction_canonical_of_staged {benv : Benv} (h : benv.Canonical)
     {bout : BlockOutput} {tx : Transaction} {index : Nat} {p}
     (hp : Jaune.processTransaction benv bout tx index = .ok p) : State.Canonical p.1 := by
-  rw [← processTransaction_eq_b2, ← B2.Transaction.run_output] at hp
-  cases hr : B2.Transaction.run benv bout tx index with
+  rw [← processTransaction_eq_b2, ← Staging.B2.Transaction.run_output] at hp
+  cases hr : Staging.B2.Transaction.run benv bout tx index with
   | error e => rw [hr] at hp; cases hp
   | ok r =>
     rw [hr] at hp
     cases hp
-    exact B2.Transaction.run_canonical h hr
+    exact Staging.B2.Transaction.run_canonical h hr
 
 /-- The old `processCheckedSystemTransaction_canonical`, from the staged one. -/
 theorem processCheckedSystemTransaction_canonical_of_staged {benv : Benv} (h : benv.Canonical)
@@ -51,7 +51,7 @@ private theorem staged_of_old {ε : Type} {embed : TransitionError → ε} {f : 
     {ch : BlockChain} {block : Block} {checkOmmers : Unit → Except ε Unit} {ch'}
     (hs : ¬ BlockDecodeOrderSplit f ch block checkOmmers)
     (hp : Jaune.stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
-    E.stateTransitionCoreE embed f ch block checkOmmers = .ok ch' :=
+    Staging.E.stateTransitionCoreE embed f ch block checkOmmers = .ok ch' :=
   (E.stateTransitionCoreE_eq_of_not_split embed f ch block checkOmmers hs).trans hp
 
 /-- The old `stateTransitionCoreE_canonical`, from the staged one, off the split. -/
@@ -60,7 +60,7 @@ theorem stateTransitionCoreE_canonical_of_staged {ε : Type} {embed : Transition
     {checkOmmers : Unit → Except ε Unit}
     (hs : ¬ BlockDecodeOrderSplit f ch block checkOmmers)
     (hp : Jaune.stateTransitionCoreE embed f ch block checkOmmers = .ok ch') : ch'.Canonical :=
-  E.stateTransitionCoreE_canonical h (staged_of_old hs hp)
+  Staging.E.stateTransitionCoreE_canonical h (staged_of_old hs hp)
 
 /-- The old `stateTransitionCoreE_eq_ok`, from the staged one, off the split. -/
 theorem stateTransitionCoreE_eq_ok_of_staged {ε : Type} {embed : TransitionError → ε}
@@ -71,7 +71,7 @@ theorem stateTransitionCoreE_eq_ok_of_staged {ε : Type} {embed : TransitionErro
     validateHeader f.ruleSet ch block.header = .ok () ∧
       ch'.blocks = appendBlock ch.blocks block ∧
       ch'.state.root = block.header.stateRoot :=
-  E.stateTransitionCoreE_eq_ok (staged_of_old hs hp)
+  Staging.E.stateTransitionCoreE_eq_ok (staged_of_old hs hp)
 
 /-- The old `stateTransitionCoreE_preserves_chainId`, from the staged one, off the split. -/
 theorem stateTransitionCoreE_preserves_chainId_of_staged {ε : Type}
@@ -80,6 +80,6 @@ theorem stateTransitionCoreE_preserves_chainId_of_staged {ε : Type}
     (hs : ¬ BlockDecodeOrderSplit f ch block checkOmmers)
     (hp : Jaune.stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
     ch'.chainId = ch.chainId :=
-  E.stateTransitionCoreE_preserves_chainId (staged_of_old hs hp)
+  Staging.E.stateTransitionCoreE_preserves_chainId (staged_of_old hs hp)
 
 end Jaune.Bridge.G2a

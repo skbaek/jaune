@@ -16,7 +16,7 @@ deeper, in `Jaune.Staging.B2`; at the switch they take the final names `Transact
 gate G2a's bridge modules.
 -/
 
-namespace Jaune.Staging.B2
+namespace Jaune
 
 open Jaune Jaune.Staging
 
@@ -24,8 +24,8 @@ open Jaune Jaune.Staging
 sender, pay the coinbase, erase the writes of emptied and deleted accounts, settle the
 self-destructs, sweep the touched empty accounts, record the gas, the receipt and the logs, and
 incorporate the block access list at `index + 1`. -/
-def Transaction.settle (prepared : Transaction.Prepared) (tx : Transaction) (index : Nat)
-    (run : MessageRun) : Except TransitionError (State × BlockOutput) := do
+def Staging.B2.Transaction.settle (prepared : Staging.Transaction.Prepared) (tx : Transaction) (index : Nat)
+    (run : Staging.MessageRun) : Except TransitionError (State × BlockOutput) := do
   let benv := prepared.benv
   let bout := prepared.bout
   let sender := prepared.sender
@@ -75,23 +75,23 @@ def Transaction.settle (prepared : Transaction.Prepared) (tx : Transaction) (ind
   .ok ⟨state, {bout with blockAccessListBuilder := bal}⟩
 
 /-- One transaction: check, prepare, the top-level message run, settle. -/
-def processTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+def Staging.B2.processTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
     Except TransitionError (State × BlockOutput) := do
-  let checked ← Transaction.check benv bout tx index
-  let prepared ← Transaction.prepare checked tx index
-  let run ← (Message.run prepared.msg).mapError (fun e => TransitionError.vm e.toEvmError)
-  Transaction.settle prepared tx index run
+  let checked ← Staging.Transaction.check benv bout tx index
+  let prepared ← Staging.Transaction.prepare checked tx index
+  let run ← (Staging.Message.run prepared.msg).mapError (fun e => TransitionError.vm e.toEvmError)
+  Staging.B2.Transaction.settle prepared tx index run
 
 /-- The successful phases of one transaction. The block output is threaded separately, so a
 record can be read independently of earlier entries in the block's tries. -/
-structure TransactionRun where
+structure Staging.B2.TransactionRun where
   index : Nat
   transaction : Transaction
   sender : Address
   intrinsicGas : Nat
   blobGasUsed : Nat
   effectiveGasPrice : Nat
-  message : MessageRun
+  message : Staging.MessageRun
   gasSettlement : TransactionGasSettlement
   state : State
   receipt : Fin 5 × Receipt
@@ -99,9 +99,9 @@ structure TransactionRun where
   storageWrites : KeySet
 
 /-- Settle a prepared transaction, keeping the observations beside the updated block output. -/
-def Transaction.settleRun (checked : Transaction.Checked) (prepared : Transaction.Prepared)
-    (tx : Transaction) (index : Nat) (run : MessageRun) :
-    Except TransitionError (TransactionRun × BlockOutput) := do
+def Staging.B2.Transaction.settleRun (checked : Staging.Transaction.Checked) (prepared : Staging.Transaction.Prepared)
+    (tx : Transaction) (index : Nat) (run : Staging.MessageRun) :
+    Except TransitionError (Staging.B2.TransactionRun × BlockOutput) := do
   let benv := prepared.benv
   let bout := prepared.bout
   let sender := prepared.sender
@@ -152,22 +152,22 @@ def Transaction.settleRun (checked : Transaction.Checked) (prepared : Transactio
     run, settlement, state, receipt, storageWrites⟩, {bout with blockAccessListBuilder := bal})
 
 /-- Execute one transaction and keep its message, gas settlement and receipt. -/
-def Transaction.run (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
-    Except TransitionError (TransactionRun × BlockOutput) := do
-  let checked ← Transaction.check benv bout tx index
-  let prepared ← Transaction.prepare checked tx index
-  let message ← (Message.run prepared.msg).mapError (fun e => TransitionError.vm e.toEvmError)
-  Transaction.settleRun checked prepared tx index message
+def Staging.B2.Transaction.run (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+    Except TransitionError (Staging.B2.TransactionRun × BlockOutput) := do
+  let checked ← Staging.Transaction.check benv bout tx index
+  let prepared ← Staging.Transaction.prepare checked tx index
+  let message ← (Staging.Message.run prepared.msg).mapError (fun e => TransitionError.vm e.toEvmError)
+  Staging.B2.Transaction.settleRun checked prepared tx index message
 
 /-- Erasing the transaction record preserves both failure and the entire successful output. -/
-theorem Transaction.run_output (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
-    (fun pair => (pair.1.state, pair.2)) <$> Transaction.run benv bout tx index =
-      processTransaction benv bout tx index := by
-  unfold Transaction.run processTransaction
+theorem Staging.B2.Transaction.run_output (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+    (fun pair => (pair.1.state, pair.2)) <$> Staging.B2.Transaction.run benv bout tx index =
+      Staging.B2.processTransaction benv bout tx index := by
+  unfold Staging.B2.Transaction.run Staging.B2.processTransaction
   simp only [map_bind]
   refine bind_congr fun checked => bind_congr fun prepared => bind_congr fun message => ?_
-  unfold Transaction.settleRun Transaction.settle
+  unfold Staging.B2.Transaction.settleRun Staging.B2.Transaction.settle
   simp only [map_bind]
   exact bind_congr fun _ => rfl
 
-end Jaune.Staging.B2
+end Jaune
