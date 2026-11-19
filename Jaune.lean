@@ -106,6 +106,10 @@ import Jaune.MessageCall.CheckedExec
 import Jaune.Bridge.G2b.CheckedIngress
 import Jaune.Bridge.G2b.CheckedSimulation
 import Jaune.Bridge.G2b.CheckedWalk
+import Jaune.Bridge.G2b.CheckedPlainArms
+import Jaune.Bridge.G2b.CheckedRowAgreement
+import Jaune.Bridge.G2b.CheckedStoreAgreement
+import Jaune.Bridge.G2b.CheckedDispatch
 import Jaune.Bridge.G2b.CheckedPlain
 import Jaune.Bridge.G2b.CheckedControl
 import Jaune.Bridge.G2b.CheckedMessageOps
@@ -167,7 +171,7 @@ import Jaune.MessageCall.CheckedStepGasBound
 import Jaune.MessageCall.CheckedPartsGas
 import Jaune.MessageCall.CheckedTotality
 import Jaune.Instructions.Word
-import Jaune.Instructions.WordRows
+import Jaune.Instructions.Table
 import Jaune.Instructions.WordFacts
 import Jaune.Instructions.Store
 import Jaune.Instructions.StoreFacts

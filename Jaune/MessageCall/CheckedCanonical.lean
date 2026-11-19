@@ -1,5 +1,7 @@
 import Jaune.MessageCall.Canonical
 import Jaune.MessageCall.CheckedTotality
+import Jaune.Instructions.LogFacts
+import Jaune.Instructions.ReadFacts
 
 /-! Canonicality of the world and original state through the native grouped frame driver. -/
 namespace Jaune.Checked
@@ -167,58 +169,78 @@ local macro "canonical_walk" : tactic => `(tactic| repeat' first
   | dsimp only
   | split)
 
-private theorem sstoreBerlin_canonical (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s) :
-    Walk Frame.State.Canonical Frame.State.Canonical (PlainOp.sstoreBerlin ctx s) := by
-  unfold PlainOp.sstoreBerlin
-  refine Walk.bind (canonical_pop h) ?_
-  intro ⟨key, t⟩ ht
-  refine Walk.bind (canonical_pop ht) ?_
-  intro ⟨value, u⟩ hu
-  refine Walk.bind (Walk.assert (H := Frame.State.Canonical) hu) ?_
-  intro _ _
-  dsimp only
-  split <;> refine Walk.bind (canonical_chargeGas _ (by split <;> exact hu)) ?_ <;> intro v hv <;>
-    refine Walk.bind (canonical_assertDynamic ctx hv) ?_ <;> intro _ _ <;>
-    exact storageValue_canonical hv _ _ _
+private theorem applyStoreTouch_canonical (rules : ForkRules) (a : Address) (t : StoreTouch)
+    {s : Frame.State} (h : Frame.State.Canonical s) :
+    Frame.State.Canonical (s.applyStoreTouch rules a t) := by
+  rcases t with ⟨readStorage, warmKey, newRefund, readAccount, write⟩
+  have hp : Frame.State.Canonical
+      (let s := match readStorage with | none => s | some k => s.recordStorageRead rules a k
+       let s := match warmKey with | none => s | some k => s.addAccessedStorageKey a k
+       let s := match newRefund with | none => s | some r => s.withRefund r
+       if readAccount then s.recordAccountRead rules a else s) := by
+    rcases readStorage with _ | k <;> rcases warmKey with _ | k' <;> rcases newRefund with _ | r <;>
+      cases readAccount <;> exact h
+  unfold Frame.State.applyStoreTouch
+  dsimp only at hp ⊢
+  rcases write with _ | ⟨k, v⟩ | ⟨k, v⟩
+  · exact hp
+  · exact storageValue_canonical hp _ _ _
+  · exact transientValue_canonical hp _ _ _
 
-private theorem sstoreLegacy_canonical (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s) :
-    Walk Frame.State.Canonical Frame.State.Canonical (PlainOp.sstoreLegacy ctx s) := by
-  unfold PlainOp.sstoreLegacy
-  canonical_walk
-  all_goals apply storageValue_canonical; assumption
+private theorem liftStore_canonical (rules : ForkRules) (a : Address)
+    (core : Machine → Except (ExceptionalHalt × Machine × StoreTouch) (Machine × StoreTouch))
+    {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical Frame.State.Canonical (s.liftStore rules a core) := by
+  unfold Frame.State.liftStore
+  split
+  · exact applyStoreTouch_canonical rules a _ (s := s.withMachine _) h
+  · exact applyStoreTouch_canonical rules a _ (s := s.withMachine _) h
 
-private theorem sstoreAmsterdam_canonical (state : StateGasRules) (ctx : CallContext) {s : Frame.State}
-    (h : Frame.State.Canonical s) :
-    Walk Frame.State.Canonical Frame.State.Canonical (PlainOp.sstoreAmsterdam state ctx s) := by
-  unfold PlainOp.sstoreAmsterdam
-  refine Walk.bind (canonical_assertDynamic ctx h) ?_
-  intro _ _
-  refine Walk.bind (canonical_pop h) ?_
-  intro ⟨key, t⟩ ht
-  refine Walk.bind (canonical_pop ht) ?_
-  intro ⟨value, u⟩ hu
-  refine Walk.bind (Walk.assert (H := Frame.State.Canonical) hu) ?_
-  intro _ _
-  refine Walk.bind (canonical_chargeGas _ ?_) ?_
-  · split <;> exact hu
-  · intro v hv
-    refine Walk.bind (canonical_chargeStateGas _ hv) ?_
-    intro w hw
-    exact storageValue_canonical hw _ _ _
+/-- Every family step keeps the world canonical: the machine lifts and the log lift keep the world,
+a read's touch keeps it, and a store's touch writes at most one slot (S4: the lift types). -/
+theorem Family.run_canonical (f : Family) {x : Frame.Running}
+    (h : Frame.State.Canonical x.state) :
+    Walk Frame.State.Canonical Frame.State.Canonical (f.run x) := by
+  cases f with
+  | word row => exact liftCanonical h _
+  | shuffle row => exact liftCanonical h _
+  | memory row => exact liftCanonical h _
+  | log row =>
+    have hk := Frame.State.liftLog_keeps x.state (row.step x.context x.state.machine)
+    show Walk _ _ (x.state.liftLog (row.step x.context x.state.machine))
+    revert hk
+    generalize x.state.liftLog (row.step x.context x.state.machine) = r
+    intro hk
+    cases r with
+    | error p =>
+      obtain ⟨e, s'⟩ := p
+      show s'.world.Canonical
+      rw [show s'.world = x.state.world from hk.1]; exact h
+    | ok s' =>
+      show s'.world.Canonical
+      rw [show s'.world = x.state.world from hk.1]; exact h
+  | read row =>
+    have hk := Frame.State.liftRead_keeps x.context.block.rules
+      (row.step x.context.block.rules x.context x.state.readView) x.state
+    show Walk _ _ (x.state.liftRead x.context.block.rules
+      (row.step x.context.block.rules x.context x.state.readView))
+    revert hk
+    generalize x.state.liftRead x.context.block.rules
+      (row.step x.context.block.rules x.context x.state.readView) = r
+    intro hk
+    cases r with
+    | error p =>
+      obtain ⟨e, s'⟩ := p
+      show s'.world.Canonical
+      rw [show s'.world = x.state.world from hk.1]; exact h
+    | ok s' =>
+      show s'.world.Canonical
+      rw [show s'.world = x.state.world from hk.1]; exact h
+  | store kind => cases kind <;> exact liftStore_canonical _ _ _ h
 
 theorem PlainOp.runCore_canonical (pc : Nat) (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s)
-    (op : Jaune.PlainOp) : Walk Frame.State.Canonical Frame.State.Canonical (PlainOp.runCore pc ctx s op) := by
-  cases op
-  case log k =>
-    simp only [PlainOp.runCore, PlainOp.liftLog]
-    split <;> exact h
-  case sstore =>
-    simp only [PlainOp.runCore]
-    split
-    · split <;> first | exact sstoreBerlin_canonical _ h | exact sstoreLegacy_canonical _ h
-    · exact sstoreAmsterdam_canonical _ _ h
-  all_goals simp only [PlainOp.runCore]
-  all_goals canonical_walk
+    (op : Jaune.PlainOp) : Walk Frame.State.Canonical Frame.State.Canonical (PlainOp.runCore pc ctx s op) :=
+  Family.run_canonical (PlainOp.family op) (x := ⟨pc, ctx, s⟩) h
 
 theorem JumpOp.runCore_canonical (pc : Nat) (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s)
     (op : Jaune.JumpOp) :
@@ -451,12 +473,8 @@ theorem NextOp.step_canonical {r : Frame.Running} (h : Frame.Running.Canonical r
   cases op with
   | plain p => exact Step.ofHalt_canonical (PlainOp.runCore_canonical _ _ h.2 p)
   | message m => exact MessageOp.Outcome.toStep_canonical (MessageOp.step_canonical _ _ h.1 h.2 m)
-  | push xs _ =>
-    simp only [NextOp.step]
-    split
-    · exact h.2
-    · apply Step.ofHalt_canonical; canonical_walk
-  | dupn imm | swapn imm | exchange imm => apply Step.ofHalt_canonical; canonical_walk
+  | push xs _ => exact Step.ofHalt_canonical (Family.run_canonical _ h.2)
+  | dupn imm | swapn imm | exchange imm => exact Step.ofHalt_canonical (Family.run_canonical _ h.2)
 
 theorem step_canonical {r : Frame.Running} (h : Frame.Running.Canonical r) {out : Step}
     (hs : step r = .ok out) : out.Canonical := by

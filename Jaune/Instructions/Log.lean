@@ -42,9 +42,4 @@ def Frame.State.liftLog (s : Frame.State)
   | .error (e, m) => .error (e, s.withMachine m)
   | .ok (m, log) => .ok ((s.withMachine m).addLog log)
 
-/-- `LOG0`–`LOG4`. -/
-def PlainOp.logRow? : Jaune.PlainOp → Option LogRow
-  | .log n => some { topics := n }
-  | _ => none
-
 end Jaune.Checked

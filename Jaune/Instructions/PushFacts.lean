@@ -2,8 +2,10 @@ import Jaune.Instructions.Push
 import Jaune.Instructions.WordFacts
 import Jaune.MessageCall.CheckedStep
 
-/-! The push rows' table lemmas and their bridge to `Checked.NextOp.step`, for every input and
-every `Fork`. The effect law is the Word family's (`WordRow.step_ok`, `WordRow.step_error`). -/
+/-! The push rows' table lemmas and the lemma that `Checked.NextOp.step` reads them, for every
+input and every `Fork`. The effect law is the Word family's (`WordRow.step_ok`,
+`WordRow.step_error`). The rows' agreement with the per-opcode arms is in
+`Jaune.Bridge.G2b.CheckedRowAgreement`. -/
 
 namespace Jaune.Checked
 
@@ -36,31 +38,13 @@ theorem NextOp.pushRow_step_irrel (xs : Bytes) (o o' : OpcodeRules) (e e' : Word
   simp only [WordRow.step, NextOp.pushRow, h]
   rfl
 
-/-- **Bridge (`PUSH0`–`PUSH32`):** the push row, stepped by `WordRow.step`, lifted by
-`liftMachine` and turned into a step at the next program counter, equals `Checked.NextOp.step`
-for every running frame (hence every `Fork`). -/
+/-- `PUSH0`–`PUSH32` are the push row, stepped by `WordRow.step`, lifted by `liftMachine` and
+turned into a step at the next program counter, by the definition of `NextOp.step`. -/
 theorem NextOp.pushRow_step_eq (xs : Bytes) (hxs : xs.length ≤ 32) (r : Frame.Running) :
     Step.ofHalt (r.pc + (NextOp.push xs hxs).size)
         (r.state.liftMachine ((NextOp.pushRow xs).step r.context.block.rules.opcodes
           ⟨r.pc, r.context⟩)) =
-      NextOp.step r (.push xs hxs) := by
-  simp only [NextOp.step]
-  by_cases hnil : xs = []
-  · subst hnil
-    by_cases h0 : r.context.block.rules.opcodes.push0
-    · simp only [h0, NextOp.pushRow, WordRow.step, List.isEmpty_nil, Bool.not_true,
-        Bool.false_or, ↓reduceIte, Machine.popWords, bind, Except.bind, decide_true,
-        Bool.not_true, Bool.and_false, Bool.false_eq_true, Frame.State.chargeGas,
-        Frame.State.push, Frame.State.liftMachine]
-      cases r.state.machine.chargeGas Gas.base <;> rfl
-    · simp [h0, NextOp.pushRow, WordRow.step, throw, throwThe, MonadExceptOf.throw, bind,
-        Except.bind, Frame.State.liftMachine, Frame.State.withMachine]
-  · have he : xs.isEmpty = false := by simpa using hnil
-    simp only [hnil, he, NextOp.pushRow, WordRow.step, Bool.not_false, Bool.true_or,
-      ↓reduceIte, Machine.popWords, bind, Except.bind, decide_false, Bool.false_and,
-      Bool.false_eq_true, Bool.false_eq_true, Frame.State.chargeGas, Frame.State.push,
-      Frame.State.liftMachine]
-    cases r.state.machine.chargeGas Gas.veryLow <;> rfl
+      NextOp.step r (.push xs hxs) := rfl
 
 theorem NextOp.pushRow?_step_eq {n : Jaune.NextOp} {row : WordRow}
     (hrow : NextOp.pushRow? n = some row) (r : Frame.Running) :

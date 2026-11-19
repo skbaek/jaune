@@ -1,4 +1,10 @@
 import Jaune.MessageCall.CheckedMemoryCosts
+import Jaune.Instructions.WordFacts
+import Jaune.Instructions.ShuffleFacts
+import Jaune.Instructions.LogFacts
+import Jaune.Instructions.MemoryFacts
+import Jaune.Instructions.ReadFacts
+import Jaune.Instructions.StoreFacts
 
 /-! # The memory potential during a plain instruction -/
 
@@ -42,10 +48,6 @@ private theorem Machine.popN_within (k : Nat) {m : Machine} {n : Nat} (h : Withi
     have hp' := ih hp
     split <;> rename_i he <;> rw [he] at hp' <;> exact hp'
 
-private theorem Frame.State.popN_within (k : Nat) {s : Frame.State} {n : Nat} (h : StateWithin n s) :
-    Walk (StateWithin n) (fun p => StateWithin n p.2) (s.popN k) :=
-  Walk.liftMachineValue (core := fun m => m.popN k) (Machine.popN_within k h)
-
 private theorem Machine.push_within (x : U256) {m : Machine} {n : Nat} (h : Within n m) :
     MWalk (Within n) (Within n) (m.push x) := by
   unfold Machine.push
@@ -55,50 +57,6 @@ theorem Frame.State.push_memoryPotential (x : U256) {s : Frame.State} {n : Nat}
     (h : Machine.memoryPotential s.machine ≤ n) :
     Walk (fun t => Machine.memoryPotential t.machine ≤ n) (fun t => Machine.memoryPotential t.machine ≤ n) (s.push x) :=
   Walk.liftMachine (core := fun m => m.push x) (Machine.push_within x h)
-
-private theorem Machine.pushItem_within (x : U256) (c : Nat) {m : Machine} {n : Nat} (h : Within n m) :
-    MWalk (Within n) (Within n) (m.pushItem x c) := by
-  unfold Machine.pushItem
-  next_stack hp (Machine.charge_within c h)
-  exact Machine.push_within x hp
-
-private theorem Frame.State.pushItem_within (x : U256) (c : Nat) {s : Frame.State} {n : Nat} (h : StateWithin n s) :
-    Walk (StateWithin n) (StateWithin n) (s.pushItem x c) :=
-  Walk.liftMachine (core := fun m => m.pushItem x c) (Machine.pushItem_within x c h)
-
-private theorem Machine.applyUnary_within (f : U256 → U256) (c : Nat) {m : Machine} {n : Nat} (h : Within n m) :
-    MWalk (Within n) (Within n) (m.applyUnary f c) := by
-  unfold Machine.applyUnary
-  next_stack hp (Machine.pop_memoryPotential h)
-  exact Machine.pushItem_within _ _ hp
-
-private theorem Frame.State.applyUnary_within (f : U256 → U256) (c : Nat) {s : Frame.State} {n : Nat} (h : StateWithin n s) :
-    Walk (StateWithin n) (StateWithin n) (s.applyUnary f c) :=
-  Walk.liftMachine (core := fun m => m.applyUnary f c) (Machine.applyUnary_within f c h)
-
-private theorem Machine.applyBinary_within (f : U256 → U256 → U256) (c : Nat) {m : Machine} {n : Nat} (h : Within n m) :
-    MWalk (Within n) (Within n) (m.applyBinary f c) := by
-  unfold Machine.applyBinary
-  next_stack hp (Machine.pop_memoryPotential h)
-  next_stack hp (Machine.pop_memoryPotential hp)
-  exact Machine.pushItem_within _ _ hp
-
-private theorem Frame.State.applyBinary_within (f : U256 → U256 → U256) (c : Nat) {s : Frame.State} {n : Nat} (h : StateWithin n s) :
-    Walk (StateWithin n) (StateWithin n) (s.applyBinary f c) :=
-  Walk.liftMachine (core := fun m => m.applyBinary f c) (Machine.applyBinary_within f c h)
-
-private theorem Machine.applyTernary_within (f : U256 → U256 → U256 → U256) (c : Nat) {m : Machine} {n : Nat} (h : Within n m) :
-    MWalk (Within n) (Within n) (m.applyTernary f c) := by
-  unfold Machine.applyTernary
-  next_stack hp (Machine.pop_memoryPotential h)
-  next_stack hp (Machine.pop_memoryPotential hp)
-  next_stack hp (Machine.pop_memoryPotential hp)
-  exact Machine.pushItem_within _ _ hp
-
-private theorem Frame.State.applyTernary_within (f : U256 → U256 → U256 → U256) (c : Nat) {s : Frame.State} {n : Nat} (h : StateWithin n s) :
-    Walk (StateWithin n) (StateWithin n) (s.applyTernary f c) :=
-  Walk.liftMachine (core := fun m => m.applyTernary f c) (Machine.applyTernary_within f c h)
-
 
 private theorem Machine.charge_extend_within (pairs : List (Nat × Nat)) (base : Nat)
     {m : Machine} {n : Nat} (h : Within n m) :
@@ -130,315 +88,259 @@ private theorem copy_within (m : Machine) (src dst size n : Nat)
   · exact memory_slice_length _ _ _ _
   · exact h
 
-local macro "potential_leaf" : tactic => `(tactic| first
-  | assumption
-  | exact Nat.le_refl _
-  | (apply write_within <;> first | assumption | rfl | exact list_slice_length .. | exact Jaune.ByteArray.length_sliceD ..)
-  | (apply copy_within; assumption)
-  | (exact (Machine.memoryPotential_le_extended ..).trans (by assumption))
-  | (solve | simp only [Walk.ok_iff, Walk.error_iff, MWalk.ok_iff, MWalk.error_iff] at * <;> assumption))
+/-! ### One potential walk per family (S4) -/
 
-local macro "potential_known" : tactic => `(tactic| first
-  | (apply Machine.charge_extend_within; potential_leaf)
-  | (apply Machine.push_within; potential_leaf)
-  | (apply Machine.pushItem_within; potential_leaf)
-  | (apply Machine.applyUnary_within; potential_leaf)
-  | (apply Machine.applyBinary_within; potential_leaf)
-  | (apply Machine.applyTernary_within; potential_leaf)
-  | (apply Machine.pop_memoryPotential; potential_leaf)
-  | (apply Machine.popToNat_memoryPotential; potential_leaf)
-  | (apply Machine.popToAddress_within; potential_leaf)
-  | (apply Machine.popN_within; potential_leaf)
-  | (apply Machine.charge_within; potential_leaf)
-  | (apply Frame.State.push_memoryPotential; potential_leaf)
-  | (apply Frame.State.pushItem_within; potential_leaf)
-  | (apply Frame.State.applyUnary_within; potential_leaf)
-  | (apply Frame.State.applyBinary_within; potential_leaf)
-  | (apply Frame.State.applyTernary_within; potential_leaf)
-  | (apply Frame.State.pop_memoryPotential; potential_leaf)
-  | (apply Frame.State.popToNat_memoryPotential; potential_leaf)
-  | (apply Frame.State.popToAddress_memoryPotential; potential_leaf)
-  | (apply Frame.State.popN_within; potential_leaf)
-  | (apply Frame.State.chargeGas_memoryPotential; potential_leaf)
-  | (apply MWalk.assert (H := Within _); potential_leaf)
-  | (apply Walk.assert (H := StateWithin _); potential_leaf))
+private theorem within_of {m out : Machine} (hmem : out.memory = m.memory)
+    (hg : out.gasMeasure ≤ m.gasMeasure) : Within (Machine.memoryPotential m) out := by
+  unfold Within Machine.memoryPotential
+  rw [hmem]
+  omega
 
-local macro "potential_walk" : tactic => `(tactic| repeat' first
-  | potential_leaf
-  | potential_known
-  | (apply MWalk.bind (by potential_known); first | intro ⟨_, _⟩ _ | intro _ _; try dsimp only at *)
-  | (apply Walk.bind (by potential_known); first | intro ⟨_, _⟩ _ | intro _ _; try dsimp only at *)
-  | (apply Walk.liftMachine (Hm := Within _) (Pm := Within _))
-  | split)
+private theorem pcases {α : Type} {H : Machine → Prop} {P : α → Prop}
+    {x : Except (ExceptionalHalt × Machine) α}
+    (h : MWalk H P x) : (∀ e m, x = .error (e, m) → H m) ∧ (∀ a, x = .ok a → P a) := by
+  constructor
+  · intro e m he; subst he; exact h
+  · intro a ha; subst ha; exact h
 
-private theorem mload_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .mload) := by
-  simp only [PlainOp.runCore]
-  potential_walk
+private theorem Machine.popWords_within {n : Nat} {m : Machine} (a : Fin 4) (h : Within n m) :
+    MWalk (Within n) (fun p => Within n p.2) (m.popWords a) := by
+  match a with
+  | 0 => exact h
+  | 1 => exact Machine.pop_memoryPotential h
+  | 2 =>
+    refine MWalk.bind (Machine.pop_memoryPotential h) ?_
+    rintro ⟨x, m₁⟩ h₁
+    refine MWalk.bind (Machine.pop_memoryPotential h₁) ?_
+    rintro ⟨y, m₂⟩ h₂
+    exact h₂
+  | 3 =>
+    refine MWalk.bind (Machine.pop_memoryPotential h) ?_
+    rintro ⟨x, m₁⟩ h₁
+    refine MWalk.bind (Machine.pop_memoryPotential h₁) ?_
+    rintro ⟨y, m₂⟩ h₂
+    refine MWalk.bind (Machine.pop_memoryPotential h₂) ?_
+    rintro ⟨z, m₃⟩ h₃
+    exact h₃
 
-private theorem mstore_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .mstore) := by
-  simp only [PlainOp.runCore]
-  potential_walk
+private theorem WordRow.step_within (row : WordRow) (o : OpcodeRules) (e : Word.Env) (m : Machine) :
+    MWalk (Within (Machine.memoryPotential m)) (Within (Machine.memoryPotential m)) (row.step o e m) := by
+  have hmem := WordRow.step_memory row o e m
+  have hg := WordRow.step_gasMeasure_le row o e m
+  cases he : row.step o e m with
+  | ok out => rw [he] at hmem hg; exact within_of hmem hg
+  | error p => obtain ⟨r, out⟩ := p; rw [he] at hmem hg; exact within_of hmem hg
 
-private theorem mstore8_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .mstore8) := by
-  simp only [PlainOp.runCore]
-  potential_walk
+private theorem ShuffleRow.step_within (row : ShuffleRow) (o : OpcodeRules) (m : Machine) :
+    MWalk (Within (Machine.memoryPotential m)) (Within (Machine.memoryPotential m)) (row.step o m) := by
+  have hf := ShuffleRow.step_frame row o m
+  cases he : row.step o m with
+  | ok out =>
+    rw [he] at hf; obtain ⟨_, _, hg, rfl⟩ := hf
+    exact within_of rfl (by simp only [Machine.gasMeasure]; omega)
+  | error p =>
+    obtain ⟨r, out⟩ := p
+    rw [he] at hf; obtain ⟨_, _, hg, rfl⟩ := hf
+    exact within_of rfl (by simp only [Machine.gasMeasure]; omega)
 
-local macro "copy_operands" dst:ident src:ident size:ident bound:ident : tactic => `(tactic| (
+/-- An effect's new memory costs no more than the extension of its ranges, which the step has paid. -/
+private theorem MemoryEffect.apply_within {a : Fin 4} (eff : MemoryEffect a) (calldata : Bytes)
+    (code : ByteArray) (returnData : Bytes) (args : Words a) {t : Machine} {n : Nat}
+    {mem : Memory} {pushed : Option U256}
+    (happ : eff.apply calldata code returnData args t.memory = some (mem, pushed))
+    (h : Within n (t.memExtends (eff.ranges args))) : Within n { t with memory := mem } := by
+  cases eff with
+  | copy src =>
+    obtain ⟨d, o, k⟩ := args
+    cases src <;> simp only [MemoryEffect.apply] at happ
+    · cases happ
+      exact write_within t d.toNat k.toNat _ n (list_slice_length ..) h
+    · cases happ
+      exact write_within t d.toNat k.toNat _ n (Jaune.ByteArray.length_sliceD ..) h
+    · split at happ
+      · cases happ
+      · cases happ
+        exact write_within t d.toNat k.toNat _ n (list_slice_length ..) h
+  | move =>
+    obtain ⟨d, src, k⟩ := args
+    simp only [MemoryEffect.apply] at happ
+    cases happ
+    exact copy_within t src.toNat d.toNat k.toNat n h
+  | storeWord =>
+    obtain ⟨i, x⟩ := args
+    simp only [MemoryEffect.apply] at happ
+    cases happ
+    exact write_within t i.toNat 32 _ n rfl h
+  | storeByte =>
+    obtain ⟨i, x⟩ := args
+    simp only [MemoryEffect.apply] at happ
+    cases happ
+    exact write_within t i.toNat 1 _ n rfl h
+  | load =>
+    simp only [MemoryEffect.apply] at happ
+    cases happ
+    exact h
+  | digest =>
+    obtain ⟨i, k⟩ := args
+    simp only [MemoryEffect.apply] at happ
+    cases happ
+    exact h
+
+private theorem MemoryRow.step_within (row : MemoryRow) (o : OpcodeRules) (ctx : CallContext)
+    (m : Machine) :
+    MWalk (Within (Machine.memoryPotential m)) (Within (Machine.memoryPotential m))
+      (row.step o ctx m) := by
+  unfold MemoryRow.step
+  cases ha : row.available o
+  · simp only [Bool.false_eq_true, ↓reduceIte]
+    exact Nat.le_refl _
+  · simp only [↓reduceIte]
+    refine MWalk.bind (Machine.popWords_within row.arity (Nat.le_refl _)) ?_
+    rintro ⟨args, m₁⟩ h₁
+    refine MWalk.bind (Machine.charge_extend_within (row.effect.ranges args) (row.base args) h₁) ?_
+    intro m₂ h₂
+    split
+    · exact (Machine.memoryPotential_le_extended _ _).trans h₂
+    · rename_i mem happ
+      exact MemoryEffect.apply_within row.effect _ _ _ args happ h₂
+    · rename_i mem x happ
+      exact Machine.push_within x (MemoryEffect.apply_within row.effect _ _ _ args happ h₂)
+
+private theorem LogRow.step_within (row : LogRow) (ctx : CallContext) (m : Machine) :
+    MWalk (Within (Machine.memoryPotential m)) (fun p => Within (Machine.memoryPotential m) p.1)
+      (row.step ctx m) := by
+  unfold LogRow.step LogRow.cost
   refine MWalk.bind (Machine.popToNat_memoryPotential (Nat.le_refl _)) ?_
-  intro ⟨$dst, m₁⟩ h₁
+  intro ⟨start, m₁⟩ h₁
   refine MWalk.bind (Machine.popToNat_memoryPotential h₁) ?_
-  intro ⟨$src, m₂⟩ h₂
-  refine MWalk.bind (Machine.popToNat_memoryPotential h₂) ?_
-  intro ⟨$size, m₃⟩ $bound))
-
-private theorem calldatacopy_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .calldatacopy) := by
-  simp only [PlainOp.runCore]
-  apply Walk.liftMachine (Hm := Within _) (Pm := Within _)
-  copy_operands dst src size h₃
-  refine MWalk.bind (Machine.charge_extend_within [(dst, size)] _ h₃) ?_
+  intro ⟨size, m₂⟩ h₂
+  refine MWalk.bind (Machine.popN_within _ h₂) ?_
+  intro ⟨topics, m₃⟩ h₃
+  refine MWalk.bind (Machine.charge_extend_within [(start, size)] _ h₃) ?_
   intro m₄ h₄
-  exact write_within _ _ size _ _ (list_slice_length ..) h₄
+  refine MWalk.bind (MWalk.assert (H := Within _) ((Machine.memoryPotential_le_extended _ _).trans h₄)) ?_
+  intro _ _; exact h₄
 
-private theorem codecopy_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .codecopy) := by
-  simp only [PlainOp.runCore]
-  apply Walk.liftMachine (Hm := Within _) (Pm := Within _)
-  copy_operands dst src size h₃
-  refine MWalk.bind (Machine.charge_extend_within [(dst, size)] _ h₃) ?_
-  intro m₄ h₄
-  exact write_within _ _ size _ _ (Jaune.ByteArray.length_sliceD ..) h₄
+private def TouchWithin {τ : Type} (n : Nat) : Except (ExceptionalHalt × Machine × τ) (Machine × τ) → Prop
+  | .error (_, m, _) => Within n m
+  | .ok (m, _) => Within n m
 
-private theorem returndatacopy_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .returndatacopy) := by
-  simp only [PlainOp.runCore]
-  apply Walk.liftMachine (Hm := Within _) (Pm := Within _)
-  copy_operands dst src size h₃
-  refine MWalk.bind (Machine.charge_extend_within [(dst, size)] _ h₃) ?_
-  intro m₄ h₄
-  split
-  · exact (Machine.memoryPotential_le_extended _ _).trans h₄
-  · exact write_within _ _ size _ _ (list_slice_length ..) h₄
+private theorem ReadTarget.pop_within (t : ReadTarget) (m : Machine) :
+    MWalk (Within (Machine.memoryPotential m)) (fun p => Within (Machine.memoryPotential m) p.2)
+      (t.pop m) := by
+  cases t with
+  | account => exact Machine.popToAddress_within (Nat.le_refl _)
+  | slot => exact Machine.pop_memoryPotential (Nat.le_refl _)
+  | transient => exact Machine.pop_memoryPotential (Nat.le_refl _)
+  | recipient => exact Nat.le_refl _
 
-private theorem mcopy_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .mcopy) := by
-  simp only [PlainOp.runCore]
-  apply Walk.liftMachine (Hm := Within _) (Pm := Within _)
-  split
-  case isFalse => exact Nat.le_refl _
-  copy_operands dst src size h₃
-  refine MWalk.bind (Machine.charge_extend_within [(src, size), (dst, size)] _ h₃) ?_
-  intro m₄ h₄
-  exact copy_within _ _ _ _ _ h₄
-
-private theorem keccak256_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .keccak256) := by
-  simp only [PlainOp.runCore]
-  potential_walk
-
-private theorem sstoreBerlin_memory (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.sstoreBerlin ctx s) := by
-  unfold PlainOp.sstoreBerlin
-  refine Walk.bind (Frame.State.pop_memoryPotential (Nat.le_refl _)) ?_
-  intro ⟨key, s₁⟩ h₁
-  refine Walk.bind (Frame.State.pop_memoryPotential h₁) ?_
-  intro ⟨value, s₂⟩ h₂
-  refine Walk.bind (Walk.assert (H := (StateWithin (Machine.memoryPotential s.machine))) h₂) ?_
-  intro _ _
-  dsimp only at *
-  refine Walk.bind (Frame.State.chargeGas_memoryPotential _ ?_) ?_
-  · split <;> exact h₂
-  · intro s₃ h₃
-    refine Walk.bind (Walk.assert (H := (StateWithin (Machine.memoryPotential s.machine))) h₃) ?_
-    intro _ _
-    exact h₃
-
-private theorem sstoreLegacy_memory (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.sstoreLegacy ctx s) := by
-  unfold PlainOp.sstoreLegacy
-  refine Walk.bind (Frame.State.pop_memoryPotential (Nat.le_refl _)) ?_
-  intro ⟨key, s₁⟩ h₁
-  refine Walk.bind (Frame.State.pop_memoryPotential h₁) ?_
-  intro ⟨value, s₂⟩ h₂
-  refine Walk.bind (Walk.assert (H := (StateWithin (Machine.memoryPotential s.machine))) h₂) ?_
-  intro _ _
-  dsimp only at *
-  refine Walk.bind (Frame.State.chargeGas_memoryPotential _ ?_) ?_
-  · split <;> first | exact h₂ | (split <;> exact h₂)
-  · intro s₃ h₃
-    refine Walk.bind (Walk.assert (H := (StateWithin (Machine.memoryPotential s.machine))) h₃) ?_
-    intro _ _
-    exact h₃
-
-
-
-private theorem log_memory (k : Fin 5) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.liftLog (PlainOp.logStep k ctx) s) := by
-  have core : MWalk (Within (Machine.memoryPotential s.machine)) (fun p => Within (Machine.memoryPotential s.machine) p.1)
-      (PlainOp.logStep k ctx s.machine) := by
-    unfold PlainOp.logStep
-    refine MWalk.bind (Machine.popToNat_memoryPotential (Nat.le_refl _)) ?_
-    intro ⟨start, m₁⟩ h₁
-    refine MWalk.bind (Machine.popToNat_memoryPotential h₁) ?_
-    intro ⟨size, m₂⟩ h₂
-    refine MWalk.bind (Machine.popN_within _ h₂) ?_
-    intro ⟨topics, m₃⟩ h₃
-    refine MWalk.bind (Machine.charge_extend_within [(start, size)] _ h₃) ?_
-    intro m₄ h₄
-    refine MWalk.bind (MWalk.assert (H := Within _) ((Machine.memoryPotential_le_extended _ _).trans h₄)) ?_
-    intro _ _; exact h₄
-  unfold PlainOp.liftLog
-  split <;> rename_i he <;> rw [he] at core <;> exact core
-
-private theorem extcodecopy_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .extcodecopy) := by
-  unfold PlainOp.runCore
-  refine Walk.bind (Frame.State.popToAddress_memoryPotential (Nat.le_refl _)) ?_
-  intro ⟨adr, s₁⟩ h₁
-  refine Walk.bind (Frame.State.popToNat_memoryPotential h₁) ?_
-  intro ⟨dst, s₂⟩ h₂
-  refine Walk.bind (Frame.State.popToNat_memoryPotential h₂) ?_
-  intro ⟨src, s₃⟩ h₃
-  refine Walk.bind (Frame.State.popToNat_memoryPotential h₃) ?_
-  intro ⟨size, s₄⟩ h₄
+private theorem ReadRow.step_within (row : ReadRow) (rules : ForkRules) (ctx : CallContext)
+    (v : ReadView) (m : Machine) :
+    TouchWithin (Machine.memoryPotential m) (row.step rules ctx v m) := by
+  rcases row with ⟨avail, target, price, result⟩
+  unfold ReadRow.step
   dsimp only
-  split <;> try split
-  all_goals
-    first
-    | refine Walk.bind (Frame.State.chargeGas_extend_memoryPotential [(dst, size)] _ h₄) ?_
-    | refine Walk.bind (Frame.State.chargeGas_extend_memoryPotential (s := s₄.addAccessedAddress adr) [(dst, size)] _ h₄) ?_
-    intro s₅ h₅
-    apply write_within (size := size)
-    · exact Jaune.ByteArray.length_sliceD ..
-    · exact (Nat.le_add_right _ _).trans h₅
-
-
-local macro "plain_memory " name:ident " for " op:term : command =>
-  `(private theorem $name (pc : Nat) (ctx : CallContext) (s : Frame.State) (hn : ctx.block.rules.stateGas = none) :
-      Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-        (PlainOp.runCore pc ctx s $op) := by
-      simp only [PlainOp.runCore, hn]
-      potential_walk)
-
-plain_memory calldataload_memory for .calldataload
-plain_memory blockhash_memory for .blockhash
-plain_memory pop_memory for .pop
-plain_memory gas_memory for .gas
-plain_memory exp_memory for .exp
-plain_memory blobhash_memory for .blobhash
-
-local macro "access_charge_push" bound:term : tactic => `(tactic| (
-  dsimp only
-  split <;> try split
-  all_goals
-    refine Walk.bind (Frame.State.chargeGas_memoryPotential _ ?_) ?_
-    · exact $bound
-    · intro u hu
-      apply Frame.State.push_memoryPotential
-      exact hu))
-
-private theorem balance_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .balance) := by
-  simp only [PlainOp.runCore]
-  refine Walk.bind (Frame.State.popToAddress_memoryPotential (Nat.le_refl _)) ?_
-  intro ⟨k, t⟩ ht
-  access_charge_push ht
-
-private theorem extcodesize_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .extcodesize) := by
-  simp only [PlainOp.runCore]
-  refine Walk.bind (Frame.State.popToAddress_memoryPotential (Nat.le_refl _)) ?_
-  intro ⟨k, t⟩ ht
-  access_charge_push ht
-
-private theorem extcodehash_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .extcodehash) := by
-  simp only [PlainOp.runCore]
   split
-  case isFalse => exact Nat.le_refl _
-  refine Walk.bind (Frame.State.popToAddress_memoryPotential (Nat.le_refl _)) ?_
-  intro ⟨k, t⟩ ht
-  access_charge_push ht
+  · exact Nat.le_refl _
+  · have hpop := pcases (ReadTarget.pop_within target m)
+    split
+    · rename_i e m' hp; exact hpop.1 _ _ hp
+    · rename_i key m₁ hp
+      have h₁ := hpop.2 _ hp
+      cases result with
+      | push f =>
+        simp only [ReadResult.finish]
+        have hc := pcases (Machine.charge_within (price.quote rules ctx v key).1 h₁)
+        split
+        · rename_i e m' he; exact hc.1 _ _ he
+        · rename_i m₂ he
+          have hq := pcases (Machine.push_within (f ctx v.world key) (hc.2 _ he))
+          split
+          · rename_i e m' he'; exact hq.1 _ _ he'
+          · rename_i m₃ he'; exact hq.2 _ he'
+      | copyCode perWord =>
+        simp only [ReadResult.finish]
+        have p1 := pcases (Machine.popToNat_memoryPotential h₁)
+        split
+        · rename_i e m' he; exact p1.1 _ _ he
+        · rename_i d m₂ he
+          have p2 := pcases (Machine.popToNat_memoryPotential (p1.2 _ he))
+          split
+          · rename_i e m' he'; exact p2.1 _ _ he'
+          · rename_i o m₃ he'
+            have p3 := pcases (Machine.popToNat_memoryPotential (p2.2 _ he'))
+            split
+            · rename_i e m' he''; exact p3.1 _ _ he''
+            · rename_i k m₄ he''
+              have h₄ := p3.2 _ he''
+              have hc := pcases (Machine.charge_extend_within [(d, k)]
+                ((price.quote rules ctx v key).1 + perWord * ceilDiv k 32) h₄)
+              split
+              · rename_i e m' h5
+                exact hc.1 _ _ h5
+              · rename_i m₅ h5
+                have h₅ := hc.2 _ h5
+                apply write_within (size := k)
+                · exact Jaune.ByteArray.length_sliceD ..
+                · exact h₅
 
-plain_memory selfbalance_memory for .selfbalance
-private theorem sload_memory (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    Walk (StateWithin (Machine.memoryPotential s.machine)) (StateWithin (Machine.memoryPotential s.machine))
-      (PlainOp.runCore pc ctx s .sload) := by
-  simp only [PlainOp.runCore]
-  refine Walk.bind (Frame.State.pop_memoryPotential (Nat.le_refl _)) ?_
-  intro ⟨k, t⟩ ht
-  access_charge_push ht
-
-plain_memory tload_memory for .tload
-plain_memory tstore_memory for .tstore
+/-- A family step spends at most the frame's potential: the gas it charges pays for the memory it
+extends; a state-gas credit or charge only moves gas between the meters. -/
+theorem Family.run_memoryPotential (f : Family) (x : Frame.Running) :
+    Walk (fun t => Machine.memoryPotential t.machine ≤ Machine.memoryPotential x.state.machine)
+      (fun t => Machine.memoryPotential t.machine ≤ Machine.memoryPotential x.state.machine)
+      (f.run x) := by
+  cases f with
+  | word row => exact Walk.liftMachine (Hm := Within _) (Pm := Within _) (WordRow.step_within row _ _ _)
+  | shuffle row => exact Walk.liftMachine (Hm := Within _) (Pm := Within _) (ShuffleRow.step_within row _ _)
+  | memory row => exact Walk.liftMachine (Hm := Within _) (Pm := Within _) (MemoryRow.step_within row _ _ _)
+  | log row =>
+    have core := LogRow.step_within row x.context x.state.machine
+    show Walk _ _ (x.state.liftLog (row.step x.context x.state.machine))
+    unfold Frame.State.liftLog
+    split <;> rename_i he <;> rw [he] at core <;> exact core
+  | read row =>
+    have hr := ReadRow.step_within row x.context.block.rules x.context x.state.readView x.state.machine
+    show Walk _ _ (x.state.liftRead _ _)
+    unfold Frame.State.liftRead
+    split <;> rename_i he <;> rw [he] at hr
+    all_goals
+      show Machine.memoryPotential (Frame.State.machine _) ≤ _
+      rw [(Frame.State.applyReadTouch_keeps _ _ _).1]
+      exact hr
+  | store kind =>
+    cases kind with
+    | persistent =>
+      show Walk _ _ (x.state.liftStore _ _ _)
+      unfold Frame.State.liftStore
+      split <;> rename_i he
+      · show Machine.memoryPotential (Frame.State.machine _) ≤ _
+        rw [Frame.State.applyStoreTouch_machine]
+        obtain ⟨_, hmem, _, hg, _⟩ := SstoreRow.step_error he
+        exact within_of hmem hg
+      · show Machine.memoryPotential (Frame.State.machine _) ≤ _
+        rw [Frame.State.applyStoreTouch_machine]
+        obtain ⟨key, v, rest, _, _, _, _, _, hmem, _, hg, _⟩ := SstoreRow.step_ok he
+        exact within_of hmem (by simp only [Frame.State.withMachine_machine] at hg ⊢; rw [hg]; omega)
+    | transient =>
+      show Walk _ _ (x.state.liftStore _ _ _)
+      unfold Frame.State.liftStore
+      split <;> rename_i he
+      · show Machine.memoryPotential (Frame.State.machine _) ≤ _
+        rw [Frame.State.applyStoreTouch_machine]
+        obtain ⟨_, hmem, _, _, hg, _⟩ := TstoreRow.step_error he
+        exact within_of hmem hg
+      · show Machine.memoryPotential (Frame.State.machine _) ≤ _
+        rw [Frame.State.applyStoreTouch_machine]
+        obtain ⟨key, v, rest, _, _, _, _, rfl, _⟩ := TstoreRow.step_ok he
+        exact within_of rfl (by simp only [Frame.State.withMachine_machine, Machine.gasMeasure]; omega)
 
 /-- A plain instruction can spend the frame’s gas and expand memory up to its original potential. -/
 theorem PlainOp.runCore_memoryPotential (pc : Nat) (ctx : CallContext) (s : Frame.State) (op : Jaune.PlainOp)
-    (hn : ctx.block.rules.stateGas = none) :
+    (_hn : ctx.block.rules.stateGas = none) :
     Walk (fun t => Machine.memoryPotential t.machine ≤ Machine.memoryPotential s.machine)
       (fun t => Machine.memoryPotential t.machine ≤ Machine.memoryPotential s.machine)
-      (PlainOp.runCore pc ctx s op) := by
-  cases op
-  case mload => exact mload_memory pc ctx s
-  case mstore => exact mstore_memory pc ctx s
-  case mstore8 => exact mstore8_memory pc ctx s
-  case calldatacopy => exact calldatacopy_memory pc ctx s
-  case codecopy => exact codecopy_memory pc ctx s
-  case returndatacopy => exact returndatacopy_memory pc ctx s
-  case mcopy => exact mcopy_memory pc ctx s
-  case keccak256 => exact keccak256_memory pc ctx s
-  case extcodecopy => exact extcodecopy_memory pc ctx s
-  case calldataload => exact calldataload_memory pc ctx s hn
-  case blockhash => exact blockhash_memory pc ctx s hn
-  case pop => exact pop_memory pc ctx s hn
-  case gas => exact gas_memory pc ctx s hn
-  case exp => exact exp_memory pc ctx s hn
-  case blobhash => exact blobhash_memory pc ctx s hn
-  case balance => exact balance_memory pc ctx s
-  case extcodesize => exact extcodesize_memory pc ctx s
-  case extcodehash => exact extcodehash_memory pc ctx s
-  case selfbalance => exact selfbalance_memory pc ctx s hn
-  case sload => exact sload_memory pc ctx s
-  case tload => exact tload_memory pc ctx s hn
-  case tstore => exact tstore_memory pc ctx s hn
-  case sstore =>
-    simp only [PlainOp.runCore, hn]
-    split <;> first | apply sstoreBerlin_memory | apply sstoreLegacy_memory
-  case log => apply log_memory
-  case dup n | swap n =>
-    simp only [PlainOp.runCore]
-    apply Walk.liftMachine (Hm := Within _) (Pm := Within _)
-    refine MWalk.bind (Machine.charge_within _ (Nat.le_refl _)) ?_
-    intro m h; split <;> first | exact h | exact Machine.push_within _ h
-  all_goals simp only [PlainOp.runCore]
-  all_goals first
-    | exact Frame.State.pushItem_within _ _ (Nat.le_refl _)
-    | exact Frame.State.applyUnary_within _ _ (Nat.le_refl _)
-    | exact Frame.State.applyBinary_within _ _ (Nat.le_refl _)
-    | exact Frame.State.applyTernary_within _ _ (Nat.le_refl _)
-    | (apply Walk.liftMachine (Hm := Within _) (Pm := Within _)
-       split <;> first
-       | exact Nat.le_refl _
-       | exact Machine.pushItem_within _ _ (Nat.le_refl _)
-       | exact Machine.applyBinary_within _ _ (Nat.le_refl _)
-       | exact Machine.applyUnary_within _ _ (Nat.le_refl _))
+      (PlainOp.runCore pc ctx s op) :=
+  Family.run_memoryPotential (PlainOp.family op) ⟨pc, ctx, s⟩
 
 end Jaune.Checked

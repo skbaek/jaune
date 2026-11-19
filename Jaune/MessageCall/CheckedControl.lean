@@ -30,7 +30,11 @@ end Frame.State
 
 /-! ### Jumps -/
 
-/-- `JUMPDEST`, `JUMP` and `JUMPI` at `pc`: the next program counter and the state. -/
+/-- `JUMPDEST`, `JUMP` and `JUMPI` at `pc`: the next program counter and the state.
+
+Outside the instruction table (goal S4): a jump returns the next program counter, which a family
+step, over the frame state alone, cannot (W4 design note §2.3), so the class keeps these explicit
+equations. -/
 def JumpOp.runCore (pc : Nat) (ctx : CallContext) (s : Frame.State) :
     JumpOp → Except (ExceptionalHalt × Frame.State) (Nat × Frame.State)
   | .jumpdest => do
@@ -67,7 +71,11 @@ def JumpOp.run (r : Frame.Running) (j : JumpOp) :
 so it is a `match` on the state-gas switch: Amsterdam moves the static check ahead of the pop,
 checks the access cost before warming the beneficiary, replaces the 25,000 new-account charge by
 `ACCOUNT_WRITE` (execution) plus `NEW_ACCOUNT` (state) when the sweep creates the beneficiary,
-logs the sweep, and schedules the originator without zeroing it. -/
+logs the sweep, and schedules the originator without zeroing it.
+
+Outside the instruction table (goal S4): a halt produces a `Frame.Exit`, and `SELFDESTRUCT` can end
+in an internal fault, which a family's error type (`ExceptionalHalt × _`) cannot carry (W4 design
+note §2.3), so the class keeps these explicit equations. -/
 def HaltOp.run (ctx : CallContext) (s : Frame.State) : HaltOp → Except Fault Frame.Exit
   | .stop => .ok (.finished [] s)
   | .revert => Frame.Exit.catchHalt do

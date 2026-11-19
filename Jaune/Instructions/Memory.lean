@@ -94,26 +94,4 @@ def MemoryRow.step (row : MemoryRow) (opcodes : OpcodeRules) (ctx : CallContext)
   | some (memory, none) => pure { m with memory }
   | some (memory, some x) => Machine.push x { m with memory }
 
-/-- The Memory table. -/
-def PlainOp.memoryRow? : Jaune.PlainOp → Option MemoryRow
-  | .mload => some { arity := 1, effect := .load, base := fun _ => Gas.veryLow }
-  | .mstore => some { arity := 2, effect := .storeWord, base := fun _ => Gas.veryLow }
-  | .mstore8 => some { arity := 2, effect := .storeByte, base := fun _ => Gas.veryLow }
-  | .calldatacopy => some {
-      arity := 3, effect := .copy .calldata,
-      base := fun (_, _, n) => Gas.veryLow + Gas.copy * ceilDiv n.toNat 32 }
-  | .codecopy => some {
-      arity := 3, effect := .copy .code,
-      base := fun (_, _, n) => Gas.veryLow + Gas.copy * ceilDiv n.toNat 32 }
-  | .returndatacopy => some {
-      arity := 3, effect := .copy .returnData,
-      base := fun (_, _, n) => Gas.veryLow + Gas.returnDataCopy * ceilDiv n.toNat 32 }
-  | .mcopy => some {
-      available := OpcodeRules.mcopy, arity := 3, effect := .move,
-      base := fun (_, _, n) => Gas.veryLow + Gas.copy * ceilDiv n.toNat 32 }
-  | .keccak256 => some {
-      arity := 2, effect := .digest,
-      base := fun (_, n) => Gas.keccak256 + Gas.keccak256Word * ceilDiv n.toNat 32 }
-  | _ => none
-
 end Jaune.Checked

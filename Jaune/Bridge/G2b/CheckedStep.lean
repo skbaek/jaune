@@ -36,13 +36,15 @@ private theorem MessageOp.Outcome.toStep (pc : Nat) (x : Checked.MessageOp.Outco
 
 theorem NextOp.step (r : Checked.Frame.Running) (op : Jaune.NextOp) :
     Square (Checked.NextOp.step r op) (Staging.NextOp.step r.toLegacy op) := by
-  cases op <;> simp only [Checked.NextOp.step, Staging.NextOp.step]
+  rw [Checked.NextOp.step_arms]
+  cases op <;> simp only [Checked.Arms.NextOp.step, Staging.NextOp.step]
   case message m =>
     change erase _ = (Staging.MessageOp.step r.context r.state.toLegacy m).toStep _
     rw [← (show (Checked.MessageOp.step r.context r.state m).toLegacy = _ from MessageOp.step ..)]
     apply MessageOp.Outcome.toStep
   case plain op =>
     apply Step.ofHalt
+    rw [← Checked.PlainOp.run_arms]
     exact PlainOp.runCore r.pc r.context r.state op
   all_goals repeat' first | apply Step.ofHalt | checked_sq_one
 
