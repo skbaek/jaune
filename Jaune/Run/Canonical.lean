@@ -4,7 +4,7 @@ import Jaune.Run.Block
 # Canonicality through the staged chain (goal `jaune-shape-and-names-v1`, W2 unit W2-C)
 
 Every successful run of the staged chain leaves a canonical state: the top-level message run
-(`Message.run`, read through `MessageRun.state`), the transaction (`B2.processTransaction`), the
+(`Message.run`, read through `MessageRun.state`), the transaction (`B2.Transaction.run`), the
 system calls, one body operation (`Body.step`), a run of operations (`Body.run`, `Body.fold`), the
 importer's body (`Body.importer`, `applyBody`), and the block transition
 (`E.stateTransitionCoreE`). These restate, over the staged definitions, the canonical family that
@@ -316,6 +316,39 @@ theorem B2.processTransaction_canonical {benv : Benv} (h : benv.Canonical)
   exact B2.Transaction.settle_canonical
     (Message.run_canonical hm (Except.mapError_eq_ok_iff.mp hrun)) hp
 
+/-- Settlement into a transaction run keeps the message run's state canonical: the fee
+movements are balance credits, then the self-destructs and the sweep only erase accounts. -/
+theorem B2.Transaction.settleRun_canonical {checked : Transaction.Checked}
+    {prepared : Transaction.Prepared} {tx : Transaction} {index : Nat} {run : MessageRun}
+    (h : run.state.Canonical) {p}
+    (hp : B2.Transaction.settleRun checked prepared tx index run = .ok p) :
+    State.Canonical p.1.state := by
+  unfold B2.Transaction.settleRun at hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  cases hp
+  exact State.Canonical.sweepTouchedAccounts (State.Canonical.settleSelfdestructs
+    (State.Canonical.addBal (State.Canonical.addBal h _ _) _ _) _ _) _ _
+
+/-- **A successful transaction run leaves a canonical state**: the fee movements go through
+`incrNonce`/`subBal`/`addBal`, the call itself through `Message.run`, and settlement follows the
+fork's SELFDESTRUCT rule. -/
+theorem B2.Transaction.run_canonical {benv : Benv} (h : benv.Canonical)
+    {bout : BlockOutput} {tx : Transaction} {index : Nat} {p}
+    (hp : B2.Transaction.run benv bout tx index = .ok p) :
+    State.Canonical p.1.state := by
+  unfold B2.Transaction.run at hp
+  obtain ⟨checked, hchecked, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨prepared, hprepared, hp⟩ := Except.bind_eq_ok hp
+  obtain ⟨run, hrun, hp⟩ := Except.bind_eq_ok hp
+  have hb : checked.benv.Canonical := by
+    rw [Transaction.check_benv hchecked]
+    exact ⟨h.1, h.1⟩
+  have hm := Transaction.prepare_canonical hb hprepared
+  exact B2.Transaction.settleRun_canonical
+    (Message.run_canonical hm (Except.mapError_eq_ok_iff.mp hrun)) hp
+
 /-! ### The system calls -/
 
 /-- The single boundary all four system transactions share. -/
@@ -430,12 +463,9 @@ theorem Body.step_canonical {benv : Benv} (hb : benv.stat.Canonical) {p : Body.P
     exact processUncheckedSystemTransaction_canonical he (Except.mapError_eq_ok_iff.mp hrun)
   | transaction tx index =>
     simp only [Body.step] at hs
-    obtain ⟨⟨state, bout⟩, ht, hs⟩ := Except.bind_eq_ok hs
+    obtain ⟨⟨run, bout⟩, ht, hs⟩ := Except.bind_eq_ok hs
     cases hs
-    apply B2.processTransaction_canonical he (tx := tx) (index := index)
-      (bout := p.toBlockOutput) (p := (state.state, bout))
-    rw [← B2.Transaction.run_output, ht]
-    rfl
+    exact B2.Transaction.run_canonical he ht
   | withdrawals ws index =>
     simp only [Body.step] at hs
     cases hs

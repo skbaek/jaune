@@ -9,7 +9,7 @@ Plain theorems about the staged body (`Jaune.Run.Body`); no old side.
 
 * **The runner is the run.** `Body.fold_eq_run`: the fold the importer and the transition tool
   use keeps exactly the run's last prefix. `Body.run_append` and `Body.fold_append` split a run.
-* **What each step writes.** `B2.processTransaction_output` gives the block output a transaction
+* **What each step writes.** `B2.Transaction.run_writes` gives the block output a transaction
   leaves: its gas settlement, the transaction and receipt entered under the index's key
   (`rlpKey`), the receipt's logs appended, and the access list. Every other operation leaves the
   gas counters, the tries, the receipt keys and the logs alone (`Body.step_frame`).
@@ -344,7 +344,7 @@ theorem Body.step_frame {benv : Benv} {p q : Body.Prefix} {op : BodyOp} {r : OpR
     cases h
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- A transaction step, read through `B2.processTransaction_output`. -/
+/-- A transaction step, read through `B2.Transaction.run_writes`. -/
 theorem Body.step_transaction_output {benv : Benv} {p q : Body.Prefix} {tx : Transaction}
     {index : Nat} {r : OpRun} (h : Body.step benv p (.transaction tx index) = .ok (r, q)) :
     ∃ (settlement : TransactionGasSettlement) (txBlobGasUsed : Nat)
