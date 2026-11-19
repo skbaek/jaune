@@ -372,15 +372,8 @@ def render_open(row, renamer):
     return f'open {prefix} ({last})' if last == alias else f'open {prefix} renaming {last} → {alias}'
 
 
-def authored_locations(index, positions):
-    """Full names bound to declaration spans, including constructor and field
-    definitions recorded only as a reference's definition site."""
-    decls = {name: APPLY.span(positions, loc[:4]) for name, loc in index['decls'].items()}
-    for key, info in index['references'].items():
-        const = json.loads(key).get('c')
-        if const and const['m'] == APPLY.module_name(index['module']) and info.get('definition'):
-            decls.setdefault(const['n'], APPLY.span(positions, info['definition']))
-    return decls
+# Capture-side map generators also use this spelling.
+authored_locations = APPLY.authored_locations
 
 
 def plan_promotions(candidate, texts, records, bundles, renamer, consumer):

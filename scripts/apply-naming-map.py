@@ -248,6 +248,12 @@ def split_name(name):
     return [part for part in IDENT_PART.findall(name)] if '«' in name else name.split('.')
 
 
+def spelling_parts(name):
+    """Source names do not contain the internal private-module prefix."""
+    private = MAP.split_private(name) if name.startswith('_private.') else None
+    return split_name(private[2] if private else name)
+
+
 def replacement(spelling, old, new, renamer=None, type_directed=False):
     """New spelling for one compiler reference.
 
@@ -259,11 +265,7 @@ def replacement(spelling, old, new, renamer=None, type_directed=False):
     """
     leading_dot = spelling.startswith('.')
     bare = spelling[1:] if leading_dot else spelling
-    if old.startswith('_private.'):
-        old = MAP.split_private(old)[2]
-    if new.startswith('_private.'):
-        new = MAP.split_private(new)[2]
-    old_parts, new_parts = split_name(old), split_name(new)
+    old_parts, new_parts = spelling_parts(old), spelling_parts(new)
     parts = split_name(bare)
     if parts != old_parts[-len(parts):]:
         raise ValueError(f'indexed spelling {spelling!r} is not a suffix of {old}')
@@ -404,6 +406,17 @@ def generated_rename(renamer, const):
     return None if new == parent else f'{new}.{last}'
 
 
+def authored_locations(index, positions):
+    """Full names bound to declaration spans, including constructor and field
+    definitions recorded only as a reference's definition site."""
+    decls = {name: span(positions, loc[:4]) for name, loc in index['decls'].items()}
+    for key, info in index['references'].items():
+        const = json.loads(key).get('c')
+        if const and const['m'] == module_name(index['module']) and info.get('definition'):
+            decls.setdefault(const['n'], span(positions, info['definition']))
+    return decls
+
+
 def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
     if index.get('version') != 5:
         raise ValueError('requires Lean ilean format 5')
@@ -534,18 +547,36 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
     # with more components of its target; failing that, it is unresolved.
     commands = sorted((*char_span(offsets, r[0], r[1], text), r[3], r[4])
                       for r in syntax_rows(index, 'commands', 6) if r[0] < r[1])
+    starts = [c[0] for c in commands]
+    def command_of(position):
+        i = bisect.bisect_right(starts, position) - 1
+        return i if i >= 0 and position < commands[i][1] else None
+
+    # Private aliases are local to a module. A reference travels with its
+    # enclosing command, including when its name and namespace stay the same.
+    destinations = {}
+    if universe is not None and any(src == index_module for src, _ in renamer.relocations.values()):
+        for name, (a, b) in authored_locations(index, positions).items():
+            private = MAP.split_private(name)
+            row = renamer.relocations.get(private[2] if private else name)
+            i = command_of(a)
+            if row and row[0] == index_module and i is not None and b <= commands[i][1]:
+                if i in destinations and destinations[i] != row[1]:
+                    problems.append(dict(start=a, end=b, reason='one command relocated to two modules'))
+                destinations[i] = row[1]
+
+    def after_scope(i):
+        return universe.lookup('after', destinations.get(i, renamer.module(index_module)))
+
     if universe is not None and commands:
-        module = module_name(index['module'])
-        before = universe.lookup('before', module)
-        after = universe.lookup('after', module, renamer)
-        starts = [c[0] for c in commands]
+        before = universe.lookup('before', index_module)
         checked = unverifiable = requalified = unverifiable_edited = 0
         for start, end, const, comps, local in references:
             if (local or const is None or comps is None or (start, end) in definitions or
                     text.startswith('.', start) or (start > 0 and text[start - 1] == '.')):
                 continue
-            i = bisect.bisect_right(starts, start) - 1
-            if i < 0 or not (commands[i][0] <= start and end <= commands[i][1]):
+            i = command_of(start)
+            if i is None or end > commands[i][1]:
                 continue
             _, _, ns, opens = commands[i]
             spelling = text[start:end]
@@ -558,9 +589,10 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             current = edits[start, end]['new'] if (start, end) in edits else spelling
             new_ns, new_opens = renamer.scope(ns) if ns != '[anonymous]' else ns, renamed_opens(opens, renamer)
             checked += 1
+            after = after_scope(i)
             if resolve(after, current, new_ns, new_opens) == {target}:
                 continue
-            parts = split_name(target)
+            parts = spelling_parts(target)
             for k in range(len(split_name(current)) + 1, len(parts) + 1):
                 candidate = '.'.join(parts[-k:])
                 if resolve(after, candidate, new_ns, new_opens) == {target}:
@@ -583,13 +615,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
     # top-level command (an over-approximation; qualification preserves meaning,
     # so it can only add qualifications). The spelling is lengthened with the
     # minimal prefix of its target that escapes every such name.
-    local_commands = sorted((*char_span(offsets, r[0], r[1], text),)
-                            for r in syntax_rows(index, 'commands', 6) if r[0] < r[1])
-    if local_commands and universe is not None and commands:
-        local_starts = [c[0] for c in local_commands]
-        def command_of(position):
-            i = bisect.bisect_right(local_starts, position) - 1
-            return i if i >= 0 and local_commands[i][0] <= position < local_commands[i][1] else None
+    if universe is not None and commands:
         binders = {}
         for key, info in index['references'].items():
             ident = json.loads(key)
@@ -618,20 +644,18 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             # Only a lexically resolved spelling can be captured by a local: the
             # old spelling must resolve to its constant by the capture model
             # (struct-instance field labels, named arguments and projections do not).
-            j = bisect.bisect_right([c[0] for c in commands], start) - 1
-            if j < 0 or resolve(universe.lookup('before', index_module), edit['old'], commands[j][2],
-                                commands[j][3]) != {const}:
+            if i is None or resolve(before, edit['old'], commands[i][2], commands[i][3]) != {const}:
                 continue
             target = generated_rename(renamer, const) or renamer(const)
-            parts = split_name(target)
+            parts = spelling_parts(target)
             choice = None
             for k in range(len(split_name(new)) + 1, len(parts) + 1):
                 candidate = '.'.join(parts[-k:])
                 if parts[-k] in captured:
                     continue
-                ns, opens = commands[j][2], commands[j][3]
+                ns, opens = commands[i][2], commands[i][3]
                 new_ns = renamer.scope(ns) if ns != '[anonymous]' else ns
-                if resolve(universe.lookup('after', index_module, renamer), candidate, new_ns,
+                if resolve(after_scope(i), candidate, new_ns,
                            renamed_opens(opens, renamer)) != {target}:
                     continue
                 choice = escape_keywords(candidate)
@@ -712,10 +736,6 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         start, end = char_span(offsets, a, b, text)
         add_cover(components(text, start, end) or [], ('module', name))  # Module rows edit imports.
     quoted = metadata.get('quotation_identifiers', []) if metadata.get('version') == 2 else []
-    if quoted:
-        commands_q = sorted((*char_span(offsets, r[0], r[1], text), r[3], r[4])
-                            for r in syntax_rows(index, 'commands', 6) if r[0] < r[1])
-        starts_q = [c[0] for c in commands_q]
     for a, b, name in quoted:
         if a >= b:
             continue  # A missing (zero-width) identifier inside a quotation.
@@ -726,11 +746,11 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             continue
         # Lean pre-resolves quoted identifiers as global names in the quoting
         # command's scope; the same resolution model decides them here.
-        i = bisect.bisect_right(starts_q, start) - 1
+        i = command_of(start)
         found = set()
-        if universe is not None and i >= 0 and commands_q[i][0] <= start < commands_q[i][1]:
-            found = resolve(universe.lookup('before', index_module), spelling, commands_q[i][2], commands_q[i][3])
-        in_scope = universe is not None and i >= 0 and commands_q[i][0] <= start < commands_q[i][1]
+        if universe is not None and i is not None:
+            found = resolve(universe.lookup('before', index_module), spelling, commands[i][2], commands[i][3])
+        in_scope = universe is not None and i is not None
         if start > 0 and text[start - 1] == '.':
             # A generalized field projection (`(e).pres`) inside a quotation resolves
             # through the type of `e`, which a quotation does not record. Rename it
@@ -756,9 +776,9 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
             # declaration (a quoted local binder such as `hx`) and stays as
             # written. A resolution the model misses (an alias, a term-level
             # `open`) changes the quotation's pre-resolution, which N4 compares.
-            scope_ns, scope_opens = commands_q[i][2], commands_q[i][3]
+            scope_ns, scope_opens = commands[i][2], commands[i][3]
             new_ns = renamer.scope(scope_ns) if scope_ns != '[anonymous]' else scope_ns
-            if not resolve(universe.lookup('after', index_module, renamer), spelling, new_ns,
+            if not resolve(after_scope(i), spelling, new_ns,
                            renamed_opens(scope_opens, renamer)):
                 add_cover(comps, ('quoted-local', spelling))
                 if stats is not None:
@@ -775,9 +795,9 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         const = next(iter(found))
         add_cover(comps, ('const', const))
         target = renamer(const)
-        scope_ns, scope_opens = commands_q[i][2], commands_q[i][3]
+        scope_ns, scope_opens = commands[i][2], commands[i][3]
         new_ns = renamer.scope(scope_ns) if scope_ns != '[anonymous]' else scope_ns
-        after_lookup = universe.lookup('after', index_module, renamer)
+        after_lookup = after_scope(i)
         try:
             renamed = replacement(spelling, const, target, renamer) if target != const else spelling
         except ValueError as error:
@@ -787,7 +807,7 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
         # the new spelling must not be captured (execution `U256` inside
         # `namespace JauneConsensus`).
         if resolve(after_lookup, renamed, new_ns, renamed_opens(scope_opens, renamer)) != {target}:
-            parts = split_name(target)
+            parts = spelling_parts(target)
             for k in range(len(split_name(renamed)) + 1, len(parts) + 1):
                 candidate = '.'.join(parts[-k:])
                 if resolve(after_lookup, candidate, new_ns, renamed_opens(scope_opens, renamer)) == {target}:

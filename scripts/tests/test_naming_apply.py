@@ -68,6 +68,29 @@ class NamingApplyTests(unittest.TestCase):
         _, problems = M.plan_file(text, index, rows)
         self.assertTrue(any('leaves the namespace' in p['reason'] for p in problems))
 
+    def test_private_reference_resolves_in_its_callers_destination(self):
+        text = 'private def helper := 1\ndef caller := helper\n'
+        private = '_private.Pilot.0.Pilot.helper'
+        index = index_for(text, [('helper', private, 0, True), ('helper', private, 1, False),
+                                 ('caller', 'Pilot.caller', 0, True)])
+        cut = text.index('\n')
+        self.syntax(text, index, commands=[(a, b, 'def', 'Pilot', [], [False] * 3)
+                                           for a, b in [(0, cut), (cut + 1, len(text) - 1)]])
+        names = [private, 'Pilot.caller']
+        rows = [dict(entry(name, name), kind='relocation', from_module='Pilot', to_module='Parts')
+                for name in ('Pilot.helper', 'Pilot.caller')]
+
+        def plan(entries):
+            renamer = M.MAP.Renamer(entries)
+            return M.plan_file(text, index, entries, renamer, M.Universe(names, renamer))
+
+        self.assertEqual(plan(rows), ([], []))
+        # A stationary caller cannot use the private declaration at its new home.
+        edits, problems = plan(rows[:1])
+        self.assertEqual(edits, [])
+        self.assertEqual(len(problems), 1)
+        self.assertIn('no qualification resolves', problems[0]['reason'])
+
     def test_dot_constructor_reference(self):
         text = 'def f := .gas\n'
         index = index_for(text, [('.gas', 'Pilot.Op.gas', 0, False)])
