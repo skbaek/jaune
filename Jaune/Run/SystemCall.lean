@@ -4,7 +4,7 @@ import Jaune.Run.Fields
 # System calls read their message run (goal `jaune-shape-and-names-v1`, W2 cut B2)
 
 A system call is a top-level message run from the system address with the fixed system gas
-(`processSystemTransactionMsg`), on a freshly begun transaction. Its consumers read the
+(`systemTransactionMessage`), on a freshly begun transaction. Its consumers read the
 `MessageRun` through its functions (`Jaune.Run.Fields`) instead of a rendered output record:
 
 * `processSystemTransaction` runs the message and returns the run. As before, a run whose refund
@@ -30,8 +30,8 @@ fails the call. -/
 def processSystemTransaction (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :
     Except Fault MessageRun := do
   let benv := benv.beginTransaction
-  let txEnv : Tenv := processSystemTransactionTenv benv
-  let systemTxMsg : Msg := processSystemTransactionMsg benv txEnv target data code
+  let txEnv : Tenv := systemTransactionEnvironment benv
+  let systemTxMsg : Msg := systemTransactionMessage benv txEnv target data code
   let run ← Message.run systemTxMsg
   let _ ← run.refundCounter
   pure run

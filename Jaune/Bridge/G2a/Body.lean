@@ -547,7 +547,7 @@ def stateTransitionCoreWith {ε : Type}
   Except.mapError embed (validateHeader f.ruleSet ch block.header)
   checkOmmers ()
   let ⟨st, bout⟩ ← Except.mapError embed
-    (body (initBenv f ch block.header) block.transactions block.ommers block.withdrawals)
+    (body (initBlockEnvironment f ch block.header) block.transactions block.ommers block.withdrawals)
   Except.mapError (embed ∘ TransitionError.block) <|
     stateTransitionChecks bout block.header (getTransactionsRoot bout) st.root (getReceiptRoot bout)
       (logsBloom bout.blockLogs) (getWithdrawalsRoot bout)
@@ -570,7 +570,7 @@ the split. -/
 def BlockDecodeOrderSplit {ε : Type} (f : Fork) (ch : BlockChain) (block : Block)
     (checkOmmers : Unit → Except ε Unit) : Prop :=
   validateHeader f.ruleSet ch block.header = .ok () ∧ checkOmmers () = .ok () ∧
-    DecodeOrderSplit (initBenv f ch block.header) block.transactions
+    DecodeOrderSplit (initBlockEnvironment f ch block.header) block.transactions
 
 /-- **Difference theorem at the block transition, part 1.** Off the split the new block transition
 is the old one, on the whole result. -/
@@ -587,7 +587,7 @@ theorem stateTransitionCoreE_eq_of_not_split {ε : Type} (embed : TransitionErro
     cases ho : checkOmmers () with
     | error e => simp only [bind, Except.bind, Except.mapError, hv]
     | ok u' =>
-      by_cases hs : DecodeOrderSplit (initBenv f ch block.header) block.transactions
+      by_cases hs : DecodeOrderSplit (initBlockEnvironment f ch block.header) block.transactions
       · exact absurd ⟨hv, ho, hs⟩ h
       · rw [applyBody_eq_of_not_split hs]
 
@@ -596,8 +596,8 @@ reports the system calls' error and the new one the decode's, both through `embe
 theorem stateTransitionCoreE_of_split {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit)
     (hv : validateHeader f.ruleSet ch block.header = .ok ()) (ho : checkOmmers () = .ok ())
-    {eSys eDec : TransitionError} (hs : preCalls (initBenv f ch block.header) = .error eSys)
-    (hd : decodeAll (initBenv f ch block.header) block.transactions = .error eDec) :
+    {eSys eDec : TransitionError} (hs : preCalls (initBlockEnvironment f ch block.header) = .error eSys)
+    (hd : decodeAll (initBlockEnvironment f ch block.header) block.transactions = .error eDec) :
     stateTransitionCoreE embed f ch block checkOmmers = .error (embed eSys) ∧
       Staging.stateTransitionCoreE embed f ch block checkOmmers = .error (embed eDec) := by
   obtain ⟨h1, h2⟩ := applyBody_of_split hs hd block.ommers block.withdrawals

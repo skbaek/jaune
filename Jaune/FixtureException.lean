@@ -387,7 +387,7 @@ the twenty-one reasons has an identity; the blob-fee reason shares
 `INSUFFICIENT_MAX_FEE_PER_GAS` with the execution-fee reason, and both
 blob-count reasons share `TYPE_3_TX_BLOB_COUNT_EXCEEDED`, exactly as the
 retired string routes said. -/
-def ofTxValidationError : TxValidationError → Option FixtureException
+def ofTransactionValidationError : TransactionValidationError → Option FixtureException
   | .gasPriceProductOverflow _ => some txGasLimitPriceProductOverflow
   | .gasAllowanceExceeded _ => some txGasAllowanceExceeded
   | .initcodeSizeExceeded _ => some txInitcodeSizeExceeded
@@ -494,7 +494,7 @@ all, which is what makes "a context, support, harness, internal, or VM
 failure can never score as an expected rejection" a fact about types rather
 than a convention about strings. -/
 def ofBlockRejection : BlockRejection → Option FixtureException
-  | .transaction reason => ofTxValidationError reason
+  | .transaction reason => ofTransactionValidationError reason
   | .block reason => ofBlockValidationError reason
   | .decode reason => ofDecodeError reason
   | .senderRecovery reason => ofCryptoError reason
@@ -696,7 +696,7 @@ def fixtureInventory : List String :=
 -- the identity those fixtures expect belongs with the goal that activates that
 -- lane. Until then it fails closed, which is what an unmapped reason means.
 #guard DecodeError.all.all (fun e => (ofDecodeError e).isSome)
-#guard TxValidationError.all.all (fun e => (ofTxValidationError e).isSome)
+#guard TransactionValidationError.all.all (fun e => (ofTransactionValidationError e).isSome)
 #guard (BlockValidationError.all.filter
   (fun e => (ofBlockValidationError e).isNone)).length = 4
 #guard (ofBlockValidationError (.invalidDifficulty .none)).isNone
@@ -723,13 +723,13 @@ def fixtureInventory : List String :=
 -- Coverage in the fixture-to-producer direction: every one of the 43
 -- identities is reachable from some typed rejection constructor, so a newly
 -- observed expected identity cannot silently remain unclassifiable.
--- (`TxValidationError.all` carries one representative `typePreFork`, type 3;
+-- (`TransactionValidationError.all` carries one representative `typePreFork`, type 3;
 -- types 1, 2 and 4 reach theirs through the same constructor.)
 #guard all.all fun e =>
-  TxValidationError.all.any (fun r => ofTxValidationError r == some e) ||
-  ofTxValidationError (.typePreFork 4 .none) == some e ||
-  ofTxValidationError (.typePreFork 1 .none) == some e ||
-  ofTxValidationError (.typePreFork 2 .none) == some e ||
+  TransactionValidationError.all.any (fun r => ofTransactionValidationError r == some e) ||
+  ofTransactionValidationError (.typePreFork 4 .none) == some e ||
+  ofTransactionValidationError (.typePreFork 1 .none) == some e ||
+  ofTransactionValidationError (.typePreFork 2 .none) == some e ||
   BlockValidationError.all.any (fun r => ofBlockValidationError r == some e) ||
   DecodeError.all.any (fun r => ofDecodeError r == some e) ||
   ofCryptoError (.invalidSignature .none) == some e
@@ -746,10 +746,10 @@ def fixtureInventory : List String :=
   != ofBlockValidationError (.gasUsedMismatch .none)
 #guard ofBlockValidationError (.unknownParent .none)
   != ofBlockValidationError (.unknownParentZero .none)
-#guard ofTxValidationError (.nonceMismatchTooLow .none)
-  != ofTxValidationError (.nonceMismatchTooHigh .none)
-#guard ofTxValidationError (.intrinsicGasTooLow .none)
-  != ofTxValidationError (.gasAllowanceExceeded .none)
+#guard ofTransactionValidationError (.nonceMismatchTooLow .none)
+  != ofTransactionValidationError (.nonceMismatchTooHigh .none)
+#guard ofTransactionValidationError (.intrinsicGasTooLow .none)
+  != ofTransactionValidationError (.gasAllowanceExceeded .none)
 
 -- The distinct strict-decode reasons that share the official structures
 -- identity still share it -- deliberately -- while the 64-bit overflow and
@@ -757,12 +757,12 @@ def fixtureInventory : List String :=
 #guard ofDecodeError (.rlpStructure .none) == some blockRlpStructuresEncoding
 #guard ofDecodeError (.roundTrip .none) == some blockRlpStructuresEncoding
 #guard ofDecodeError (.headerWidth .none) == some blockIncorrectBlockFormat
-#guard ofTxValidationError (.typePreFork 3 .none) == some txType3TransactionPreFork
-#guard ofTxValidationError (.typePreFork 4 .none) == some txType4TransactionPreFork
-#guard ofTxValidationError (.typePreFork 1 .none) == some txType1TransactionPreFork
-#guard ofTxValidationError (.typePreFork 2 .none) == some txType2TransactionPreFork
-#guard (ofTxValidationError (.typePreFork 0 .none)).isNone
-#guard (ofTxValidationError (.typePreFork 5 .none)).isNone
+#guard ofTransactionValidationError (.typePreFork 3 .none) == some txType3TransactionPreFork
+#guard ofTransactionValidationError (.typePreFork 4 .none) == some txType4TransactionPreFork
+#guard ofTransactionValidationError (.typePreFork 1 .none) == some txType1TransactionPreFork
+#guard ofTransactionValidationError (.typePreFork 2 .none) == some txType2TransactionPreFork
+#guard (ofTransactionValidationError (.typePreFork 0 .none)).isNone
+#guard (ofTransactionValidationError (.typePreFork 5 .none)).isNone
 #guard ofDecodeError (.leadingZeros .none) == some blockRlpStructuresEncoding
 #guard ofDecodeError (.fieldOverflow64 .none) == some blockRlpInvalidFieldOverflow64
 #guard ofDecodeError (.withdrawalsNotRead .none) == some blockRlpWithdrawalsNotRead

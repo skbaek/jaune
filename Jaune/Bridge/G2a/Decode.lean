@@ -1,4 +1,5 @@
 import Batteries.Tactic.OpenPrivate
+import Jaune.Transaction
 import Jaune.Run.Decode
 
 /-!
@@ -23,7 +24,7 @@ and the switch commit composes it with the staged decoder. This module is delete
 after the gate's tag.
 -/
 
-open private dec from Jaune.Transaction
+open private dec from Jaune.Transaction.Parts
 
 namespace Jaune.Bridge.G2a
 
@@ -248,7 +249,7 @@ theorem decodeTransaction_eq_transactionTypeNotSupported_iff (rules : ForkRules)
     · obtain ⟨y, hy⟩ := h
       rw [(decodeTransaction_of_unknown (rules := rules) hy).2] at he
       simp only [Except.error.injEq, Staging.transactionTypeNotSupported,
-        TransitionError.transaction.injEq, TxValidationError.typePreFork.injEq] at he
+        TransitionError.transaction.injEq, TransactionValidationError.typePreFork.injEq] at he
       have : y = x := UInt8.toNat_inj.mp he.1
       exact this ▸ hy
     · push Not at h
@@ -256,7 +257,7 @@ theorem decodeTransaction_eq_transactionTypeNotSupported_iff (rules : ForkRules)
       rcases decodeTransaction_error_of_not_unknown h he with he' | ⟨n, d, hn0, hn4, he'⟩
       · simp [Staging.transactionTypeNotSupported, EnvelopeReason] at he'
       · simp only [Staging.transactionTypeNotSupported, TransitionError.transaction.injEq,
-          TxValidationError.typePreFork.injEq] at he'
+          TransactionValidationError.typePreFork.injEq] at he'
         exfalso
         apply hx
         have hn : x.toNat = n := he'.1
@@ -419,7 +420,7 @@ def stateTransitionCoreEDecoding
   let rules := f.ruleSet
   Except.mapError embed (validateHeader rules ch block.header)
   checkOmmers ()
-  let benv : Benv := initBenv f ch block.header
+  let benv : Benv := initBlockEnvironment f ch block.header
   let ⟨st, bout⟩ ← Except.mapError embed
     (applyBodyDecoding decode benv block.transactions block.ommers block.withdrawals)
   let blockStateRoot : U256 := st.root
@@ -447,7 +448,7 @@ differs (`BodyDiffers`) for byte `x`. -/
 def TransitionDiffers {ε : Type} (f : Fork) (ch : BlockChain) (block : Block)
     (checkOmmers : Unit → Except ε Unit) (x : UInt8) : Prop :=
   validateHeader f.ruleSet ch block.header = .ok () ∧ checkOmmers () = .ok () ∧
-    BodyDiffers (initBenv f ch block.header) block.transactions x
+    BodyDiffers (initBlockEnvironment f ch block.header) block.transactions x
 
 /-- **Difference theorem, block transition.** For every error embedding (the importer's
 `TransitionError.split` routes the old error to the outer failure channel and the new one to the
@@ -473,7 +474,7 @@ theorem stateTransitionCoreE_difference {ε : Type} (embed : TransitionError →
       refine .inl ⟨by simp [hv, bind, Except.bind, Except.mapError], ?_⟩
       rintro x ⟨-, h2, -⟩; rw [ho] at h2; cases h2
     | ok u' =>
-      rcases applyBody_difference (initBenv f ch block.header) block.transactions block.ommers
+      rcases applyBody_difference (initBlockEnvironment f ch block.header) block.transactions block.ommers
           block.withdrawals with ⟨hb, hbn⟩ | ⟨x, hx, hold, hnew⟩
       · refine .inl ⟨?_, ?_⟩
         · rw [applyBody_eq_decoding] at hb

@@ -1,4 +1,4 @@
-import Jaune.Transaction
+import Jaune.Transaction.Parts
 
 /-!
 # The top-level message run (goal `jaune-shape-and-names-v1`, W2 cut B1)
@@ -16,10 +16,9 @@ A top-level message call is a preparation followed by at most one frame:
 * `MessageRun.output` renders the run as the transaction reads it, through `Frame.output`,
   `Frame.outputAmsterdam` and `settleTopLevelPreparationFailure`.
 
-The Amsterdam preparation helpers are public here; their earlier copies in `Jaune.Transaction`
-were private. Everything is staged under `Jaune.Staging` beside today's `processMessageCall`, and
-nothing in today's pipeline reads it until the switch commit. The bridges are in
-`Jaune.Bridge.G2a.Run`.
+The Amsterdam preparation helpers here correspond to the public definitions in
+`Jaune.Transaction.Parts`. This module stages the new message run under `Jaune.Staging`.
+`Jaune.Bridge.G2a.Run` relates it to the existing message call.
 -/
 
 namespace Jaune.Staging
@@ -498,7 +497,7 @@ def TopLevel.prepare.call (msg : Msg) : Except Fault TopLevel.Preparation :=
     match h : processMessageCall.authorize msg with
     | .error e => .error (EvmError.toFault e (processMessageCall.authorize_error_isFault h))
     | .ok (delegated, authorizationRefund) =>
-      .ok (.frame (Frame.ofTop (Msg.resolveCodeDelegation delegated) false) authorizationRefund)
+      .ok (.frame (Frame.ofTop (TopLevel.resolveCodeDelegation delegated) false) authorizationRefund)
   | some state => TopLevel.prepare.amsterdam state msg false
 
 /-- Prepare a top-level message: a creation when it has no target, otherwise a call. -/

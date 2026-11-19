@@ -290,7 +290,7 @@ def stateTransitionCoreE {ε : Type} (embed : TransitionError → ε)
   let rules := f.ruleSet
   Except.mapError embed (validateHeader rules ch block.header)
   checkOmmers ()
-  let benv : Benv := initBenv f ch block.header
+  let benv : Benv := initBlockEnvironment f ch block.header
   let ⟨st, bout⟩ ← Except.mapError embed
     (applyBody benv block.transactions block.ommers block.withdrawals)
   let blockStateRoot : U256 := st.root

@@ -24,16 +24,16 @@ open Jaune
 -- Golden guards. Each vocabulary is pinned constructor-by-constructor to the
 -- tag it renders under, so a migrated producer cannot silently change an
 -- externally observed message or route a reason to the wrong identity.
-#guard TxValidationError.all.length = 22
-#guard TxValidationError.all.eraseDups.length = 22
-#guard TxValidationError.all.map TxValidationError.tag = transactionExceptionTags
-#guard (TxValidationError.all.map TxValidationError.tag).eraseDups.length = 22
-#guard TxValidationError.render
+#guard TransactionValidationError.all.length = 22
+#guard TransactionValidationError.all.eraseDups.length = 22
+#guard TransactionValidationError.all.map TransactionValidationError.tag = transactionExceptionTags
+#guard (TransactionValidationError.all.map TransactionValidationError.tag).eraseDups.length = 22
+#guard TransactionValidationError.render
     (.insufficientMaxFeePerBlobGas (.text "insufficient max fee per blob gas"))
   = "InsufficientMaxFeePerBlobGasError : insufficient max fee per blob gas"
-#guard TxValidationError.render (.nonceMismatchTooHigh .none)
+#guard TransactionValidationError.render (.nonceMismatchTooHigh .none)
   = "NonceMismatchTooHighError"
-#guard TxValidationError.render (.intrinsicGasTooLow (.text "needs 21000, has 20999"))
+#guard TransactionValidationError.render (.intrinsicGasTooLow (.text "needs 21000, has 20999"))
   = "IntrinsicGasTooLowError : needs 21000, has 20999"
 
 #guard BlockValidationError.all.length = 32
@@ -74,7 +74,7 @@ open Jaune
 -- constructor-level restatements of the distinctness facts the tag lists
 -- already carry, and they are what makes exhaustive matching a faithful
 -- replacement for prefix matching.
-#guard (TxValidationError.all.map TxValidationError.tag).all fun t =>
+#guard (TransactionValidationError.all.map TransactionValidationError.tag).all fun t =>
   ¬ (BlockValidationError.all.map BlockValidationError.tag).contains t
 
 -- The empty list hashes to `keccak(rlp [])`, which is `emptyOmmerHash`.
@@ -340,8 +340,8 @@ private def amsterdamCreateCollisionGuard (code : Bool) : Bool :=
 #guard delegatedDispatchGuard false = some ⟨7000, 0, some 11⟩
 #guard delegatedDispatchGuard true = some ⟨9900, 0, some 11⟩
 -- Constructor-level matcher for the transaction-validation boundary guards.
-private def txvFails {α : Type} (p : TxValidationError → Bool) :
-    Except TxValidationError α → Bool
+private def txvFails {α : Type} (p : TransactionValidationError → Bool) :
+    Except TransactionValidationError α → Bool
   | .error e => p e
   | .ok _ => false
 
@@ -460,11 +460,11 @@ private def amsterdamCapacityOutput : BlockOutput :=
   checkTransactionSenderAccount
     (fixtureTestAccount 0 100 (ByteArray.mk #[0x01])) fixtureTestTx 0
 
-#guard (processSystemTransactionTenv
+#guard (systemTransactionEnvironment
     fixtureAmsterdamBenv).stat.stateGasReservoir
   = amsterdamStateGasRules.systemReservoir
-#guard (processSystemTransactionMsg fixtureAmsterdamBenv
-    (processSystemTransactionTenv fixtureAmsterdamBenv) 1 [] .empty).stateGasGrant
+#guard (systemTransactionMessage fixtureAmsterdamBenv
+    (systemTransactionEnvironment fixtureAmsterdamBenv) 1 [] .empty).stateGasGrant
   = amsterdamStateGasRules.systemReservoir
 
 --------------- GAS-LIMIT BOUNDARY CHECKS ----------------
@@ -891,9 +891,9 @@ private def guardBlockAtRules (rules : ForkRules) (timestamp : Nat) : Block :=
 -- S8 0x44 (unit U5): `DIFFICULTY` source selection at environment
 -- construction. Under proof of work the opcode reads the header's difficulty;
 -- post-merge it reads `prevRandao`, so Prague is unaffected.
-#guard (initBenvStat .byzantium guardEmptyChain
+#guard (initBlockContext .byzantium guardEmptyChain
   { guardTestHeader with difficulty := 19 }).prevRandao = Nat.toU256 19
-#guard (initBenvStat .prague guardEmptyChain
+#guard (initBlockContext .prague guardEmptyChain
   { guardTestHeader with difficulty := 19 }).prevRandao = 0
 
 -- EIP-7918 uses a strict price comparison. At the 16-wei equality boundary
@@ -1428,10 +1428,10 @@ private def guardLondonFirst (baseFee gasLimit : Nat) : Header :=
   | .error (.block (.excessBlobGas _)) => true
   | _ => false)
 
--- `initBenvStat` reads an absent field as zero.
-#guard (initBenvStat .prague (guardChainAt guardParent15) guardHeader15).baseFeePerGas = 0
-#guard (initBenvStat .prague (guardChainAt guardParent15) guardHeader15).excessBlobGas = 0
-#guard (initBenvStat .prague (guardChainAt guardParent15) guardHeader15).parentBeaconBlockRoot = 0
+-- `initBlockContext` reads an absent field as zero.
+#guard (initBlockContext .prague (guardChainAt guardParent15) guardHeader15).baseFeePerGas = 0
+#guard (initBlockContext .prague (guardChainAt guardParent15) guardHeader15).excessBlobGas = 0
+#guard (initBlockContext .prague (guardChainAt guardParent15) guardHeader15).parentBeaconBlockRoot = 0
 
 ------------------- PRE-MERGE CONSENSUS (U7) --------------------
 
@@ -1589,7 +1589,7 @@ private def guardPowLineOmmer (parentNumber : Nat) : Header :=
 -- withdrawals and the request pass are gated off, so the state the body
 -- leaves is exactly the input state plus the rewards -- two accounts.
 private def guardPowBenv : Benv :=
-  initBenv .byzantium guardPowChain (guardPowBlockWith [guardPowOmmer])
+  initBlockEnvironment .byzantium guardPowChain (guardPowBlockWith [guardPowOmmer])
 
 #guard (match applyBody guardPowBenv [] [guardPowOmmer] [] with
   | .ok ⟨st, bout⟩ =>
@@ -1614,7 +1614,7 @@ private def guardSysBenv (benv : Benv) : Benv :=
   | .ok ⟨st, _⟩ => (st.get beaconRootsAddress).storage.isEmpty &&
       (st.get historyStorageAddress).storage.isEmpty
   | .error _ => false)
-#guard (match applyBody (guardSysBenv (initBenv .cancun guardPowChain guardTestHeader))
+#guard (match applyBody (guardSysBenv (initBlockEnvironment .cancun guardPowChain guardTestHeader))
     [] [] [] with
   | .ok ⟨st, _⟩ => !(st.get beaconRootsAddress).storage.isEmpty &&
       (st.get historyStorageAddress).storage.isEmpty
@@ -1622,7 +1622,7 @@ private def guardSysBenv (benv : Benv) : Benv :=
 
 -- Under Prague's rules the same body runs every step: the request pass calls
 -- the request contracts, which this chain has not deployed.
-#guard (match applyBody (initBenv .prague guardPowChain (guardPowBlockWith []))
+#guard (match applyBody (initBlockEnvironment .prague guardPowChain (guardPowBlockWith []))
     [] [guardPowOmmer] [] with
   | .error (.block (.systemContractEmpty _)) => true
   | _ => false)

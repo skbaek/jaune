@@ -1,5 +1,4 @@
 import Jaune.Bridge.G2a.Old.Transaction
-import Batteries.Tactic.OpenPrivate
 import Jaune.MessageCall.SpawnFacts
 import Jaune.Run.Transaction
 
@@ -8,20 +7,13 @@ import Jaune.Run.Transaction
 
 Old side = the definitions at `ba15f397` (`Jaune.Transaction`), unedited. New side = the staged
 definitions of `Jaune.Run.Message` and `Jaune.Run.Transaction`. Each bridge quantifies over every
-input and observes the whole result. The private helpers of `Jaune.Transaction` are named here
-through `open private`; this module is deleted with the old side after the gate's tag.
+input and observes the whole result. The original preparation helpers now live in
+`Jaune.Transaction.Parts`. This module is deleted with the old side after the gate's tag.
 -/
-
-open private AmsterdamDelegationResult chargeNewAuthorityAmsterdam chargePaidAccountWriteAmsterdam
-  chargeAuthBaseAmsterdam setDelegationAmsterdamStep setDelegationAmsterdamLoop
-  setDelegationAmsterdam preparedTopLevelMsg dispatchTopLevelAmsterdam
-  finishTopLevelAmsterdam checkTransactionGasLimit checkTransactionPriorityFeeRelation
-  checkTransactionBlobShape BlockAccessListAccount.upsert BlockAccessListBuilder.startStorage
-  from Jaune.Transaction
 
 namespace Jaune.Bridge.G2a
 
-/-! ### The Amsterdam preparation helpers: public successors equal the private originals -/
+/-! ### The Amsterdam preparation helpers -/
 
 theorem amsterdamDelegationResult_eq :
     Staging.AmsterdamDelegationResult = AmsterdamDelegationResult := rfl
@@ -57,7 +49,7 @@ theorem setDelegationAmsterdam_eq :
   simp only [Staging.setDelegationAmsterdam, setDelegationAmsterdam, setDelegationAmsterdamLoop_eq]
 
 theorem preparedTopLevelMessage_eq :
-    Staging.preparedTopLevelMessage = preparedTopLevelMsg := rfl
+    Staging.preparedTopLevelMessage = preparedTopLevelMessage := rfl
 
 theorem resolveTopLevelCallAmsterdam_eq :
     Staging.resolveTopLevelCallAmsterdam = resolveTopLevelCallAmsterdam := rfl
@@ -180,7 +172,7 @@ theorem processMessageCall_eq (msg : Msg) :
         simp [bind, Except.bind]
       | ok q =>
         obtain ⟨delegated, refund⟩ := q
-        rw [processMessageCall_of_frame (f := Frame.ofTop (Msg.resolveCodeDelegation delegated) false)
+        rw [processMessageCall_of_frame (f := Frame.ofTop (TopLevel.resolveCodeDelegation delegated) false)
           (a := refund) (by
             simp only [Staging.TopLevel.prepare, Staging.TopLevel.prepare.call, ht, hs,
               Bool.false_eq_true, ↓reduceIte]
@@ -271,8 +263,7 @@ theorem Staging.Message.run_topFrame {msg : Msg} {run : Staging.MessageRun} (h :
   subst this
   exact Staging.TopLevel.prepare_topFrame hp
 
-/-! ### Transaction validators and block-access-list helpers: public successors equal the
-private originals -/
+/-! ### Transaction validators and block-access-list helpers -/
 
 theorem checkTransactionGasLimit_eq :
     Staging.checkTransactionGasLimit = checkTransactionGasLimit := rfl

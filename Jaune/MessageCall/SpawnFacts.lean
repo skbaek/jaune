@@ -12,7 +12,7 @@ and 8)
   `prepareMessage` builds a `Msg` whose code address is absent exactly when its target is
   (`prepareMessage_codeAddress_eq_none_iff`), and the creation flag `processMessageCall` passes is
   `msg.target.isNone`; top-level delegation resolution only ever sets a code address
-  (`Msg.resolveCodeDelegation_codeAddress_eq_none`). Together with the authorization step and
+  (`TopLevel.resolveCodeDelegation_codeAddress_eq_none`). Together with the authorization step and
   Amsterdam's preparation, which keep the code address (`authorize_codeAddress`,
   `prepareTopLevelAmsterdam_message`), every top frame `processMessageCall` runs on a prepared
   message is coherent (`processMessageCall.topFrame_kindCoherent`).
@@ -287,9 +287,9 @@ theorem prepareMessage_codeAddress_eq_none_iff {benv : Benv} {tenv : Tenv} {tx :
     simp only [hto, Except.ok.injEq] at h <;> subst h <;> simp
 
 /-- Top-level delegation resolution only ever sets a code address. -/
-theorem Msg.resolveCodeDelegation_codeAddress_eq_none {msg : Msg}
-    (h : (Msg.resolveCodeDelegation msg).codeAddress = none) : msg.codeAddress = none := by
-  unfold Msg.resolveCodeDelegation at h
+theorem TopLevel.resolveCodeDelegation_codeAddress_eq_none {msg : Msg}
+    (h : (TopLevel.resolveCodeDelegation msg).codeAddress = none) : msg.codeAddress = none := by
+  unfold TopLevel.resolveCodeDelegation at h
   split at h
   · exact h
   · cases h
@@ -305,9 +305,9 @@ theorem prepareMessage_create_kindCoherent {benv : Benv} {tenv : Tenv} {tx : Tra
 /-- The top-level call frame `processMessageCall.call` runs (pre-Amsterdam, on a message with a
 target and after delegation resolution) is coherent. -/
 theorem resolveCodeDelegation_call_kindCoherent {msg : Msg} (h : msg.codeAddress ≠ none) :
-    (Frame.ofTop (Msg.resolveCodeDelegation msg) false).message.KindCoherent := by
+    (Frame.ofTop (TopLevel.resolveCodeDelegation msg) false).message.KindCoherent := by
   refine (Message.ofTop_kindCoherent_iff _ false).mpr ?_
-  exact iff_of_false (by simp) (fun e => h (Msg.resolveCodeDelegation_codeAddress_eq_none e))
+  exact iff_of_false (by simp) (fun e => h (TopLevel.resolveCodeDelegation_codeAddress_eq_none e))
 
 /-- The top frame `processMessageCall msg` runs, when it runs one. Without state gas: a creation's
 frame over the message (`processMessageCall.create`, past the collision test), or a call's frame
@@ -319,7 +319,7 @@ inductive processMessageCall.TopFrame (msg : Msg) : Frame → Prop
       processMessageCall.TopFrame msg (Frame.ofTop msg true)
   | call (ht : msg.target ≠ none) (hs : msg.benv.stat.rules.stateGas = none) {q : Msg × Nat}
       (ha : processMessageCall.authorize msg = .ok q) :
-      processMessageCall.TopFrame msg (Frame.ofTop (Msg.resolveCodeDelegation q.1) false)
+      processMessageCall.TopFrame msg (Frame.ofTop (TopLevel.resolveCodeDelegation q.1) false)
   | amsterdam {state : StateGasRules} (hs : msg.benv.stat.rules.stateGas = some state)
       {p : Msg × Devm} (hp : prepareTopLevelAmsterdam state msg = .ok p) :
       processMessageCall.TopFrame msg

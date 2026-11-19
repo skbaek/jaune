@@ -470,7 +470,7 @@ closure report.
   sits at timestamp zero; the failing call reports which era is unsupported
   as a typed `SupportError`, not a silent default.
 - **Core semantics uses typed errors, not strings.**
-  `ChainContextError`, `DecodeError`, `EvmError`, `TxValidationError`,
+  `ChainContextError`, `DecodeError`, `EvmError`, `TransactionValidationError`,
   `BlockValidationError`, and `InternalError` are the internal
   discriminants that producers construct directly; `String` remains only at
   external parsing/rendering/fixture-compatibility boundaries.

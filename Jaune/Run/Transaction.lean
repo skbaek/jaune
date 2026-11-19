@@ -15,8 +15,8 @@ A transaction runs in four phases:
 
 `processTransaction` is their composition. This split was a local copy in the tracer
 (`TraceTransaction.prepareTransaction`/`finishTransaction`); here it is the definition. Also here,
-public: the transaction validators and block-access-list helpers whose earlier copies in
-`Jaune.Transaction` were private, and `stateTransitionUsing_run`. Staged under `Jaune.Staging`
+the staged transaction validators and block-access-list helpers from `Jaune.Transaction.Parts`.
+Staged under `Jaune.Staging`
 until the switch commit; the bridges are in `Jaune.Bridge.G2a.Run`.
 -/
 
@@ -28,7 +28,7 @@ open Jaune
 
 /-- Enforce an optional transaction gas cap. -/
 def checkTransactionGasLimit (limit : Option Nat) (gas : Nat) :
-    Except TxValidationError Unit :=
+    Except TransactionValidationError Unit :=
   match limit with
   | none => .ok ()
   | some maxGas =>
@@ -41,7 +41,7 @@ def checkTransactionGasLimit (limit : Option Nat) (gas : Nat) :
 
 /-- A dynamic-fee transaction's priority fee is at most its maximum fee. -/
 def checkTransactionPriorityFeeRelation (tx : Transaction) :
-    Except TxValidationError Unit :=
+    Except TransactionValidationError Unit :=
   let check (priorityFee maxFee : Nat) :=
     if maxFee < priorityFee then
       .error <| .priorityGreaterThanMaxFee <| .text
@@ -56,7 +56,7 @@ def checkTransactionPriorityFeeRelation (tx : Transaction) :
 /-- A blob transaction carries at least one blob, within the fork's count, each hash with the KZG
 version byte. -/
 def checkTransactionBlobShape (rules : ForkRules) (tx : Transaction) :
-    Except TxValidationError Unit := do
+    Except TransactionValidationError Unit := do
   match tx.type with
   | .eip4844 _ _ _ _ _ _ blobHashes =>
     if blobHashes.isEmpty then
@@ -89,25 +89,6 @@ def BlockAccessListBuilder.startStorage (b : BlockAccessListBuilder) (idx : Nat)
     let atAddress := atAddress.insert slot value
     let atIndex := atIndex.insert address atAddress
     ({b with indexStartStorage := b.indexStartStorage.insert idx atIndex}, value)
-
-/-! ### The configured block transition -/
-
-/-- A configured block transition that succeeds found the active fork and the scheduled
-transition's success. -/
-theorem stateTransitionUsing_run {cfg : ChainConfig} {ch ch' : BlockChain}
-    {block : Block} (h : stateTransitionUsing cfg ch block = .ok ch') :
-    ∃ f, cfg.forkAt block.header.number block.header.timestamp = .ok f ∧
-      stateTransitionScheduledE cfg f ch block = .ok (.ok ch') := by
-  unfold stateTransitionUsing at h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨f, hf, h⟩ := Except.bind_eq_ok h
-  refine ⟨f, Except.mapError_eq_ok_iff.mp hf, ?_⟩
-  cases hs : stateTransitionScheduledE cfg f ch block with
-  | error e => rw [hs] at h; cases h
-  | ok r =>
-    rw [hs] at h
-    have hr : r = .ok ch' := Except.mapError_eq_ok_iff.mp h
-    rw [hr]
 
 /-! ### The phases -/
 
@@ -191,7 +172,7 @@ def Transaction.prepare (checked : Transaction.Checked) (tx : Transaction) (inde
       blobVersionedHashes := checked.blobVersionedHashes
       auths := tx.authorizationList
       indexInBlock := index
-      txHash := getTxHash tx
+      txHash := transactionHash tx
     }
   }
   let msg ← prepareMessage {benv with state := state} tenv tx

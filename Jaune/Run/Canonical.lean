@@ -222,7 +222,7 @@ theorem TopLevel.prepare_canonical {msg : Msg} (h : msg.Canonical) {f : Frame} {
       · rename_i delegated refund hauth
         cases hp
         exact Frame.ofTop_canonical
-          (Msg.resolveCodeDelegation_canonical (processMessageCall.authorize_canonical h hauth))
+          (TopLevel.resolveCodeDelegation_canonical (processMessageCall.authorize_canonical h hauth))
           false
     · exact amsterdam _ _ hp
 

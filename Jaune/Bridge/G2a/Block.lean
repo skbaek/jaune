@@ -62,7 +62,7 @@ theorem E.stateTransitionCoreE_eq {ε : Type} (embed : TransitionError → ε) (
     cases ho : checkOmmers () with
     | error e => simp only [bind, Except.bind, Except.mapError]
     | ok u' =>
-      cases hq : Body.importer (initBenv f ch block.header) block.transactions block.ommers
+      cases hq : Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers
           block.withdrawals with
       | error e => simp only [bind, Except.bind, Except.mapError, Functor.map, Except.map]
       | ok q =>
@@ -103,20 +103,20 @@ theorem Body.run_map_snd (benv : Benv) :
 /-- The block run's final prefix is the importer's body. -/
 theorem BlockRun.run_final (f : Fork) (ch : BlockChain) (block : Block) :
     BlockRun.final <$> BlockRun.run f ch block =
-      Body.importer (initBenv f ch block.header) block.transactions block.ommers
+      Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers
         block.withdrawals := by
   unfold BlockRun.run Body.importer
   simp only [bind, Except.bind]
-  cases block.transactions.mapM (decodeTransaction (initBenv f ch block.header).stat.rules) with
+  cases block.transactions.mapM (decodeTransaction (initBlockEnvironment f ch block.header).stat.rules) with
   | error e => rfl
   | ok txs =>
-    have h := Body.run_map_snd (initBenv f ch block.header)
-      (Body.Prefix.init (initBenv f ch block.header).state)
-      (Body.ops (initBenv f ch block.header) txs block.ommers block.withdrawals)
+    have h := Body.run_map_snd (initBlockEnvironment f ch block.header)
+      (Body.Prefix.init (initBlockEnvironment f ch block.header).state)
+      (Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals)
     dsimp only
-    cases hr : Body.run (initBenv f ch block.header)
-        (Body.Prefix.init (initBenv f ch block.header).state)
-        (Body.ops (initBenv f ch block.header) txs block.ommers block.withdrawals) with
+    cases hr : Body.run (initBlockEnvironment f ch block.header)
+        (Body.Prefix.init (initBlockEnvironment f ch block.header).state)
+        (Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals) with
     | error e => rw [hr] at h; exact h
     | ok sq => rw [hr] at h; exact h
 
@@ -182,7 +182,7 @@ def E.stateTransitionCoreEDecoding
   Except.mapError embed (validateHeader f.ruleSet ch block.header)
   checkOmmers ()
   let q ← Except.mapError embed
-    (Body.importerDecoding decode (initBenv f ch block.header) block.transactions block.ommers
+    (Body.importerDecoding decode (initBlockEnvironment f ch block.header) block.transactions block.ommers
       block.withdrawals)
   Except.mapError (embed ∘ TransitionError.block) <|
     Block.check block.header (Block.Commitments.ofPrefix f.ruleSet q)
@@ -212,9 +212,9 @@ theorem E.stateTransitionCoreE_difference {ε : Type} (embed : TransitionError �
         ¬ BlockDecodeOrderSplit f ch block checkOmmers ∧
         ∀ x, ¬ TransitionDiffers f ch block checkOmmers x) ∨
       (BlockDecodeOrderSplit f ch block checkOmmers ∧
-        ∃ eSys eNew, preCalls (initBenv f ch block.header) = .error eSys ∧
+        ∃ eSys eNew, preCalls (initBlockEnvironment f ch block.header) = .error eSys ∧
           block.transactions.mapM
-              (Staging.decodeTransaction (initBenv f ch block.header).stat.rules) = .error eNew ∧
+              (Staging.decodeTransaction (initBlockEnvironment f ch block.header).stat.rules) = .error eNew ∧
           stateTransitionCoreE embed f ch block checkOmmers = .error (embed eSys) ∧
           E.stateTransitionCoreEDecoding Staging.decodeTransaction embed f ch block checkOmmers =
             .error (embed eNew)) ∨
@@ -222,8 +222,8 @@ theorem E.stateTransitionCoreE_difference {ε : Type} (embed : TransitionError �
         stateTransitionCoreE embed f ch block checkOmmers = .error (embed (oldUnknownTypeError x)) ∧
         E.stateTransitionCoreEDecoding Staging.decodeTransaction embed f ch block checkOmmers =
           .error (embed (Staging.transactionTypeNotSupported x))) := by
-  have hrules : (initBenv f ch block.header).stat.rules = f.ruleSet := rfl
-  rcases mapM_decodeTransaction_difference (initBenv f ch block.header).stat.rules
+  have hrules : (initBlockEnvironment f ch block.header).stat.rules = f.ruleSet := rfl
+  rcases mapM_decodeTransaction_difference (initBlockEnvironment f ch block.header).stat.rules
       block.transactions with ⟨hm, hmn⟩ | ⟨x, hx, hold, hnew⟩
   · -- The staged decoder agrees: cut E's bridge and cut D's difference theorem.
     have hE :
@@ -278,23 +278,23 @@ theorem E.stateTransitionCoreE_difference {ε : Type} (embed : TransitionError �
         have hE : E.stateTransitionCoreEDecoding Staging.decodeTransaction embed f ch block
             checkOmmers = .error (embed (Staging.transactionTypeNotSupported x)) := by
           rw [hnew']; simp only [hv, ho, bind, Except.bind, Except.mapError]
-        cases hp : preCalls (initBenv f ch block.header) with
+        cases hp : preCalls (initBlockEnvironment f ch block.header) with
         | error eSys =>
-          have hd : decodeAll (initBenv f ch block.header) block.transactions =
+          have hd : decodeAll (initBlockEnvironment f ch block.header) block.transactions =
               .error (oldUnknownTypeError x) := hold
           obtain ⟨h1, -⟩ :=
             Jaune.Bridge.G2a.stateTransitionCoreE_of_split embed f ch block checkOmmers hv ho hp hd
           exact .inr (.inl ⟨⟨hv, ho, ⟨eSys, hp⟩, _, hd⟩, eSys, _, rfl, hnew, h1, hE⟩)
         | ok sb =>
           revert hp; unfold preCalls
-          cases hb : beaconRootsCall (initBenv f ch block.header).stat.rules
-              (initBenv f ch block.header) with
+          cases hb : beaconRootsCall (initBlockEnvironment f ch block.header).stat.rules
+              (initBlockEnvironment f ch block.header) with
           | error e => intro hp; cases hp
           | ok pb =>
             obtain ⟨stB, bal⟩ := pb
             simp only [bind, Except.bind]
-            cases hh : historyStorageCall (initBenv f ch block.header).stat.rules
-                ((initBenv f ch block.header).withState stB) bal with
+            cases hh : historyStorageCall (initBlockEnvironment f ch block.header).stat.rules
+                ((initBlockEnvironment f ch block.header).withState stB) bal with
             | error e => intro hp; cases hp
             | ok ph =>
               intro _
@@ -302,8 +302,8 @@ theorem E.stateTransitionCoreE_difference {ε : Type} (embed : TransitionError �
               refine .inr (.inr ⟨x, ⟨hv, ho, stB, bal, stH, bal', hb, hh, hx⟩, ?_, hE⟩)
               rw [Jaune.Bridge.G2a.stateTransitionCoreE_eq_decoding]
               unfold Jaune.Bridge.G2a.stateTransitionCoreEDecoding applyBodyDecoding
-              have hr : (((initBenv f ch block.header).withState stB).withState stH).stat.rules =
-                  (initBenv f ch block.header).stat.rules := rfl
+              have hr : (((initBlockEnvironment f ch block.header).withState stB).withState stH).stat.rules =
+                  (initBlockEnvironment f ch block.header).stat.rules := rfl
               simp only [hv, ho, hb, hh, hr, hold, bind, Except.bind, Except.mapError]
 
 end Jaune.Bridge.G2a

@@ -1,4 +1,4 @@
-import Jaune.Transaction
+import Jaune.Transaction.Parts
 
 /-!
 # Unknown transaction type: an invalid block (goal `jaune-shape-and-names-v1`, W2-T, decision 16)
@@ -13,7 +13,7 @@ transaction the RLP list, not a byte string; geth's `decodeTyped` rejects every 
 block is invalid) for an unknown type byte. Every other slot decodes as before, through the old
 decoder.
 
-The reason reuses `TxValidationError.typePreFork`, carrying the type byte: EELS has one exception
+The reason reuses `TransactionValidationError.typePreFork`, carrying the type byte: EELS has one exception
 for a type the fork does not know, whether a later fork defines it or none does
 (`TransactionTypeError` in every fork's `decode_transaction`), and `typePreFork` is the
 transaction reason Jaune already gives that exception for the types 1-4. Its fixture identity is

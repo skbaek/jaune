@@ -665,7 +665,7 @@ inductive TransactionParseError : Type
   -- (`Transaction.lean`, the type-3 receiver check). And a nonce of `2^64` or
   -- more: `Tx.nonce` is 64 bits, while the target holds it in `U256` and raises
   -- `NonceOverflowError` from every fork's `validate_transaction`.
-  | validation (reason : TxValidationError)
+  | validation (reason : TransactionValidationError)
   -- A quantity the target's own field type cannot hold. Its constructor raises
   -- `OverflowError`, which no transaction handler catches and which ends the
   -- whole run, so this is never a rejection: `refuseOutOfRange` turns it into
@@ -679,7 +679,7 @@ def TransactionParseError.render : TransactionParseError → String
   | .badField n => "JauneT8n.TX_PARSE_MALFORMED_FIELD: " ++ n
   | .unsupportedType ty => s!"JauneT8n.TX_PARSE_UNSUPPORTED_TYPE: {ty}"
   | .validation reason =>
-    match FixtureException.ofTxValidationError reason with
+    match FixtureException.ofTransactionValidationError reason with
     | some e => e.toString
     | none => "JauneT8n.TX_PARSE_UNMAPPED: " ++ reason.render
   | .outOfRange n _ _ => "JauneT8n.TX_PARSE_OUT_OF_RANGE: " ++ n
@@ -1310,7 +1310,7 @@ def identityText (kind : String) (detail : String) :
 def rejectionText : RejectReason → String
   | .parse e => e.render
   | .execution (.transaction e) =>
-    identityText "TRANSACTION" e.render (FixtureException.ofTxValidationError e)
+    identityText "TRANSACTION" e.render (FixtureException.ofTransactionValidationError e)
   | .execution (.block e) =>
     identityText "BLOCK" e.render (FixtureException.ofBlockValidationError e)
   | .execution (.decode e) =>
@@ -1771,7 +1771,7 @@ def run (args : List String) : IO Unit := do
       baseFeePerGas := env.baseFeePerGas,
       time := env.timestamp.toU256,
       -- Before the merge `DIFFICULTY` (0x44) reads the block's difficulty,
-      -- exactly as the block path's `initBenv` selects it (unit U5); the
+      -- exactly as the block path's `initBlockEnvironment` selects it (unit U5); the
       -- target's pre-merge block environment carries `difficulty` and no
       -- `prev_randao`. Post-merge (`pow = none`) it is `currentRandom` as
       -- before. U11d.

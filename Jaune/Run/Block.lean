@@ -126,8 +126,8 @@ structure BlockRun : Type where
   ops : List OpRun
   final : Body.Prefix
 
-/-- The block environment of a block over its parent (`initBenv`). -/
-def BlockRun.benv (r : BlockRun) : Benv := initBenv r.fork r.parent r.block.header
+/-- The block environment of a block over its parent (`initBlockEnvironment`). -/
+def BlockRun.benv (r : BlockRun) : Benv := initBlockEnvironment r.fork r.parent r.block.header
 
 /-- A run's commitments: its final prefix's, under its fork's rules. -/
 def BlockRun.commitments (r : BlockRun) : Block.Commitments :=
@@ -137,7 +137,7 @@ def BlockRun.commitments (r : BlockRun) : Block.Commitments :=
 prefix over the parent's state, keeping each operation's record. -/
 def BlockRun.run (f : Fork) (ch : BlockChain) (block : Block) :
     Except TransitionError BlockRun := do
-  let benv := initBenv f ch block.header
+  let benv := initBlockEnvironment f ch block.header
   let txs ← block.transactions.mapM (decodeTransaction benv.stat.rules)
   let ⟨ops, final⟩ ← Body.run benv (Body.Prefix.init benv.state)
     (Body.ops benv txs block.ommers block.withdrawals)
@@ -153,7 +153,7 @@ def E.stateTransitionCoreE {ε : Type} (embed : TransitionError → ε)
   Except.mapError embed (validateHeader f.ruleSet ch block.header)
   checkOmmers ()
   let q ← Except.mapError embed
-    (Body.importer (initBenv f ch block.header) block.transactions block.ommers block.withdrawals)
+    (Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers block.withdrawals)
   Except.mapError (embed ∘ TransitionError.block) <|
     Block.check block.header (Block.Commitments.ofPrefix f.ruleSet q)
   .ok ⟨appendBlock ch.blocks block, q.state, ch.chainId⟩
