@@ -957,9 +957,11 @@ Two different contracts, and confusing them is the most common misreading:
   every old root's dependency closure (exempt and non-Jaune constants
   excluded) is equal at the tag under the entry's maps by N4's per-constant
   comparator, every old root maps to the old side the ledger names, and the
-  external import artifacts of both captures are identical; a gate's receipt
-  counts in Mode A only with both captures bound (the clean tree of the old
-  revision and of the tag commit). Adding an exemption needs another ledger
+  external import artifacts of both captures are identical. Mode A requires a
+  receipt bound to both clean captures and one passing result per theorem.
+  Each result's scope digest binds the old revision, roots, modules, tag-side
+  roots and modules, exemptions and ordered map hashes. If these inputs
+  change, rerun Mode B. Adding an exemption needs another ledger
   entry that bridges it; a gap is closed by evidence, never by deleting its
   line.
 

@@ -487,10 +487,17 @@ def mode_a(ledger, git, head='HEAD', receipts=RECEIPTS, require_closed=()):
     return dict(status='OK', entries=len(ledger['entries']), gates=sorted(ledger['gates']), gaps=gaps)
 
 
+def closure_scope_sha256(entry):
+    """Bind the inputs that affect this theorem's closure comparison."""
+    scope = dict(old=entry['old'], exempt=entry['exempt'],
+                 maps=[row['sha256'] for row in entry['maps']])
+    return sha256(FIDELITY.encoded(scope).encode())
+
+
 def check_receipt(ledger, gate, receipt):
     where = f'receipt {gate}'
     problems = []
-    entries = {e['id']: e for e in ledger['entries'] if e['gate'] == gate}
+    entries = {e['id']: e for e in ledger['entries'] if e['gate'] == gate and e['kind'] == 'theorem'}
     if receipt.get('schema_version') != SCHEMA or receipt.get('gate') != gate:
         return [f'{where}: schema_version {SCHEMA} for gate {gate} required']
     if receipt.get('verdict') != 'OK':
@@ -498,18 +505,28 @@ def check_receipt(ledger, gate, receipt):
     commit = ledger['gates'][gate]['commit']
     if commit is None or receipt.get('tag_commit') != commit:
         problems.append(f'{where}: bound to {receipt.get("tag_commit")}, gate commit is {commit}')
-    if not (receipt.get('before', {}).get('bound') and receipt.get('after', {}).get('bound')):
+    before, after = receipt.get('before', {}), receipt.get('after', {})
+    if before.get('bound') is not True or after.get('bound') is not True:
         problems.append(f'{where}: captures are not bound to the old revision and the tag')
+    seen = set()
     for row in receipt.get('entries', []):
         entry = entries.get(row.get('id'))
-        if entry is None:
-            problems.append(f'{where}: entry {row.get("id")} is not a {gate} ledger entry')
+        if entry is None or entry['id'] in seen:
+            problems.append(f'{where}: expected one closure result per {gate} theorem, got {row.get("id")}')
             continue
+        seen.add(entry['id'])
+        if row.get('verdict') != 'OK' or row.get('mismatches') != []:
+            problems.append(f'{where}: entry {entry["id"]} closure did not pass')
         if row.get('maps') != [m['sha256'] for m in entry['maps']] or row.get('roots') != entry['old']['roots']:
             problems.append(f'{where}: entry {entry["id"]} maps or roots differ from the ledger')
-        if row.get('old_revision') != entry['old']['revision']:
+        old_rev = entry['old']['revision']
+        if row.get('old_revision') != old_rev or before.get('head') != old_rev:
             problems.append(f'{where}: entry {entry["id"]} old revision differs from the ledger')
-    missing = {e for e, v in entries.items() if v['kind'] == 'theorem'} - {r.get('id') for r in receipt.get('entries', [])}
+        if row.get('closure_scope_sha256') != closure_scope_sha256(entry):
+            problems.append(f'{where}: entry {entry["id"]} closure scope differs from the ledger; run Mode B again')
+    if after.get('head') != commit:
+        problems.append(f'{where}: after capture is not at the gate commit')
+    missing = entries.keys() - seen
     if missing:
         problems.append(f'{where}: no closure result for {sorted(missing)}')
     return problems
@@ -781,6 +798,7 @@ def mode_b(ledger, git, gate, before_path, after_path, ids=(), maps=(), plan=Non
         result = closure_compare(old_env, new_env, renamers, entry['old']['roots'], entry['old']['at_tag'],
                                  exemptions(ledger, entry), edits, reviewed_rows)
         result.update(id=entry['id'], roots=entry['old']['roots'], old_revision=revision,
+                      closure_scope_sha256=closure_scope_sha256(entry),
                       maps=[m['sha256'] for m in entry['maps']],
                       old_modules=len(old_selected), tag_modules=len(new_selected))
         results.append(result)

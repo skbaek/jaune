@@ -243,6 +243,7 @@ class ModeBGlueTests(unittest.TestCase):
         self.assertEqual((receipt['entries'][0]['closure'], receipt['before']['bound'], receipt['after']['bound']),
                          (2, False, False))
         self.assertEqual(len(receipt['entries'][0]['maps']), 1)
+        self.assertRegex(receipt['entries'][0]['closure_scope_sha256'], r'^[0-9a-f]{64}$')
         self.assertEqual(self.run_b(2)['verdict'], 'REGRESSION')
 
 
@@ -404,18 +405,32 @@ class ModeATests(unittest.TestCase):
         self.assertEqual(self.run_a()['status'], 'OK')
 
     def test_missing_closure_receipt_is_a_gap_and_a_receipt_is_checked(self):
-        self.ledger['entries'][0]['accepted'] = []
+        theorem = self.ledger['entries'][0]
+        theorem['accepted'] = []
         self.assertEqual(self.run_a()['gaps'], ['entry GX-1: no Mode B closure receipt (GX.json)'])
         self.receipts.mkdir()
+        row = dict(id='GX-1', maps=[], roots=['Jaune.old'], old_revision=self.old,
+                   verdict='OK', mismatches=[], closure_scope_sha256=LEDGER.closure_scope_sha256(theorem))
         receipt = dict(schema_version=1, gate='GX', verdict='OK', tag_commit=self.tag,
-                       before=dict(bound=True), after=dict(bound=True),
-                       entries=[dict(id='GX-1', maps=[], roots=['Jaune.old'], old_revision=self.old)])
-        (self.receipts / 'GX.json').write_text(json.dumps(receipt))
+                       before=dict(bound=True, head=self.old), after=dict(bound=True, head=self.tag),
+                       entries=[row])
+        path = self.receipts / 'GX.json'
+        path.write_text(json.dumps(receipt))
+        self.assertEqual(self.run_a()['gaps'], [])
+        theorem['notes'].append('Clarify the prose without changing the comparison.')
         self.assertEqual(self.run_a()['gaps'], [])
         for change in (dict(verdict='REGRESSION'), dict(tag_commit=self.old), dict(after=dict(bound=False)),
-                       dict(entries=[dict(id='GX-1', maps=['x'], roots=['Jaune.old'], old_revision=self.old)])):
-            (self.receipts / 'GX.json').write_text(json.dumps(dict(receipt, **change)))
+                       dict(before=dict(bound=True, head=self.tag)), dict(after=dict(bound=True, head=self.old)),
+                       dict(entries=[row, row]), dict(entries=[dict(row, verdict='REGRESSION')]),
+                       dict(entries=[dict(row, maps=['x'])])):
+            path.write_text(json.dumps(dict(receipt, **change)))
             self.assertFinding('receipt GX')
+        path.write_text(json.dumps(receipt))
+        theorem['exempt'] = [dict(name='Jaune.old', bridged_by='GX-map')]
+        self.assertFinding('closure scope differs')
+        theorem['exempt'] = []
+        theorem['old'].update(at_tag=['Jaune.new'], modules_at_tag=['Jaune.New'])
+        self.assertFinding('closure scope differs')
 
     def test_pending_gate_reads_head(self):
         entry = copy.deepcopy(self.ledger['entries'][0])
