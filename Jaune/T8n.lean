@@ -916,9 +916,9 @@ def operational : TransitionError → Bool
   | _ => false
 
 /-- The reject-and-continue fold: the one piece of control flow a transition
-tool needs that a block importer must not have. Every arm calls
-`processTransaction` unchanged, and a rejected transaction is rolled back by
-not threading its state.
+tool needs that a block importer must not have. Every arm runs the body's
+transaction step (`Body.step`) unchanged from the prefix so far, and a rejected
+transaction is rolled back by not threading its prefix.
 
 A rejected transaction leaves no trace in the block: each accepted transaction
 is processed at the count of transactions accepted before it, so the ones that
@@ -927,26 +927,27 @@ trie, the receipts trie and the block-level access list alike. Rejections are
 still reported under their position in the input. This is the target's rule
 since ethereum/execution-specs#3849 (rejected transactions are numbered out)
 and #3361 (the body lists only accepted transactions). -/
-def foldTransactions :
-    List (Nat × TransactionParse Transaction) → Benv → BlockOutput → List Rejection → List Transaction →
-    Except TransitionError (Benv × BlockOutput × List Rejection × List Transaction)
-  | [], benv, bout, rej, inc => .ok ⟨benv, bout, rej, inc⟩
-  | ⟨i, .error e⟩ :: rest, benv, bout, rej, inc =>
-    foldTransactions rest benv bout (rej ++ [⟨i, .parse e⟩]) inc
-  | ⟨i, .ok tx⟩ :: rest, benv, bout, rej, inc =>
-    match processTransaction benv bout tx inc.length with
-    | .ok ⟨st, bout'⟩ => foldTransactions rest (benv.withState st) bout' rej (inc ++ [tx])
+def foldTransactions (benv : Benv) :
+    List (Nat × TransactionParse Transaction) → Staging.Body.Prefix → List Rejection →
+      List Transaction →
+      Except TransitionError (Staging.Body.Prefix × List Rejection × List Transaction)
+  | [], p, rej, inc => .ok ⟨p, rej, inc⟩
+  | ⟨i, .error e⟩ :: rest, p, rej, inc =>
+    foldTransactions benv rest p (rej ++ [⟨i, .parse e⟩]) inc
+  | ⟨i, .ok tx⟩ :: rest, p, rej, inc =>
+    match Staging.Body.step benv p (.transaction tx inc.length) with
+    | .ok ⟨_, q⟩ => foldTransactions benv rest q rej (inc ++ [tx])
     | .error err =>
       if operational err then .error err
-      else foldTransactions rest benv bout (rej ++ [⟨i, .execution err⟩]) inc
+      else foldTransactions benv rest p (rej ++ [⟨i, .execution err⟩]) inc
 
-/-- State-test mode: exactly one transaction, no system operations, no
-withdrawals, no requests. -/
+/-- State-test mode: exactly one transaction from the empty prefix, no system
+operations, no withdrawals, no requests. -/
 def runStateTest (benv : Benv) (txs : List (TransactionParse Transaction)) :
     Except TransitionError Outcome := do
   let selected := match txs with | [] => [] | t :: _ => [⟨0, t⟩]
-  let ⟨benv, bout, rej, inc⟩ ← foldTransactions selected benv .init [] []
-  .ok ⟨benv.state, bout, rej, none, inc⟩
+  let ⟨p, rej, inc⟩ ← foldTransactions benv selected (Staging.Body.Prefix.init benv.state) [] []
+  .ok ⟨p.state, p.toBlockOutput, rej, none, inc⟩
 
 /-- The reward `--state.reward` asks for, as the target resolves it
 (`_resolve_state_reward`, then `_run_blockchain_test`'s guard): under proof of
@@ -987,6 +988,32 @@ def payT8nRewards (reward : Nat) (coinbase : Address) (ommers : List T8nOmmer)
 def ommerAgesOk (ommers : List T8nOmmer) : Bool :=
   ommers.all (·.delta ≤ 8)
 
+/-- t8n's pre-execution system calls, in its order: history storage (with the last window hash,
+or zero for an empty window), then beacon roots. -/
+def preOps (benv : Benv) : List Staging.BodyOp :=
+  (if benv.stat.rules.systemCalls.historyStorage then
+    [.systemCall historyStorageAddress (.ok (benv.stat.blockHashes.getLast?.getD 0).toBytes) 0]
+  else []) ++
+  (if benv.stat.rules.systemCalls.beaconRoots then
+    [.systemCall beaconRootsAddress (.ok benv.stat.parentBeaconBlockRoot.toBytes) 0]
+  else [])
+
+/-- The rewards (when resolved, `payT8nRewards`' amounts), then the withdrawals at the accepted
+count plus one. -/
+def postOps (benv : Benv) (accepted : Nat) (wds : List Withdrawal) (reward : Option Nat)
+    (ommers : List T8nOmmer) : List Staging.BodyOp :=
+  (match reward with
+    | none => []
+    | some r =>
+      [.rewards benv.stat.coinbase (r + ommers.length * (r / 32))
+        (ommers.map fun ommer => (ommer.address, (8 - ommer.delta) * r / 8))]) ++
+  (if benv.stat.rules.header.withdrawalsRoot then [.withdrawals wds (accepted + 1)] else [])
+
+/-- The request group at the accepted count plus one. -/
+def requestOps (benv : Benv) (accepted : Nat) : List Staging.BodyOp :=
+  .depositRequests :: benv.stat.rules.requests.map fun ⟨type, address⟩ =>
+    .requestCall type address (accepted + 1)
+
 /-- Blockchain mode: the target's `_run_blockchain_test`, step for step, each
 fork-dependent step gated by the rule data that stands for the target's
 `has_*` flag: the history-storage call (`sys.historyStorage`), the
@@ -1007,65 +1034,23 @@ the goal, as renumbered by ethereum/execution-specs#3849). The list is built
 after the requests and the item rule is applied to it; a violation is the
 `blockException` of a result that still carries the list, as the target
 assigns `block_output.block_access_list` before validating it. -/
-def runBlockchain (benv : Benv) (txs : List (TransactionParse Transaction)) (wds : List Withdrawal)
-    (reward : Option Nat := none) (ommers : List T8nOmmer := []) :
+def runBlockchain (benv : Benv) (txs : List (TransactionParse Transaction))
+    (wds : List Withdrawal) (reward : Option Nat := none) (ommers : List T8nOmmer := []) :
     Except TransitionError Outcome := do
-  let rules := benv.stat.rules
-  -- The parent hash the history-storage system transaction records. The
-  -- target reads `block_hashes[-1]` and raises `IndexError` out of the whole
-  -- tool when the window is empty, which is the shape every state test
-  -- arrives in once the framework has declined to pass `--state-test` to an
-  -- external binary. There is no reference behaviour to match on that input,
-  -- so this records the zero hash and continues; on every input the target
-  -- can process at all, the window is non-empty and this is its last entry.
-  let lastHash := benv.stat.blockHashes.getLast?.getD 0
-  let ⟨benv, bal⟩ ← if rules.systemCalls.historyStorage then do
-      let ⟨stHistory, outHistory⟩ ←
-        Except.mapError TransitionError.vm <|
-          processUncheckedSystemTransaction benv historyStorageAddress lastHash.toBytes
-      let bal := ({} : BlockAccessListBuilder).incorporateSystem rules 0 benv.state stHistory
-        (historyStorageAddress :: outHistory.accountReads.toList)
-        outHistory.storageReads.toList outHistory.storageWrites.toList
-      pure (benv.withState stHistory, bal)
-    else pure (benv, ({} : BlockAccessListBuilder))
-  let ⟨benv, bal⟩ ← if rules.systemCalls.beaconRoots then do
-      let ⟨stBeacon, outBeacon⟩ ←
-        Except.mapError TransitionError.vm <|
-          processUncheckedSystemTransaction benv beaconRootsAddress
-            benv.stat.parentBeaconBlockRoot.toBytes
-      let bal := bal.incorporateSystem rules 0 benv.state stBeacon
-        (beaconRootsAddress :: outBeacon.accountReads.toList)
-        outBeacon.storageReads.toList outBeacon.storageWrites.toList
-      pure (benv.withState stBeacon, bal)
-    else pure (benv, bal)
-  let ⟨benv, bout, rej, inc⟩ ← foldTransactions txs.putIndex benv {BlockOutput.init with blockAccessListBuilder := bal} [] []
-  let benv := match reward with
-    | none => benv
-    | some r => benv.withState (payT8nRewards r benv.stat.coinbase ommers benv.state)
-  let postIndex := inc.length + 1
-  let ⟨benv, bout⟩ := if rules.header.withdrawalsRoot then
-      let ⟨stWds, bout⟩ := processWithdrawals benv bout wds
-      let balWds := bout.blockAccessListBuilder.incorporateSystem rules postIndex benv.state stWds
-        (wds.map Withdrawal.address) [] []
-      (benv.withState stWds, {bout with blockAccessListBuilder := balWds})
-    else (benv, bout)
-  let requests := if rules.header.requestsHash then
-      processGeneralPurposeRequestsAt postIndex benv bout
-    else .ok ⟨benv.state, bout⟩
+  let p ← Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (preOps benv)
+  let ⟨p, rej, inc⟩ ← foldTransactions benv txs.putIndex p [] []
+  let p ← Staging.Body.fold benv p (postOps benv inc.length wds reward ommers)
+  let requests :=
+    if benv.stat.rules.header.requestsHash then Staging.Body.fold benv p (requestOps benv inc.length)
+    else .ok p
   match requests with
-  | .ok ⟨st, bout'⟩ =>
-    let list := match rules.blockAccessListRules with
-      | none => []
-      | some _ => bout'.blockAccessListBuilder.build
-    let bout' := {bout' with blockAccessList := list}
-    match checkBlockAccessListGasLimit rules benv.stat.blockGasLimit list with
-    | .ok () => .ok ⟨st, bout', rej, none, inc⟩
-    | .error (.block reason) => .ok ⟨st, bout', rej, some reason, inc⟩
+  | .ok q => do
+    let ⟨_, q⟩ ← Staging.Body.step benv q .buildAccessList
+    match Staging.Body.step benv q .checkAccessListLimit with
+    | .ok _ => .ok ⟨q.state, q.toBlockOutput, rej, none, inc⟩
+    | .error (.block reason) => .ok ⟨q.state, q.toBlockOutput, rej, some reason, inc⟩
     | .error err => .error err
-  | .error (.block reason) =>
-    -- The target raises `InvalidBlock` out of the step and builds its result
-    -- from whatever the block environment and block output already hold.
-    .ok ⟨benv.state, bout, rej, some reason, inc⟩
+  | .error (.block reason) => .ok ⟨p.state, p.toBlockOutput, rej, some reason, inc⟩
   | .error err => .error err
 
 -- Focused EIP-7928 carry tests for the two block frontends. The request

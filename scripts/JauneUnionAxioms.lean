@@ -30,7 +30,7 @@ import Jaune.StaticcallEffects
 import Jaune.TraceTransaction
 import Jaune.MessageCall.TraceJson
 import Jaune.Run.Trace
-import Jaune.Run.BodyT8n
+import Jaune.Bridge.G2a.Old.T8n
 import Jaune.Run.BodyFactsT8n
 
 /-!

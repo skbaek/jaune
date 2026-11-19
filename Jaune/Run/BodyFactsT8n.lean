@@ -1,4 +1,4 @@
-import Jaune.Run.BodyT8n
+import Jaune.T8n
 import Jaune.Run.BodyFacts
 
 /-!
@@ -10,9 +10,9 @@ the receipts so far (`Staging.parseDepositRequests_of_receipts`). Adapter class:
 about the adapter's own driver.
 -/
 
-namespace Jaune.Staging.T8n
+namespace Jaune.T8n
 
-open Jaune Jaune.Staging Jaune.T8n
+open Jaune Jaune.Staging
 
 /-- The tolerant loop keeps the receipts so far, one receipt per accepted transaction. -/
 theorem foldTransactions_receipts (benv : Benv) :
@@ -40,4 +40,4 @@ theorem foldTransactions_receipts (benv : Benv) :
       · cases h
       · exact foldTransactions_receipts benv rest p _ inc rcpts q rej' inc' hp h
 
-end Jaune.Staging.T8n
+end Jaune.T8n
