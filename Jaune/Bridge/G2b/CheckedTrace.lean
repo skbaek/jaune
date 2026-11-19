@@ -1173,4 +1173,130 @@ theorem runMessage_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State
         | split <;> rename_i he' <;> rw [he] at he' <;> cases he'
           simp only [bind_assoc, pure_bind]
 
+/-! ### The transaction boundary -/
+
+private theorem processTransaction_prepared (benv : Benv) (bout : BlockOutput)
+    (tx : Transaction) (index : Nat) :
+    Staging.B2.processTransaction benv bout tx index = (do
+      let prepared ← Staging.TraceTransaction.prepareTransaction benv bout tx index
+      let ⟨state, output⟩ ← Except.mapError TransitionError.vm (processMessageCall prepared.msg)
+      Staging.Transaction.settle prepared tx index state output) := by
+  rw [Jaune.Bridge.G2a.processTransaction_eq_staged]
+  unfold Staging.processTransaction Staging.TraceTransaction.prepareTransaction
+  simp only [bind_assoc, Jaune.Bridge.G2a.processMessageCall_eq]
+
+/-- The Checked transaction trace retains the message needed to interpret its
+typed run. The certificate refers to the current staged transaction value. -/
+structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat)
+    extends TraceTransaction.Certified (Staging.B2.processTransaction benv bout tx index) where
+  messageRun : Option (Msg × Checked.TopLevel.Run)
+  observes : messageRun =
+    (Staging.TraceTransaction.prepareTransaction benv bout tx index).toOption.bind fun prepared =>
+      (Checked.TopLevel.run prepared.msg).toOption.map fun run => (prepared.msg, run)
+
+/-- Trace one Checked message and settle its result through the transaction's
+shared preparation and the checked bridge to staging settlement. -/
+def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
+    (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction)
+    (index : Nat) (runId : String) : m (TransactionResult benv bout tx index) := do
+  match hp : Staging.TraceTransaction.prepareTransaction benv bout tx index with
+  | .error error =>
+    pure {
+      value := .error error
+      messageRun := none
+      erases := by rw [processTransaction_prepared, hp]; rfl
+      observes := by rw [hp]; rfl }
+  | .ok prepared =>
+    let message ← runMessage sink authorizationRefund prepared.msg runId
+    let rendered := message.run.mapError Fault.toEvmError >>= Checked.TopLevel.Run.output prepared.msg
+    pure {
+      value := do
+        let ⟨state, output⟩ ← rendered.mapError TransitionError.vm
+        Staging.Transaction.settle prepared tx index state output
+      messageRun := message.run.toOption.map fun run => (prepared.msg, run)
+      erases := by rw [processTransaction_prepared, hp]; simp only [rendered, message.output_eq]; rfl
+      observes := by rw [hp, message.erases]; rfl }
+
+private def messageSummary (rendered : Except EvmError (State × MsgCallOutput)) : Option (Bytes × Bool) :=
+  rendered.toOption.map fun (_, output) => (output.returnData, output.error.isNone)
+
+/-- The returned bytes and success flag read by the deferred transaction row. -/
+def TransactionResult.summary {benv bout tx index} (result : TransactionResult benv bout tx index) :
+    Option (Bytes × Bool) :=
+  result.messageRun.bind fun (msg, run) => messageSummary (run.output msg)
+
+private def transactionSummary (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+    Option (Bytes × Bool) :=
+  (Staging.TraceTransaction.prepareTransaction benv bout tx index).toOption.bind fun prepared =>
+    messageSummary (processMessageCall prepared.msg)
+
+private theorem TransactionResult.summary_eq {benv bout tx index} (result : TransactionResult benv bout tx index) :
+    result.summary = transactionSummary benv bout tx index := by
+  unfold TransactionResult.summary transactionSummary
+  rw [result.observes]
+  cases Staging.TraceTransaction.prepareTransaction benv bout tx index with
+  | error => rfl
+  | ok prepared =>
+    have h := congrArg messageSummary (Checked.preparedMessageOutput_square prepared.msg)
+    unfold Checked.preparedMessageOutput at h
+    cases hr : Checked.TopLevel.run prepared.msg <;>
+      simpa only [bind, Except.bind, Except.mapError, messageSummary, Except.toOption,
+        Option.bind, Option.map, hr] using h
+
+private theorem stagedSummary_eq {benv bout tx index}
+    (result : Staging.TraceTransaction.TransactionResult benv bout tx index) :
+    result.messageRun.bind (messageSummary ∘ Staging.MessageRun.output) =
+      transactionSummary benv bout tx index := by
+  unfold transactionSummary
+  rw [result.observes]
+  cases Staging.TraceTransaction.prepareTransaction benv bout tx index with
+  | error => rfl
+  | ok prepared =>
+    have h := congrArg messageSummary (Jaune.Bridge.G2a.processMessageCall_eq prepared.msg)
+    unfold Staging.processMessageCall at h
+    cases hr : Staging.Message.run prepared.msg <;>
+      simpa only [bind, Except.bind, Except.mapError, messageSummary, Except.toOption,
+        Option.bind, Option.map, Function.comp_def, hr] using h
+
+/-- The Checked transaction makes the same JSON writes and refund calls as
+the staged transaction tracer. The transaction value and the message fields
+used by the deferred summary also agree. -/
+theorem runTransaction_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
+    (trace frames : IO.FS.Handle) (authorizationRefund : Nat → IO Unit) (benv : Benv)
+    (bout : BlockOutput) (tx : Transaction) (index : Nat) (runId : String) :
+    (fun result => (result.value, result.summary)) <$> runTransaction (TraceJson.sink cfg state trace frames)
+        authorizationRefund benv bout tx index runId =
+      (fun result => (result.value, result.messageRun.bind fun run =>
+        run.output.toOption.map fun (_, output) => (output.returnData, output.error.isNone))) <$>
+        Staging.TraceTransaction.runTransaction (TraceJson.sink cfg state trace frames)
+          authorizationRefund benv bout tx index runId := by
+  let sink := TraceJson.sink cfg state trace frames
+  have effects : (fun _ => ()) <$> runTransaction sink authorizationRefund benv bout tx index runId =
+      (fun _ => ()) <$> Staging.TraceTransaction.runTransaction sink
+        authorizationRefund benv bout tx index runId := by
+    unfold runTransaction Staging.TraceTransaction.runTransaction
+    split
+    · rename_i error hp
+      split <;> rename_i h <;> rw [hp] at h <;> cases h
+      simp only [map_pure]
+    · rename_i prepared hp
+      split <;> rename_i h <;> rw [hp] at h <;> cases h
+      simp only [← bind_pure_comp, bind_assoc, pure_bind]
+      simpa only [← bind_pure_comp] using
+        runMessage_json cfg state trace frames authorizationRefund prepared.msg runId
+  let observation := (Staging.B2.processTransaction benv bout tx index, transactionSummary benv bout tx index)
+  have checkedObs : (fun result : TransactionResult benv bout tx index => (result.value, result.summary)) =
+      (fun _ : Unit => observation) ∘ (fun _ => ()) :=
+    funext fun result => congrArg₂ Prod.mk result.erases result.summary_eq
+  have stagedObs : (fun result : Staging.TraceTransaction.TransactionResult benv bout tx index =>
+      (result.value, result.messageRun.bind (messageSummary ∘ Staging.MessageRun.output))) =
+        (fun _ : Unit => observation) ∘ (fun _ => ()) :=
+    funext fun result => congrArg₂ Prod.mk result.erases (stagedSummary_eq result)
+  change (fun result => (result.value, result.summary)) <$> runTransaction sink
+      authorizationRefund benv bout tx index runId =
+    (fun result => (result.value, result.messageRun.bind (messageSummary ∘ Staging.MessageRun.output))) <$>
+      Staging.TraceTransaction.runTransaction sink authorizationRefund benv bout tx index runId
+  rw [checkedObs, stagedObs]
+  simpa only [← comp_map] using congrArg (fun action => (fun _ : Unit => observation) <$> action) effects
+
 end Jaune.Bridge.G2b.CheckedTrace
