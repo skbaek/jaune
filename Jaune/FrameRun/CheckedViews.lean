@@ -46,6 +46,16 @@ def spine {r out} (t : Frame.Run r (.exit out)) : List Node :=
   | .next _ rest | .callDone _ _ _ rest | .callRan _ _ _ _ rest => here :: spine rest
 termination_by sizeOf t
 
+/-- The immediate continuation in the current frame. A child run is a different frame. -/
+def Node.parentNext (root : Node) : Option Node :=
+  match root.run with
+  | .halt _ | .callDoneEnd .. | .callRanEnd .. => none
+  | .next _ rest | .callDone _ _ _ rest | .callRan _ _ _ _ rest => some ⟨_, _, rest⟩
+
+theorem Node.parentNext_unique {root left right : Node}
+    (hl : root.parentNext = some left) (hr : root.parentNext = some right) : left = right :=
+  Option.some.inj (hl.symm.trans hr)
+
 /-- A failed root has no retained nodes, even if a child settled successfully before its rollback. -/
 def retainedNodes {r out} (t : Frame.Run r (.exit out)) : List Node :=
   if Exec.finished out then ((visits t).filter Visit.kept).map Visit.node else []

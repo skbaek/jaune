@@ -238,6 +238,12 @@ theorem committedFrames_bridge {r out} (d : Exec r out) :
 theorem spine_bridge {r out} (d : Exec r out) : d.parentNodes.map Node.ofDeriv = spine (ofExec d) := by
   induction d <;> simp [Exec.parentNodes, Node.ofDeriv, spine, ofExec, *]
 
+/-- The old same-frame successor maps to the exact immediate successor in the surviving run. -/
+theorem parentNext_bridge (d : Exec.Deriv) :
+    d.parentNext.map Node.ofDeriv = (Node.ofDeriv d).parentNext := by
+  rcases d with ⟨_, _, run⟩
+  cases run <;> rfl
+
 private theorem root_mem_parentNodes (root : Exec.Deriv) : root ∈ root.run.parentNodes := by
   rcases root with ⟨_, _, run⟩
   cases run <;> simp [Exec.parentNodes]
@@ -275,6 +281,14 @@ private theorem ofDeriv_injective : Function.Injective Node.ofDeriv := by
   have eq := congrArg back h
   simp only [back, Node.ofDeriv, toExec_ofExec] at eq
   exact eq
+
+/-- The successor relation agrees in both directions on the surviving run. -/
+theorem parentStep_bridge (root next : Exec.Deriv) :
+    next.ParentStep root ↔ (Node.ofDeriv root).parentNext = some (Node.ofDeriv next) := by
+  rw [Exec.Deriv.ParentStep, ← parentNext_bridge]
+  cases root.parentNext with
+  | none => simp
+  | some node => simp only [Option.map_some, Option.some.injEq, ofDeriv_injective.eq_iff]
 
 theorem parentPrefix_bridge (a b : Exec.Deriv) :
     a.ParentPrefix b ↔ (Node.ofDeriv a).Prefix (Node.ofDeriv b) := by
