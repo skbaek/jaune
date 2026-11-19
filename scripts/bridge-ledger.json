@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "goal": "jaune-shape-and-names-v1",
+  "about": "X1 bridge ledger, machine-checked by scripts/check-bridge-ledger.py (Mode A every catalogue run; Mode B --closure once per gate at its tag candidate). Revisions are full commit shas; `record` fields cite the goal's evidence by its own relative names.",
+  "standard_axioms": ["Classical.choice", "Quot.sound", "propext"],
+  "gates": {
+    "G0a": {"tag": "gate/g0a", "commit": "904d7fff568f538d6d53cf6a7141be935a3bd00c", "status": "tagged"},
+    "G0b": {"tag": "gate/g0b", "commit": "d8f34ae4c1ca2726886b1d02b9b65ca05304c876", "status": "tagged"},
+    "G1": {"tag": "gate/g1", "commit": "acf1e0b744565a0a524bfe1b22ce3a81ca731897", "status": "tagged"},
+    "G2a": {"tag": "gate/g2a", "commit": null, "status": "pending"},
+    "G2b": {"tag": "gate/g2b", "commit": null, "status": "pending"}
+  },
+  "entries": [
+    {
+      "id": "G0a-map",
+      "gate": "G0a",
+      "kind": "map",
+      "theorem": null,
+      "module": null,
+      "audit": [],
+      "old": {
+        "revision": "730aae6533a986edcc02910ca33216bf3da37f3f",
+        "roots": [],
+        "modules": [],
+        "at_tag": [],
+        "modules_at_tag": []
+      },
+      "new": {"names": [], "modules": []},
+      "exempt": [],
+      "maps": [
+        {"path": "scripts/naming-map.json", "revision": "904d7fff568f538d6d53cf6a7141be935a3bd00c",
+         "sha256": "6dea531b8ed5764a22664cb8adfdba40a1c0be9ce6542293f57d01cb216ab1ee"}
+      ],
+      "n4_receipts": [
+        {"map_sha256": "6dea531b8ed5764a22664cb8adfdba40a1c0be9ce6542293f57d01cb216ab1ee",
+         "before_candidate": "89bcd3f9e288a9a0f0e9ed6f6e98a944b7a25248",
+         "after_candidate": "784cff2792279f2e4d16107e3a44b559731c9319",
+         "status": "OK", "environments": 28,
+         "record": "g0a-fix/u16-report.md section 4; raw g0a-fix/n4b (naming-candidate.py compare --collect-all, exit 0, 229 affected modules, wall 1431.9 s)"}
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Names only, in both layers: the bridge is the rename map plus N4's verdict, not a Lean theorem (goal section 7). The map holds 2599 entries at the tag.",
+        "N4's before is 89bcd3f9 = 730aae65 + tooling + three pre-G0a proof-script spelling edits in JauneConsensus (c7842939, e33582cc, 6b0b70b1; 8 files, 25+/25-); no executable definition changes and no N4 run covers them.",
+        "N4's after is 784cff27; `git diff 784cff27 904d7fff -- Jaune JauneConsensus JauneChecks Assurance` is empty and the map bytes are the same.",
+        "G0b re-targets one row: Jaune.gasStorageUpdate -> Jaune.Gas.sstoreResetGas (user decision; N4 OK, g0b/u21-report.md)."
+      ]
+    },
+    {
+      "id": "G0b-1",
+      "gate": "G0b",
+      "kind": "theorem",
+      "theorem": "Jaune.G0b.processCheckedSystemTransaction_bridge",
+      "module": "Jaune.Bridge.G0b",
+      "audit": [
+        {"kind": "union_walk", "file": "scripts/JauneUnionAxioms.lean"},
+        {"kind": "receipt", "axioms": ["propext", "Classical.choice", "Quot.sound"], "record": "lean_verify at the tag, g0b/u18-report.md section 3"}
+      ],
+      "old": {
+        "revision": "01241ec74e71a213c394e530c2101a7354fdd7e6",
+        "roots": ["Jaune.processCheckedSystemTransaction"],
+        "modules": ["Jaune.Transaction"],
+        "at_tag": ["Jaune.G0b.processCheckedSystemTransaction"],
+        "modules_at_tag": ["Jaune.Bridge.G0b"]
+      },
+      "new": {"names": ["Jaune.processCheckedSystemTransaction"], "modules": ["Jaune.Transaction"]},
+      "exempt": [],
+      "maps": [],
+      "n4_receipts": [],
+      "accepted": [
+        {"decision": "jsn-g0b-review-triage", "covers": "closure",
+         "text": "N4 was not run on the old side's dependency closure between 01241ec7 and the tag; the closure gained constructors and classifier/detail/tag arms in the same commit (review finding F3). The old bodies are byte-identical and both sides elaborate in one environment."}
+      ],
+      "gaps": [],
+      "notes": [
+        "Inputs: every Benv, Address, Bytes (every Fork through benv). Observation: the whole result through Except.mapError TransitionError.render.",
+        "X1 mutation: detail's system-call text `call failed` -> `call faileD` fails only this bridge (G0b.lean:103:21), g0b/u18-report.md section 4.",
+        "Constructor systemContractCallHalted at the tag, renamed systemContractCallFailed at 170c6eb2 (pure token substitution, decision jsn-g0b-review-triage); the tagged statement does not mention it."
+      ]
+    },
+    {
+      "id": "G0b-2",
+      "gate": "G0b",
+      "kind": "theorem",
+      "theorem": "Jaune.G0b.validateOmmerWithParent_bridge",
+      "module": "Jaune.Bridge.G0b",
+      "audit": [
+        {"kind": "union_walk", "file": "scripts/JauneUnionAxioms.lean"},
+        {"kind": "receipt", "axioms": ["propext", "Classical.choice", "Quot.sound"], "record": "lean_verify at the tag, g0b/u18-report.md section 3"}
+      ],
+      "old": {
+        "revision": "01241ec74e71a213c394e530c2101a7354fdd7e6",
+        "roots": ["Jaune.validateOmmerWithParent"],
+        "modules": ["Jaune.Transaction"],
+        "at_tag": ["Jaune.G0b.validateOmmerWithParent"],
+        "modules_at_tag": ["Jaune.Bridge.G0b"]
+      },
+      "new": {"names": ["Jaune.validateOmmerWithParent"], "modules": ["Jaune.Transaction"]},
+      "exempt": [],
+      "maps": [],
+      "n4_receipts": [],
+      "accepted": [
+        {"decision": "jsn-g0b-review-triage", "covers": "closure",
+         "text": "As G0b-1: no N4 on the old side's closure between 01241ec7 and the tag (review finding F3); bodies byte-identical, both sides elaborate in one environment."}
+      ],
+      "gaps": [],
+      "notes": [
+        "Inputs: every ForkRules, BlockChain, Header, Block. Observation: the whole result through Except.mapError TransitionError.render.",
+        "X1 mutation: ommer text `is invalid` -> `is Invalid` fails only this bridge (G0b.lean:117:16), g0b/u18-report.md section 4."
+      ]
+    },
+    {
+      "id": "G1-1",
+      "gate": "G1",
+      "kind": "theorem",
+      "theorem": "Jaune.processMessageCall_legacy",
+      "module": "Jaune.Bridge.Top",
+      "audit": [
+        {"kind": "union_walk", "file": "scripts/JauneUnionAxioms.lean"},
+        {"kind": "receipt", "axioms": ["propext", "Classical.choice", "Quot.sound"], "record": "#print axioms, w1/u29-report.md"}
+      ],
+      "old": {
+        "revision": "210683f34a2378627ce50062e56cddeb81312f2e",
+        "roots": ["Jaune.processMessageCall"],
+        "modules": ["Jaune.Transaction"],
+        "at_tag": ["Jaune.Legacy.processMessageCall"],
+        "modules_at_tag": ["Jaune.Transaction"]
+      },
+      "new": {"names": ["Jaune.processMessageCall"], "modules": ["Jaune.Transaction"]},
+      "exempt": [],
+      "maps": [
+        {"path": "delta-map-1.json", "revision": null,
+         "sha256": "efa6e653b340c97c6e57fbe8ebd362b8e1a37f3e2da9dab5ff50946ce51b14de",
+         "gap": "relocation-1 delta map (115 rows) kept with the u29 captures, not committed to Jaune"},
+        {"path": "delta-map-2.json", "revision": null,
+         "sha256": "8d980476b69b21a4f8df69423a4bfcfefc4801e8c9a33583e283a5b18d62dd4d",
+         "gap": "relocation-2 delta map (namespace Jaune.Staging -> Jaune) kept with the u29 captures, not committed to Jaune"}
+      ],
+      "n4_receipts": [
+        {"map_sha256": "efa6e653b340c97c6e57fbe8ebd362b8e1a37f3e2da9dab5ff50946ce51b14de",
+         "before_candidate": "6893f89ddd0ec090bd889ebaa40acb3c4483431f",
+         "after_candidate": "80751a2b687fc75e734787fce990cb62084ab5f2",
+         "status": "RESIDUAL",
+         "residual": "one mismatch only: the hand-edited #guard_msgs expected text in Examples.Arithmetic (NextOp.step -> Legacy.NextOp.step, Step.cont -> Legacy.Step.cont), in the Examples and ExecutionAxioms environments",
+         "record": "w1/u29-report.md N4 table; before = 6893f89d plus reviewed sites"},
+        {"map_sha256": "8d980476b69b21a4f8df69423a4bfcfefc4801e8c9a33583e283a5b18d62dd4d",
+         "before_candidate": "8e8989be1a70c8f96baeed3445ca07d2cb9f2414",
+         "after_candidate": "c75ad1325ff6bc7f89363f377183db1d775dc14a",
+         "status": "OK", "environments": 29,
+         "record": "w1/u29-report.md N4 table (24 affected modules, 1 excluded importer)"}
+      ],
+      "accepted": [
+        {"decision": "jsn-w1-u29-accept", "covers": "trace",
+         "text": "Trace observation: the message path is proved (runFrame_json_legacy, exec_json_legacy, w1/u27-report.md); the Amsterdam transaction path is covered by check-trace.py only."},
+        {"decision": "G1 landing deviation (master, 2026-11-18)", "covers": "old-side-location",
+         "text": "G1's old sides waited as Jaune.Legacy.* inside specification modules as well as in Jaune/Bridge/*; not accepted as a pattern (from G2 on, old sides move to Jaune/Bridge/G2a and G2b, decision jsn-g2-order)."}
+      ],
+      "gaps": [
+        "old-side closure from 210683f3 to gate/g1 is N4-checked only across the two relocation commits (80751a2b, c75ad132); the commits between 210683f3 and 6893f89d have no closure comparison"
+      ],
+      "notes": [
+        "Anchor processMessageCall (gate anchor); block transition by congruence (processMessageCall_eq_legacy, decision jsn-block-anchor-composition). Inputs: every Msg, every Fork. Observation: the whole result, plain Eq.",
+        "Post-tag chain acf1e0b7 -> c3239790 (deletes, renames D2/D2b with N4 OK, documents) audited by the master on 2026-11-18; it follows the tag and does not touch the old side at the tag."
+      ]
+    }
+  ],
+  "entry_template": {
+    "about": "Copy for a G2a/G2b row and fill every field; delete `about`. kind theorem; old.roots pair with old.at_tag; maps in application order (committed under scripts/maps/ with their revision, or revision null with `gap`); exempt rows name the ledger entry whose bridge admits the edit and, when the edit replaces the helper, its tag-side `replacement`.",
+    "id": "G2a-N",
+    "gate": "G2a",
+    "kind": "theorem",
+    "theorem": "Jaune.Bridge.G2a.<name>_eq",
+    "module": "Jaune.Bridge.G2a.<Module>",
+    "audit": [
+      {"kind": "expect_axioms", "file": "Jaune/Check/G2aBridgeAudit.lean"}
+    ],
+    "old": {
+      "revision": "ba15f397195d9c73c89aec7bfc179e0f32a3e8dc",
+      "roots": ["Jaune.<oldRoot>"],
+      "modules": ["Jaune.<OldModule>"],
+      "at_tag": ["Jaune.Bridge.G2a.Old.<oldRoot>"],
+      "modules_at_tag": ["Jaune.Bridge.G2a.Old.<Module>"]
+    },
+    "new": {"names": ["Jaune.<newName>"], "modules": ["Jaune.<NewModule>"]},
+    "exempt": [
+      {"name": "Jaune.<editedHelper>", "replacement": "Jaune.<replacementAtTag>", "bridged_by": "G2a-M"}
+    ],
+    "maps": [
+      {"path": "scripts/maps/<map>.json", "revision": "<full sha>", "sha256": "<sha256>"}
+    ],
+    "n4_receipts": [
+      {"map_sha256": "<sha256>", "before_candidate": "<full sha>", "after_candidate": "<full sha>", "status": "OK", "record": "<goal evidence>"}
+    ],
+    "accepted": [],
+    "gaps": [],
+    "notes": []
+  }
+}
