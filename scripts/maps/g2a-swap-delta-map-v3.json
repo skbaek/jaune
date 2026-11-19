@@ -1,0 +1,2404 @@
+{
+ "schema_version": 1,
+ "retired_tokens": [
+  "Acct",
+  "Adr",
+  "B128",
+  "B256",
+  "BLT",
+  "Benv",
+  "CFork",
+  "Ctx",
+  "Devm",
+  "Gated",
+  "Jinst",
+  "Linst",
+  "Mach",
+  "Mem",
+  "Meta",
+  "Msg",
+  "NTB",
+  "NTBs",
+  "Ninst",
+  "Pres",
+  "Rinst",
+  "Sevm",
+  "Stor",
+  "Tenv",
+  "Tra",
+  "Tx",
+  "WQ",
+  "XStep",
+  "Xinst",
+  "Xlot",
+  "bal",
+  "hp",
+  "txsRoot",
+  "vbytes",
+  "wds"
+ ],
+ "allowed_abbreviations": [
+  "API",
+  "BLAKE2",
+  "BLS",
+  "BPO",
+  "Bool",
+  "ByteArray",
+  "Bytes",
+  "CLI",
+  "EC",
+  "EIP",
+  "EOA",
+  "EVM",
+  "Ecrecover",
+  "Fp",
+  "Fp2",
+  "G1",
+  "G2",
+  "Hash32",
+  "IO",
+  "Int",
+  "JSON",
+  "KECCAK",
+  "KZG",
+  "Modexp",
+  "Nat",
+  "RIPEMD160",
+  "RLP",
+  "SHA256",
+  "SSZ",
+  "U128",
+  "U16",
+  "U256",
+  "U32",
+  "U64",
+  "U8",
+  "UInt16",
+  "UInt32",
+  "UInt64",
+  "UInt8",
+  "YAML",
+  "pc",
+  "secp256k1",
+  "tx"
+ ],
+ "entries": [
+  {
+   "old": "Jaune.Staging.EvmError.IsFault",
+   "new": "Jaune.EvmError.IsFault",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.EvmError.toFault",
+   "new": "Jaune.EvmError.toFault",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.EvmError.toFault_toEvmError",
+   "new": "Jaune.EvmError.toFault_toEvmError",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Message.run",
+   "new": "Jaune.TopLevel.run",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Message.run_result",
+   "new": "Jaune.TopLevel.run_result",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.MessageRun.output",
+   "new": "Jaune.Bridge.G2a.Phased.MessageRun.output",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a phased predecessor to the bridge (u57 \u00a71, u63 step 4)",
+   "from_module": "Jaune.Run.Message",
+   "to_module": "Jaune.Bridge.G2a.Phased",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.PreparationError",
+   "new": "Jaune.PreparationError",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TopLevel.prepare",
+   "new": "Jaune.TopLevel.prepare",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TopLevel.prepare.amsterdam",
+   "new": "Jaune.TopLevel.prepare.amsterdam",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TopLevel.prepare.call",
+   "new": "Jaune.TopLevel.prepare.call",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TopLevel.prepare.create",
+   "new": "Jaune.TopLevel.prepare.create",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.applyValidatedDelegationAmsterdam_preparationErrors",
+   "new": "Jaune.applyValidatedDelegationAmsterdam_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.chargeAuthBaseAmsterdam_preparationErrors",
+   "new": "Jaune.chargeAuthBaseAmsterdam_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.chargeGas_preparationErrors",
+   "new": "Jaune.chargeGas_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.chargeNewAuthorityAmsterdam_preparationErrors",
+   "new": "Jaune.chargeNewAuthorityAmsterdam_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.chargePaidAccountWriteAmsterdam_preparationErrors",
+   "new": "Jaune.chargePaidAccountWriteAmsterdam_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.chargeStateGas_preparationErrors",
+   "new": "Jaune.chargeStateGas_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.dispatchTopLevelAmsterdam_preparationErrors",
+   "new": "Jaune.dispatchTopLevelAmsterdam_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.prepareTopLevelAmsterdam_error",
+   "new": "Jaune.prepareTopLevelAmsterdam_error",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.prepareTopLevelAmsterdam_error_ne_revert",
+   "new": "Jaune.prepareTopLevelAmsterdam_error_ne_revert",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.prepareTopLevelAmsterdam_preparationErrors",
+   "new": "Jaune.prepareTopLevelAmsterdam_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processMessageCall",
+   "new": "Jaune.Bridge.G2a.Phased.processMessageCall",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a phased predecessor to the bridge (u57 \u00a71, u63 step 4)",
+   "from_module": "Jaune.Run.Message",
+   "to_module": "Jaune.Bridge.G2a.Phased",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processMessageCall.authorize_error_isFault",
+   "new": "Jaune.TopLevel.applyAuthorizations_error_isFault",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.resolveTopLevelCallAmsterdam_preparationErrors",
+   "new": "Jaune.resolveTopLevelCallAmsterdam_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.setDelegationAmsterdamLoop_preparationErrors",
+   "new": "Jaune.setDelegationAmsterdamLoop_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.setDelegationAmsterdamStep_preparationErrors",
+   "new": "Jaune.setDelegationAmsterdamStep_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.setDelegationAmsterdam_preparationErrors",
+   "new": "Jaune.setDelegationAmsterdam_preparationErrors",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.setDelegationLoop_error_isFault",
+   "new": "Jaune.setDelegationLoop_error_isFault",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.setDelegationStep_error_isFault",
+   "new": "Jaune.setDelegationStep_error_isFault",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.setDelegation_error_isFault",
+   "new": "Jaune.setDelegation_error_isFault",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Transaction.check",
+   "new": "Jaune.Transaction.admit",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Transaction.prepare",
+   "new": "Jaune.Transaction.prepare",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Transaction.settle",
+   "new": "Jaune.Bridge.G2a.Phased.Transaction.settle",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a phased predecessor to the bridge (u57 \u00a71, u63 step 4)",
+   "from_module": "Jaune.Run.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Phased",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processTransaction",
+   "new": "Jaune.Bridge.G2a.Phased.processTransaction",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a phased predecessor to the bridge (u57 \u00a71, u63 step 4)",
+   "from_module": "Jaune.Run.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Phased",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.B2.Transaction.run",
+   "new": "Jaune.Transaction.run",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.B2.Transaction.run_output",
+   "new": "Jaune.Bridge.G2a.Phased.B2.Transaction.run_output",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a phased predecessor to the bridge (u57 \u00a71, u63 step 4)",
+   "from_module": "Jaune.Run.Settle",
+   "to_module": "Jaune.Bridge.G2a.Phased",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.B2.Transaction.settle",
+   "new": "Jaune.Bridge.G2a.Phased.B2.Transaction.settle",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a phased predecessor to the bridge (u57 \u00a71, u63 step 4)",
+   "from_module": "Jaune.Run.Settle",
+   "to_module": "Jaune.Bridge.G2a.Phased",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.B2.Transaction.settleRun",
+   "new": "Jaune.Transaction.settleRun",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.B2.processTransaction",
+   "new": "Jaune.Bridge.G2a.Phased.B2.processTransaction",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a phased predecessor to the bridge (u57 \u00a71, u63 step 4)",
+   "from_module": "Jaune.Run.Settle",
+   "to_module": "Jaune.Bridge.G2a.Phased",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.beaconRootsCall",
+   "new": "Jaune.beaconRootsCall",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.historyStorageCall",
+   "new": "Jaune.historyStorageCall",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processCheckedSystemTransaction",
+   "new": "Jaune.processCheckedSystemTransaction",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processGeneralPurposeRequests",
+   "new": "Jaune.processGeneralPurposeRequests",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processGeneralPurposeRequestsAt",
+   "new": "Jaune.processGeneralPurposeRequestsAt",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processSystemTransaction",
+   "new": "Jaune.processSystemTransaction",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processUncheckedSystemTransaction",
+   "new": "Jaune.processUncheckedSystemTransaction",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.runRequestContracts",
+   "new": "Jaune.runRequestContracts",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.Prefix.accessList",
+   "new": "Jaune.Body.Prefix.blockAccessListBuilder",
+   "kind": "field",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.Prefix.builtAccessList",
+   "new": "Jaune.Body.Prefix.blockAccessList",
+   "kind": "field",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.fold",
+   "new": "Jaune.Body.fold",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.importer",
+   "new": "Jaune.Body.importer",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.ops",
+   "new": "Jaune.Body.ops",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.postOps",
+   "new": "Jaune.Body.postOps",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.preOps",
+   "new": "Jaune.Body.preOps",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.run",
+   "new": "Jaune.Body.run",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.step",
+   "new": "Jaune.Body.step",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.transactionOps",
+   "new": "Jaune.Body.transactionOps",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.applyBody",
+   "new": "Jaune.applyBody",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.creditAll",
+   "new": "Jaune.creditAll",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.stateTransitionCoreE",
+   "new": "Jaune.Bridge.G2a.Phased.stateTransitionCoreE",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a phased predecessor to the bridge (u57 \u00a71, u63 step 4)",
+   "from_module": "Jaune.Run.Body",
+   "to_module": "Jaune.Bridge.G2a.Phased",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Block.check",
+   "new": "Jaune.Block.check",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Block.checkAccessListHash",
+   "new": "Jaune.Block.checkAccessListHash",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Block.checkCommitments",
+   "new": "Jaune.Block.checkCommitments",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.E.stateTransitionCoreE",
+   "new": "Jaune.stateTransitionCoreE",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TraceTransaction.prepareTransaction",
+   "new": "Jaune.TraceTransaction.prepareTransaction",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TraceTransaction.runMessage",
+   "new": "Jaune.TraceTransaction.runMessage",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TraceTransaction.runMessage_erasure",
+   "new": "Jaune.TraceTransaction.runMessage_erasure",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TraceTransaction.runTransaction",
+   "new": "Jaune.TraceTransaction.runTransaction",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TraceTransaction.runTransaction_erasure",
+   "new": "Jaune.TraceTransaction.runTransaction_erasure",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.B2.Transaction.run_summary",
+   "new": "Jaune.Transaction.run_summary",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.B2.Transaction.run_writes",
+   "new": "Jaune.Transaction.run_writes",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.fold_append",
+   "new": "Jaune.Body.fold_append",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.fold_eq_apply",
+   "new": "Jaune.Body.fold_eq_apply",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.fold_eq_run",
+   "new": "Jaune.Body.fold_eq_run",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.fold_legacyGasAccounting",
+   "new": "Jaune.Body.fold_legacyGasAccounting",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.fold_receipts_of_noTransaction",
+   "new": "Jaune.Body.fold_receipts_of_noTransaction",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.fold_transactions_receipts",
+   "new": "Jaune.Body.fold_transactions_receipts",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.importer_depositRequests",
+   "new": "Jaune.Body.importer_depositRequests",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.importer_legacyGasAccounting",
+   "new": "Jaune.Body.importer_legacyGasAccounting",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.run_append",
+   "new": "Jaune.Body.run_append",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.run_apply",
+   "new": "Jaune.Body.run_apply",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.run_summary",
+   "new": "Jaune.Body.run_summary",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.step_apply",
+   "new": "Jaune.Body.step_apply",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.step_frame",
+   "new": "Jaune.Body.step_frame",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.step_legacyGasAccounting",
+   "new": "Jaune.Body.step_legacyGasAccounting",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.step_summary",
+   "new": "Jaune.Body.step_summary",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.step_transaction_output",
+   "new": "Jaune.Body.step_transaction_output",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.E.stateTransitionCoreE_eq_run",
+   "new": "Jaune.stateTransitionCoreE_eq_run",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Except.ok_bind'",
+   "new": "Jaune.Except.ok_bind'",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.IsDepositLog",
+   "new": "Jaune.IsDepositLog",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.applyBody_legacyGasAccounting",
+   "new": "Jaune.applyBody_legacyGasAccounting",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.checkTransaction_congr",
+   "new": "Jaune.checkTransaction_congr",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.forIn_congr_mem",
+   "new": "Jaune.forIn_congr_mem",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.forIn_filter_mapM",
+   "new": "Jaune.forIn_filter_mapM",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.forIn_lookup_flatMap",
+   "new": "Jaune.forIn_lookup_flatMap",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.length_putIndex",
+   "new": "Jaune.length_putIndex",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.length_putIndex_aux",
+   "new": "Jaune.length_putIndex_aux",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.outputSummary",
+   "new": "Jaune.outputSummary",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.parseDepositRequests_congr",
+   "new": "Jaune.parseDepositRequests_congr",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.parseDepositRequests_of_receipts",
+   "new": "Jaune.parseDepositRequests_of_receipts",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.putIndex_aux_fst",
+   "new": "Jaune.putIndex_aux_fst",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.receiptsRead",
+   "new": "Jaune.receiptsRead",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.receiptsRead_eq",
+   "new": "Jaune.receiptsRead_eq",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.receiptsRead_insert",
+   "new": "Jaune.receiptsRead_insert",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.B2.Transaction.run_canonical",
+   "new": "Jaune.Transaction.run_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.B2.Transaction.settleRun_canonical",
+   "new": "Jaune.Transaction.settleRun_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.fold_canonical",
+   "new": "Jaune.Body.fold_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.importer_canonical",
+   "new": "Jaune.Body.importer_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.run_canonical",
+   "new": "Jaune.Body.run_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Body.step_canonical",
+   "new": "Jaune.Body.step_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.E.stateTransitionCoreE_canonical",
+   "new": "Jaune.stateTransitionCoreE_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Message.run_canonical",
+   "new": "Jaune.TopLevel.run_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.State.Canonical.creditAll",
+   "new": "Jaune.State.Canonical.creditAll",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TopLevel.prepare_canonical",
+   "new": "Jaune.TopLevel.prepare_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Transaction.check_benv",
+   "new": "Jaune.Transaction.check_benv",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Transaction.prepare_canonical",
+   "new": "Jaune.Transaction.prepare_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.applyBody_canonical",
+   "new": "Jaune.applyBody_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.applyValidatedDelegationAmsterdam_canonical",
+   "new": "Jaune.applyValidatedDelegationAmsterdam_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.beaconRootsCall_canonical",
+   "new": "Jaune.beaconRootsCall_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.chargeAuthBaseAmsterdam_canonical",
+   "new": "Jaune.chargeAuthBaseAmsterdam_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.chargeNewAuthorityAmsterdam_canonical",
+   "new": "Jaune.chargeNewAuthorityAmsterdam_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.chargePaidAccountWriteAmsterdam_canonical",
+   "new": "Jaune.chargePaidAccountWriteAmsterdam_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.dispatchTopLevelAmsterdam_canonical",
+   "new": "Jaune.dispatchTopLevelAmsterdam_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.finishTopLevelAmsterdam_canonical",
+   "new": "Jaune.finishTopLevelAmsterdam_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.historyStorageCall_canonical",
+   "new": "Jaune.historyStorageCall_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.prepareTopLevelAmsterdam_canonical",
+   "new": "Jaune.prepareTopLevelAmsterdam_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.preparedTopLevelMessage_canonical",
+   "new": "Jaune.preparedTopLevelMessage_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processCheckedSystemTransaction_canonical",
+   "new": "Jaune.processCheckedSystemTransaction_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processGeneralPurposeRequestsAt_canonical",
+   "new": "Jaune.processGeneralPurposeRequestsAt_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processGeneralPurposeRequests_canonical",
+   "new": "Jaune.processGeneralPurposeRequests_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processSystemTransaction_canonical",
+   "new": "Jaune.processSystemTransaction_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.processUncheckedSystemTransaction_canonical",
+   "new": "Jaune.processUncheckedSystemTransaction_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.resolveTopLevelCallAmsterdam_canonical",
+   "new": "Jaune.resolveTopLevelCallAmsterdam_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.runRequestContracts_canonical",
+   "new": "Jaune.runRequestContracts_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.setDelegationAmsterdamLoop_canonical",
+   "new": "Jaune.setDelegationAmsterdamLoop_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.setDelegationAmsterdamStep_canonical",
+   "new": "Jaune.setDelegationAmsterdamStep_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.setDelegationAmsterdam_canonical",
+   "new": "Jaune.setDelegationAmsterdam_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Block.check_stateRoot",
+   "new": "Jaune.Block.check_stateRoot",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.E.stateTransitionCoreE_eq_ok",
+   "new": "Jaune.stateTransitionCoreE_eq_ok",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.E.stateTransitionCoreE_header",
+   "new": "Jaune.stateTransitionCoreE_header",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.E.stateTransitionCoreE_mapError",
+   "new": "Jaune.stateTransitionCoreE_mapError",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.E.stateTransitionCoreE_preserves_chainId",
+   "new": "Jaune.stateTransitionCoreE_preserves_chainId",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.except_mapError_bind",
+   "new": "Jaune.except_mapError_bind",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.except_mapError_comp",
+   "new": "Jaune.except_mapError_comp",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.except_mapError_id",
+   "new": "Jaune.except_mapError_id",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.importExplicit",
+   "new": "Jaune.importExplicit",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.importScheduled",
+   "new": "Jaune.importScheduled",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.Message.run_topFrame",
+   "new": "Jaune.TopLevel.run_topFrame",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TopLevel.prepare.amsterdam_topFrame",
+   "new": "Jaune.TopLevel.prepare.amsterdam_topFrame",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TopLevel.prepare_topFrame",
+   "new": "Jaune.TopLevel.prepare_topFrame",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.TraceTransaction.runTransaction_value_eq",
+   "new": "Jaune.Bridge.G2a.TraceTransaction.runTransaction_value_eq",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); the trace value bridge lives in the bridge namespace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Frame.Result.refundCounter",
+   "new": "Jaune.Bridge.G2a.Old.Frame.Result.refundCounter",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.MessageCall.Top",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Frame.output",
+   "new": "Jaune.Bridge.G2a.Old.Frame.output",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.MessageCall.Top",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Frame.outputAmsterdam",
+   "new": "Jaune.Bridge.G2a.Old.Frame.outputAmsterdam",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.MessageCall.Top",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.accountReads",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.accountReads",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.accountsToDelete",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.accountsToDelete",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.error",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.error",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.gasLeft",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.gasLeft",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.logs",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.logs",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.refundCounter",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.refundCounter",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.returnData",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.returnData",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.stateGasLeft",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.stateGasLeft",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.stateGasUsed",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.stateGasUsed",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.storageReads",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.storageReads",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.storageWrites",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.storageWrites",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.MsgCallOutput.touchedAccounts",
+   "new": "Jaune.Bridge.G2a.Old.MessageCallOutput.touchedAccounts",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Execution",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.PreparedTransaction",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.PreparedTransaction",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.PreparedTransaction.benv",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.PreparedTransaction.benv",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.PreparedTransaction.bout",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.PreparedTransaction.bout",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.PreparedTransaction.calldataFloorGasCost",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.PreparedTransaction.calldataFloorGasCost",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.PreparedTransaction.effectiveGasPrice",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.PreparedTransaction.effectiveGasPrice",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.PreparedTransaction.msg",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.PreparedTransaction.msg",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.PreparedTransaction.sender",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.PreparedTransaction.sender",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.PreparedTransaction.txBlobGasUsed",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.PreparedTransaction.txBlobGasUsed",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.TransactionResult",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.TransactionResult",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.TransactionResult.messageOutput",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.TransactionResult.messageOutput",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.finishTransaction",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.finishTransaction",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.prepareTransaction",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.prepareTransaction",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.processTransaction_eq",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.processTransaction_eq",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.runMessage",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.runMessage",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.runMessageCall",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.runMessageCall",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.runMessageCreate",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.runMessageCreate",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.runTopLevelAmsterdam",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.runTopLevelAmsterdam",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.runTopLevelAmsterdam_erasure",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.runTopLevelAmsterdam_erasure",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.runTransaction",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.runTransaction",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.runTransaction_erasure",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.runTransaction_erasure",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.TraceTransaction.runTransaction_id_erasure",
+   "new": "Jaune.Bridge.G2a.Old.TraceTransaction.runTransaction_id_erasure",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.TraceTransaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Trace",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.applyBody",
+   "new": "Jaune.Bridge.G2a.Old.applyBody",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.applyBody_canonical",
+   "new": "Jaune.Bridge.G2a.Old.applyBody_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.applyBody_legacyGasAccounting",
+   "new": "Jaune.Bridge.G2a.Old.applyBody_legacyGasAccounting",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.applyTransactions",
+   "new": "Jaune.Bridge.G2a.Old.applyTransactions",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.applyTransactions_canonical",
+   "new": "Jaune.Bridge.G2a.Old.applyTransactions_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.applyTransactions_init_legacyGasAccounting",
+   "new": "Jaune.Bridge.G2a.Old.applyTransactions_init_legacyGasAccounting",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.applyTransactions_legacyGasAccounting",
+   "new": "Jaune.Bridge.G2a.Old.applyTransactions_legacyGasAccounting",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.beaconRootsCall",
+   "new": "Jaune.Bridge.G2a.Old.beaconRootsCall",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.beaconRootsCall_canonical",
+   "new": "Jaune.Bridge.G2a.Old.beaconRootsCall_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.historyStorageCall",
+   "new": "Jaune.Bridge.G2a.Old.historyStorageCall",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.historyStorageCall_canonical",
+   "new": "Jaune.Bridge.G2a.Old.historyStorageCall_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.payRewards",
+   "new": "Jaune.Bridge.G2a.Old.payRewards",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.payRewards_canonical",
+   "new": "Jaune.Bridge.G2a.Old.payRewards_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processCheckedSystemTransaction",
+   "new": "Jaune.Bridge.G2a.Old.processCheckedSystemTransaction",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processCheckedSystemTransaction_canonical",
+   "new": "Jaune.Bridge.G2a.Old.processCheckedSystemTransaction_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processGeneralPurposeRequests",
+   "new": "Jaune.Bridge.G2a.Old.processGeneralPurposeRequests",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processGeneralPurposeRequestsAt",
+   "new": "Jaune.Bridge.G2a.Old.processGeneralPurposeRequestsAt",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processGeneralPurposeRequests_canonical",
+   "new": "Jaune.Bridge.G2a.Old.processGeneralPurposeRequests_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processGeneralPurposeRequests_legacyGasAccounting",
+   "new": "Jaune.Bridge.G2a.Old.processGeneralPurposeRequests_legacyGasAccounting",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall",
+   "new": "Jaune.Bridge.G2a.Old.processMessageCall",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.call",
+   "new": "Jaune.Bridge.G2a.Old.processMessageCall.call",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.call_canonical",
+   "new": "Jaune.Bridge.G2a.Old.processMessageCall.call_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.create",
+   "new": "Jaune.Bridge.G2a.Old.processMessageCall.create",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.create_canonical",
+   "new": "Jaune.Bridge.G2a.Old.processMessageCall.create_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall_canonical",
+   "new": "Jaune.Bridge.G2a.Old.processMessageCall_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processSystemTransaction",
+   "new": "Jaune.Bridge.G2a.Old.processSystemTransaction",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processSystemTransaction_canonical",
+   "new": "Jaune.Bridge.G2a.Old.processSystemTransaction_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processTopLevelAmsterdam",
+   "new": "Jaune.Bridge.G2a.Old.processTopLevelAmsterdam",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processTransaction",
+   "new": "Jaune.Bridge.G2a.Old.processTransaction",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processTransaction_canonical",
+   "new": "Jaune.Bridge.G2a.Old.processTransaction_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processTransaction_legacyGasAccounting",
+   "new": "Jaune.Bridge.G2a.Old.processTransaction_legacyGasAccounting",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processUncheckedSystemTransaction",
+   "new": "Jaune.Bridge.G2a.Old.processUncheckedSystemTransaction",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processUncheckedSystemTransaction_canonical",
+   "new": "Jaune.Bridge.G2a.Old.processUncheckedSystemTransaction_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.requestsPass",
+   "new": "Jaune.Bridge.G2a.Old.requestsPass",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.requestsPass_canonical",
+   "new": "Jaune.Bridge.G2a.Old.requestsPass_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.requestsPass_legacyGasAccounting",
+   "new": "Jaune.Bridge.G2a.Old.requestsPass_legacyGasAccounting",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.runRequestContracts",
+   "new": "Jaune.Bridge.G2a.Old.runRequestContracts",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.runRequestContracts_canonical",
+   "new": "Jaune.Bridge.G2a.Old.runRequestContracts_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.settleTopLevelPreparationFailure",
+   "new": "Jaune.Bridge.G2a.Old.settleTopLevelPreparationFailure",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction.Parts",
+   "to_module": "Jaune.Bridge.G2a.Old.Message",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.stateTransitionCoreE",
+   "new": "Jaune.Bridge.G2a.Old.stateTransitionCoreE",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.stateTransitionCoreE_canonical",
+   "new": "Jaune.Bridge.G2a.Old.stateTransitionCoreE_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.stateTransitionCoreE_eq_ok",
+   "new": "Jaune.Bridge.G2a.Old.stateTransitionCoreE_eq_ok",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.stateTransitionCoreE_header",
+   "new": "Jaune.Bridge.G2a.Old.stateTransitionCoreE_header",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.stateTransitionCoreE_mapError",
+   "new": "Jaune.Bridge.G2a.Old.stateTransitionCoreE_mapError",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.stateTransitionCoreE_preserves_chainId",
+   "new": "Jaune.Bridge.G2a.Old.stateTransitionCoreE_preserves_chainId",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.withdrawalsPass",
+   "new": "Jaune.Bridge.G2a.Old.withdrawalsPass",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.withdrawalsPass_canonical",
+   "new": "Jaune.Bridge.G2a.Old.withdrawalsPass_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.withdrawalsPass_legacyGasAccounting",
+   "new": "Jaune.Bridge.G2a.Old.withdrawalsPass_legacyGasAccounting",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Body",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.frameOutputAmsterdam_canonical",
+   "new": "Jaune.Bridge.G2a.Old.frameOutputAmsterdam_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.frameOutput_canonical",
+   "new": "Jaune.Bridge.G2a.Old.frameOutput_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processTopLevelAmsterdam_canonical",
+   "new": "Jaune.Bridge.G2a.Old.processTopLevelAmsterdam_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.runTopOutput_canonical",
+   "new": "Jaune.Bridge.G2a.Old.runTopOutput_canonical",
+   "kind": "relocation",
+   "source": "Plain English (rule 4); G2a switch relocation 1, old side to the bridge (u57 \u00a71)",
+   "from_module": "Jaune.Transaction",
+   "to_module": "Jaune.Bridge.G2a.Old.Transaction",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.transition_mapError_id",
+   "new": "Jaune.transition_mapError_id",
+   "kind": "declaration",
+   "public_from": "_private.Jaune.Transaction.0.Jaune.transition_mapError_id",
+   "source": "Plain English (rule 4); made public so the relocated stateTransitionCoreE_mapError can use it (u57 \u00a73.1 precedent)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.transition_mapError_bind",
+   "new": "Jaune.transition_mapError_bind",
+   "kind": "declaration",
+   "public_from": "_private.Jaune.Transaction.0.Jaune.transition_mapError_bind",
+   "source": "Plain English (rule 4); made public so the relocated stateTransitionCoreE_mapError can use it (u57 \u00a73.1 precedent)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.transition_mapError_comp",
+   "new": "Jaune.transition_mapError_comp",
+   "kind": "declaration",
+   "public_from": "_private.Jaune.Transaction.0.Jaune.transition_mapError_comp",
+   "source": "Plain English (rule 4); made public so the relocated stateTransitionCoreE_mapError can use it (u57 \u00a73.1 precedent)",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.authorize",
+   "new": "Jaune.TopLevel.applyAuthorizations",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); u57 \u00a72 rename tail: the processMessageCall leftovers are top-level preparation",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.authorize_canonical",
+   "new": "Jaune.TopLevel.applyAuthorizations_canonical",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); u57 \u00a72 rename tail: the processMessageCall leftovers are top-level preparation",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.authorize_codeAddress",
+   "new": "Jaune.TopLevel.applyAuthorizations_codeAddress",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); u57 \u00a72 rename tail: the processMessageCall leftovers are top-level preparation",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.authorize_disabled",
+   "new": "Jaune.TopLevel.applyAuthorizations_disabled",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); u57 \u00a72 rename tail: the processMessageCall leftovers are top-level preparation",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.authorize_enabled",
+   "new": "Jaune.TopLevel.applyAuthorizations_enabled",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); u57 \u00a72 rename tail: the processMessageCall leftovers are top-level preparation",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.TopFrame",
+   "new": "Jaune.TopLevel.TopFrame",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); u57 \u00a72 rename tail: the processMessageCall leftovers are top-level preparation",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.TopFrame.amsterdam",
+   "new": "Jaune.TopLevel.TopFrame.amsterdam",
+   "kind": "field",
+   "source": "Plain English (rule 4); u57 \u00a72 rename tail: the processMessageCall leftovers are top-level preparation",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.TopFrame.call",
+   "new": "Jaune.TopLevel.TopFrame.call",
+   "kind": "field",
+   "source": "Plain English (rule 4); u57 \u00a72 rename tail: the processMessageCall leftovers are top-level preparation",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.TopFrame.create",
+   "new": "Jaune.TopLevel.TopFrame.create",
+   "kind": "field",
+   "source": "Plain English (rule 4); u57 \u00a72 rename tail: the processMessageCall leftovers are top-level preparation",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.processMessageCall.topFrame_kindCoherent",
+   "new": "Jaune.TopLevel.topFrame_kindCoherent",
+   "kind": "declaration",
+   "source": "Plain English (rule 4); u57 \u00a72 rename tail: the processMessageCall leftovers are top-level preparation",
+   "layer": "execution",
+   "rule": "4"
+  },
+  {
+   "old": "Jaune.Staging.B2.TransactionRun",
+   "new": "Jaune.TransactionRun",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.Block.Commitments",
+   "new": "Jaune.Block.Commitments",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.BlockRun",
+   "new": "Jaune.BlockRun",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.Body.Prefix",
+   "new": "Jaune.Body.Prefix",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.BodyOp",
+   "new": "Jaune.BodyOp",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.MessageRun",
+   "new": "Jaune.TopLevelRun",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.OpRun",
+   "new": "Jaune.OpRun",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.PreparationErrors",
+   "new": "Jaune.PreparationErrors",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.TopLevel.Preparation",
+   "new": "Jaune.TopLevel.Preparation",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.TraceTransaction.TransactionResult",
+   "new": "Jaune.TraceTransaction.TransactionResult",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.Transaction.Checked",
+   "new": "Jaune.Transaction.Admitted",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  },
+  {
+   "old": "Jaune.Staging.Transaction.Prepared",
+   "new": "Jaune.Transaction.Prepared",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "Plain English (rule 4); G2a switch relocation 2, staged name to final (u57 \u00a72); the type, its fields, constructors and functions"
+  }
+ ]
+}
