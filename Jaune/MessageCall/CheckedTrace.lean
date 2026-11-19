@@ -284,14 +284,14 @@ def runFrame {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m) (f : Fram
   | .done settled =>
     sink (.entered context (frame f) (.done settled))
     sink (.settled context (frame f) settled)
-    pure ⟨settled, 1, by simp only [Checked.Frame.runTop, hentry]⟩
+    pure ⟨settled, 1, by simp only [Checked.Frame.runTop_eq, hentry]⟩
   | .run r =>
     sink (.entered context (frame f) (.run (evm f.message r)))
     let result ← exec sink f.message r context 1
     let settled := result.value >>= settle f
     sink (.settled context (frame f) settled)
     pure ⟨settled, result.nextFrame, by
-      simp only [Checked.Frame.runTop, hentry, settled, result.erases]⟩
+      simp only [Checked.Frame.runTop_eq, hentry, settled, result.erases]⟩
 
 /-- Exact connection to the checked top-level frame's settled result. -/
 theorem runFrame_erasure {f : Frame} (result : FrameResult f) :

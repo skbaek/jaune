@@ -628,7 +628,7 @@ theorem exec_canonical {run : Frame.Running} (h : Frame.Running.Canonical run)
 theorem Frame.runTop_canonical {f : Frame} (hf : f.Canonical) {r : Frame.Result}
     (h : Frame.runTop f = .ok r) : (f.worldAfter r).Canonical := by
   have hr : r.Canonical := by
-    unfold Frame.runTop at h
+    rw [Frame.runTop_eq] at h
     have hi := enterWith_canonical hf f.checkpoint
     cases he : enterWith f f.checkpoint with
     | done result => rw [he] at h hi; cases h; exact hi

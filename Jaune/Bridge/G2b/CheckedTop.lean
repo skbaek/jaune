@@ -43,6 +43,14 @@ theorem Frame.runTop_prepared {msg : Msg} {f : Jaune.Frame} {refund : Nat}
     Frame.runTop (Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp)) = Jaune.Frame.runTop f := by
   rw [Frame.runTop_square, Frame.toLegacy_ofLegacy]
 
+/-- The checked frame entered by transaction preparation names its kind and code address
+coherently, including after authorization and delegation resolution. -/
+theorem Frame.ofLegacy_prepared_kindCoherent {benv : Benv} {tenv : Tenv} {tx : Transaction}
+    {msg : Msg} (hm : prepareMessage benv tenv tx = .ok msg) {f : Jaune.Frame} {refund : Nat}
+    (hp : Staging.TopLevel.prepare msg = .ok (.frame f refund)) :
+    (Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp)).message.KindCoherent :=
+  processMessageCall.topFrame_kindCoherent hm (Jaune.Bridge.G2a.Staging.TopLevel.prepare_topFrame hp)
+
 /-- Raw execution from a prepared frame keeps every reached current machine well formed. -/
 theorem prepared_reached_memory_wf {msg : Msg} {f : Jaune.Frame} {refund : Nat} {root evm : Evm}
     (hp : Staging.TopLevel.prepare msg = .ok (.frame f refund))
