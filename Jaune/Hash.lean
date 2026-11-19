@@ -274,7 +274,7 @@ def run (data : Bytes) : U256 :=
 
 end SHA256
 
-def Bytes.sha256 : Bytes → U256 := SHA256.run
+def Bytes.sha256 : Bytes → Hash32 := SHA256.run
 
 ------------------------------KECCAK------------------------------
 
@@ -859,7 +859,7 @@ def ByteArray.run (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
 
 end KECCAK
 
-def Bytes.keccak (bs : Bytes) : U256 :=
+def Bytes.keccak (bs : Bytes) : Hash32 :=
   KECCAK.Bytes.run (0 : Fin 17) bs <| .replicate 25 0
 
 /-- keccak over the `sz` bytes of `bs` starting at `loc`.
@@ -870,7 +870,7 @@ absorbed as zero, and the zero extension is materialised once, up front, so the
 in-range path — the only one any in-tree caller takes, since all three pass
 `loc = 0` and `sz = bs.size` — carries its bound as a proof and tests nothing
 per byte. -/
-def ByteArray.keccak (loc sz : Nat) (bs : ByteArray) : U256 :=
+def ByteArray.keccak (loc sz : Nat) (bs : ByteArray) : Hash32 :=
   if h : loc + sz ≤ bs.size then
     KECCAK.ByteArray.run (loc + sz) bs h sz (by omega) (0 : Fin 17) <|
       .replicate 25 0
@@ -885,6 +885,6 @@ def ByteArray.keccak (loc sz : Nat) (bs : ByteArray) : U256 :=
         omega)
       sz (by omega) (0 : Fin 17) <| .replicate 25 0
 
-def U256.keccak (x : U256) : U256 := Bytes.keccak <| x.toBytes
+def U256.keccak (x : U256) : Hash32 := Bytes.keccak <| x.toBytes
 
 end Jaune

@@ -24,7 +24,7 @@ structure Transaction.Admitted : Type where
   bout : BlockOutput
   sender : Address
   effectiveGasPrice : Nat
-  blobVersionedHashes : List U256
+  blobVersionedHashes : List Hash32
   txBlobGasUsed : Nat
   intrinsicGas : Nat
   calldataFloorGasCost : Nat

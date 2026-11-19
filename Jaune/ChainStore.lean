@@ -46,7 +46,7 @@ open Jaune
 /-- The hash of a chain's tip block header: the key under which this snapshot
 is (or would be) stored. `none` only for a chain with no blocks at all, which
 a checked snapshot can never be. -/
-def BlockChain.tipHash? (chain : BlockChain) : Option U256 :=
+def BlockChain.tipHash? (chain : BlockChain) : Option Hash32 :=
   chain.blocks.getLast?.map fun b => (Header.toRlpItem b.header).toBytes.keccak
 
 /-- Invariant 1, now structural: a checked snapshot's derived key is the
@@ -60,7 +60,7 @@ theorem CheckedBlockChain.tipHash?_val (cc : CheckedBlockChain) :
 /-- Immutable checked snapshots indexed by the hash of their tip block
 header. -/
 structure ChainStore : Type where
-  snapshots : Std.TreeMap U256 CheckedBlockChain compare
+  snapshots : Std.TreeMap Hash32 CheckedBlockChain compare
 
 namespace ChainStore
 
@@ -73,7 +73,7 @@ def init (genesis : CheckedBlockChain) : ChainStore :=
   ⟨Std.TreeMap.empty.insert genesis.tipHash genesis⟩
 
 /-- The snapshot stored under `hash`, if any. -/
-def find? (store : ChainStore) (hash : U256) : Option CheckedBlockChain :=
+def find? (store : ChainStore) (hash : Hash32) : Option CheckedBlockChain :=
   store.snapshots.get? hash
 
 /-- The number of stored snapshots. -/
@@ -96,7 +96,7 @@ parent hash names no block at all (`BlockException.UNKNOWN_PARENT_ZERO`),
 while any other missing hash names a block this store has not imported
 (`BlockException.UNKNOWN_PARENT`). The rendered diagnostics are byte-for-byte
 the Step 6/9 ones. -/
-def findParent (store : ChainStore) (parentHash : U256) :
+def findParent (store : ChainStore) (parentHash : Hash32) :
     Except BlockValidationError CheckedBlockChain :=
   match store.find? parentHash with
   | some chain => .ok chain
@@ -125,7 +125,7 @@ and post-state root the runner must always check. A miss here is a
 harness-level operational failure, not a consensus rejection: `ImportFailure`
 has no fixture identity by type, so it can never be scored as an expected
 block exception. The render is byte-for-byte the old `ERROR : ...` line. -/
-def findLast (store : ChainStore) (lastBlockHash : U256) :
+def findLast (store : ChainStore) (lastBlockHash : Hash32) :
     Except ImportFailure CheckedBlockChain :=
   (store.find? lastBlockHash).toExcept
     (.harness (.text s!"lastblockhash = {lastBlockHash} names no imported snapshot"))
@@ -151,7 +151,7 @@ wire-representable header carries, and the state root is the root of the empty
 world these synthetic snapshots pair with. That is P0.2 item 7 -- the fixtures
 satisfy the checked predicate for real, rather than the production store
 gaining a bypass for them. -/
-private def synthHeader (parentHash : U256) (number : Nat) (tag : Bytes) : Header :=
+private def synthHeader (parentHash : Hash32) (number : Nat) (tag : Bytes) : Header :=
   { parentHash := parentHash
     ommersHash := 0
     coinbase := 0
@@ -176,10 +176,10 @@ private def synthHeader (parentHash : U256) (number : Nat) (tag : Bytes) : Heade
     blockAccessListHash := none
     slotNumber := none }
 
-private def synthBlock (parentHash : U256) (number : Nat) (tag : Bytes) : Block :=
+private def synthBlock (parentHash : Hash32) (number : Nat) (tag : Bytes) : Block :=
   { header := synthHeader parentHash number tag, transactions := [], ommers := [], withdrawals := [] }
 
-private def synthHash (b : Block) : U256 :=
+private def synthHash (b : Block) : Hash32 :=
   (Header.toRlpItem b.header).toBytes.keccak
 
 private def chainOf (blocks : List Block) : BlockChain :=
@@ -198,17 +198,17 @@ private def tagsOf (chain : BlockChain) : List Bytes :=
   chain.blocks.map (fun b => b.header.extraData)
 
 private def gB : Block := synthBlock 0 0 [0x60]
-private def gH : U256 := synthHash gB
+private def gH : Hash32 := synthHash gB
 private def a1B : Block := synthBlock gH 1 [0xA1]
-private def a1H : U256 := synthHash a1B
+private def a1H : Hash32 := synthHash a1B
 private def b1B : Block := synthBlock gH 1 [0xB1]
-private def b1H : U256 := synthHash b1B
+private def b1H : Hash32 := synthHash b1B
 private def a2B : Block := synthBlock a1H 2 [0xA2]
-private def a2H : U256 := synthHash a2B
+private def a2H : Hash32 := synthHash a2B
 private def b2B : Block := synthBlock b1H 2 [0xB2]
-private def b2H : U256 := synthHash b2B
+private def b2H : Hash32 := synthHash b2B
 private def b3B : Block := synthBlock b2H 3 [0xB3]
-private def b3H : U256 := synthHash b3B
+private def b3H : Hash32 := synthHash b3B
 
 -- The synthetic hashes are pairwise distinct, so the two branches and the
 -- rejected candidate cannot collide in the store.
@@ -243,10 +243,10 @@ private def store2? : Option ChainStore := do
   pure (((((ChainStore.init g).insert a1).insert b1).insert a2).insert b2)
 
 /-- The snapshot under `hash`, read as its tag trail. -/
-private def findTags (store : ChainStore) (hash : U256) : Option (List Bytes) :=
+private def findTags (store : ChainStore) (hash : Hash32) : Option (List Bytes) :=
   (store.find? hash).map (fun cc => tagsOf cc.val)
 
-private def findTags? (store? : Option ChainStore) (hash : U256) :
+private def findTags? (store? : Option ChainStore) (hash : Hash32) :
     Option (List Bytes) :=
   store?.bind (fun store => findTags store hash)
 

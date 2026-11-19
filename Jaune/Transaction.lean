@@ -316,7 +316,7 @@ def stateTransitionOmmersCheck (ommers : List Header) :
 
 /-- The hash a header's `ommersHash` commits to: the keccak of the RLP list
 of the ommer headers. `emptyOmmerHash` is its value on the empty list. -/
-def ommersListHash (ommers : List Header) : U256 :=
+def ommersListHash (ommers : List Header) : Hash32 :=
   (Rlp.Item.list (ommers.map Header.toRlpItem)).toBytes.keccak
 
 private def ommersFail (msg : String) : Except TransitionError Unit :=
@@ -838,7 +838,7 @@ block, ignoring everything else in the JSON (the code path that deals
 with nonexistent RLP bytes exists, but is unreachable). its return
 type also omits the RLP bytes, since this is identical to the input.
 -/
-def rlpToBlockE (rlp : Bytes) : Except DecodeError (Block × U256) := do
+def rlpToBlockE (rlp : Bytes) : Except DecodeError (Block × Hash32) := do
   let block_blt ← (Bytes.toRlpItem? rlp).toExcept <|
     DecodeError.structure "block RLP" "cannot decode the outer RLP item"
   let block ← block_blt.toExceptBlock
@@ -857,7 +857,7 @@ def rlpToBlock (rlp : Bytes) : Except String (Block × U256) :=
 
 /-- The adapter adds rendering and nothing else: success is the typed core's
 success. This is the bridge every string-level client inverts through. -/
-theorem rlpToBlock_eq_ok_iff {rlp : Bytes} {p : Block × U256} :
+theorem rlpToBlock_eq_ok_iff {rlp : Bytes} {p : Block × Hash32} :
     rlpToBlock rlp = .ok p ↔ rlpToBlockE rlp = .ok p :=
   Except.mapError_eq_ok_iff
 
@@ -894,7 +894,7 @@ and later the comparison -- and every success and failure -- is
 `rlpToBlockE`'s. `rlpToBlockE` itself is untouched: the proven envelope keeps
 its equation. -/
 def rlpToBlockEAt (rules : ForkRules) (rlp : Bytes) :
-    Except DecodeError (Block × U256) := do
+    Except DecodeError (Block × Hash32) := do
   let block_blt ← (Bytes.toRlpItem? rlp).toExcept <|
     DecodeError.structure "block RLP" "cannot decode the outer RLP item"
   let block ← block_blt.toExceptBlockAt rules
@@ -910,7 +910,7 @@ def rlpToBlockEAt (rules : ForkRules) (rlp : Bytes) :
 canonical encoding. It is therefore *derivable* from the decoded block and was
 never independent evidence, which is why the import core below takes an
 envelope instead of a separate hash argument. -/
-theorem rlpToBlock_headerHash {raw : Bytes} {block : Block} {hash : U256}
+theorem rlpToBlock_headerHash {raw : Bytes} {block : Block} {hash : Hash32}
     (h : rlpToBlock raw = .ok ⟨block, hash⟩) :
     hash = (Header.toRlpItem block.header).toBytes.keccak := by
   rw [rlpToBlock_eq_ok_iff] at h
@@ -926,7 +926,7 @@ theorem rlpToBlock_headerHash {raw : Bytes} {block : Block} {hash : U256}
 
 /-- A successful strict decode proves the decoded block re-encodes to exactly
 the bytes supplied -- P0.3's first acceptance criterion. -/
-theorem rlpToBlock_canonical {raw : Bytes} {block : Block} {hash : U256}
+theorem rlpToBlock_canonical {raw : Bytes} {block : Block} {hash : Hash32}
     (h : rlpToBlock raw = .ok ⟨block, hash⟩) : block.toRlpItem.toBytes = raw := by
   rw [rlpToBlock_eq_ok_iff] at h
   unfold rlpToBlockE at h
@@ -941,7 +941,7 @@ theorem rlpToBlock_canonical {raw : Bytes} {block : Block} {hash : U256}
     exact (not_not.mp hne).symm
 
 /-- A successful strict decode is structurally sound. -/
-theorem rlpToBlock_rlpCanonical {raw : Bytes} {block : Block} {hash : U256}
+theorem rlpToBlock_rlpCanonical {raw : Bytes} {block : Block} {hash : Hash32}
     (h : rlpToBlock raw = .ok ⟨block, hash⟩) : block.RlpCanonical := by
   rw [rlpToBlock_eq_ok_iff] at h
   unfold rlpToBlockE at h
@@ -983,7 +983,7 @@ structure CanonicalBlock : Type where
 
 /-- The checked smart constructor: an envelope may only be built from the
 strict decoder's own equation. -/
-def CanonicalBlock.ofDecode {raw : Bytes} {block : Block} {hash : U256}
+def CanonicalBlock.ofDecode {raw : Bytes} {block : Block} {hash : Hash32}
     (h : rlpToBlock raw = .ok ⟨block, hash⟩) : CanonicalBlock :=
   { raw := raw
     block := block
@@ -999,7 +999,7 @@ def CanonicalBlock.ofRlp? (raw : Bytes) : Option CanonicalBlock :=
   | .error _ => none
 
 /-- The block header hash, *derived* from the envelope. -/
-def CanonicalBlock.headerHash (cb : CanonicalBlock) : U256 :=
+def CanonicalBlock.headerHash (cb : CanonicalBlock) : Hash32 :=
   (Header.toRlpItem cb.block.header).toBytes.keccak
 
 /-- The authoritative original RLP size, the one EIP-7934 observes. -/
@@ -1025,7 +1025,7 @@ theorem CanonicalBlock.rawSize_eq (cb : CanonicalBlock) :
 
 /-- Introduction: strict decode succeeds exactly when an envelope exists, and
 the envelope it yields carries those very bytes and that very block. -/
-theorem CanonicalBlock.ofRlp?_eq_some {raw : Bytes} {block : Block} {hash : U256}
+theorem CanonicalBlock.ofRlp?_eq_some {raw : Bytes} {block : Block} {hash : Hash32}
     (h : rlpToBlock raw = .ok ⟨block, hash⟩) :
     ∃ cb : CanonicalBlock,
       CanonicalBlock.ofRlp? raw = some cb ∧ cb.raw = raw ∧ cb.block = block := by
@@ -1325,7 +1325,7 @@ theorem CheckedBlockChain.check_val (cc : CheckedBlockChain) :
 /-- The snapshot's key: the hash of the tip header it is proved to end with.
 Total, because the tip is a field rather than a lookup -- which is what lets
 `ChainStore` derive every key instead of accepting one. -/
-def CheckedBlockChain.tipHash (cc : CheckedBlockChain) : U256 :=
+def CheckedBlockChain.tipHash (cc : CheckedBlockChain) : Hash32 :=
   cc.tip.header.hash
 
 /-- The snapshot's committed state root, read from the tip header rather than
@@ -1333,7 +1333,7 @@ rebuilt from the world -- the same trade `tipHash` makes, for the same reason:
 `tipStateRoot` is already the proof that the two agree, so recomputing
 `val.state.root` here would rebuild the whole trie to learn something the
 structure carries. -/
-def CheckedBlockChain.stateRoot (cc : CheckedBlockChain) : U256 :=
+def CheckedBlockChain.stateRoot (cc : CheckedBlockChain) : Hash32 :=
   cc.tip.header.stateRoot
 
 /-- The field read is the trie rebuild. This is `tipStateRoot` under the
@@ -1666,7 +1666,7 @@ theorem addBlockToChainAt_decode_error {f : Fork} {chain : BlockChain}
 envelope that decode produces. This is the bridge: the wrapper adds
 validation, and nothing else. -/
 theorem addBlockToChainAt_eq_canonical {f : Fork} {chain : BlockChain}
-    {blockRlp : Bytes} {block : Block} {hash : U256}
+    {blockRlp : Bytes} {block : Block} {hash : Hash32}
     (h : rlpToBlock blockRlp = .ok ⟨block, hash⟩) :
     addBlockToChainAt f chain blockRlp
       = addBlockToChainCanonical f chain (CanonicalBlock.ofDecode h) := by
@@ -2191,8 +2191,8 @@ theorem validateHeader_firstFee_gasLimit {rules : ForkRules} {chain : BlockChain
 header's own -- which is exactly the tip/root agreement the resulting snapshot
 needs, already paid for. -/
 theorem stateTransitionChecks_stateRoot {bout : BlockOutput} {header : Header}
-    {transactionsRoot blockStateRoot receiptRoot : U256} {blockLogsBloom : Bytes}
-    {withdrawalsRoot : U256} {requestsHash : Option U256}
+    {transactionsRoot blockStateRoot receiptRoot : Hash32} {blockLogsBloom : Bytes}
+    {withdrawalsRoot : Hash32} {requestsHash : Option Hash32}
     (h : stateTransitionChecks bout header transactionsRoot blockStateRoot
       receiptRoot blockLogsBloom withdrawalsRoot requestsHash = .ok ()) :
     blockStateRoot = header.stateRoot := by
@@ -2437,7 +2437,7 @@ theorem addBlockToChainChecked_eq_raw (f : Fork) (cc : CheckedBlockChain)
 /-- A raw typed import of bytes into a checked snapshot's value is the checked
 import of the envelope those bytes decode to. -/
 theorem addBlockToChainAtE_eq_checked {f : Fork} {cc : CheckedBlockChain}
-    {blockRlp : Bytes} {block : Block} {hash : U256}
+    {blockRlp : Bytes} {block : Block} {hash : Hash32}
     (h : rlpToBlock blockRlp = .ok ⟨block, hash⟩) :
     addBlockToChainAtE f cc.val blockRlp
       = addBlockToChainChecked f cc (CanonicalBlock.ofDecode h) := by

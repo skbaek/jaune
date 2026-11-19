@@ -31,16 +31,16 @@ open Jaune
 structure Block.Commitments : Type where
   /-- The block's gas used: the larger of execution gas and (Amsterdam) state gas. -/
   gasUsed : Nat
-  transactionsRoot : U256
-  stateRoot : U256
-  receiptsRoot : U256
+  transactionsRoot : Hash32
+  stateRoot : Hash32
+  receiptsRoot : Hash32
   logsBloom : Bytes
-  withdrawalsRoot : U256
+  withdrawalsRoot : Hash32
   blobGasUsed : Nat
   /-- `none` exactly under rules without the field (before Prague). -/
-  requestsHash : Option U256
+  requestsHash : Option Hash32
   /-- EIP-7928: `none` exactly under rules without a block-level access list. -/
-  blockAccessListHash : Option U256
+  blockAccessListHash : Option Hash32
 
 /-- The commitments of a body's final prefix, under `rules`. -/
 def Block.Commitments.ofPrefix (rules : ForkRules) (q : Body.Prefix) : Block.Commitments :=

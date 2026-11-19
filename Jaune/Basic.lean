@@ -79,6 +79,9 @@ instance : Inhabited U128 := ⟨⟨0, 0⟩⟩
 def U256 : Type := U128 × U128
 deriving DecidableEq
 
+/-- The existing 256-bit representation, used for 32-byte digests and commitments. -/
+abbrev Hash32 := U256
+
 instance : Inhabited U256 := ⟨⟨Inhabited.default, Inhabited.default⟩⟩
 
 def U128.highBit (x : U128) : Bool := x.1.highBit

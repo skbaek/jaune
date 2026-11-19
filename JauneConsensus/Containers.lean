@@ -39,7 +39,7 @@ abbrev RowIndex := U64
 /-- `Root`, `Bytes32`, `Hash32`, `Domain`: a 32-byte chunk. -/
 abbrev Root := Jaune.U256
 abbrev Bytes32 := Jaune.U256
-abbrev Hash32 := Jaune.U256
+abbrev Hash32 := Jaune.Hash32
 abbrev Domain := Jaune.U256
 abbrev Version := SszVector UInt8 4
 abbrev BLSPubkey := SszVector UInt8 48

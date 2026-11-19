@@ -194,7 +194,7 @@ inductive BlockValidationError : Type
   block carries only the hash. `computed` is the hash of the list this
   candidate built, carried as data so that the fixture runner's refinement
   below never reads a rendered message. -/
-  | blockAccessListHash (computed : U256) (detail : ErrorDetail)
+  | blockAccessListHash (computed : Hash32) (detail : ErrorDetail)
   /-- EIP-7928: the block-level access list a fixture publishes as its
   verification aid is not the computed one in content. Never produced by the
   block pipeline -- only the fixture runner, which alone has the published
@@ -932,7 +932,7 @@ def BlockAccessList.toRlpItem (l : BlockAccessList) : Rlp.Item := .list (l.map B
 def BlockAccessList.encode (l : BlockAccessList) : Bytes := l.toRlpItem.toBytes
 
 /-- `hash_block_access_list`. -/
-def BlockAccessList.hash (l : BlockAccessList) : U256 := l.encode.keccak
+def BlockAccessList.hash (l : BlockAccessList) : Hash32 := l.encode.keccak
 
 /-- `validate_block_access_list_gas_limit`'s count: every address, plus every
 unique storage slot across its changes and reads (the reads already exclude
@@ -1085,7 +1085,7 @@ def checkTransactionGasFee (benv : Benv) (tx : Transaction) :
 
 /-- Enforce the fork's per-transaction blob-count limit, when one is active. -/
 def checkTransactionBlobCount (limits : TransactionLimits)
-    (blobHashes : List U256) : Except TransactionValidationError Unit :=
+    (blobHashes : List Hash32) : Except TransactionValidationError Unit :=
   match limits.maxBlobCount with
   | none => .ok ()
   | some maxBlobCount =>
@@ -1098,7 +1098,7 @@ def checkTransactionBlobCount (limits : TransactionLimits)
 
 def checkTransactionBlobData
     (benv : Benv) (tx : Transaction) (maxGasFee : Nat) :
-    Except TransactionValidationError (Nat × List U256) :=
+    Except TransactionValidationError (Nat × List Hash32) :=
   match tx.type with
   | .eip4844 _ _ _ _ _ maxBlobFee blobHashes => do
     if blobHashes.isEmpty then
@@ -1255,7 +1255,7 @@ because it joins two typed channels: every rule above is a
 `TransactionValidationError`, while sender recovery reports on the cryptographic
 channel and is the one reason here that is not a validation rule. -/
 def checkTransaction (benv : Benv) (blockOut : BlockOutput) (tx : Transaction) :
-    Except TransitionError (Address × Nat × List U256 × Nat) := do
+    Except TransitionError (Address × Nat × List Hash32 × Nat) := do
   let txBlobGasUsed ←
     Except.mapError .transaction (checkTransactionGasLimits benv blockOut tx)
   Except.mapError TransitionError.transaction (checkTransactionChainId benv tx)
@@ -1657,7 +1657,7 @@ def calculateDataFee (blob : BlobSchedule) (excess_blob_gas: Nat) (tx: Transacti
     Nat :=
   getTotalBlobGas tx * getBaseFeePerBlobGas blob excess_blob_gas
 
-def transactionHash (tx : Transaction) : U256 := tx.toRlpItem.toBytes.keccak
+def transactionHash (tx : Transaction) : Hash32 := tx.toRlpItem.toBytes.keccak
 
 def Receipt.toRlpItem (r : Receipt) : Rlp.Item :=
   .list [
@@ -1801,7 +1801,7 @@ def Rlp.Item.toExceptAccessList : Rlp.Item → Except DecodeError AccessList
   | .bytes _ =>
     .error <| DecodeError.structure "access list" "expected a list item"
 
-def Rlp.Item.toExceptBlobHash : Rlp.Item → Except DecodeError U256
+def Rlp.Item.toExceptBlobHash : Rlp.Item → Except DecodeError Hash32
   | .bytes xs => xs.toRlpHash "blob versioned hash"
   | .list _ =>
     .error <| DecodeError.structure "blob versioned hash"
@@ -2273,23 +2273,23 @@ def checkBlockAccessListGasLimit (rules : ForkRules) (blockGasLimit : Nat)
            gasLimit / itemCost = {blockGasLimit / r.itemCost}"
     else .ok ()
 
-def BlockChain.recentBlockHashes (chain : BlockChain) : List U256 :=
+def BlockChain.recentBlockHashes (chain : BlockChain) : List Hash32 :=
   match chain.blocks.reverse.take 255 with
   | [] => []
   | block :: blocks =>
-    let hash : U256 := (Header.toRlpItem block.header).toBytes.keccak
-    let hashes : List U256 :=
+    let hash : Hash32 := (Header.toRlpItem block.header).toBytes.keccak
+    let hashes : List Hash32 :=
       (block :: blocks).map <| fun x => x.header.parentHash
     (hash :: hashes).reverse
 
-def computeRequestsHash (requests : List Bytes) : U256 :=
+def computeRequestsHash (requests : List Bytes) : Hash32 :=
   -- EIP-7685 commits the SHA-256 digest of each type-prefixed request, then
   -- hashes their concatenation once more.  This is deliberately not the EVM
   -- Keccak primitive used by transaction and trie commitments.
   let hashes := requests.map (fun r => r.sha256.toBytes)
   Bytes.sha256 <| List.flatten hashes
 
-def State.root (w : State) : U256 :=
+def State.root (w : State) : Hash32 :=
   let keyVals := (List.map accountToKeyValue w.toList)
   let finalNTB : TrieBuilder := Std.TreeMap.ofList keyVals _
   trie finalNTB
@@ -2575,8 +2575,8 @@ def validateHeader (rules : ForkRules) (chain : BlockChain) (header : Header) :
          {if rules.header.slotNumber then "require" else "do not define"} it"
 
 def stateTransitionChecks (bout : BlockOutput) (header : Header)
-    (transactionsRoot blockStateRoot receiptRoot : U256)
-    (blockLogsBloom : Bytes) (withdrawalsRoot : U256) (requestsHash : Option U256) :
+    (transactionsRoot blockStateRoot receiptRoot : Hash32)
+    (blockLogsBloom : Bytes) (withdrawalsRoot : Hash32) (requestsHash : Option Hash32) :
     Except BlockValidationError Unit := do
   let totalBlockGasUsed := max bout.blockGasUsed bout.blockStateGasUsed
   if totalBlockGasUsed ≠ header.gasUsed then
@@ -2667,7 +2667,7 @@ def initBlockEnvironment (fork : Fork) (chain : BlockChain) (header : Header) : 
     stat := initBlockContext fork chain header
   }
 
-def getTransactionsRoot (bout : BlockOutput) : U256 :=
+def getTransactionsRoot (bout : BlockOutput) : Hash32 :=
   let aux (arg : Bytes × Transaction) : (Bytes × Bytes) :=
     let txPrefix : Bytes :=
       match arg.snd.type with
@@ -2679,12 +2679,12 @@ def getTransactionsRoot (bout : BlockOutput) : U256 :=
     ⟨arg.fst.toNibbles, txPrefix ++ arg.snd.toRlpItem.toBytes⟩
   trie <| Std.TreeMap.ofList (List.map aux bout.transactionsTrie.toList) _
 
-def getReceiptRoot (bout : BlockOutput) : U256 :=
+def getReceiptRoot (bout : BlockOutput) : Hash32 :=
   let aux : (Bytes × Fin 5 × Receipt) → (Bytes × Bytes)
     | ⟨key, type, receipt⟩ => ⟨key.toNibbles, type.val.toBytes ++ receipt.toRlpItem.toBytes⟩
   trie <| Std.TreeMap.ofList (List.map aux bout.receiptsTrie.toList) _
 
-def getWithdrawalsRoot (bout : BlockOutput) : U256 :=
+def getWithdrawalsRoot (bout : BlockOutput) : Hash32 :=
   let aux (arg : Bytes × Withdrawal) : Bytes × Bytes :=
     ⟨arg.fst.toNibbles, arg.snd.toRlpItem.toBytes⟩
   trie <| Std.TreeMap.ofList (List.map aux bout.withdrawalsTrie.toList) _

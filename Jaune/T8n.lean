@@ -411,8 +411,8 @@ structure T8nEnv : Type where
   baseFeePerGas : Nat
   difficulty : Nat := 0
   excessBlobGas : Nat
-  parentBeaconBlockRoot : U256
-  blockHashes : List U256
+  parentBeaconBlockRoot : Hash32
+  blockHashes : List Hash32
   withdrawals : List Withdrawal
   /-- EIP-7843 (goal C): `env.slotNumber`, what `SLOTNUM` pushes. The target's
   default block environment sets `slot_number = U64(0)`, and its driver passes
@@ -468,7 +468,7 @@ represents a gap in it as a `None` placeholder, and `BenvStat.blockHashes` has
 no placeholder, so a gap is refused here rather than silently read as some
 other block's hash. Every corpus case and every `fill` invocation that
 supplies the map at all supplies it dense. -/
-def readBlockHashes (j : Lean.Json) (number : Nat) : IO (List U256) := do
+def readBlockHashes (j : Lean.Json) (number : Nat) : IO (List Hash32) := do
   let entries : List (Nat × U256) ←
     match field? j "blockHashes" with
     | none => pure []
@@ -739,7 +739,7 @@ def txAccessList (j : Lean.Json) : TransactionParse AccessList :=
       | _, _ => .error (.badField "accessList")
   | some _ => .error (.badField "accessList")
 
-def txBlobVersionedHashes (j : Lean.Json) : TransactionParse (List U256) :=
+def txBlobVersionedHashes (j : Lean.Json) : TransactionParse (List Hash32) :=
   match field? j "blobVersionedHashes" with
   | none => .error (.missingField "blobVersionedHashes")
   | some (.arr items) =>
@@ -1325,7 +1325,7 @@ def txEncoding (tx : Transaction) : Bytes :=
     | .eip7702 _ _ _ _ _ _ => [0x04]
   typeByte ++ tx.toRlpItem.toBytes
 
-def txHash (tx : Transaction) : U256 := (txEncoding tx).keccak
+def txHash (tx : Transaction) : Hash32 := (txEncoding tx).keccak
 
 def logJson (l : Log) : JOut :=
   .obj [

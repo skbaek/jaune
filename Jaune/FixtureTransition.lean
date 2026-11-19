@@ -43,7 +43,7 @@ end FixtureNetwork
 /-- Observation of the actual checked parent lookup; fields are absent until
 that stage is reached. No metadata or last-visited snapshot supplies a parent. -/
 structure FixtureObserved (α : Type) : Type where
-  decodedParentHash : Option U256
+  decodedParentHash : Option Hash32
   parent : Option CheckedBlockChain
   outcome : Except ImportFailure (ImportOutcome α)
 
@@ -311,17 +311,17 @@ private def headerDecidableEq : DecidableEq Header := by
 /-- Only genesis and successful checked imports can populate this ledger. -/
 structure Store : Type where
   private mk ::
-  private entries : Std.TreeMap U256 Entry compare
+  private entries : Std.TreeMap Hash32 Entry compare
   private valid : ∃ g, GenesisAdmitted g ∧
     ∀ key entry, entries[key]? = some entry →
       key = entry.chain.tipHash ∧ Origin g entry
 
 namespace Store
 
-def find? (store : Store) (key : U256) : Option Entry := store.entries[key]?
+def find? (store : Store) (key : Hash32) : Option Entry := store.entries[key]?
 
 def init (genesis : CheckedBlockChain) (h : GenesisAdmitted genesis) : Store :=
-  ⟨(∅ : Std.TreeMap U256 Entry compare).insert genesis.tipHash (genesisEntry genesis), by
+  ⟨(∅ : Std.TreeMap Hash32 Entry compare).insert genesis.tipHash (genesisEntry genesis), by
     refine ⟨genesis, h, ?_⟩
     intro key entry he
     rw [Std.TreeMap.getElem?_insert] at he
@@ -349,7 +349,7 @@ theorem find_phase_bounds (store : Store) (h : store.find? key = some entry) :
   obtain ⟨g, _, ho⟩ := store.find_origin h
   exact origin_phase_bounds ho
 
-private def insertAccepted (store : Store) {key : U256} {parent : Entry}
+private def insertAccepted (store : Store) {key : Hash32} {parent : Entry}
     (found : store.find? key = some parent) {cb : CanonicalBlock} {child : BlockChain}
     (imported : addBlockToChainChecked (phaseFork parent.phase) parent.chain cb =
       .ok (.inl child)) : Store :=
@@ -365,10 +365,10 @@ private def insertAccepted (store : Store) {key : U256} {parent : Entry}
       exact ⟨hk.symm, .step (hv key parent found).2 imported⟩
     · exact hv hash value he⟩
 
-private theorem insertAccepted_lookup (store : Store) {key : U256} {parent : Entry}
+private theorem insertAccepted_lookup (store : Store) {key : Hash32} {parent : Entry}
     (found : store.find? key = some parent) {cb : CanonicalBlock} {child : BlockChain}
     (imported : addBlockToChainChecked (phaseFork parent.phase) parent.chain cb =
-      .ok (.inl child)) (hash : U256) :
+      .ok (.inl child)) (hash : Hash32) :
     (Store.insertAccepted store found imported).find? hash =
       if (nextEntry parent (CheckedBlockChain.ofImport imported)).chain.tipHash = hash
       then some (nextEntry parent (CheckedBlockChain.ofImport imported))
@@ -382,15 +382,15 @@ theorem init_entry (genesis : CheckedBlockChain) (h : GenesisAdmitted genesis) :
 
 /-- Installing the same complete entry twice changes no observable lookup.
 This deliberately says nothing about the balancing-tree representation. -/
-private theorem overwrite_lookup (entries : Std.TreeMap U256 Entry compare)
-    (entry : Entry) (hash : U256) :
+private theorem overwrite_lookup (entries : Std.TreeMap Hash32 Entry compare)
+    (entry : Entry) (hash : Hash32) :
     ((entries.insert entry.chain.tipHash entry).insert entry.chain.tipHash entry)[hash]? =
       (entries.insert entry.chain.tipHash entry)[hash]? := by
   simp only [Std.TreeMap.getElem?_insert]
   split <;> rfl
 
 /-- Final lookup retains the existing operational miss, never a scorable verdict. -/
-def findLast (store : Store) (hash : U256) : Except ImportFailure CheckedBlockChain :=
+def findLast (store : Store) (hash : Hash32) : Except ImportFailure CheckedBlockChain :=
   ((store.find? hash).map Entry.chain).toExcept
     (.harness (.text s!"lastblockhash = {hash} names no imported snapshot"))
 
@@ -409,7 +409,7 @@ theorem Store.init_valid (genesis : CheckedBlockChain) (h : GenesisAdmitted gene
     Valid genesis (Store.init genesis h) := by
   refine ⟨h, ?_⟩
   intro key entry he
-  change ((∅ : Std.TreeMap U256 Entry compare).insert
+  change ((∅ : Std.TreeMap Hash32 Entry compare).insert
     genesis.tipHash (genesisEntry genesis))[key]? = some entry at he
   rw [Std.TreeMap.getElem?_insert] at he
   split at he
@@ -427,7 +427,7 @@ def StructuralHeader (raw : Bytes) (header : Header) : Prop :=
 canonical normalization and the actual checked import in one erased witness. -/
 inductive Faithful (store : Store) (raw : Bytes) : CheckedBlockChain → Store → Prop
   | imported {header : Header} {parent : Entry} {rules : ForkRules}
-      {block canon : Block} {hash canonHash : U256} {chain : BlockChain}
+      {block canon : Block} {hash canonHash : Hash32} {chain : BlockChain}
       (structural : StructuralHeader raw header)
       (found : store.find? header.parentHash = some parent)
       (selected : (phaseFork parent.phase).rules = .ok rules)
@@ -447,7 +447,7 @@ structure Accepted (store : Store) (raw : Bytes) : Type where
   next : Store
   faithful : Faithful store raw child next
 
-private def missingParent (hash : U256) : BlockRejection :=
+private def missingParent (hash : Hash32) : BlockRejection :=
   if hash = 0 then .block (.unknownParentZero (.text
     "parent hash is the all-zero hash, which names no block"))
   else .block (.unknownParent (.text s!"parent hash = {hash} names no imported snapshot"))
@@ -538,7 +538,7 @@ same phase-selected fork, with the selected header retained at the child tip. -/
 theorem accepted_selected_decode_import {store : Store} {raw : Bytes}
     (result : Accepted store raw) :
     ∃ (header : Header) (parent : Entry) (rules : ForkRules)
-      (block canon : Block) (hash canonHash : U256) (chain : BlockChain)
+      (block canon : Block) (hash canonHash : Hash32) (chain : BlockChain)
       (normalized : rlpToBlock block.toRlpItem.toBytes = .ok (canon, canonHash))
       (accepted : addBlockToChainChecked (phaseFork parent.phase) parent.chain
         (CanonicalBlock.ofDecode normalized) = .ok (.inl chain)),
@@ -615,7 +615,7 @@ theorem accepted_recurrence {store : Store} {raw : Bytes}
 /-- Reinstalling exactly the accepted complete entry is lookup-idempotent.
 It does not re-evaluate a candidate against a potentially changed parent. -/
 theorem accepted_overwrite_lookup {store : Store} {raw : Bytes}
-    (result : Accepted store raw) (hash : U256) :
+    (result : Accepted store raw) (hash : Hash32) :
     ∃ entry : Entry, result.next.find? result.child.tipHash = some entry ∧
       entry.chain = result.child ∧
       (result.next.entries.insert result.child.tipHash entry)[hash]? =
