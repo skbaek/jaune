@@ -3,19 +3,17 @@ import Jaune.Run.BodyFacts
 
 namespace Jaune.Staging
 
-/-- A message's whole observation, together with its actual top-level code entry, if any. -/
-def MessageRoots (msg : Msg) (state : State) (out : MsgCallOutput) (roots : List Root) : Prop :=
-  ∃ run, Message.run msg = .ok run ∧ run.output = .ok (state, out) ∧
-    roots = run.enteredRoot.toList
+/-- A message's run, together with its actual top-level code entry, if any. -/
+def MessageRoots (msg : Msg) (run : MessageRun) (roots : List Root) : Prop :=
+  Message.run msg = .ok run ∧ roots = run.enteredRoot.toList
 
-theorem exists_messageRoots {msg : Msg} {state out}
-    (h : processMessageCall msg = .ok (state, out)) : ∃ roots, MessageRoots msg state out roots := by
-  obtain ⟨run, hm, ho⟩ := Except.bind_eq_ok h
-  exact ⟨_, run, Except.mapError_eq_ok_iff.mp hm, ho, rfl⟩
+theorem exists_messageRoots {msg : Msg} {run : MessageRun}
+    (h : Message.run msg = .ok run) : ∃ roots, MessageRoots msg run roots :=
+  ⟨_, h, rfl⟩
 
-theorem MessageRoots.atMostOne {msg state out roots} (h : MessageRoots msg state out roots) :
+theorem MessageRoots.atMostOne {msg run roots} (h : MessageRoots msg run roots) :
     roots.length ≤ 1 := by
-  obtain ⟨run, _, _, rfl⟩ := h
+  obtain ⟨_, rfl⟩ := h
   cases run.enteredRoot <;> simp
 
 /-- Expose the sender and the root of the very message that contributed the final receipt. -/
@@ -25,15 +23,15 @@ def TransactionRoots (benv : Benv) (input : BlockOutput) (tx : Transaction) (ind
     run.sender = sender ∧ roots = run.message.enteredRoot.toList
 
 theorem exists_transactionRoots {benv input tx index state output}
-    (h : B2.processTransaction benv input tx index = .ok (state, output)) :
+    (h : (fun pair => (pair.1.state, pair.2)) <$> B2.Transaction.run benv input tx index =
+      .ok (state, output)) :
     ∃ sender roots, TransactionRoots benv input tx index state output sender roots := by
-  rw [← B2.Transaction.run_output] at h
   cases hr : B2.Transaction.run benv input tx index with
-  | error err => rw [hr] at h; cases h
+  | error err => simp [hr, Functor.map, Except.map] at h
   | ok pair =>
     obtain ⟨run, next⟩ := pair
-    rw [hr] at h
-    cases h
+    simp only [hr, Functor.map, Except.map, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
     exact ⟨_, _, run, hr, rfl, rfl, rfl⟩
 
 /-- Each phase records its complete prefix, including state, receipts and gas meters. -/
