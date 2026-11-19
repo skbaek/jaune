@@ -13,7 +13,7 @@ Old side = cut D's `Staging.stateTransitionCoreE` (`Jaune.Run.Body`), whose own 
   check fails first with the same reason and text.
 * `E.stateTransitionCoreE_eq`: **the bridge.** The staged block transition equals cut D's, for every
   error embedding, fork, chain, block and ommer check, on the whole result.
-* `Body.run_map_snd`, `BlockRun.run_final`, `E.stateTransitionCoreE_eq_run`: the run keeps what the
+* `BlockRun.run_final`, `E.stateTransitionCoreE_eq_run`: the run keeps what the
   streaming fold keeps, and the transition reads the block run's commitments.
 * `E.stateTransitionCoreE_difference`: cut E composed with cut D's difference theorem (decode
   before the system calls, decision 14) and W2-T's (an unknown type byte is an invalid block,
@@ -83,23 +83,6 @@ theorem E.stateTransitionCoreE_eq_of_not_split {ε : Type} (embed : TransitionEr
 
 /-! ### The block run -/
 
-/-- The run keeps what the fold keeps. -/
-theorem Body.run_map_snd (benv : Benv) :
-    ∀ (p : Body.Prefix) (ops : List BodyOp),
-      Prod.snd <$> Body.run benv p ops = Body.fold benv p ops
-  | p, [] => rfl
-  | p, op :: ops => by
-    unfold Body.run Body.fold
-    cases Body.step benv p op with
-    | error e => rfl
-    | ok rq =>
-      obtain ⟨r, q⟩ := rq
-      have ih := Body.run_map_snd benv q ops
-      simp only [bind, Except.bind]
-      cases hr : Body.run benv q ops with
-      | error e => rw [hr] at ih; exact ih
-      | ok sq => rw [hr] at ih; exact ih
-
 /-- The block run's final prefix is the importer's body. -/
 theorem BlockRun.run_final (f : Fork) (ch : BlockChain) (block : Block) :
     BlockRun.final <$> BlockRun.run f ch block =
@@ -110,9 +93,9 @@ theorem BlockRun.run_final (f : Fork) (ch : BlockChain) (block : Block) :
   cases block.transactions.mapM (decodeTransaction (initBlockEnvironment f ch block.header).stat.rules) with
   | error e => rfl
   | ok txs =>
-    have h := Body.run_map_snd (initBlockEnvironment f ch block.header)
+    have h := (Body.fold_eq_run (initBlockEnvironment f ch block.header)
       (Body.Prefix.init (initBlockEnvironment f ch block.header).state)
-      (Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals)
+      (Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals)).symm
     dsimp only
     cases hr : Body.run (initBlockEnvironment f ch block.header)
         (Body.Prefix.init (initBlockEnvironment f ch block.header).state)
