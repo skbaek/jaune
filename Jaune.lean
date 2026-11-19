@@ -135,6 +135,11 @@ import Jaune.Bridge.G2b.FinalChronology
 import Jaune.MessageCall.FinalRunInvariants
 import Jaune.MessageCall.FinalDriverInvariants
 import Jaune.MessageCall.FinalCanonical
+import Jaune.Instructions.Word
+import Jaune.Instructions.WordRows
+import Jaune.Instructions.WordFacts
+import Jaune.Instructions.Store
+import Jaune.Instructions.StoreFacts
 
 namespace Jaune
 
