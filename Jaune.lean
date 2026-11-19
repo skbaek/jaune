@@ -146,6 +146,7 @@ import Jaune.Run.Root
 import Jaune.Bridge.G2b.RunRoots
 import Jaune.Bridge.G2b.KeptHistory
 import Jaune.Bridge.G2b.BodyRoots
+import Jaune.Bridge.G2b.BodyResults
 import Jaune.FrameRun.Basic
 import Jaune.FrameRun.Adequacy
 import Jaune.FrameRun.Prefix
