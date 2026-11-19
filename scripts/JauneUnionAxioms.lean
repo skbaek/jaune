@@ -18,6 +18,7 @@ import Jaune.Check.CheckedPortAuditB
 import Jaune.Check.FrameBridgeAudit
 import Jaune.Check.InstructionFamiliesAudit
 import Jaune.Check.Hash
+import Jaune.Check.InstructionsAudit
 import Jaune.Check.KeccakSpec
 import Jaune.Check.Machine
 import Jaune.Check.Precompiles

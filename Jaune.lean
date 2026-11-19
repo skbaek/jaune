@@ -172,6 +172,10 @@ import Jaune.Instructions.Push
 import Jaune.Instructions.PushFacts
 import Jaune.Instructions.Log
 import Jaune.Instructions.LogFacts
+import Jaune.Instructions.Memory
+import Jaune.Instructions.MemoryFacts
+import Jaune.Instructions.Read
+import Jaune.Instructions.ReadFacts
 import Jaune.Bridge.G2b.FinalPrefix
 import Jaune.Bridge.G2b.FinalRetained
 import Jaune.Run.Root
