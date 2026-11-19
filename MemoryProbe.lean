@@ -1,4 +1,5 @@
 import Jaune.MessageCall.Top
+import Jaune.MessageCall.CheckedTrace
 
 /-!
 # Bounded call-depth / calldata-size memory probe
@@ -142,13 +143,33 @@ def run (family : Family) (depth inputSize : Nat) :
       let success := Bytes.toU256 (devm.memory.data.sliceD 32 32 0)
       .ok (devm.memory.size, devm.memory.data.size, success)
 
+/-- `run` on the checked interpreter: enter the top frame from its checkpoint with
+`Checked.enterWith`, run `Checked.exec` (the total interpreter `Checked.Frame.runTop` settles),
+and read the final frame's memory. Staged and selected by `--checked`; the registered gate does
+not pass it. Until the reserved packet item imports `Jaune.Implementation.CheckedCachedDriver`
+into `Jaune.MessageCall.CheckedExec` with the compiled-code substitution, `Checked.exec` is
+compiled against the uncached driver, and this measures that. -/
+def runChecked (family : Family) (depth inputSize : Nat) :
+    Except ProbeError (Nat × Nat × U256) :=
+  let frame := Checked.Trace.topFrame (probeMsg family depth inputSize) false
+  match Checked.enterWith frame frame.checkpoint with
+  | .done _ => .error .frameSettlement
+  | .run r =>
+    match Checked.exec r with
+    | .ok (.halted ..) | .ok (.reverted ..) => .error .settledHalt
+    | .error _ => .error .frameSettlement
+    | .ok (.finished _ s) =>
+      let memory := s.machine.memory
+      let success := Bytes.toU256 (memory.data.sliceD 32 32 0)
+      .ok (memory.size, memory.data.size, success)
+
 private def parseFamily (text : String) : Option Family :=
   if text = "--staticcall" then some .staticcall
   else if text = "--call" then some .call
   else none
 
 private def usage : String :=
-  "usage: jaune-memory-probe [--staticcall|--call] DEPTH INPUT_SIZE"
+  "usage: jaune-memory-probe [--checked] [--staticcall|--call] DEPTH INPUT_SIZE"
 
 private def parseSizes (depth inputSize : String) : IO (Nat × Nat) := do
   match depth.toNat?, inputSize.toNat? with
@@ -172,8 +193,11 @@ private def parseArgs (args : List String) : IO (Family × Nat × Nat) := do
   | _ => throw (IO.userError usage)
 
 def main (args : List String) : IO UInt32 := do
+  let (checked, args) := match args with
+    | "--checked" :: rest => (true, rest)
+    | _ => (false, args)
   let (family, depth, inputSize) ← parseArgs args
-  match run family depth inputSize with
+  match (if checked then runChecked else run) family depth inputSize with
   | .error error =>
     IO.eprintln
       s!"FAIL family={family.name} depth={depth} input={inputSize}: {error.render}"

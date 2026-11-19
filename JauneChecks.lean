@@ -29,5 +29,6 @@ import Jaune.Check.Sufficiency
 import Jaune.Check.Transaction
 import Jaune.Check.Types
 import Jaune.Run.Trace
+import Jaune.Bridge.G2b.CheckedTrace
 import Jaune.Run.BodyT8n
 import Jaune.Run.BodyFactsT8n
