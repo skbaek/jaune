@@ -21,7 +21,7 @@ theorem Memory.write_size_of_prepaid (mem : Memory) (index : Nat) (bytes : Bytes
   | nil => rfl
   | cons b bs =>
     have hb : b :: bs ≠ [] := by intro heq; contradiction
-    simp only [Memory.write, dif_pos (h hb)]
+    simp only [Memory.write, h hb, ↓reduceDIte]
     split <;> rfl
 
 private theorem push_done_ne_spawn (d : Frame.State) (c : Frame) (p : Staging.Pending) :
@@ -123,7 +123,7 @@ private theorem absorbMeters_returnData (rules : ForkRules) (p : Staging.Pending
       | _, _ => r.output := by
   unfold absorbMeters Machine.creditStateGasRefund Machine.repayStateGasSpill
   rcases ht : p.target with ⟨outputIndex, outputSize⟩ | address <;>
-    cases hf : r.failed <;> simp only [hf] <;> split <;> (try split) <;> (try split) <;> rfl
+    cases hf : r.failed <;> simp only [] <;> split <;> (try split) <;> (try split) <;> rfl
 
 private theorem finish_returnData (target : ReturnTarget) (r : Frame.Result) (m : Machine) :
     (finishTarget target r m).returnData = m.returnData := by
