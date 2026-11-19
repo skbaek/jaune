@@ -541,27 +541,51 @@ def check_receipt(ledger, gate, receipt):
 class Composed(MAP.Renamer):
     """The entry's maps applied in order, with exempt replacements first.
 
-    One map is used as is (every comparator rule, namespace rows included).
-    Several maps compose by name: exact, namespace and module effects compose
-    through `explain`; relocations are not re-checked here (N4 checked each
-    map's moves). An exempt `replacement` renames the bridged old helper to
-    its tag-side replacement, so a reference to it compares under the map."""
+    Each map supplies its naming rules. Authored declarations carry their
+    moves and promotions through the intermediate names and modules. An
+    exempt `replacement` renames a bridged helper reference to its tag-side
+    name without adding a compared declaration."""
 
-    def __init__(self, renamers, overrides=None):
-        self.parts, self.overrides = list(renamers), dict(overrides or {})
+    def __init__(self, renamers, overrides, authored_owners):
+        self.parts, self.overrides = list(renamers), dict(overrides)
+        self.relocations, self.public_from = {}, {}
         if len(self.parts) == 1:
             one = self.parts[0]
-            self.exact, self.namespaces, self.modules, self.relocations = (
-                dict(one.exact), one.namespaces, one.modules, one.relocations)
+            self.exact, self.namespaces, self.modules = dict(one.exact), one.namespaces, one.modules
         else:
-            self.namespaces, self.relocations = {}, {}
+            self.namespaces = {}
             self.exact = {old: self._through(old) for one in self.parts for old in one.exact}
             self.modules = {old: self._module(old) for one in self.parts for old in one.modules}
-            if any(hasattr(one, 'public_from') for one in self.parts):
-                # A newer map schema's private-to-public rows, composed.
-                self.public_from = {old: self._through(old) for one in self.parts
-                                    for old in getattr(one, 'public_from', {})}
+        if any(one.relocations or getattr(one, 'public_from', {}) for one in self.parts):
+            for name, owner in authored_owners.items():
+                self.record_placement(name.rsplit('@', 1)[0], owner)
         self.exact.update(self.overrides)
+
+    def record_placement(self, old, owner):
+        name, current = old, owner
+        old_private = MAP.split_private(old)
+        moved, promoted = False, False
+        for one in self.parts:
+            private = MAP.split_private(name)
+            user = private[2] if private else name
+            move = one.relocations.get(user)
+            if move is not None:
+                moved = True
+                source, target = move
+                if source != current:
+                    raise Finding(f'relocation of {name} names {source}, expected owner {current}')
+                current = target
+            elif current is not None:
+                current = one.module(current)
+            promoted |= name in getattr(one, 'public_from', {})
+            name = one(name)
+        if moved:
+            user = old_private[2] if old_private else old
+            move = (owner, current)
+            if self.relocations.setdefault(user, move) != move:
+                raise Finding(f'inconsistent composed relocations for {user}')
+        if promoted:
+            self.public_from[old] = name
 
     def __getattr__(self, attr):
         # One map: any further table a (newer) comparator reads is that map's.
@@ -662,9 +686,9 @@ def exemptions(ledger, entry):
 
 
 def scoped_maps(maps, names):
-    """Each map's rows that concern `names` (and, map by map, their images):
-    namespace and module rows always; an exact row when it renames one of
-    the names, or the user part of a private one, or names it `public_from`.
+    """Each map's rows that concern the names as they reach that stage:
+    namespace and module rows always; an exact row when it renames a current
+    name, or the user part of a private one, or names it `public_from`.
     The comparator's map-scope checks (every relocation row names an authored
     constant in scope) then hold for the closure, as they do for N4's scope."""
     current, scoped = set(names), []
@@ -674,7 +698,7 @@ def scoped_maps(maps, names):
                 row['old'] in users or row.get('public_from') in current]
         scoped.append(rows)
         one = MAP.Renamer(rows)
-        current = current | {one(n) for n in current}
+        current = {one(n) for n in current}
     return scoped
 
 
@@ -699,8 +723,10 @@ def closure_compare(before, after, maps, roots, at_tag, exempt, plan_edits=None,
         raise Finding(f'old roots cannot be exempt: {sorted(skipped_roots)}')
     members, stopped, external = walk(before['constants'], roots, set(exempt))
     overrides = {name: row['replacement'] for name, row in exempt.items() if row.get('replacement')}
-    mapping = Composed([MAP.Renamer(rows) for rows in scoped_maps(maps, members | set(exempt))] or
-                       [MAP.Renamer([])], overrides)
+    renamers = [MAP.Renamer(rows) for rows in scoped_maps(maps, members | set(exempt))]
+    owners = before.get('owners') or {}
+    authored_owners = {name: owners.get(name) for name in sorted(members & before['roots'])}
+    mapping = Composed(renamers or [MAP.Renamer([])], overrides, authored_owners)
     mismatches = []
     for root, expected in zip(roots, at_tag):
         if mapping(root) != expected:

@@ -167,6 +167,72 @@ class ClosureTests(unittest.TestCase):
         result = LEDGER.closure_compare(self.before, self.after, self.maps, ['J.root'], ['J.Older.root'], {})
         self.assertEqual(result['verdict'], 'OK')
 
+    def test_composed_relocation_preserves_authored_owners_and_generated_holders(self):
+        self.before['constants']['J.root'] = definition(app(c('J.root.match_1'), c('J.helper')))
+        self.before['constants']['J.root.match_1'] = definition(['lit', 3])
+        self.after['constants']['J.Old.root'] = definition(app(c('J.Old.root.match_2'), c('J.helper')))
+        self.after['constants']['J.Old.root.match_2'] = definition(['lit', 3])
+        self.before['owners'] = {'J.root': 'J.Start', 'J.helper': 'J.Start'}
+        self.after['owners'] = {'J.Old.root': 'J.OldCode', 'J.helper': 'J.Renamed'}
+        self.before['holders'] = {'J.root.match_1': {'J.Start'}}
+        self.after['holders'] = {'J.Old.root.match_2': {'J.OldCode'}}
+        self.maps = [
+            [dict(old='J.Start', new='J.Renamed', kind='module')],
+            [dict(old='J.root', new='J.Middle.root', kind='relocation',
+                  from_module='J.Renamed', to_module='J.MiddleCode')],
+            [dict(old='J.Middle.root', new='J.Old.root', kind='relocation',
+                  from_module='J.MiddleCode', to_module='J.OldCode')],
+        ]
+        self.assertEqual(self.compare()['verdict'], 'OK')
+
+        self.after['owners']['J.Old.root'] = 'J.Wrong'
+        result = self.compare()
+        self.assertEqual(result['verdict'], 'REGRESSION')
+        self.assertIn('J.Wrong, expected J.OldCode', ' '.join(result['mismatches']))
+        self.after['owners']['J.Old.root'] = 'J.OldCode'
+
+        self.after['holders']['J.Old.root.match_2'] = {'J.Wrong'}
+        result = self.compare()
+        self.assertEqual(result['verdict'], 'REGRESSION')
+        self.assertIn("modules ['J.Start'] became ['J.Wrong']", ' '.join(result['mismatches']))
+        self.after['holders']['J.Old.root.match_2'] = {'J.OldCode'}
+
+        self.maps[2][0]['from_module'] = 'J.Wrong'
+        with self.assertRaisesRegex(LEDGER.Finding, r'J\.Middle\.root.*J\.Wrong.*J\.MiddleCode'):
+            self.compare()
+
+    def test_exempt_relocated_dependency_does_not_add_a_compared_declaration(self):
+        self.after['constants']['J.Old.root'] = definition(app(c('Nat.add'), c('J.New.helper'), ['lit', 1]))
+        self.after['constants']['J.New.helper'] = definition(['lit', 5])
+        self.after['roots'].add('J.New.helper')
+        self.maps[0].append(dict(old='J.helper', new='J.New.helper', kind='relocation',
+                                 from_module='J.Start', to_module='J.NewCode'))
+        self.exempt = {'J.helper': dict(name='J.helper', bridged_by='E2')}
+        result = self.compare()
+        self.assertEqual((result['verdict'], result['stopped_exempt']), ('OK', ['J.helper']))
+
+    @unittest.skipUnless(hasattr(LEDGER.MAP.Renamer([]), 'public_from'), 'requires private promotion maps')
+    def test_composed_promotion_is_bound_to_the_original_private_declaration(self):
+        original = '_private.J.Start.0.J.root'
+        intermediate = '_private.J.Renamed.0.J.root'
+        self.before['constants'][original] = self.before['constants'].pop('J.root')
+        self.before['roots'] = set(self.before['constants'])
+        self.before['owners'] = {original: 'J.Start', 'J.helper': 'J.Start'}
+        self.after['owners'] = {'J.Old.root': 'J.OldCode', 'J.helper': 'J.Renamed'}
+        maps = [
+            [dict(old='J.Start', new='J.Renamed', kind='module')],
+            [dict(old='J.root', new='J.Old.root', kind='relocation', public_from=intermediate,
+                  from_module='J.Renamed', to_module='J.OldCode')],
+        ]
+
+        def compare():
+            return LEDGER.closure_compare(self.before, self.after, maps, [original], ['J.Old.root'], {})
+
+        self.assertEqual(compare()['verdict'], 'OK')
+        maps[0][0]['new'] = 'J.Wrong'
+        with self.assertRaisesRegex(ValueError, r'J\.Renamed.*J\.Wrong'):
+            compare()
+
     def test_generated_closure_members_are_compared(self):
         self.before['constants']['J.root'] = definition(app(c('J.root.match_1'), c('J.helper')))
         self.before['constants']['J.root.match_1'] = definition(['lit', 3])
