@@ -88,8 +88,10 @@ class ClosureTests(unittest.TestCase):
 
     def test_exempt_change_passes_only_with_a_bridged_by_entry(self):
         self.after['constants']['J.helper'] = definition(['lit', 7])
-        ledger = dict(entries=[dict(id='E1', exempt=[dict(name='J.helper', bridged_by='E2')]),
-                               dict(id='E2', exempt=[])])
+        ledger = dict(entries=[dict(id='E1', old=dict(roots=['J.root']),
+                                    exempt=[dict(name='J.helper', bridged_by='E2')]),
+                               dict(id='E2', kind='theorem', old=dict(roots=['J.helper']),
+                                    new=dict(names=['J.helper2']), exempt=[])])
         self.exempt = LEDGER.exemptions(ledger, ledger['entries'][0])
         result = self.compare()
         self.assertEqual(result['verdict'], 'OK')
@@ -116,6 +118,14 @@ class ClosureTests(unittest.TestCase):
         result = LEDGER.closure_compare(self.before, self.after, self.maps, ['J.root'], ['J.Elsewhere.root'], {})
         self.assertEqual(result['verdict'], 'REGRESSION')
         self.assertIn('ledger names J.Elsewhere.root', result['mismatches'][0])
+
+    def test_exemptions_cannot_remove_the_root_from_either_closure(self):
+        self.exempt = {'J.root': dict(name='J.root', bridged_by='E2')}
+        with self.assertRaisesRegex(LEDGER.Finding, '^old roots cannot be exempt'):
+            self.compare()
+        self.exempt = {'J.helper': dict(name='J.helper', bridged_by='E2', replacement='J.Old.root')}
+        with self.assertRaisesRegex(LEDGER.Finding, '^tag-side old roots cannot be exempt'):
+            self.compare()
 
     def test_missing_closure_member_at_the_tag_fails(self):
         del self.after['constants']['J.helper']
@@ -430,11 +440,23 @@ class ModeATests(unittest.TestCase):
         self.assertFinding('uncommitted with its gap stated')
 
     def test_exempt_reference_must_resolve(self):
-        self.ledger['entries'][0]['exempt'] = [dict(name='Jaune.old', bridged_by='GX-9')]
-        self.assertFinding('not another ledger entry')
-        self.ledger['entries'][0]['exempt'] = [dict(name='Jaune.old')]
+        entry = self.ledger['entries'][0]
+        entry['exempt'] = [dict(name='Jaune.Old.side', bridged_by='GX-9')]
+        self.assertFinding('needs another ledger entry')
+        entry['exempt'] = [dict(name='Jaune.Old.side')]
         self.assertFinding('exempt rows are')
-        self.ledger['entries'][0]['exempt'] = [dict(name='Jaune.old', bridged_by='GX-map')]
+        entry['exempt'] = [dict(name='Jaune.Old.side', bridged_by='GX-map')]
+        self.assertFinding('needs a theorem bridge that names it as an old root')
+        helper = copy.deepcopy(entry)
+        helper.update(id='GX-2', exempt=[])
+        self.ledger['entries'].append(helper)
+        row = entry['exempt'][0]
+        row['bridged_by'] = 'GX-2'
+        self.assertFinding('needs a theorem bridge that names it as an old root')
+        helper['old']['roots'] = ['Jaune.Old.side']
+        row['replacement'] = 'Jaune.unrelated'
+        self.assertFinding('replacement Jaune.unrelated is not named by bridge GX-2')
+        row['replacement'] = 'Jaune.new'
         self.assertEqual(self.run_a()['status'], 'OK')
 
     def test_missing_closure_receipt_is_a_gap_and_a_receipt_is_checked(self):
@@ -459,7 +481,11 @@ class ModeATests(unittest.TestCase):
             path.write_text(json.dumps(dict(receipt, **change)))
             self.assertFinding('receipt GX')
         path.write_text(json.dumps(receipt))
-        theorem['exempt'] = [dict(name='Jaune.old', bridged_by='GX-map')]
+        helper = copy.deepcopy(theorem)
+        helper.update(id='GY-1', gate='GY', accepted=[dict(decision='fixture', covers='closure', text='fixture')])
+        helper['old']['roots'] = ['Jaune.Old.side']
+        self.ledger['entries'].append(helper)
+        theorem['exempt'] = [dict(name='Jaune.Old.side', bridged_by='GY-1')]
         self.assertFinding('closure scope differs')
         theorem['exempt'] = []
         theorem['old'].update(at_tag=['Jaune.new'], modules_at_tag=['Jaune.New'])

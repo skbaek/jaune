@@ -963,9 +963,10 @@ Two different contracts, and confusing them is the most common misreading:
   same paths and blob contents as the full Git tree.
   Each result's scope digest binds the old revision, roots, modules, tag-side
   roots and modules, exemptions and ordered map hashes. If these inputs
-  change, rerun Mode B. Adding an exemption needs another ledger
-  entry that bridges it; a gap is closed by evidence, never by deleting its
-  line.
+  change, rerun Mode B. An exempt dependency needs another theorem entry
+  whose old roots include it. An explicit replacement must be named on
+  that bridge's new side. Both closure walks always include their own old
+  roots. Close a gap by recording its evidence.
 
 `--bls` is a middle case: it compares against a tracked baseline like a tier,
 but that baseline is a hand-authored *target*, so `--rebase` is refused — edit

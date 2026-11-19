@@ -356,12 +356,12 @@ def validate(ledger):
         need(_strings(entry['gaps']) and _strings(entry['notes']), f'{where}: gaps and notes are string lists')
     if problems:
         return problems
-    known = {e['id'] for e in entries}
+    by_id = {e['id']: e for e in entries}
     for entry in entries:
         for row in entry['exempt']:
-            need(row['bridged_by'] in known and row['bridged_by'] != entry['id'],
-                 f'entry {entry["id"]}: exempt {row["name"]} is bridged by {row["bridged_by"]!r}, '
-                 'which is not another ledger entry')
+            problem = exemption_problem(by_id, entry, row)
+            if problem:
+                problems.append(problem)
     return problems
 
 
@@ -632,14 +632,31 @@ def walk(constants, roots, stop):
     return members, stopped, external
 
 
+def exemption_problem(entries, entry, row):
+    name = row['name']
+    where = f'entry {entry["id"]}: exempt {name}'
+    bridge_id = row.get('bridged_by')
+    bridge = entries.get(bridge_id)
+    if bridge is None or bridge_id == entry['id']:
+        return f'{where} needs another ledger entry'
+    if name in entry['old']['roots']:
+        return f'{where} is an old root of this entry'
+    if bridge['kind'] != 'theorem' or name not in bridge['old']['roots']:
+        return f'{where} needs a theorem bridge that names it as an old root ({bridge_id})'
+    replacement = row.get('replacement')
+    if replacement and replacement not in bridge['new']['names']:
+        return f'{where} replacement {replacement} is not named by bridge {bridge_id}'
+    return None
+
+
 def exemptions(ledger, entry):
-    """{old name: row} for the entry's exemptions, each bridged by another
-    ledger entry; an exemption without one is refused."""
-    known = {e['id'] for e in ledger['entries']}
+    """Validate the bridge for each dependency that the closure may skip."""
+    by_id = {e['id']: e for e in ledger['entries']}
     rows = {}
     for row in entry['exempt']:
-        if not row.get('bridged_by') or row['bridged_by'] not in known or row['bridged_by'] == entry['id']:
-            raise Finding(f'entry {entry["id"]}: exempt {row.get("name")} has no bridging ledger entry')
+        problem = exemption_problem(by_id, entry, row)
+        if problem:
+            raise Finding(problem)
         rows[row['name']] = row
     return rows
 
@@ -677,6 +694,9 @@ def closure_compare(before, after, maps, roots, at_tag, exempt, plan_edits=None,
     missing = [r for r in roots if r not in before['constants']]
     if missing:
         raise ValueError(f'old roots not in the old export: {missing}')
+    skipped_roots = set(roots) & exempt.keys()
+    if skipped_roots:
+        raise Finding(f'old roots cannot be exempt: {sorted(skipped_roots)}')
     members, stopped, external = walk(before['constants'], roots, set(exempt))
     overrides = {name: row['replacement'] for name, row in exempt.items() if row.get('replacement')}
     mapping = Composed([MAP.Renamer(rows) for rows in scoped_maps(maps, members | set(exempt))] or
@@ -686,6 +706,9 @@ def closure_compare(before, after, maps, roots, at_tag, exempt, plan_edits=None,
         if mapping(root) != expected:
             mismatches.append(f'old root {root} maps to {mapping(root)}, ledger names {expected} at the tag')
     images = {mapping(name) for name in exempt}
+    skipped_roots = set(at_tag) & images
+    if skipped_roots:
+        raise Finding(f'tag-side old roots cannot be exempt: {sorted(skipped_roots)}')
     tag_members, _, _ = walk(after['constants'], at_tag, images)
 
     def scope(env, names):
