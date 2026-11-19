@@ -350,6 +350,24 @@ class ModeATests(unittest.TestCase):
         result = self.run_a()
         self.assertEqual((result['status'], result['entries'], result['gaps']), ('OK', 2, []))
 
+    def test_capture_binding_requires_the_complete_tracked_tree(self):
+        candidate = LEDGER.CANDIDATE.inventory(self.root, ['.'])
+        reader = LEDGER.Git(self.root)
+        self.addCleanup(reader.close)
+        self.assertTrue(LEDGER.bound(reader, {'candidate': candidate}, self.tag))
+        with self.subTest('omitted tracked path'):
+            partial = copy.deepcopy(candidate)
+            del partial['files']['scripts/maps/m.json']
+            self.assertFalse(LEDGER.bound(reader, {'candidate': partial}, self.tag))
+        with self.subTest('untracked path'):
+            extra = copy.deepcopy(candidate)
+            extra['files']['untracked.txt'] = hashlib.sha256(b'fixture').hexdigest()
+            self.assertFalse(LEDGER.bound(reader, {'candidate': extra}, self.tag))
+        with self.subTest('changed bytes'):
+            changed = copy.deepcopy(candidate)
+            changed['files']['Jaune/Old.lean'] = hashlib.sha256(OLD.encode()).hexdigest()
+            self.assertFalse(LEDGER.bound(reader, {'candidate': changed}, self.tag))
+
     def test_renamed_theorem_fails(self):
         self.ledger['entries'][0]['theorem'] = 'Jaune.G.foo_bridgeX'
         self.assertFinding(r'GX-1: Jaune\.G\.foo_bridgeX is not declared in Jaune\.Bridge\.G')

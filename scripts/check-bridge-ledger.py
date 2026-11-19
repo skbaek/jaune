@@ -113,6 +113,10 @@ class Git:
         found = self.object(f'{rev}:{path}')
         return found[2] if found and found[1] == 'blob' else None
 
+    def paths(self, rev):
+        raw = subprocess.check_output(['git', '-C', str(self.root), 'ls-tree', '-r', '--name-only', '-z', rev])
+        return set(raw.decode().split('\0')) - {''}
+
 
 def module_paths(module):
     base = module.replace('.', '/') + '.lean'
@@ -725,13 +729,18 @@ def load_maps(git, entry, supplied):
 
 
 def bound(git, snapshot, revision):
-    """Whether the capture is the clean tree of `revision`: same commit and
-    every inventoried file byte-identical to the commit's blob."""
+    """Bind the complete inventory of paths and file bytes to `revision`."""
     candidate = snapshot['candidate']
-    if candidate['head'] != revision or git.commit(revision) != revision or not candidate['files']:
+    files = candidate['files']
+    if candidate['head'] != revision or git.commit(revision) != revision or not files:
         return False
-    return all((lambda data: data is not None and sha256(data) == digest)(git.blob(revision, path))
-               for path, digest in candidate['files'].items())
+    if git.paths(revision) != files.keys():
+        return False
+    for path, digest in files.items():
+        blob = git.blob(revision, path)
+        if blob is None or sha256(blob) != digest:
+            return False
+    return True
 
 
 def environment(snapshot, modules):

@@ -959,6 +959,8 @@ Two different contracts, and confusing them is the most common misreading:
   comparator, every old root maps to the old side the ledger names, and the
   external import artifacts of both captures are identical. Mode A requires a
   receipt bound to both clean captures and one passing result per theorem.
+  A capture binds to its revision only when its file inventory has the
+  same paths and blob contents as the full Git tree.
   Each result's scope digest binds the old revision, roots, modules, tag-side
   roots and modules, exemptions and ordered map hashes. If these inputs
   change, rerun Mode B. Adding an exemption needs another ledger
