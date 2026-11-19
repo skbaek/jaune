@@ -243,6 +243,18 @@ private theorem amsterdam_preserves_block {msg : Msg} {rules : StateGasRules} {o
       cases h
       rfl
 
+private theorem prepare_frame_block {msg : Msg} {f : Jaune.Frame} {refund : Nat}
+    (hp : Jaune.TopLevel.prepare msg = .ok (.frame f refund)) :
+    f.message.context.block = msg.benv.stat := by
+  have hframe := Jaune.TopLevel.prepare_topFrame hp
+  cases hframe with
+  | create => rfl
+  | call _ _ ha =>
+    change (Jaune.TopLevel.resolveCodeDelegation _).benv.stat = _
+    unfold Jaune.TopLevel.resolveCodeDelegation
+    split <;> exact authorize_preserves_block ha
+  | amsterdam _ ha => exact amsterdam_preserves_block ha
+
 /-- The frame sees the transaction's original state after all top-level preparation,
 including authorization writes and delegation resolution. -/
 theorem run_frame_originalState {msg : Msg} {f : Frame} {refund : Nat} {result : Frame.TopRun}
@@ -265,14 +277,28 @@ theorem run_frame_originalState {msg : Msg} {f : Frame} {refund : Nat} {result :
       · cases hr
       · cases hr
         change legacy.message.context.block.origState = msg.benv.stat.origState
-        have hframe := Jaune.TopLevel.prepare_topFrame hp'
-        cases hframe with
-        | create => rfl
-        | call _ _ ha =>
-          change (Jaune.TopLevel.resolveCodeDelegation _).benv.stat.origState = _
-          unfold Jaune.TopLevel.resolveCodeDelegation
-          split <;> exact congrArg BenvStat.origState (authorize_preserves_block ha)
-        | amsterdam _ ha => exact congrArg BenvStat.origState (amsterdam_preserves_block ha)
+        exact congrArg BenvStat.origState (prepare_frame_block hp')
+
+/-- The typed refund is the legacy settlement input on every successful Checked run. -/
+theorem refundCounter_observe {msg : Msg} {prepared : Jaune.TopLevel.Preparation} {checked : Run}
+    (hp : Jaune.TopLevel.prepare msg = .ok prepared) (hr : (ofPreparation msg prepared hp).run = .ok checked) :
+    checked.refundCounter = (observe msg prepared checked).refundCounter := by
+  cases prepared with
+  | refused reason halted =>
+    simp only [ofPreparation, Preparation.run] at hr
+    cases hr
+    rfl
+  | frame f refund =>
+    simp only [ofPreparation, Preparation.run] at hr
+    cases he : (Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp)).runTopWithRoot with
+    | error => rw [he] at hr; cases hr
+    | ok result =>
+      rw [he] at hr
+      cases hr
+      have block : (Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp)).message.context.block =
+          msg.benv.stat := prepare_frame_block hp
+      simp only [Run.refundCounter, observe, TopLevelRun.refundCounter, TopLevelRun.stateGasRules, block]
+      cases result.result <;> rfl
 
 private def systemCallMessage (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) : Msg :=
   let started := benv.beginTransaction
@@ -287,9 +313,8 @@ def runSystemCall (benv : Benv) (target : Address) (code : ByteArray) (data : By
   | .error fault => .error fault
   | .ok prepared =>
     let checked ← (ofPreparation msg prepared hp).run
-    let observed := observe msg prepared checked
-    let _ ← observed.refundCounter
-    pure (checked, observed)
+    let _ ← checked.refundCounter
+    pure (checked, observe msg prepared checked)
 
 /-- The whole observed system run, including faults and the refund check, agrees with the current run. -/
 theorem runSystemCall_observe (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :
@@ -306,10 +331,11 @@ theorem runSystemCall_observe (benv : Benv) (target : Address) (code : ByteArray
     rfl
   · rename_i prepared hp
     rw [← run_observe _ _ hp]
-    cases (ofPreparation _ prepared hp).run with
+    cases hr : (ofPreparation _ prepared hp).run with
     | error => rfl
     | ok checked =>
       simp only [bind, Except.bind, Except.map, pure, Except.pure]
+      rw [refundCounter_observe hp hr]
       cases (observe _ prepared checked).refundCounter <;> rfl
 
 /-- Every prepared system frame sees the world at the start of that system call. -/

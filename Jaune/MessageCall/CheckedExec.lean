@@ -89,6 +89,20 @@ inductive Run where
   | refused (reason : Refusal)
   | frame (frame : Frame) (authorizationRefund : Nat) (run : Frame.TopRun)
 
+/-- The settled frame's refund, plus the authorization refund on forks without state gas.
+A successful frame with a negative refund counter faults. -/
+def Run.refundCounter : Run → Except Fault Nat
+  | .refused _ => .ok 0
+  | .frame f authorizationRefund run =>
+    let refund : Except Fault Nat := match run.result with
+      | .success _ _ _ _ substate _ =>
+        (Int.toNat? substate.refund).toExcept
+          (Fault.internal (.invariant (.text "refund counter is negative")))
+      | _ => .ok 0
+    match f.message.context.block.rules.stateGas with
+    | none => (authorizationRefund + ·) <$> refund
+    | some _ => refund
+
 def Preparation.run : Preparation → Except Fault Run
   | .refused reason => .ok (.refused reason)
   | .frame f refund => f.runTopWithRoot.map (.frame f refund)
