@@ -14,6 +14,7 @@ import Jaune.Check.Fork
 import Jaune.Check.CheckedPortAuditA
 import Jaune.Check.CheckedPortAuditB
 import Jaune.Check.FrameBridgeAudit
+import Jaune.Check.G2aBridgeAudit
 import Jaune.Check.InstructionFamiliesAudit
 import Jaune.Check.Hash
 import Jaune.Check.KeccakSpec
