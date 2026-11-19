@@ -6,6 +6,7 @@ import Jaune.Implementation.CheckedCachedDriver
 import Jaune.Bridge.G2b.FinalDriver
 import Jaune.MessageCall.SpawnFacts
 import Jaune.Run.Message
+import Jaune.Run.SystemCall
 
 namespace Jaune.Checked
 
@@ -272,6 +273,63 @@ theorem run_frame_originalState {msg : Msg} {f : Frame} {refund : Nat} {result :
           unfold Jaune.TopLevel.resolveCodeDelegation
           split <;> exact congrArg BenvStat.origState (authorize_preserves_block ha)
         | amsterdam _ ha => exact congrArg BenvStat.origState (amsterdam_preserves_block ha)
+
+private def systemCallMessage (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) : Msg :=
+  let started := benv.beginTransaction
+  systemTransactionMessage started (systemTransactionEnvironment started) target data code
+
+/-- Run the shared system message once and retain the Checked result and its current observation.
+The refund counter can fault even though a system caller discards its value. -/
+def runSystemCall (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :
+    Except Fault (Run × TopLevelRun) := do
+  let msg := systemCallMessage benv target code data
+  match hp : Jaune.TopLevel.prepare msg with
+  | .error fault => .error fault
+  | .ok prepared =>
+    let checked ← (ofPreparation msg prepared hp).run
+    let observed := observe msg prepared checked
+    let _ ← observed.refundCounter
+    pure (checked, observed)
+
+/-- The whole observed system run, including faults and the refund check, agrees with the current run. -/
+theorem runSystemCall_observe (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :
+    (runSystemCall benv target code data).map Prod.snd = processSystemTransaction benv target code data := by
+  unfold runSystemCall
+  dsimp only
+  change _ = (do
+    let observed ← Jaune.TopLevel.run (systemCallMessage benv target code data)
+    let _ ← observed.refundCounter
+    pure observed)
+  split
+  · rename_i fault hp
+    rw [Jaune.TopLevel.run, hp]
+    rfl
+  · rename_i prepared hp
+    rw [← run_observe _ _ hp]
+    cases (ofPreparation _ prepared hp).run with
+    | error => rfl
+    | ok checked =>
+      simp only [bind, Except.bind, Except.map, pure, Except.pure]
+      cases (observe _ prepared checked).refundCounter <;> rfl
+
+/-- Every prepared system frame sees the world at the start of that system call. -/
+theorem runSystemCall_frame_originalState {benv : Benv} {target : Address} {code : ByteArray}
+    {data : Bytes} {f : Frame} {refund : Nat} {result : Frame.TopRun} {observed : TopLevelRun}
+    (h : runSystemCall benv target code data = .ok (.frame f refund result, observed)) :
+    f.message.context.toChecked.tx.originalState = benv.state := by
+  unfold runSystemCall at h
+  dsimp only at h
+  split at h
+  · cases h
+  · rename_i prepared hp
+    obtain ⟨checked, hrun, h⟩ := Except.bind_eq_ok h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h
+    have checkedRun : run (systemCallMessage benv target code data) = .ok (.frame f refund result) := by
+      unfold run prepare
+      split <;> rename_i h <;> rw [hp] at h <;> cases h
+      exact hrun
+    exact run_frame_originalState checkedRun
 
 end TopLevel
 
