@@ -344,7 +344,7 @@ theorem Family.run_meter (f : Family) (x : Frame.Running)
     cases kind with
     | persistent =>
       have hs := SstoreRow.step_meter (SstoreRow.ofRules x.context.block.rules) x.context.isStatic
-        (fun k => x.state.slotView x.context k) x.state.machine
+        (x.state.slotView x.context.recipient x.context.block.origState) x.state.machine
         (by intro a b d; simp [SstoreRow.ofRules, hn]) (by intro a b d; simp [SstoreRow.ofRules, hn])
       show Walk _ _ (x.state.liftStore _ _ _)
       unfold Frame.State.liftStore

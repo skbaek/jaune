@@ -503,7 +503,7 @@ theorem Family.run_inv (f : Family) (x : Frame.Running) {c : Nat} (h : Inv c 0 x
     cases kind with
     | persistent =>
       have hs := SstoreRow.step_inv (SstoreRow.ofRules x.context.block.rules) x.context.isStatic
-        (fun k => x.state.slotView x.context k) h
+        (x.state.slotView x.context.recipient x.context.block.origState) h
       show Walk (Inv c 0) (Inv c 0) (x.state.liftStore _ _ _)
       unfold Frame.State.liftStore
       split <;> rename_i he <;> rw [he] at hs

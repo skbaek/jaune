@@ -619,14 +619,14 @@ theorem SstoreRow.ofRules_fork_gasCost_pos (f : Fork) :
 theorem SstoreRow.ofRules_run_eq (r : Frame.Running) :
     r.state.liftStore r.context.block.rules r.context.recipient
         ((SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-          (fun k => r.state.slotView r.context k)) =
+          (r.state.slotView r.context.recipient r.context.block.origState)) =
       PlainOp.run r .sstore := rfl
 
 theorem SstoreRow.ofRules_run_fork_eq (f : Fork) (r : Frame.Running)
     (hf : r.context.block.fork = f) :
     r.state.liftStore (Fork.ruleSet f) r.context.recipient
         ((SstoreRow.ofRules (Fork.ruleSet f)).step r.context.isStatic
-          (fun k => r.state.slotView r.context k)) =
+          (r.state.slotView r.context.recipient r.context.block.origState)) =
       PlainOp.run r .sstore := by
   have hr : r.context.block.rules = Fork.ruleSet f := by simp only [BenvStat.rules, hf]
   rw [← hr]
@@ -687,14 +687,11 @@ theorem PlainOp.sstore_run_congr_fork (r : Frame.Running) (f' : Fork)
   have hrow : SstoreRow.ofRules (Fork.ruleSet f') =
       SstoreRow.ofRules (Fork.ruleSet r.context.block.fork) :=
     sstoreRow_ofRules_eq_of hsg.symm hss.symm hacc.symm hclr.symm
-  have hsv : (fun k => r.state.slotView
-      { r.context with block := { r.context.block with fork := f' } } k) =
-      (fun k => r.state.slotView r.context k) := rfl
   unfold Frame.State.liftStore
   dsimp only [BenvStat.rules] at hrow ⊢
-  rw [hsv, hrow]
+  rw [hrow]
   cases ((SstoreRow.ofRules (Fork.ruleSet r.context.block.fork)).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine) with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine) with
   | error err =>
     rcases err with ⟨e, m', touch⟩
     dsimp only
@@ -712,7 +709,7 @@ theorem PlainOp.sstore_run_gasMeasure_lt (r : Frame.Running) (hacc : r.context.b
   rw [← SstoreRow.ofRules_run_eq] at hok
   unfold Frame.State.liftStore at hok
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | error e => simp [hs] at hok
   | ok res =>
     rcases res with ⟨m', touch⟩
@@ -728,9 +725,9 @@ theorem PlainOp.sstore_run_memory (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   have hm := SstoreRow.step_memory (SstoreRow.ofRules r.context.block.rules) r.context.isStatic
-    (fun k => r.state.slotView r.context k) r.state.machine
+    (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res => simp [hs] at hm ⊢; exact hm
   | error err => simp [hs] at hm ⊢; exact hm
 
@@ -740,9 +737,9 @@ theorem PlainOp.sstore_run_returnData (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   have hrd := SstoreRow.step_returnData (SstoreRow.ofRules r.context.block.rules) r.context.isStatic
-    (fun k => r.state.slotView r.context k) r.state.machine
+    (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res => simp [hs] at hrd ⊢; exact hrd
   | error err => simp [hs] at hrd ⊢; exact hrd
 
@@ -751,7 +748,7 @@ theorem PlainOp.sstore_run_logs (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine <;>
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine <;>
     simp [Frame.State.applyStoreTouch_logs, Frame.State.logs]
 
 theorem PlainOp.sstore_run_selfDestructs (r : Frame.Running) :
@@ -760,7 +757,7 @@ theorem PlainOp.sstore_run_selfDestructs (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine <;>
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine <;>
     simp [Frame.State.applyStoreTouch_selfDestructs, Frame.State.selfDestructs]
 
 theorem PlainOp.sstore_run_accessedAddresses (r : Frame.Running) :
@@ -769,7 +766,7 @@ theorem PlainOp.sstore_run_accessedAddresses (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine <;>
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine <;>
     simp [Frame.State.applyStoreTouch_accessedAddresses, Frame.State.accessedAddresses]
 
 theorem PlainOp.sstore_run_touchedAccounts (r : Frame.Running) :
@@ -778,7 +775,7 @@ theorem PlainOp.sstore_run_touchedAccounts (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine <;>
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine <;>
     simp [Frame.State.applyStoreTouch_touchedAccounts, Frame.State.touchedAccounts]
 
 theorem PlainOp.sstore_run_createdAccounts (r : Frame.Running) :
@@ -787,7 +784,7 @@ theorem PlainOp.sstore_run_createdAccounts (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine <;>
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine <;>
     simp [Frame.State.applyStoreTouch_createdAccounts, Frame.State.createdAccounts]
 
 theorem PlainOp.sstore_run_transientStorage (r : Frame.Running) :
@@ -796,7 +793,7 @@ theorem PlainOp.sstore_run_transientStorage (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res =>
     rcases res with ⟨m', touch⟩
     have hnot : ∀ k v, touch.write ≠ some (.transient k v) := by
@@ -816,7 +813,7 @@ theorem PlainOp.sstore_run_balance (r : Frame.Running) (a : Address) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res =>
     rcases res with ⟨m', touch⟩
     have hnot : ∀ k v, touch.write ≠ some (.transient k v) := by
@@ -835,7 +832,7 @@ theorem PlainOp.sstore_run_code (r : Frame.Running) (a : Address) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res =>
     rcases res with ⟨m', touch⟩
     have hnot : ∀ k v, touch.write ≠ some (.transient k v) := by
@@ -855,7 +852,7 @@ theorem PlainOp.sstore_run_storageValue_ne_addr (r : Frame.Running) {a : Address
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res =>
     rcases res with ⟨m', touch⟩
     have hnot : ∀ k v, touch.write ≠ some (.transient k v) := by

@@ -145,7 +145,8 @@ private theorem sstoreBerlin_eq_sstoreLegacy (ctx : CallContext) (s : Frame.Stat
 private theorem liftStore_sstoreLegacy_eq (ctx : CallContext) (s : Frame.State)
     (hs1 : ctx.block.rules.stateGas = none) :
     s.liftStore ctx.block.rules ctx.recipient
-        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic (fun k => s.slotView ctx k)) =
+        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic
+          (s.slotView ctx.recipient ctx.block.origState)) =
       PlainOp.sstoreLegacy ctx s := by
   unfold Frame.State.liftStore SstoreRow.step SstoreRow.ofRules PlainOp.sstoreLegacy
   simp only [hs1, Bool.false_and, Bool.false_eq_true, ↓reduceIte, Bool.not_false, state_pop_eq]
@@ -200,7 +201,8 @@ private theorem liftStore_sstoreLegacy_eq (ctx : CallContext) (s : Frame.State)
         | eip2929 =>
           simp only [Bool.true_and]
           by_cases hcold : (ctx.recipient, key) ∉ s.accessedStorageKeys
-          · have hdc : (s.slotView ctx key).cold = true := decide_eq_true hcold
+          · have hdc : (s.slotView ctx.recipient ctx.block.origState key).cold = true :=
+              decide_eq_true hcold
             simp only [hdc, ↓reduceIte]
             have hcold_true : ((ctx.recipient, key) ∉ s.accessedStorageKeys) = True :=
               eq_true hcold
@@ -226,7 +228,8 @@ private theorem liftStore_sstoreLegacy_eq (ctx : CallContext) (s : Frame.State)
                 cases ctx.block.rules.sstore.netMetering <;> (unfold Frame.State.applyStoreTouch; rfl)
               · rw [assertDynamic_true hstat]
                 cases ctx.block.rules.sstore.netMetering <;> (unfold Frame.State.applyStoreTouch; rfl)
-          · have hdc : (s.slotView ctx key).cold = false := decide_eq_false hcold
+          · have hdc : (s.slotView ctx.recipient ctx.block.origState key).cold = false :=
+              decide_eq_false hcold
             simp only [hdc, Bool.false_eq_true, ↓reduceIte]
             have hcold_false : ((ctx.recipient, key) ∉ s.accessedStorageKeys) = False :=
               eq_false hcold
@@ -265,7 +268,8 @@ private theorem liftStore_sstoreBerlin_eq (ctx : CallContext) (s : Frame.State)
     (hs2 : ctx.block.rules.sstore = ⟨true, true⟩)
     (hs3 : ctx.block.rules.access = .eip2929) :
     s.liftStore ctx.block.rules ctx.recipient
-        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic (fun k => s.slotView ctx k)) =
+        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic
+          (s.slotView ctx.recipient ctx.block.origState)) =
       PlainOp.sstoreBerlin ctx s := by
   rw [liftStore_sstoreLegacy_eq ctx s hs1]
   exact (sstoreBerlin_eq_sstoreLegacy ctx s hs2 hs3).symm
@@ -273,7 +277,8 @@ private theorem liftStore_sstoreBerlin_eq (ctx : CallContext) (s : Frame.State)
 private theorem liftStore_sstoreAmsterdam_eq (state : StateGasRules) (ctx : CallContext)
     (s : Frame.State) (hs : ctx.block.rules.stateGas = some state) :
     s.liftStore ctx.block.rules ctx.recipient
-        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic (fun k => s.slotView ctx k)) =
+        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic
+          (s.slotView ctx.recipient ctx.block.origState)) =
       PlainOp.sstoreAmsterdam state ctx s := by
   unfold Frame.State.liftStore SstoreRow.step SstoreRow.ofRules PlainOp.sstoreAmsterdam
   simp only [hs, Bool.true_and, Bool.not_true, Bool.false_and, Bool.false_eq_true, ↓reduceIte]
@@ -294,7 +299,8 @@ private theorem liftStore_sstoreAmsterdam_eq (state : StateGasRules) (ctx : Call
       | ok p2 =>
         rcases p2 with ⟨newVal, m₂⟩
         by_cases hcold : (ctx.recipient, key) ∉ s.accessedStorageKeys
-        · have hdc : (s.slotView ctx key).cold = true := decide_eq_true hcold
+        · have hdc : (s.slotView ctx.recipient ctx.block.origState key).cold = true :=
+            decide_eq_true hcold
           have hcold_true : ((ctx.recipient, key) ∉ s.accessedStorageKeys) = True :=
             eq_true hcold
           simp only [hdc, ↓reduceIte]
@@ -344,7 +350,8 @@ private theorem liftStore_sstoreAmsterdam_eq (state : StateGasRules) (ctx : Call
             rw [except_assert_eq_error hg_raw]
             simp only [hlt, ↓reduceIte, withMachine_twice]
             rfl
-        · have hdc : (s.slotView ctx key).cold = false := decide_eq_false hcold
+        · have hdc : (s.slotView ctx.recipient ctx.block.origState key).cold = false :=
+            decide_eq_false hcold
           have hcold_false : ((ctx.recipient, key) ∉ s.accessedStorageKeys) = False :=
             eq_false hcold
           simp only [hdc, Bool.false_eq_true, ↓reduceIte]
@@ -400,7 +407,8 @@ private theorem liftStore_sstoreAmsterdam_eq (state : StateGasRules) (ctx : Call
 configuration, `pc`, `CallContext`, and `Frame.State`. -/
 theorem SstoreRow.ofRules_lift_eq (pc : Nat) (ctx : CallContext) (s : Frame.State) :
     s.liftStore ctx.block.rules ctx.recipient
-        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic (fun k => s.slotView ctx k)) =
+        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic
+          (s.slotView ctx.recipient ctx.block.origState)) =
       PlainOp.runCore pc ctx s .sstore := by
   dsimp only [PlainOp.runCore]
   cases hs1 : ctx.block.rules.stateGas with

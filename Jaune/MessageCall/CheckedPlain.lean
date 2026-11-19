@@ -28,7 +28,7 @@ def Family.run (f : Family) (x : Frame.Running) :
   | .store .persistent =>
     x.state.liftStore x.context.block.rules x.context.recipient
       ((SstoreRow.ofRules x.context.block.rules).step x.context.isStatic
-        (fun k => x.state.slotView x.context k))
+        (x.state.slotView x.context.recipient x.context.block.origState))
   | .store .transient =>
     x.state.liftStore x.context.block.rules x.context.recipient
       ((TstoreRow.ofRules x.context.block.rules).step x.context.block.rules.opcodes
