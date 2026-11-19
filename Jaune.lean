@@ -145,6 +145,12 @@ import Jaune.Bridge.G2b.FinalChronology
 import Jaune.MessageCall.FinalRunInvariants
 import Jaune.MessageCall.FinalDriverInvariants
 import Jaune.MessageCall.FinalCanonical
+import Jaune.MessageCall.CheckedStateGasOps
+import Jaune.MessageCall.CheckedStateGasZero
+import Jaune.MessageCall.CheckedRunInvariants
+import Jaune.MessageCall.CheckedSpawnFacts
+import Jaune.MessageCall.CheckedDriverInvariants
+import Jaune.MessageCall.CheckedCanonical
 import Jaune.MessageCall.CheckedResumeFacts
 import Jaune.MessageCall.CheckedGasFacts
 import Jaune.MessageCall.CheckedPlainGasFacts
