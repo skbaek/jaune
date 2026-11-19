@@ -21,14 +21,15 @@ private def firstSpawn : Nat → Frame.Running → Option (Frame × Staging.Pend
     | .ok (.spawn child pending _) => some (child, pending)
     | _ => none
 
-/-- Render the result of native top-level preparation and native frame execution through the
-same fork-specific output boundary used for the transaction. Both pilot preparations are frames. -/
-private def rendered (msg : Msg) : Option (State × MsgCallOutput) := do
-  let .ok (.frame f refund) := Staging.TopLevel.prepare msg | none
+/-- What the transaction reads of the native top-level frame: the world after it and the logs it
+keeps (a failed frame keeps none). Both pilot preparations are frames. -/
+private def rendered (msg : Msg) : Option (State × List Log) := do
+  let .ok (.frame f _) := Staging.TopLevel.prepare msg | none
   let .ok result := Staging.Frame.runTop f | none
-  match msg.benv.stat.rules.stateGas with
-  | none => (f.output refund result).toOption
-  | some _ => (f.outputAmsterdam result).toOption
+  let logs := match result with
+    | .success _ _ _ _ substate _ => substate.logs
+    | _ => []
+  pure ((f.worldAfter result).state, logs)
 
 def observeCall : Option CallObservation := do
   let f := topFrame callMessage
@@ -39,7 +40,7 @@ def observeCall : Option CallObservation := do
   let .ok result := Staging.settle child raw | none
   let .ok callerRaw := Staging.exec start | none
   let .ok (.success _ _ _ world substate _) := Staging.Frame.runTop f | none
-  let (state, output) ← rendered callMessage
+  let (state, logs) ← rendered callMessage
   pure {
     isCall := child.message.kind == .call
     codeAddress := child.message.codeAddress.map Address.toNat
@@ -55,7 +56,7 @@ def observeCall : Option CallObservation := do
     settledSlot := ((world.state.get childAddress).storage.get 0).toNat
     settledLogs := substate.logs.length
     topLevelSlot := ((state.get childAddress).storage.get 0).toNat
-    topLevelLogs := output.logs.length }
+    topLevelLogs := logs.length }
 
 def observeCreate : Option CreateObservation := do
   let f := topFrame createMessage
