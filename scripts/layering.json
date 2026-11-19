@@ -45,6 +45,7 @@
   "Jaune.Check.CheckedPortAuditA": "check",
   "Jaune.Check.CheckedPortAuditB": "check",
   "Jaune.Check.FrameBridgeAudit": "check",
+  "Jaune.Check.G2aBridgeAudit": "check",
   "Jaune.Check.InstructionFamiliesAudit": "check",
   "Jaune.Check.Hash": "check",
   "Jaune.Check.KeccakSpec": "check",
