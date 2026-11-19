@@ -94,13 +94,6 @@ theorem LogRow.run_gas (row : LogRow) (hpos : 0 < row.base) (x : Frame.Running)
     omega
   · exact LogRow.step_gasMeasure_lt_of_ok hpos he
 
-private theorem gcases {α : Type} {H : Machine → Prop} {P : α → Prop}
-    {x : Except (ExceptionalHalt × Machine) α}
-    (h : MWalk H P x) : (∀ e m, x = .error (e, m) → H m) ∧ (∀ a, x = .ok a → P a) := by
-  constructor
-  · intro e m he; subst he; exact h
-  · intro a ha; subst ha; exact h
-
 /-- A Read step halts within the measure and, at a positive price, continues below it. -/
 private def TouchGas {τ : Type} (g : Nat) : Except (ExceptionalHalt × Machine × τ) (Machine × τ) → Prop
   | .error (_, m, _) => m.gasMeasure ≤ g
@@ -123,7 +116,7 @@ private theorem ReadRow.step_gas (row : ReadRow) (rules : ForkRules) (ctx : Call
   dsimp only
   split
   · exact Nat.le_refl _
-  · have hpop := gcases (ReadTarget.pop_gas target m)
+  · have hpop := MWalk.cases (ReadTarget.pop_gas target m)
     split
     · rename_i e m' hp; exact hpop.1 _ _ hp
     · rename_i key m₁ hp
@@ -132,12 +125,12 @@ private theorem ReadRow.step_gas (row : ReadRow) (rules : ForkRules) (ctx : Call
       cases result with
       | push f =>
         simp only [ReadResult.finish]
-        have hc := gcases (Machine.chargeGas_gas (price.quote rules ctx v key).1 (Nat.le_refl m₁.gasMeasure))
+        have hc := MWalk.cases (Machine.chargeGas_gas (price.quote rules ctx v key).1 (Nat.le_refl m₁.gasMeasure))
         split
         · rename_i e m' he; exact (hc.1 _ _ he).trans e₁.le
         · rename_i m₂ he
           have e₂ : m₂.gasMeasure + _ = m₁.gasMeasure := hc.2 _ he
-          have hq := gcases (Machine.push_gas (f ctx v.world key) (Nat.le_refl m₂.gasMeasure))
+          have hq := MWalk.cases (Machine.push_gas (f ctx v.world key) (Nat.le_refl m₂.gasMeasure))
           split
           · rename_i e m' he'
             have := hq.1 _ _ he'
@@ -149,17 +142,17 @@ private theorem ReadRow.step_gas (row : ReadRow) (rules : ForkRules) (ctx : Call
             omega
       | copyCode perWord =>
         simp only [ReadResult.finish]
-        have p1 := gcases (Machine.popToNat_gas (Nat.le_refl m₁.gasMeasure))
+        have p1 := MWalk.cases (Machine.popToNat_gas (Nat.le_refl m₁.gasMeasure))
         split
         · rename_i e m' he; exact (p1.1 _ _ he).trans e₁.le
         · rename_i d m₂ he
           have e₂ : m₂.gasMeasure = m₁.gasMeasure := p1.2 _ he
-          have p2 := gcases (Machine.popToNat_gas (Nat.le_refl m₂.gasMeasure))
+          have p2 := MWalk.cases (Machine.popToNat_gas (Nat.le_refl m₂.gasMeasure))
           split
           · rename_i e m' he'; exact ((p2.1 _ _ he').trans e₂.le).trans e₁.le
           · rename_i o m₃ he'
             have e₃ : m₃.gasMeasure = m₂.gasMeasure := p2.2 _ he'
-            have p3 := gcases (Machine.popToNat_gas (Nat.le_refl m₃.gasMeasure))
+            have p3 := MWalk.cases (Machine.popToNat_gas (Nat.le_refl m₃.gasMeasure))
             split
             · rename_i e m' he''
               exact (((p3.1 _ _ he'').trans e₃.le).trans e₂.le).trans e₁.le
@@ -167,11 +160,11 @@ private theorem ReadRow.step_gas (row : ReadRow) (rules : ForkRules) (ctx : Call
               have e₄ : m₄.gasMeasure = m₃.gasMeasure := p3.2 _ he''
               split
               · rename_i e m' h5
-                have := (gcases (Machine.chargeGas_gas _ (Nat.le_refl m₄.gasMeasure))).1 _ _ h5
+                have := (MWalk.cases (Machine.chargeGas_gas _ (Nat.le_refl m₄.gasMeasure))).1 _ _ h5
                 show Machine.gasMeasure _ ≤ _
                 omega
               · rename_i m₅ h5
-                have := (gcases (Machine.chargeGas_gas _ (Nat.le_refl m₄.gasMeasure))).2 _ h5
+                have := (MWalk.cases (Machine.chargeGas_gas _ (Nat.le_refl m₄.gasMeasure))).2 _ h5
                 show Machine.gasMeasure _ < _
                 simp only [Machine.memWrite_gasMeasure]
                 omega

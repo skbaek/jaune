@@ -365,12 +365,6 @@ private def TouchInv {τ : Type} (c : Nat) :
   | .error (_, m, _) => MInv c 0 m
   | .ok (m, _) => MInv c 0 m
 
-private theorem mwalk_cases {α : Type} {H P} {x : Except (ExceptionalHalt × Machine) α}
-    (h : MWalk H P x) : (∀ e m, x = .error (e, m) → H m) ∧ (∀ a, x = .ok a → P a) := by
-  constructor
-  · intro e m he; subst he; exact h
-  · intro a ha; subst ha; exact h
-
 theorem ReadTarget.pop_inv (t : ReadTarget) {c : Nat} {m : Machine} (h : MInv c 0 m) :
     MWalk (MInv c 0) (fun p => MInv c 0 p.2) (t.pop m) := by
   cases t with
@@ -389,39 +383,39 @@ theorem ReadRow.step_inv (row : ReadRow) (rules : ForkRules) (ctx : CallContext)
   · exact h
   · have hpop := ReadTarget.pop_inv target h
     split
-    · rename_i e m' hp; exact (mwalk_cases hpop).1 _ _ hp
+    · rename_i e m' hp; exact (MWalk.cases hpop).1 _ _ hp
     · rename_i key m₁ hp
-      have h₁ : MInv c 0 m₁ := (mwalk_cases hpop).2 _ hp
+      have h₁ : MInv c 0 m₁ := (MWalk.cases hpop).2 _ hp
       cases result with
       | push f =>
         simp only [ReadResult.finish]
-        have hc := mwalk_cases (Machine.chargeGas_inv (price.quote rules ctx v key).1 h₁)
+        have hc := MWalk.cases (Machine.chargeGas_inv (price.quote rules ctx v key).1 h₁)
         split
         · rename_i e m' he; exact hc.1 _ _ he
         · rename_i m₂ he
-          have hp := mwalk_cases (Machine.push_inv (f ctx v.world key) (hc.2 _ he))
+          have hp := MWalk.cases (Machine.push_inv (f ctx v.world key) (hc.2 _ he))
           split
           · rename_i e m' he'; exact hp.1 _ _ he'
           · rename_i m₃ he'; exact hp.2 _ he'
       | copyCode perWord =>
         simp only [ReadResult.finish]
-        have p1 := mwalk_cases (Machine.popToNat_inv h₁)
+        have p1 := MWalk.cases (Machine.popToNat_inv h₁)
         split
         · rename_i e m' he; exact p1.1 _ _ he
         · rename_i d m₂ he
-          have p2 := mwalk_cases (Machine.popToNat_inv ((p1.2 _ he).weaken (Nat.zero_le _)))
+          have p2 := MWalk.cases (Machine.popToNat_inv ((p1.2 _ he).weaken (Nat.zero_le _)))
           split
           · rename_i e m' he'; exact p2.1 _ _ he'
           · rename_i o m₃ he'
-            have p3 := mwalk_cases (Machine.popToNat_inv ((p2.2 _ he').weaken (Nat.zero_le _)))
+            have p3 := MWalk.cases (Machine.popToNat_inv ((p2.2 _ he').weaken (Nat.zero_le _)))
             split
             · rename_i e m' he''; exact p3.1 _ _ he''
             · rename_i n m₄ he''
               have h₄ : MInv c 0 m₄ := (p3.2 _ he'').weaken (Nat.zero_le _)
               split
-              · rename_i e m' h5; exact (mwalk_cases (Machine.chargeGas_inv _ h₄)).1 _ _ h5
+              · rename_i e m' h5; exact (MWalk.cases (Machine.chargeGas_inv _ h₄)).1 _ _ h5
               · rename_i m₅ h5
-                have h₅ := (mwalk_cases (Machine.chargeGas_inv _ h₄)).2 m₅ h5
+                have h₅ := (MWalk.cases (Machine.chargeGas_inv _ h₄)).2 m₅ h5
                 exact h₅
 
 /-- The `SSTORE` row's step keeps the bound: a state-gas credit moves gas between the meters
@@ -431,11 +425,11 @@ theorem SstoreRow.step_inv (row : SstoreRow) (isStatic : Bool) (slot : U256 → 
   unfold SstoreRow.step
   split
   · exact h
-  · have p1 := mwalk_cases (Machine.pop_inv h)
+  · have p1 := MWalk.cases (Machine.pop_inv h)
     split
     · rename_i e m' he; exact p1.1 _ _ he
     · rename_i key m₁ he
-      have p2 := mwalk_cases (Machine.pop_inv ((p1.2 _ he).weaken (Nat.zero_le _)))
+      have p2 := MWalk.cases (Machine.pop_inv ((p1.2 _ he).weaken (Nat.zero_le _)))
       split
       · rename_i e m' he'; exact p2.1 _ _ he'
       · rename_i v m₂ he'
@@ -445,12 +439,12 @@ theorem SstoreRow.step_inv (row : SstoreRow) (isStatic : Bool) (slot : U256 → 
         · exact h₂
         · have h₃ : MInv c 0 (m₂.creditStateGasRefund
               (row.stateGasRefund v (slot key).original (slot key).current)) := h₂
-          have p3 := mwalk_cases (Machine.chargeGas_inv
+          have p3 := MWalk.cases (Machine.chargeGas_inv
             (row.gasCost (row.tracksWarmth && (slot key).cold) v (slot key).original (slot key).current) h₃)
           split
           · rename_i e m' h5; exact p3.1 _ _ h5
           · rename_i m₄ h5
-            have p4 := mwalk_cases (Machine.chargeStateGas_inv
+            have p4 := MWalk.cases (Machine.chargeStateGas_inv
               (row.stateGasCost v (slot key).original (slot key).current) (p3.2 _ h5))
             split
             · rename_i e m' h6; exact p4.1 _ _ h6
@@ -467,15 +461,15 @@ theorem TstoreRow.step_inv (row : TstoreRow) (o : OpcodeRules) (isStatic : Bool)
   · exact h
   · split
     · exact h
-    · have p1 := mwalk_cases (Machine.pop_inv h)
+    · have p1 := MWalk.cases (Machine.pop_inv h)
       split
       · rename_i e m' he; exact p1.1 _ _ he
       · rename_i key m₁ he
-        have p2 := mwalk_cases (Machine.pop_inv ((p1.2 _ he).weaken (Nat.zero_le _)))
+        have p2 := MWalk.cases (Machine.pop_inv ((p1.2 _ he).weaken (Nat.zero_le _)))
         split
         · rename_i e m' he'; exact p2.1 _ _ he'
         · rename_i v m₂ he'
-          have p3 := mwalk_cases (Machine.chargeGas_inv row.gasCost ((p2.2 _ he').weaken (Nat.zero_le _)))
+          have p3 := MWalk.cases (Machine.chargeGas_inv row.gasCost ((p2.2 _ he').weaken (Nat.zero_le _)))
           split
           · rename_i e m' h5; exact p3.1 _ _ h5
           · rename_i m₃ h5

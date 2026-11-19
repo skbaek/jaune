@@ -96,13 +96,6 @@ private theorem within_of {m out : Machine} (hmem : out.memory = m.memory)
   rw [hmem]
   omega
 
-private theorem pcases {α : Type} {H : Machine → Prop} {P : α → Prop}
-    {x : Except (ExceptionalHalt × Machine) α}
-    (h : MWalk H P x) : (∀ e m, x = .error (e, m) → H m) ∧ (∀ a, x = .ok a → P a) := by
-  constructor
-  · intro e m he; subst he; exact h
-  · intro a ha; subst ha; exact h
-
 private theorem Machine.popWords_within {n : Nat} {m : Machine} (a : Fin 4) (h : Within n m) :
     MWalk (Within n) (fun p => Within n p.2) (m.popWords a) := by
   match a with
@@ -242,7 +235,7 @@ private theorem ReadRow.step_within (row : ReadRow) (rules : ForkRules) (ctx : C
   dsimp only
   split
   · exact Nat.le_refl _
-  · have hpop := pcases (ReadTarget.pop_within target m)
+  · have hpop := MWalk.cases (ReadTarget.pop_within target m)
     split
     · rename_i e m' hp; exact hpop.1 _ _ hp
     · rename_i key m₁ hp
@@ -250,30 +243,30 @@ private theorem ReadRow.step_within (row : ReadRow) (rules : ForkRules) (ctx : C
       cases result with
       | push f =>
         simp only [ReadResult.finish]
-        have hc := pcases (Machine.charge_within (price.quote rules ctx v key).1 h₁)
+        have hc := MWalk.cases (Machine.charge_within (price.quote rules ctx v key).1 h₁)
         split
         · rename_i e m' he; exact hc.1 _ _ he
         · rename_i m₂ he
-          have hq := pcases (Machine.push_within (f ctx v.world key) (hc.2 _ he))
+          have hq := MWalk.cases (Machine.push_within (f ctx v.world key) (hc.2 _ he))
           split
           · rename_i e m' he'; exact hq.1 _ _ he'
           · rename_i m₃ he'; exact hq.2 _ he'
       | copyCode perWord =>
         simp only [ReadResult.finish]
-        have p1 := pcases (Machine.popToNat_memoryPotential h₁)
+        have p1 := MWalk.cases (Machine.popToNat_memoryPotential h₁)
         split
         · rename_i e m' he; exact p1.1 _ _ he
         · rename_i d m₂ he
-          have p2 := pcases (Machine.popToNat_memoryPotential (p1.2 _ he))
+          have p2 := MWalk.cases (Machine.popToNat_memoryPotential (p1.2 _ he))
           split
           · rename_i e m' he'; exact p2.1 _ _ he'
           · rename_i o m₃ he'
-            have p3 := pcases (Machine.popToNat_memoryPotential (p2.2 _ he'))
+            have p3 := MWalk.cases (Machine.popToNat_memoryPotential (p2.2 _ he'))
             split
             · rename_i e m' he''; exact p3.1 _ _ he''
             · rename_i k m₄ he''
               have h₄ := p3.2 _ he''
-              have hc := pcases (Machine.charge_extend_within [(d, k)]
+              have hc := MWalk.cases (Machine.charge_extend_within [(d, k)]
                 ((price.quote rules ctx v key).1 + perWord * ceilDiv k 32) h₄)
               split
               · rename_i e m' h5

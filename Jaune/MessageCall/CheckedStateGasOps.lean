@@ -222,13 +222,6 @@ theorem JumpOp.runCore_meter (pc : Nat) (ctx : CallContext) (s : Frame.State) (o
     meter_walk
 
 
-private theorem mcases {α : Type} {H : Machine → Prop} {P : α → Prop}
-    {x : Except (ExceptionalHalt × Machine) α}
-    (h : MWalk H P x) : (∀ e m, x = .error (e, m) → H m) ∧ (∀ a, x = .ok a → P a) := by
-  constructor
-  · intro e m he; subst he; exact h
-  · intro a ha; subst ha; exact h
-
 /-- A lifted machine step keeps the meter when the step does, on both channels. -/
 private theorem liftMachine_meter {s : Frame.State}
     {core : Machine → Except (ExceptionalHalt × Machine) Machine}
@@ -269,12 +262,12 @@ private theorem SstoreRow.step_meter (row : SstoreRow) (isStatic : Bool) (slot :
   unfold SstoreRow.step
   split
   · rfl
-  · have p1 := mcases (Machine.pop_meter m)
+  · have p1 := MWalk.cases (Machine.pop_meter m)
     split
     · rename_i e m' he; exact p1.1 _ _ he
     · rename_i key m₁ he
       have e1 : m₁.stateGas = m.stateGas := p1.2 _ he
-      have p2 := mcases (Machine.pop_meter m₁)
+      have p2 := MWalk.cases (Machine.pop_meter m₁)
       split
       · rename_i e m' he'; exact (p2.1 _ _ he').trans e1
       · rename_i v m₂ he'
@@ -283,7 +276,7 @@ private theorem SstoreRow.step_meter (row : SstoreRow) (isStatic : Bool) (slot :
         split
         · exact e2
         · simp only [hr, hc, Machine.creditStateGasRefund_zero, Machine.chargeStateGas_zero]
-          have p3 := mcases (Machine.chargeGas_meter m₂
+          have p3 := MWalk.cases (Machine.chargeGas_meter m₂
             (row.gasCost (row.tracksWarmth && (slot key).cold) v (slot key).original (slot key).current))
           split
           · rename_i e m' h5; exact (p3.1 _ _ h5).trans e2
@@ -301,17 +294,17 @@ private theorem TstoreRow.step_meter (row : TstoreRow) (o : OpcodeRules) (isStat
   · rfl
   · split
     · rfl
-    · have p1 := mcases (Machine.pop_meter m)
+    · have p1 := MWalk.cases (Machine.pop_meter m)
       split
       · rename_i e m' he; exact p1.1 _ _ he
       · rename_i key m₁ he
         have e1 : m₁.stateGas = m.stateGas := p1.2 _ he
-        have p2 := mcases (Machine.pop_meter m₁)
+        have p2 := MWalk.cases (Machine.pop_meter m₁)
         split
         · rename_i e m' he'; exact (p2.1 _ _ he').trans e1
         · rename_i v m₂ he'
           have e2 : m₂.stateGas = m.stateGas := (p2.2 _ he').trans e1
-          have p3 := mcases (Machine.chargeGas_meter m₂ row.gasCost)
+          have p3 := MWalk.cases (Machine.chargeGas_meter m₂ row.gasCost)
           split
           · rename_i e m' h5; exact (p3.1 _ _ h5).trans e2
           · rename_i m₃ h5
