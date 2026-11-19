@@ -1,0 +1,327 @@
+{
+ "schema_version": 1,
+ "retired_tokens": [
+  "Acct",
+  "Adr",
+  "B128",
+  "B256",
+  "BLT",
+  "Benv",
+  "CFork",
+  "Ctx",
+  "Devm",
+  "Gated",
+  "Jinst",
+  "Linst",
+  "Mach",
+  "Mem",
+  "Meta",
+  "Msg",
+  "NTB",
+  "NTBs",
+  "Ninst",
+  "Pres",
+  "Rinst",
+  "Sevm",
+  "Stor",
+  "Tenv",
+  "Tra",
+  "Tx",
+  "WQ",
+  "XStep",
+  "Xinst",
+  "Xlot",
+  "bal",
+  "hp",
+  "txsRoot",
+  "vbytes",
+  "wds"
+ ],
+ "allowed_abbreviations": [
+  "API",
+  "BLAKE2",
+  "BLS",
+  "BPO",
+  "Bool",
+  "ByteArray",
+  "Bytes",
+  "CLI",
+  "EC",
+  "EIP",
+  "EOA",
+  "EVM",
+  "Ecrecover",
+  "Fp",
+  "Fp2",
+  "G1",
+  "G2",
+  "Hash32",
+  "Int",
+  "JSON",
+  "KECCAK",
+  "KZG",
+  "Modexp",
+  "Nat",
+  "RIPEMD160",
+  "RLP",
+  "SHA256",
+  "SSZ",
+  "U128",
+  "U16",
+  "U256",
+  "U32",
+  "U64",
+  "U8",
+  "UInt16",
+  "UInt32",
+  "UInt64",
+  "UInt8",
+  "YAML",
+  "pc",
+  "secp256k1",
+  "tx"
+ ],
+ "entries": [
+  {
+   "old": "Jaune.SymbolicPush.nextOp_step_success",
+   "new": "Jaune.SymbolicPush.step_success",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.SymbolicPush.nextOp_step_outOfGas",
+   "new": "Jaune.SymbolicPush.step_outOfGas",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.SymbolicPush.nextOp_step_stackOverflow",
+   "new": "Jaune.SymbolicPush.step_stackOverflow",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.SymbolicPush.prependExec",
+   "new": "Jaune.SymbolicPush.prepend",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.SymbolicArith.nextOp_step_eq",
+   "new": "Jaune.SymbolicArith.step_eq",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.SymbolicArith.nextOp_step_success",
+   "new": "Jaune.SymbolicArith.step_success",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.SymbolicArith.nextOp_step_outOfGas",
+   "new": "Jaune.SymbolicArith.step_outOfGas",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.SymbolicArith.nextOp_step_stackUnderflow",
+   "new": "Jaune.SymbolicArith.step_stackUnderflow",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.SymbolicArith.prependExec",
+   "new": "Jaune.SymbolicArith.prepend",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Execution.executionExec",
+   "new": "Examples.Execution.execution",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Execution.interpreterExec",
+   "new": "Examples.Execution.interpreter",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Arithmetic.stepExec0",
+   "new": "Examples.Arithmetic.step0",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Arithmetic.stepExec2",
+   "new": "Examples.Arithmetic.step2",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Arithmetic.stepExec4",
+   "new": "Examples.Arithmetic.step4",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Arithmetic.stepExec5",
+   "new": "Examples.Arithmetic.step5",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Arithmetic.executionExec",
+   "new": "Examples.Arithmetic.execution",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Arithmetic.nextExec",
+   "new": "Examples.Arithmetic.next",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Arithmetic.resultExec",
+   "new": "Examples.Arithmetic.result",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Arithmetic.interpreterExec",
+   "new": "Examples.Arithmetic.interpreter",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Examples.Arithmetic.concreteExec",
+   "new": "Examples.Arithmetic.concrete",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.NextOp.RunExec",
+   "new": "Jaune.NextOp.Run",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.NextOp.staticcall_runExec_effects",
+   "new": "Jaune.NextOp.staticcall_run_effects",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))"
+  },
+  {
+   "old": "Jaune.genericCall_native_not_run'",
+   "new": "Jaune.genericCall_native_not_run",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): the new chain takes back the original name the deleted old side used (Plain English (rule 4))",
+   "notes": "private; the L units' clash-avoiding prime (the old-chain lemma of the plain name was deleted in D1)"
+  },
+  {
+   "old": "Jaune.processMessageCall.legacyAuthorization",
+   "new": "Jaune.processMessageCall.authorize",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): not an execution-specs function; the guarded fragment of process_message_call (execution-specs e27f097e src/ethereum/forks/prague/vm/interpreter.py:123-124, `if message.tx_env.authorizations != (): refund_counter += set_delegation(message)`, set_delegation = Jaune setDelegation); Plain English (rule 4)"
+  },
+  {
+   "old": "Jaune.processMessageCall.legacyAuthorization_disabled",
+   "new": "Jaune.processMessageCall.authorize_disabled",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): not an execution-specs function; the guarded fragment of process_message_call (execution-specs e27f097e src/ethereum/forks/prague/vm/interpreter.py:123-124, `if message.tx_env.authorizations != (): refund_counter += set_delegation(message)`, set_delegation = Jaune setDelegation); Plain English (rule 4)"
+  },
+  {
+   "old": "Jaune.processMessageCall.legacyAuthorization_enabled",
+   "new": "Jaune.processMessageCall.authorize_enabled",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): not an execution-specs function; the guarded fragment of process_message_call (execution-specs e27f097e src/ethereum/forks/prague/vm/interpreter.py:123-124, `if message.tx_env.authorizations != (): refund_counter += set_delegation(message)`, set_delegation = Jaune setDelegation); Plain English (rule 4)"
+  },
+  {
+   "old": "Jaune.processMessageCall.legacyAuthorization_codeAddress",
+   "new": "Jaune.processMessageCall.authorize_codeAddress",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): not an execution-specs function; the guarded fragment of process_message_call (execution-specs e27f097e src/ethereum/forks/prague/vm/interpreter.py:123-124, `if message.tx_env.authorizations != (): refund_counter += set_delegation(message)`, set_delegation = Jaune setDelegation); Plain English (rule 4)"
+  },
+  {
+   "old": "Jaune.processMessageCall.legacyAuthorization_canonical",
+   "new": "Jaune.processMessageCall.authorize_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan): not an execution-specs function; the guarded fragment of process_message_call (execution-specs e27f097e src/ethereum/forks/prague/vm/interpreter.py:123-124, `if message.tx_env.authorizations != (): refund_counter += set_delegation(message)`, set_delegation = Jaune setDelegation); Plain English (rule 4)"
+  },
+  {
+   "old": "Jaune.Impl.CachedDriver",
+   "new": "Jaune.Implementation.CachedDriver",
+   "kind": "module",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan) (F6): whole words, no private short form `Impl` (rules 4, 5)"
+  },
+  {
+   "old": "Jaune.Adapter.Io",
+   "new": "Jaune.Adapter.IO",
+   "kind": "module",
+   "layer": "adapter",
+   "rule": "7",
+   "source": "goal jaune-shape-and-names-v1 W1 delete commit D2 (master decision jsn-g1-tag-and-delete-plan) (F6): Lean core's spelling of the IO monad (`IO`), rule 7"
+  }
+ ]
+}

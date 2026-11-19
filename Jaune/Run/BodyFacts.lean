@@ -639,6 +639,34 @@ def outputSummary (b : BlockOutput) :
 theorem Except.ok_bind' {ε α β : Type} (a : α) (f : α → Except ε β) :
     (Except.ok a >>= f) = f a := rfl
 
+/-- The post-settlement state of `Transaction.settleRun` applies the sender gas refund,
+the coinbase fee credit, the self-destruct settlement, and the EIP-161 touched-account
+sweep in that exact order. -/
+theorem Transaction.settleRun_state (checked : Transaction.Admitted) (prepared : Transaction.Prepared)
+    (tx : Transaction) (index : Nat) (run : TopLevelRun)
+    {tr : TransactionRun} {bout' : BlockOutput}
+    (h : Transaction.settleRun checked prepared tx index run = .ok (tr, bout')) :
+    let benv := prepared.benv
+    let sender := prepared.sender
+    let effectiveGasPrice := prepared.effectiveGasPrice
+    let gasRefundAmount : Nat := tr.gasSettlement.gasLeft * effectiveGasPrice
+    let priorityFeePerGas := effectiveGasPrice - benv.stat.baseFeePerGas
+    let transactionFee := tr.gasSettlement.gasUsed * priorityFeePerGas
+    tr.state =
+      sweepTouchedAccounts benv.stat.rules run.touchedAccounts.toList
+        (settleSelfdestructs benv.stat.rules run.accountsToDelete.toList
+          ((run.state.addBal sender gasRefundAmount.toU256).addBal
+            benv.stat.coinbase transactionFee.toU256)) := by
+  unfold Transaction.settleRun at h
+  cases hrc : run.refundCounter with
+  | error e =>
+    simp only [hrc, Except.mapError, bind, Except.bind] at h
+    cases h
+  | ok refundCounter =>
+    simp only [hrc, Except.mapError, bind, Except.bind, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, _⟩ := h
+    rfl
+
 theorem Transaction.run_summary {benv : Benv} {b b' : BlockOutput} (tx : Transaction)
     (index : Nat) (h : outputSummary b = outputSummary b') :
     (fun q => (q.1, outputSummary q.2)) <$> Transaction.run benv b tx index =

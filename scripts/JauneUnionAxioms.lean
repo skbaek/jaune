@@ -18,6 +18,7 @@ import Jaune.Check.CheckedPortAuditB
 import Jaune.Check.CheckedRowsAudit
 import Jaune.Check.CheckedSpecAudit
 import Jaune.Check.FrameBridgeAudit
+import Jaune.Check.G2aBridgeAudit
 import Jaune.Check.InstructionFamiliesAudit
 import Jaune.Check.Hash
 import Jaune.Check.InstructionsAudit

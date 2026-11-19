@@ -1,0 +1,1006 @@
+{
+ "schema_version": 1,
+ "retired_tokens": [
+  "Acct",
+  "Adr",
+  "B128",
+  "B256",
+  "BLT",
+  "Benv",
+  "CFork",
+  "Ctx",
+  "Devm",
+  "Gated",
+  "Jinst",
+  "Linst",
+  "Mach",
+  "Mem",
+  "Meta",
+  "Msg",
+  "NTB",
+  "NTBs",
+  "Ninst",
+  "Pres",
+  "Rinst",
+  "Sevm",
+  "Stor",
+  "Tenv",
+  "Tra",
+  "Tx",
+  "WQ",
+  "XStep",
+  "Xinst",
+  "Xlot",
+  "bal",
+  "hp",
+  "txsRoot",
+  "vbytes",
+  "wds"
+ ],
+ "allowed_abbreviations": [
+  "API",
+  "BLAKE2",
+  "BLS",
+  "BPO",
+  "Bool",
+  "ByteArray",
+  "Bytes",
+  "CLI",
+  "EC",
+  "EIP",
+  "EOA",
+  "EVM",
+  "Ecrecover",
+  "Fp",
+  "Fp2",
+  "G1",
+  "G2",
+  "Hash32",
+  "Int",
+  "JSON",
+  "KECCAK",
+  "KZG",
+  "Modexp",
+  "Nat",
+  "RIPEMD160",
+  "RLP",
+  "SHA256",
+  "SSZ",
+  "U128",
+  "U16",
+  "U256",
+  "U32",
+  "U64",
+  "U8",
+  "UInt16",
+  "UInt32",
+  "UInt64",
+  "UInt8",
+  "YAML",
+  "pc",
+  "secp256k1",
+  "tx"
+ ],
+ "entries": [
+  {
+   "old": "Jaune.Frame",
+   "new": "Jaune.Legacy.Frame",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Step",
+   "new": "Jaune.Legacy.Step",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Trace",
+   "new": "Jaune.Legacy.Trace",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.TraceJson",
+   "new": "Jaune.Legacy.TraceJson",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.CalldataCacheKey",
+   "new": "Jaune.Legacy.CalldataCacheKey",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.CalldataCache",
+   "new": "Jaune.Legacy.CalldataCache",
+   "kind": "namespace",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Evm.step",
+   "new": "Jaune.Legacy.Evm.step",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Evm.step_canonical",
+   "new": "Jaune.Legacy.Evm.step_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Evm.step_gasBound",
+   "new": "Jaune.Legacy.Evm.step_gasBound",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Evm.step_invOp",
+   "new": "Jaune.Legacy.Evm.step_invOp",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Evm.step_jump",
+   "new": "Jaune.Legacy.Evm.step_jump",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Evm.step_last",
+   "new": "Jaune.Legacy.Evm.step_last",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Evm.step_memory_accounting_output",
+   "new": "Jaune.Legacy.Evm.step_memory_accounting_output",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Evm.step_next",
+   "new": "Jaune.Legacy.Evm.step_next",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Evm.step_spawn_inv",
+   "new": "Jaune.Legacy.Evm.step_spawn_inv",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.Evm.step_stateGasZero",
+   "new": "Jaune.Legacy.Evm.step_stateGasZero",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step",
+   "new": "Jaune.Legacy.MessageOp.step",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_call_gasDecreasing",
+   "new": "Jaune.Legacy.MessageOp.step_call_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_call_gasDecreasing_legacy",
+   "new": "Jaune.Legacy.MessageOp.step_call_gasDecreasing_legacy",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_callcode_gasDecreasing",
+   "new": "Jaune.Legacy.MessageOp.step_callcode_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_callcode_gasDecreasing_legacy",
+   "new": "Jaune.Legacy.MessageOp.step_callcode_gasDecreasing_legacy",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_canonical",
+   "new": "Jaune.Legacy.MessageOp.step_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_create2_gasDecreasing",
+   "new": "Jaune.Legacy.MessageOp.step_create2_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_create_gasDecreasing",
+   "new": "Jaune.Legacy.MessageOp.step_create_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_delegatecall_gasDecreasing",
+   "new": "Jaune.Legacy.MessageOp.step_delegatecall_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_delegatecall_gasDecreasing_legacy",
+   "new": "Jaune.Legacy.MessageOp.step_delegatecall_gasDecreasing_legacy",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_gasDecreasing",
+   "new": "Jaune.Legacy.MessageOp.step_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_halt",
+   "new": "Jaune.Legacy.MessageOp.step_halt",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_halt_legacy",
+   "new": "Jaune.Legacy.MessageOp.step_halt_legacy",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_spawn_benvStat",
+   "new": "Jaune.Legacy.MessageOp.step_spawn_benvStat",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_spawn_depth",
+   "new": "Jaune.Legacy.MessageOp.step_spawn_depth",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_stateGasZero",
+   "new": "Jaune.Legacy.MessageOp.step_stateGasZero",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_staticcall_gasDecreasing",
+   "new": "Jaune.Legacy.MessageOp.step_staticcall_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_staticcall_gasDecreasing_legacy",
+   "new": "Jaune.Legacy.MessageOp.step_staticcall_gasDecreasing_legacy",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.MessageOp.step_staticcall_not_run_of_precompile",
+   "new": "Jaune.Legacy.MessageOp.step_staticcall_not_run_of_precompile",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step",
+   "new": "Jaune.Legacy.NextOp.step",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_canonical",
+   "new": "Jaune.Legacy.NextOp.step_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_cont_pc",
+   "new": "Jaune.Legacy.NextOp.step_cont_pc",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_dupn",
+   "new": "Jaune.Legacy.NextOp.step_dupn",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_exchange",
+   "new": "Jaune.Legacy.NextOp.step_exchange",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_exec",
+   "new": "Jaune.Legacy.NextOp.step_exec",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_gasBound",
+   "new": "Jaune.Legacy.NextOp.step_gasBound",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_ne_halt_ok",
+   "new": "Jaune.Legacy.NextOp.step_ne_halt_ok",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_push",
+   "new": "Jaune.Legacy.NextOp.step_push",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_push_gasLt",
+   "new": "Jaune.Legacy.NextOp.step_push_gasLt",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_reg",
+   "new": "Jaune.Legacy.NextOp.step_reg",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_spawn_depth",
+   "new": "Jaune.Legacy.NextOp.step_spawn_depth",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_spawn_inv",
+   "new": "Jaune.Legacy.NextOp.step_spawn_inv",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_spawn_pc",
+   "new": "Jaune.Legacy.NextOp.step_spawn_pc",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_stateGasZero",
+   "new": "Jaune.Legacy.NextOp.step_stateGasZero",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.NextOp.step_swapn",
+   "new": "Jaune.Legacy.NextOp.step_swapn",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.exec",
+   "new": "Jaune.Legacy.exec",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled",
+   "new": "Jaune.Legacy.execFueled",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_ne_exhausted",
+   "new": "Jaune.Legacy.execFueled_ne_exhausted",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_run_canonical",
+   "new": "Jaune.Legacy.execFueled_run_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_run_gasMeasure_eq_gasLeft",
+   "new": "Jaune.Legacy.execFueled_run_gasMeasure_eq_gasLeft",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_run_isSome",
+   "new": "Jaune.Legacy.execFueled_run_isSome",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_run_mono",
+   "new": "Jaune.Legacy.execFueled_run_mono",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_run_of_lt",
+   "new": "Jaune.Legacy.execFueled_run_of_lt",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_run_stateGasZero",
+   "new": "Jaune.Legacy.execFueled_run_stateGasZero",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_run_sufficientFuel",
+   "new": "Jaune.Legacy.execFueled_run_sufficientFuel",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_run_sufficientFuel_isSome",
+   "new": "Jaune.Legacy.execFueled_run_sufficientFuel_isSome",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_settledGasLe",
+   "new": "Jaune.Legacy.execFueled_settledGasLe",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.execFueled_succ_ne_exhausted",
+   "new": "Jaune.Legacy.execFueled_succ_ne_exhausted",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.exec_canonical",
+   "new": "Jaune.Legacy.exec_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.exec_eq_of_run",
+   "new": "Jaune.Legacy.exec_eq_of_run",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.exec_iff_exec_eq",
+   "new": "Jaune.Legacy.exec_iff_exec_eq",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.exec_ok",
+   "new": "Jaune.Legacy.exec_ok",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step",
+   "new": "Jaune.Legacy.genericCall.step",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step_canonical",
+   "new": "Jaune.Legacy.genericCall.step_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step_gasDecreasing",
+   "new": "Jaune.Legacy.genericCall.step_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step_halt",
+   "new": "Jaune.Legacy.genericCall.step_halt",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step_spawn_benvStat",
+   "new": "Jaune.Legacy.genericCall.step_spawn_benvStat",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step_spawn_call",
+   "new": "Jaune.Legacy.genericCall.step_spawn_call",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step_spawn_data",
+   "new": "Jaune.Legacy.genericCall.step_spawn_data",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step_spawn_data_length",
+   "new": "Jaune.Legacy.genericCall.step_spawn_data_length",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step_spawn_depth",
+   "new": "Jaune.Legacy.genericCall.step_spawn_depth",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step_spawn_stat",
+   "new": "Jaune.Legacy.genericCall.step_spawn_stat",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCall.step_stateGasZero",
+   "new": "Jaune.Legacy.genericCall.step_stateGasZero",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCallAmsterdam.step",
+   "new": "Jaune.Legacy.genericCallAmsterdam.step",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCallAmsterdam.step_canonical",
+   "new": "Jaune.Legacy.genericCallAmsterdam.step_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCallAmsterdam.step_gasDecreasing",
+   "new": "Jaune.Legacy.genericCallAmsterdam.step_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCallAmsterdam.step_halt",
+   "new": "Jaune.Legacy.genericCallAmsterdam.step_halt",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCallAmsterdam.step_spawn_benvStat",
+   "new": "Jaune.Legacy.genericCallAmsterdam.step_spawn_benvStat",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCallAmsterdam.step_spawn_depth",
+   "new": "Jaune.Legacy.genericCallAmsterdam.step_spawn_depth",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreate.step",
+   "new": "Jaune.Legacy.genericCreate.step",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreate.step_canonical",
+   "new": "Jaune.Legacy.genericCreate.step_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreate.step_gasDecreasing",
+   "new": "Jaune.Legacy.genericCreate.step_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreate.step_halt",
+   "new": "Jaune.Legacy.genericCreate.step_halt",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreate.step_spawn_benvStat",
+   "new": "Jaune.Legacy.genericCreate.step_spawn_benvStat",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreate.step_spawn_depth",
+   "new": "Jaune.Legacy.genericCreate.step_spawn_depth",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreate.step_spawn_stat",
+   "new": "Jaune.Legacy.genericCreate.step_spawn_stat",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreate.step_stateGasZero",
+   "new": "Jaune.Legacy.genericCreate.step_stateGasZero",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreateAmsterdam.step",
+   "new": "Jaune.Legacy.genericCreateAmsterdam.step",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreateAmsterdam.step_canonical",
+   "new": "Jaune.Legacy.genericCreateAmsterdam.step_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreateAmsterdam.step_gasDecreasing",
+   "new": "Jaune.Legacy.genericCreateAmsterdam.step_gasDecreasing",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreateAmsterdam.step_halt",
+   "new": "Jaune.Legacy.genericCreateAmsterdam.step_halt",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreateAmsterdam.step_spawn_benvStat",
+   "new": "Jaune.Legacy.genericCreateAmsterdam.step_spawn_benvStat",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.genericCreateAmsterdam.step_spawn_depth",
+   "new": "Jaune.Legacy.genericCreateAmsterdam.step_spawn_depth",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processMessageCall",
+   "new": "Jaune.Legacy.processMessageCall",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processMessageCall.create",
+   "new": "Jaune.Legacy.processMessageCall.create",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processMessageCall.call",
+   "new": "Jaune.Legacy.processMessageCall.call",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processMessageCall.create_canonical",
+   "new": "Jaune.Legacy.processMessageCall.create_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processMessageCall.call_canonical",
+   "new": "Jaune.Legacy.processMessageCall.call_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processMessageCall_canonical",
+   "new": "Jaune.Legacy.processMessageCall_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processTopLevelAmsterdam",
+   "new": "Jaune.Legacy.processTopLevelAmsterdam",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.runPreparedTopFrame",
+   "new": "Jaune.Legacy.runPreparedTopFrame",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.msgCallOutputAmsterdam",
+   "new": "Jaune.Legacy.msgCallOutputAmsterdam",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.settleTopLevelPreparationFailure",
+   "new": "Jaune.Legacy.settleTopLevelPreparationFailure",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.runPreparedTopFrame_canonicalSettle",
+   "new": "Jaune.Legacy.runPreparedTopFrame_canonicalSettle",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processTopLevelAmsterdam_canonical",
+   "new": "Jaune.Legacy.processTopLevelAmsterdam_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processMessageCall.legacyAuthorization",
+   "new": "Jaune.Legacy.processMessageCall.legacyAuthorization",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processMessageCall.legacyAuthorization_disabled",
+   "new": "Jaune.Legacy.processMessageCall.legacyAuthorization_disabled",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processMessageCall.legacyAuthorization_enabled",
+   "new": "Jaune.Legacy.processMessageCall.legacyAuthorization_enabled",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  },
+  {
+   "old": "Jaune.processMessageCall.legacyAuthorization_canonical",
+   "new": "Jaune.Legacy.processMessageCall.legacyAuthorization_canonical",
+   "kind": "declaration",
+   "layer": "execution",
+   "rule": "4",
+   "source": "goal jaune-shape-and-names-v1 W1 switch commit (design note rev3 \u00a73.2 Mechanics): the old chain waits in the bridge namespace Jaune.Legacy until the gate's delete commit"
+  }
+ ]
+}

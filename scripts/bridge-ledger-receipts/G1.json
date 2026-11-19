@@ -1,0 +1,48 @@
+{
+  "after": {
+    "bound": true,
+    "exports_sha256": "50d2df133179023c37734fe8e6ec4fe1fb7537d4a67557e9afd979f4cfeb5c31",
+    "head": "acf1e0b744565a0a524bfe1b22ce3a81ca731897",
+    "inventory_sha256": "9a28772cd014d84f56bb3d1eaee1ceee9aacc3819a6dc70589cecd46013a3bc6",
+    "snapshot_sha256": "78339b3761ae0aba06aaedfb02e063cdfae21db0f1eba1bd1ff72c6703cfe9c3"
+  },
+  "before": {
+    "bound": true,
+    "exports_sha256": "edd73b3fee26abdee9d377706187b0c82df76651b6070f2fcc48be1fee131da5",
+    "head": "210683f34a2378627ce50062e56cddeb81312f2e",
+    "inventory_sha256": "c110cb52a8466340b5107fd7e3707a2cdecaf27e7d315ee541b032466f2db20e",
+    "snapshot_sha256": "89d46e5d2f4eee48dd491ef82cd0404f9ba8be488c8564be4d5d6d45923b432f"
+  },
+  "entries": [
+    {
+      "authored": 1308,
+      "closure": 1943,
+      "closure_scope_sha256": "a0f27d709c9e792bfdf2f2c896fccfbf31198b4b67f157154ada4781d7125415",
+      "external_references": 497,
+      "generated": 635,
+      "id": "G1-1",
+      "maps": [
+        "efa6e653b340c97c6e57fbe8ebd362b8e1a37f3e2da9dab5ff50946ce51b14de",
+        "8d980476b69b21a4f8df69423a4bfcfefc4801e8c9a33583e283a5b18d62dd4d"
+      ],
+      "mismatches": [],
+      "old_modules": 14,
+      "old_revision": "210683f34a2378627ce50062e56cddeb81312f2e",
+      "roots": [
+        "Jaune.processMessageCall"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 1943,
+      "tag_modules": 24,
+      "verdict": "OK"
+    }
+  ],
+  "gate": "G1",
+  "ledger_sha256": "cb63d3b3e86a8a76586509edb698fa00b74c094457af82fb7212d7eda2aa1214",
+  "schema_version": 1,
+  "seconds": 3.1,
+  "tag": "gate/g1",
+  "tag_commit": "acf1e0b744565a0a524bfe1b22ce3a81ca731897",
+  "tool_sha256": "d18801254c2543518a23b08be790725e39797693674dcbd862ef4d86baaf2664",
+  "verdict": "OK"
+}

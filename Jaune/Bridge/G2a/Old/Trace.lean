@@ -216,10 +216,12 @@ def Bridge.G2a.Old.TraceTransaction.finishTransaction (prepared : Bridge.G2a.Old
   let transactionFee := settlement.gasUsed * priorityFeePerGas
   let state := state.addBal sender gasRefundAmount.toU256
   let storageWrites :=
-    txOutput.storageWrites.clearIfEmpty state sender
+    if (state.get sender).isEmpty then txOutput.storageWrites.eraseAddress sender
+    else txOutput.storageWrites
   let state := state.addBal benv.stat.coinbase transactionFee.toU256
   let storageWrites :=
-    storageWrites.clearIfEmpty state benv.stat.coinbase
+    if (state.get benv.stat.coinbase).isEmpty then storageWrites.eraseAddress benv.stat.coinbase
+    else storageWrites
   let storageWrites := txOutput.accountsToDelete.toList.foldl
     (fun writes a => writes.eraseAddress a) storageWrites
   let state := settleSelfdestructs benv.stat.rules
