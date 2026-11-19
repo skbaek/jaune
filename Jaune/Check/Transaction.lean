@@ -212,10 +212,9 @@ private def prepareCreateGuard (collision : Bool) :
   let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
   match prepareTopLevelAmsterdam amsterdamStateGasRules msg with
   | .ok ⟨_, devm⟩ => some ⟨devm.gasLeft, devm.stateGasLeft, none⟩
-  | .error ⟨error, devm⟩ =>
-    match settleTopLevelPreparationFailure msg error devm with
-    | .ok ⟨_, output⟩ =>
-      some ⟨output.gasLeft, output.stateGasLeft, output.error⟩
+  | .error _ =>
+    match Staging.Message.run msg with
+    | .ok run => some ⟨run.gasLeft, run.stateGasLeft, run.error⟩
     | .error _ => none
 
 private def delegatedDispatchGuard (warm : Bool) :
@@ -293,18 +292,18 @@ private def legacyStorageOnlyCreateGuard : Bool :=
     {(default : Msg) with
       benv := {(default : Benv) with state := state}
       target := none, currentTarget := address, gas := 20000, depth := 1024}
-  match processMessageCall.create msg with
-  | .ok ⟨post, output⟩ =>
-    output.error.isNone && (post.get address).storage.isEmpty && (post.get address).nonce == 1
+  match Staging.Message.run msg with
+  | .ok run =>
+    run.error.isNone && (run.state.get address).storage.isEmpty && (run.state.get address).nonce == 1
   | .error _ => false
 
 private def amsterdamStorageOnlyCreateGuard : Bool :=
   let address : Address := 13
   let state := State.setStorVal .empty address 1 1
   let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
-  match processMessageCall.create msg with
-  | .ok ⟨post, output⟩ =>
-    output.error.isNone && (post.get address).storage.isEmpty && (post.get address).nonce == 1
+  match Staging.Message.run msg with
+  | .ok run =>
+    run.error.isNone && (run.state.get address).storage.isEmpty && (run.state.get address).nonce == 1
   | .error _ => false
 
 private def legacyCreateCollisionGuard (code : Bool) : Bool :=
@@ -316,9 +315,9 @@ private def legacyCreateCollisionGuard (code : Bool) : Bool :=
     {(default : Msg) with
       benv := {(default : Benv) with state := state}
       target := none, currentTarget := address, gas := 20000, depth := 1024}
-  match processMessageCall.create msg with
-  | .ok ⟨_, output⟩ =>
-    output.gasLeft == 0 && output.error == some (.halt (.addressCollision .none))
+  match Staging.Message.run msg with
+  | .ok run =>
+    run.gasLeft == 0 && run.error == some (.halt (.addressCollision .none))
   | .error _ => false
 
 private def amsterdamCreateCollisionGuard (code : Bool) : Bool :=
@@ -1569,19 +1568,35 @@ private def guardPowLineOmmer (parentNumber : Nat) : Header :=
   | .error (.block (.ommersOverParis _)) => true
   | _ => false)
 
--- The rewards (EELS `pay_rewards`, Byzantium's 3 ETH): the miner gets
--- `3 + 3/32` ETH for one ommer, and the age-1 ommer's miner `7/8` of 3 ETH.
-#guard (payRewards { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 } 2
+-- The rewards (EELS `pay_rewards`, Byzantium's 3 ETH), as the body's rewards
+-- step pays them: the miner gets `3 + 3/32` ETH for one ommer, and the age-1
+-- ommer's miner `7/8` of 3 ETH.
+private def bodyRewards (pow : ProofOfWorkRules) (number : Nat) (coinbase : Address)
+    (ommers : List Header) (st : State) : State :=
+  let fork : Fork := if pow.blockReward = 3 * 10 ^ 18 then .byzantium else .constantinople
+  let benv : Benv := { (default : Benv) with
+    state := st
+    stat := { (default : BenvStat) with fork := fork, number := number, coinbase := coinbase } }
+  match benv.stat.rules.proofOfWork with
+  | some p =>
+    if p.blockReward = pow.blockReward ∧ p.bombDelay = pow.bombDelay then
+      match Staging.Body.fold benv (Staging.Body.Prefix.init st)
+          (Staging.Body.postOps benv 0 ommers []) with
+      | .ok q => q.state
+      | .error _ => .empty
+    else .empty
+  | none => .empty
+#guard (bodyRewards { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 } 2
     guardPowCoinbase [guardPowOmmer] .empty).bal guardPowCoinbase
   = (3093750000000000000 : Nat).toU256
-#guard (payRewards { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 } 2
+#guard (bodyRewards { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 } 2
     guardPowCoinbase [guardPowOmmer] .empty).bal guardOmmerCoinbase
   = (2625000000000000000 : Nat).toU256
 -- Age 2 pays 6/8; no ommer pays the miner the bare block reward.
-#guard (payRewards { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 } 3
+#guard (bodyRewards { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 } 3
     guardPowCoinbase [guardPowOmmer] .empty).bal guardOmmerCoinbase
   = (1500000000000000000 : Nat).toU256
-#guard (payRewards { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 } 3
+#guard (bodyRewards { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 } 3
     guardPowCoinbase [] .empty).bal guardPowCoinbase
   = (2 * 10 ^ 18 : Nat).toU256
 
@@ -1591,7 +1606,7 @@ private def guardPowLineOmmer (parentNumber : Nat) : Header :=
 private def guardPowBenv : Benv :=
   initBlockEnvironment .byzantium guardPowChain (guardPowBlockWith [guardPowOmmer])
 
-#guard (match applyBody guardPowBenv [] [guardPowOmmer] [] with
+#guard (match Staging.applyBody guardPowBenv [] [guardPowOmmer] [] with
   | .ok ⟨st, bout⟩ =>
       st.bal guardPowCoinbase == (3093750000000000000 : Nat).toU256 &&
       st.bal guardOmmerCoinbase == (2625000000000000000 : Nat).toU256 &&
@@ -1610,11 +1625,11 @@ private def guardSysBenv (benv : Benv) : Benv :=
         historyStorageAddress guardSysCode
       stat := { benv.stat with blockHashes := [] } }
 
-#guard (match applyBody (guardSysBenv guardPowBenv) [] [guardPowOmmer] [] with
+#guard (match Staging.applyBody (guardSysBenv guardPowBenv) [] [guardPowOmmer] [] with
   | .ok ⟨st, _⟩ => (st.get beaconRootsAddress).storage.isEmpty &&
       (st.get historyStorageAddress).storage.isEmpty
   | .error _ => false)
-#guard (match applyBody (guardSysBenv (initBlockEnvironment .cancun guardPowChain guardTestHeader))
+#guard (match Staging.applyBody (guardSysBenv (initBlockEnvironment .cancun guardPowChain guardTestHeader))
     [] [] [] with
   | .ok ⟨st, _⟩ => !(st.get beaconRootsAddress).storage.isEmpty &&
       (st.get historyStorageAddress).storage.isEmpty
@@ -1622,7 +1637,7 @@ private def guardSysBenv (benv : Benv) : Benv :=
 
 -- Under Prague's rules the same body runs every step: the request pass calls
 -- the request contracts, which this chain has not deployed.
-#guard (match applyBody (initBlockEnvironment .prague guardPowChain (guardPowBlockWith []))
+#guard (match Staging.applyBody (initBlockEnvironment .prague guardPowChain (guardPowBlockWith []))
     [] [guardPowOmmer] [] with
   | .error (.block (.systemContractEmpty _)) => true
   | _ => false)
@@ -2256,11 +2271,11 @@ private def touchMsg (fork : Fork) (parentCode cCode : List UInt8) : Msg :=
     gas := 200000
     depth := 8 }
 
-/-- The transaction-level touched set `processMessageCall` reports. -/
+/-- The transaction-level touched set the top-level message run reports. -/
 private def touchedOf (fork : Fork) (parentCode : List UInt8)
     (cCode : List UInt8 := []) : Option (List Address) :=
-  match processMessageCall (touchMsg fork parentCode cCode) with
-  | .ok (_, out) => some out.touchedAccounts.toList
+  match Staging.Message.run (touchMsg fork parentCode cCode) with
+  | .ok run => some run.touchedAccounts.toList
   | .error _ => none
 
 -- A successful child's empty target is touched; Prague records nothing.
@@ -2272,9 +2287,10 @@ private def touchedOf (fork : Fork) (parentCode : List UInt8)
 -- credit erases it at once and nothing is touched. Reported as (`touchE` still
 -- present, its slot 1, the touched set).
 private def touchSelfdestruct (fork : Fork) : Option (Bool × U256 × List Address) :=
-  match processMessageCall (touchMsg fork [0x61, 0x20, 0x00, 0xFF] []) with
-  | .ok (state, out) =>
-    some (state[touchE]?.isSome, (state.get touchE).storage.get 1, out.touchedAccounts.toList)
+  match Staging.Message.run (touchMsg fork [0x61, 0x20, 0x00, 0xFF] []) with
+  | .ok run =>
+    some (run.state[touchE]?.isSome, (run.state.get touchE).storage.get 1,
+      run.touchedAccounts.toList)
   | .error _ => none
 #guard touchSelfdestruct .berlin = some (true, 1, [touchE])
 #guard touchSelfdestruct .grayGlacier = some (true, 1, [touchE])
@@ -2317,9 +2333,9 @@ private def touchSelfdestructThenFund (fork : Fork) : Option (U256 × U256) :=
   let parentCode := touchCall 0x4000 50000 ++ touchCallValue 0x2000 1000 1 ++ [0x00]
   let msg := touchMsg fork parentCode [0x61, 0x20, 0x00, 0xFF]
   let msg := { msg with benv := msg.benv.setBal touchParent 1 }
-  match processMessageCall msg with
-  | .ok (state, out) =>
-    let state := sweepTouchedAccounts msg.benv.stat.rules out.touchedAccounts.toList state
+  match Staging.Message.run msg with
+  | .ok run =>
+    let state := sweepTouchedAccounts msg.benv.stat.rules run.touchedAccounts.toList run.state
     some ((state.get touchE).balance, (state.get touchE).storage.get 1)
   | .error _ => none
 #guard touchSelfdestructThenFund .berlin = some (1, 1)
