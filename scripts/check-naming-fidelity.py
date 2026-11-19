@@ -964,7 +964,18 @@ class Comparison:
         """A downstream realized equation or splitter auxiliary of a declaration
         in a relocation component (never an anonymous instance or csimp
         replacement), whose references to relocated-component `.match_N`
-        helpers may reindex when modules split."""
+        helpers may reindex when modules split.
+
+        Memoized per comparison on `(name, side)`: the answer reads only state
+        fixed when the comparison is constructed (the map, both constant
+        tables, roots, owners and the relocated modules)."""
+        cache = self.__dict__.setdefault('_downstream_reloc_eq_cache', {})
+        key = (name, side)
+        if key not in cache:
+            cache[key] = self._is_downstream_reloc_eq(name, side)
+        return cache[key]
+
+    def _is_downstream_reloc_eq(self, name, side):
         if not self.mapping.relocations:
             return False
         table = self.left if side == 'before' else self.right
