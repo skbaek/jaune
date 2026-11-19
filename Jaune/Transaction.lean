@@ -1200,22 +1200,6 @@ theorem CanonicalBlock.decodeTx_inr {cb : CanonicalBlock} {tx : Transaction}
       Transaction.WireWellFormed tx ∧ tx.type.isLegacy = true :=
   ⟨rfl, cb.rlpCanonical.2.2.2 _ h⟩
 
-/-- The state transition on a canonical outer block.
-
-Definitionally the typed core applied to the envelope's block, so every result
-about `stateTransitionE` transfers to it by `rfl` and no proof has to be
-restated. What it adds is at the type level: a caller of this entry point
-cannot supply a block that no strict decode ever produced. -/
-def stateTransitionCanonical (f : Fork) (ch : BlockChain)
-    (cb : CanonicalBlock) :
-    Except TransitionError BlockChain :=
-  stateTransitionE f ch cb.block
-
-theorem stateTransitionCanonical_eq (f : Fork) (ch : BlockChain)
-    (cb : CanonicalBlock) :
-    stateTransitionCanonical f ch cb = stateTransitionE f ch cb.block :=
-  rfl
-
 --------------- THE CHECKED CHAIN SNAPSHOT ---------------
 
 -- P0.2. A `BlockChain` is a freely constructible triple, so nothing stops a
@@ -2438,11 +2422,6 @@ def CheckedBlockChain.ofScheduledImport {cfg : ChainConfig} {f : Fork}
 -- Stated so a downstream proof client can move between the raw names its
 -- theorems are written about and the checked ones, without unfolding either
 -- structure.
-
-theorem stateTransitionChecked_eq_raw (f : Fork) (cc : CheckedBlockChain)
-    (cb : CanonicalBlock) :
-    stateTransitionChecked f cc cb
-      = stateTransitionE f cc.val cb.block := rfl
 
 theorem addBlockToChainChecked_eq_raw (f : Fork) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
