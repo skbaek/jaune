@@ -142,6 +142,10 @@ import Jaune.Instructions.WordRows
 import Jaune.Instructions.WordFacts
 import Jaune.Instructions.Store
 import Jaune.Instructions.StoreFacts
+import Jaune.Instructions.Memory
+import Jaune.Instructions.MemoryFacts
+import Jaune.Instructions.Read
+import Jaune.Instructions.ReadFacts
 import Jaune.Bridge.G2b.FinalPrefix
 import Jaune.Bridge.G2b.FinalRetained
 import Jaune.Run.Root
