@@ -1240,4 +1240,82 @@ theorem Transaction.run_frame_originalState {benv : Benv} {bout : BlockOutput} {
     rw [TopLevel.run_frame_originalState hrun, (Transaction.prepare_environment hl).2]
     exact Jaune.Transaction.admit_originalState ha
 
+/-- Request producers preserve rejection for missing code and for either settled failure. -/
+theorem processCheckedSystemTransaction_observe (benv : Benv) (target : Address) (data : Bytes) :
+    processCheckedSystemTransaction benv.stat.toBlockContext benv.state benv.createdAccounts target data =
+      (Jaune.processCheckedSystemTransaction benv target data).map TopLevel.Settlement.ofLegacy := by
+  unfold processCheckedSystemTransaction Jaune.processCheckedSystemTransaction
+  dsimp only
+  split <;> rename_i h
+  · simp only [h, ↓reduceIte, bind, Except.bind, Except.map]
+  · simp only [h, ↓reduceIte, bind, Except.bind]
+    rw [processSystemTransaction_observe]
+    cases Jaune.processSystemTransaction benv target (benv.state.getCode target) data with
+    | error => rfl
+    | ok run =>
+      simp only [Except.map, Except.mapError]
+      change (match run.error with
+        | some halt => .error (.block (.systemContractCallFailed target halt))
+        | none => .ok (TopLevel.Settlement.ofLegacy run) :
+        Except TransitionError TopLevel.Settlement) = _
+      cases run.error <;> rfl
+
+/-- Every single Checked operation produces the same prefix and errors as the waiting body. -/
+theorem Body.step_observe (benv : Benv) (p : Jaune.Body.Prefix) (op : BodyOp) :
+    step benv p op = (Jaune.Body.step benv p op).map Prod.snd := by
+  cases op
+  case systemCall address data index =>
+    simp only [step, Jaune.Body.step, Jaune.processUncheckedSystemTransaction]
+    cases data with
+    | error => rfl
+    | ok bytes =>
+      simp only [bind, Except.bind]
+      rw [show (benv.withState p.state).state.getCode address = p.state.getCode address from rfl]
+      rw [show processSystemTransaction benv.stat.toBlockContext p.state benv.createdAccounts
+          address (p.state.getCode address) bytes =
+          (Jaune.processSystemTransaction (benv.withState p.state) address (p.state.getCode address) bytes).map
+            TopLevel.Settlement.ofLegacy from processSystemTransaction_observe (benv.withState p.state) ..]
+      cases Jaune.processSystemTransaction (benv.withState p.state) address (p.state.getCode address) bytes <;>
+        simp only [Except.mapError, Except.map, TopLevel.Settlement.ofLegacy, pure, Except.pure]
+  case transaction tx index =>
+    have h := congrArg (Except.map fun (state, out) => Jaune.Body.Prefix.ofBlockOutput state out)
+      (Transaction.run_observe (benv.withState p.state) p.toBlockOutput tx index)
+    simp only [step, Jaune.Body.step]
+    generalize Checked.Transaction.run (benv.withState p.state) p.toBlockOutput tx index = native at h ⊢
+    generalize Jaune.Transaction.run (benv.withState p.state) p.toBlockOutput tx index = waiting at h ⊢
+    rcases native with fault | ⟨run, out⟩ <;> rcases waiting with fault | ⟨run, out⟩ <;> exact h
+  case requestCall type address index =>
+    simp only [step, Jaune.Body.step]
+    rw [show processCheckedSystemTransaction benv.stat.toBlockContext p.state benv.createdAccounts address [] =
+        (Jaune.processCheckedSystemTransaction (benv.withState p.state) address []).map
+          TopLevel.Settlement.ofLegacy from processCheckedSystemTransaction_observe (benv.withState p.state) ..]
+    cases Jaune.processCheckedSystemTransaction (benv.withState p.state) address [] <;> rfl
+  all_goals rfl
+
+private theorem Body.fold_observe (benv : Benv) (p : Jaune.Body.Prefix) (ops : List BodyOp) :
+    ops.foldlM (step benv) p = Jaune.Body.fold benv p ops := by
+  induction ops generalizing p with
+  | nil => rfl
+  | cons op ops ih =>
+    rw [List.foldlM_cons, step_observe, Jaune.Body.fold]
+    cases Jaune.Body.step benv p op with
+    | error => rfl
+    | ok pair => exact ih pair.2
+
+/-- The Checked importer preserves the final prefix and the ordering of all body errors. -/
+theorem Body.importer_observe (benv : Benv) (txs : List (Bytes ⊕ Jaune.Transaction))
+    (ommers : List Header) (wds : List Withdrawal) :
+    importer benv txs ommers wds = Jaune.Body.importer benv txs ommers wds := by
+  unfold importer Jaune.Body.importer
+  simp only [fold_observe]
+
+/-- The Checked transition preserves the complete block transition, including every commitment
+and the first validation or execution error. -/
+theorem stateTransitionCoreE_observe {ε : Type} (embed : TransitionError → ε)
+    (f : Fork) (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
+    stateTransitionCoreE embed f ch block checkOmmers =
+      Jaune.stateTransitionCoreE embed f ch block checkOmmers := by
+  unfold stateTransitionCoreE Jaune.stateTransitionCoreE
+  simp only [Body.importer_observe]
+
 end Jaune.Checked

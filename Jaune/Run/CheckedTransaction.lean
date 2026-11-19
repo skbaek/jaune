@@ -1,5 +1,5 @@
 import Jaune.Run.CheckedMessage
-import Jaune.Run.Transaction
+import Jaune.Run.Block
 
 namespace Jaune.Checked
 
@@ -123,5 +123,64 @@ def Transaction.run (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction) 
   let message ← (TopLevel.runNative prepared.input).mapError
     (fun fault => TransitionError.vm fault.toEvmError)
   settleRun admitted prepared tx index message
+
+/-- Request-producing calls require code and a successful settlement. -/
+def processCheckedSystemTransaction (block : BlockContext) (state : State) (createdAccounts : AdrSet)
+    (target : Address) (data : Bytes) : Except TransitionError TopLevel.Settlement := do
+  let code := state.getCode target
+  if code.isEmpty then
+    .error <| .block <| .systemContractEmpty <| .text
+      s!"system contract address {target.toHex} holds no code"
+  let run ← (processSystemTransaction block state createdAccounts target code data).mapError
+    (fun fault => TransitionError.vm fault.toEvmError)
+  match run.error with
+  | some halt => .error <| .block <| .systemContractCallFailed target halt
+  | none => .ok run
+
+namespace Body
+
+/-- Record the prefix after one body operation. Every execution starts from the prefix state. -/
+def step (benv : Benv) (p : Jaune.Body.Prefix) : BodyOp → Except TransitionError Jaune.Body.Prefix
+  | .systemCall address data index => do
+    let data ← data
+    let run ← (processSystemTransaction benv.stat.toBlockContext p.state benv.createdAccounts
+      address (p.state.getCode address) data).mapError (fun fault => TransitionError.vm fault.toEvmError)
+    pure { p with
+      state := run.state
+      blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules index p.state run.state
+        (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList }
+  | .transaction tx index => do
+    let (run, bout) ← Transaction.run (benv.withState p.state) p.toBlockOutput tx index
+    pure (Jaune.Body.Prefix.ofBlockOutput run.state bout)
+  | .requestCall type address index => do
+    let run ← processCheckedSystemTransaction benv.stat.toBlockContext p.state benv.createdAccounts address []
+    pure { p with
+      state := run.state
+      requests := if run.returnData.length > 0 then p.requests ++ [[type] ++ run.returnData] else p.requests
+      blockAccessListBuilder := match benv.stat.rules.blockAccessListRules with
+        | none => p.blockAccessListBuilder
+        | some _ => p.blockAccessListBuilder.incorporate index p.state run.state
+            (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList }
+  | op => (Jaune.Body.step benv p op).map Prod.snd
+
+/-- Decode before executing the importer operations, including pre-execution system calls. -/
+def importer (benv : Benv) (txs : List (Bytes ⊕ Jaune.Transaction)) (ommers : List Header)
+    (wds : List Withdrawal) : Except TransitionError Jaune.Body.Prefix := do
+  let decoded ← txs.mapM (decodeTransaction benv.stat.rules)
+  (Jaune.Body.ops benv decoded ommers wds).foldlM (step benv) (Jaune.Body.Prefix.init benv.state)
+
+end Body
+
+/-- Validate the header and ommers, execute the Checked body, then check its commitments. -/
+def stateTransitionCoreE {ε : Type} (embed : TransitionError → ε)
+    (f : Fork) (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
+    Except ε BlockChain := do
+  Except.mapError embed (validateHeader f.ruleSet ch block.header)
+  checkOmmers ()
+  let q ← Except.mapError embed
+    (Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers block.withdrawals)
+  Except.mapError (embed ∘ TransitionError.block) <|
+    Block.check block.header (Block.Commitments.ofPrefix f.ruleSet q)
+  .ok ⟨appendBlock ch.blocks block, q.state, ch.chainId⟩
 
 end Jaune.Checked
