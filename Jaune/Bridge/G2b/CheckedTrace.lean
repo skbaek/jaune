@@ -1083,6 +1083,7 @@ theorem runFrame_json_top (cfg : TraceJson.Config) (state : IO.Ref TraceJson.Sta
 structure MessageResult (msg : Msg) extends TraceTransaction.Certified (TopLevel.run msg) where
   run : Except Fault Checked.TopLevel.Run
   run_erases : run = Checked.TopLevel.run msg
+  refund_erases : (run >>= Checked.TopLevel.Run.refundCounter) = (value >>= TopLevelRun.refundCounter)
 
 /-- Prepare once, then trace the Checked frame. The ordinary call's authorization
 refund is reported before entry. Preparation faults and refusals emit no frame events. -/
@@ -1097,7 +1098,8 @@ def runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
       run_erases := by
         unfold Checked.TopLevel.run Checked.TopLevel.prepare
         split <;> rename_i h <;> rw [hp] at h <;> cases h
-        rfl }
+        rfl
+      refund_erases := rfl }
   | .ok prepared =>
     let reportRefund := if msg.benv.stat.rules.stateGas.isNone && msg.target.isSome
       then authorizationRefund else fun _ => pure ()
@@ -1112,7 +1114,12 @@ def runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
         rw [result.erases]
         unfold Checked.TopLevel.run Checked.TopLevel.prepare
         split <;> rename_i h <;> rw [hp] at h <;> cases h
-        rfl }
+        rfl
+      refund_erases := by
+        rw [result.erases]
+        cases hr : (Checked.TopLevel.ofPreparation msg prepared hp).run with
+        | error => rfl
+        | ok checked => exact Checked.TopLevel.refundCounter_observe hp hr }
 
 /-- The Checked message run makes the same JSON sink and refund calls in the same order. -/
 theorem runMessage_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
@@ -1203,8 +1210,65 @@ theorem TransactionResult.frame_originalState {benv bout tx index}
     · cases h
       exact (Checked.TopLevel.run_frame_originalState hr).trans (prepared_originalState hp)
 
-/-- Trace one Checked message and settle its observation through the same
-admission, preparation and settlement as the current transaction run. -/
+/-- Settlement with a refund supplied by the Checked run. The other observations
+still come from the waiting run representation. -/
+private def settleRunWithRefund (checked : Transaction.Admitted) (prepared : Transaction.Prepared)
+    (tx : Transaction) (index : Nat) (run : TopLevelRun) (refund : Except Fault Nat) :
+    Except TransitionError (TransactionRun × BlockOutput) := do
+  let benv := prepared.benv
+  let bout := prepared.bout
+  let sender := prepared.sender
+  let effectiveGasPrice := prepared.effectiveGasPrice
+  let txBlobGasUsed := prepared.txBlobGasUsed
+  let calldataFloorGasCost := prepared.calldataFloorGasCost
+  let refundCounter : Nat ← refund.mapError (fun e => TransitionError.vm e.toEvmError)
+  let settlement :=
+    settleTransactionGas benv.stat.rules tx.gasLimit calldataFloorGasCost
+      run.gasLeft run.stateGasLeft refundCounter run.stateGasUsed
+  let gasRefundAmount : Nat := settlement.gasLeft * effectiveGasPrice
+  let priorityFeePerGas := effectiveGasPrice - benv.stat.baseFeePerGas
+  let transactionFee := settlement.gasUsed * priorityFeePerGas
+  let state := run.state.addBal sender gasRefundAmount.toU256
+  let storageWrites := run.storageWrites.clearIfEmpty state sender
+  let state := state.addBal benv.stat.coinbase transactionFee.toU256
+  let storageWrites := storageWrites.clearIfEmpty state benv.stat.coinbase
+  let storageWrites := run.accountsToDelete.toList.foldl
+    (fun writes a => writes.eraseAddress a) storageWrites
+  let state := settleSelfdestructs benv.stat.rules run.accountsToDelete.toList state
+  let state := sweepTouchedAccounts benv.stat.rules run.touchedAccounts.toList state
+  let bout ← .ok (bout.withGasSettlement settlement txBlobGasUsed)
+  let receipt := makeReceipt tx run.error bout.cumulativeGasUsed run.logs
+  let receiptKey : Bytes := Rlp.Item.toBytes <| .bytes index.toBytes
+  let bout ← .ok {bout with
+    receiptKeys := bout.receiptKeys ++ [receiptKey]
+    receiptsTrie := bout.receiptsTrie.insert receiptKey receipt
+    blockLogs := bout.blockLogs ++ run.logs}
+  let bal := match benv.stat.rules.blockAccessListRules with
+    | none => bout.blockAccessListBuilder
+    | some _ => bout.blockAccessListBuilder.incorporate (index + 1) benv.state state
+        (sender :: benv.stat.coinbase :: run.accountReads.toList)
+        run.storageReads.toList storageWrites.toList
+  .ok (⟨index, tx, checked.sender, checked.intrinsicGas, prepared.txBlobGasUsed, checked.effectiveGasPrice,
+    run, settlement, state, receipt, storageWrites⟩, {bout with blockAccessListBuilder := bal})
+
+private def settleMessage (admitted : Transaction.Admitted) (prepared : Transaction.Prepared)
+    (tx : Transaction) (index : Nat) (message : MessageResult prepared.msg) :
+    Except TransitionError (TransactionRun × BlockOutput) := do
+  let observed ← message.value.mapError (fun e => TransitionError.vm e.toEvmError)
+  settleRunWithRefund admitted prepared tx index observed (message.run >>= Checked.TopLevel.Run.refundCounter)
+
+/-- The typed refund supplies the same whole settlement, including errors, gas,
+surviving storage writes, receipt and block summary. -/
+theorem settleMessage_eq (admitted : Transaction.Admitted) (prepared : Transaction.Prepared)
+    (tx : Transaction) (index : Nat) (message : MessageResult prepared.msg) :
+    settleMessage admitted prepared tx index message = (do
+      let observed ← message.value.mapError (fun e => TransitionError.vm e.toEvmError)
+      Transaction.settleRun admitted prepared tx index observed) := by
+  unfold settleMessage
+  rw [message.refund_erases]
+  cases message.value <;> rfl
+
+/-- Trace one Checked message, then settle with its typed refund. -/
 def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction)
     (index : Nat) (runId : String) : m (TransactionResult benv bout tx index) := do
@@ -1230,14 +1294,12 @@ def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     | .ok prepared =>
       let message ← runMessage sink authorizationRefund prepared.msg runId
       pure {
-        value := do
-          let run ← message.value.mapError (fun e => TransitionError.vm e.toEvmError)
-          (fun pair => (pair.1.state, pair.2)) <$> Transaction.settleRun admitted prepared tx index run
+        value := (fun pair => (pair.1.state, pair.2)) <$> settleMessage admitted prepared tx index message
         messageRun := message.value.toOption
         checkedRun := message.run.toOption.map (fun run => (prepared.msg, run))
         erases := by
-          simp only [message.erases, Transaction.run, ha, hp, bind, Except.bind]
-          cases Except.mapError (fun e => TransitionError.vm e.toEvmError) (TopLevel.run prepared.msg) <;> rfl
+          rw [settleMessage_eq, message.erases]
+          simp only [Transaction.run, ha, hp, bind, Except.bind]
         observes := by
           simp only [TraceTransaction.prepareTransaction, ha, hp, bind, Except.bind, message.erases]
           rfl
