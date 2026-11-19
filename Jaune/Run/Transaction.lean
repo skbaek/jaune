@@ -17,7 +17,7 @@ A transaction runs in four phases:
 (`TraceTransaction.prepareTransaction`/`finishTransaction`); here it is the definition. Also here,
 the staged transaction validators and block-access-list helpers from `Jaune.Transaction.Parts`.
 Staged under `Jaune.Staging`
-until the switch commit; the bridges are in `Jaune.Bridge.G2a.Run`.
+until the switch commit; the bridges are in gate G2a's bridge modules.
 -/
 
 namespace Jaune.Staging

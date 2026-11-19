@@ -13,7 +13,7 @@ Cut A's `Transaction.settle` and `processTransaction` (`Jaune.Run.Transaction`) 
 output; these supersede them. Because those names are already staged, these are staged one level
 deeper, in `Jaune.Staging.B2`; at the switch they take the final names `Transaction.settle` and
 `processTransaction`, and cut A's two definitions go with the old side. The bridges are in
-`Jaune.Bridge.G2a.Consumers`.
+gate G2a's bridge modules.
 -/
 
 namespace Jaune.Staging.B2

@@ -22,7 +22,7 @@ discards it. A run whose preparation is a frame always has a result (`Message.ru
 refund counter of a run without one is an internal fault too, so every function here is total over
 every `MessageRun`.
 
-Staged under `Jaune.Staging` beside `MessageRun.output`; `Jaune.Bridge.G2a.Consumers` proves that
+Staged under `Jaune.Staging` beside `MessageRun.output`; a G2a bridge proves that
 `MessageRun.output` is these functions assembled.
 -/
 

@@ -16,7 +16,7 @@ A system call is a top-level message run from the system address with the fixed 
   collect the request contracts' return data and incorporate each call's reads and writes.
 * `beaconRootsCall` and `historyStorageCall` are the two pre-execution calls.
 
-Staged under `Jaune.Staging`; the bridges are in `Jaune.Bridge.G2a.Consumers`.
+Staged under `Jaune.Staging`; the bridges are in gate G2a's bridge modules.
 -/
 
 namespace Jaune.Staging

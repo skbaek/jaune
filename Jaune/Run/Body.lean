@@ -27,7 +27,7 @@ are cut B2's (`Jaune.Run.Settle`, `Jaune.Run.SystemCall`), which still read and 
 `BlockOutput`; the step passes the prefix through `Body.Prefix.toBlockOutput` and back.
 
 Staged under `Jaune.Staging`; the bridges, including the difference theorem for the decode order,
-are in `Jaune.Bridge.G2a.Body`.
+are in gate G2a's bridge modules.
 -/
 
 namespace Jaune.Staging

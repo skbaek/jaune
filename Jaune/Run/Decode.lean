@@ -21,7 +21,7 @@ none (fail closed), as for every `typePreFork` outside 1-4: the fixture vocabula
 `TransactionException.TYPE_NOT_SUPPORTED` yet.
 
 Staged under `Jaune.Staging` until the switch commit; the difference theorem is in
-`Jaune.Bridge.G2a.Decode`.
+gate G2a's bridge modules.
 -/
 
 namespace Jaune.Staging

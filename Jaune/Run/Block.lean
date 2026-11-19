@@ -20,7 +20,7 @@ what the header commits to against what the body produced.
   check, the importer's body (`Body.importer`, a streaming fold), `Block.check`, append.
 
 Staged under `Jaune.Staging` (the transition under `Jaune.Staging.E`, since cut D staged
-`Jaune.Staging.stateTransitionCoreE`); the bridges are in `Jaune.Bridge.G2a.Block`.
+`Jaune.Staging.stateTransitionCoreE`); the bridges are in gate G2a's bridge modules.
 -/
 
 namespace Jaune.Staging

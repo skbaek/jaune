@@ -19,7 +19,7 @@ A top-level message call is a preparation followed by at most one frame:
 The Amsterdam preparation helpers are the public definitions in `Jaune.Transaction.Parts`; the
 preparation lemmas below are stated over them. This module stages the new message run under
 `Jaune.Staging`.
-`Jaune.Bridge.G2a.Run` relates it to the existing message call.
+A G2a bridge relates it to the existing message call.
 -/
 
 namespace Jaune.Staging
