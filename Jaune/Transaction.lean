@@ -2442,7 +2442,7 @@ def CheckedBlockChain.ofScheduledImport {cfg : ChainConfig} {f : Fork}
 theorem stateTransitionChecked_eq_raw (f : Fork) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
     stateTransitionChecked f cc cb
-      = stateTransitionCanonical f cc.val cb := rfl
+      = stateTransitionE f cc.val cb.block := rfl
 
 theorem addBlockToChainChecked_eq_raw (f : Fork) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :
