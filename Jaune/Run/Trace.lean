@@ -1,6 +1,5 @@
-import Jaune.Bridge.G2a.Old.Trace
 import Jaune.TraceTransaction
-import Jaune.Bridge.G2a.Consumers
+import Jaune.Run.Settle
 
 /-!
 # Tracing the message run and the transaction (goal `jaune-shape-and-names-v1`, W2 cut B2)
@@ -9,8 +8,8 @@ The tracer's transaction driver over the staged phases: it prepares the transact
 top-level message run and settles the run, and hands the trace summary the `MessageRun` instead of
 a rendered output record. Each traced operation carries a certificate that its value is the public
 operation: `runMessage` is `Message.run`, `runTransaction` is the state and block output of the
-transaction run `B2.Transaction.run` (the production pipeline), which
-`Jaune.Bridge.G2a.processTransaction_eq_b2` and `B2.Transaction.run_output` equate with today's.
+transaction run `B2.Transaction.run` (the production pipeline). The transaction is settled by
+`B2.Transaction.settleRun`, the settlement of that run, so the value is computed by the run itself.
 
 The traced message run enters the prepared frame from its checkpoint exactly once, with the entry
 and settlement events `Trace.runFrame` emits, so a precompile or the interpreter never runs twice;
@@ -77,68 +76,51 @@ structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction
       fun prepared => (Message.run prepared.msg).toOption)
 
 /-- Execute one transaction with synchronous instruction observations: check and prepare it,
-trace its message run, settle the run. The certificate connects the value to the public pipeline;
-the message run is never run a second time. -/
+trace its message run, settle the run as `B2.Transaction.run` settles it. The certificate connects
+the value to the public pipeline; the message run is never run a second time. -/
 def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction)
     (index : Nat) (runId : String) : m (TransactionResult benv bout tx index) := do
-  match hprep : prepareTransaction benv bout tx index with
+  match hcheck : Transaction.check benv bout tx index with
   | .error error =>
     pure {
       value := .error error
       messageRun := none
-      erases := by
-        rw [B2.Transaction.run_output]
-        simp only [prepareTransaction] at hprep
-        simp only [B2.processTransaction]
-        revert hprep
-        cases Transaction.check benv bout tx index with
-        | error e => intro h; cases h; rfl
-        | ok checked =>
-          simp only [bind, Except.bind]
-          intro h
-          rw [h]
-      observes := by rw [hprep]; rfl }
-  | .ok prepared =>
-    let message ← runMessage sink authorizationRefund prepared.msg runId
-    let value : Except TransitionError (State × BlockOutput) := do
-      let run ← message.value.mapError (fun e => TransitionError.vm e.toEvmError)
-      B2.Transaction.settle prepared tx index run
-    let observed := match message.value with
-      | .error _ => none
-      | .ok run => some run
-    pure {
-      value := value
-      messageRun := observed
-      erases := by
-        rw [B2.Transaction.run_output]
-        simp only [prepareTransaction] at hprep
-        simp only [B2.processTransaction, value, message.erases]
-        revert hprep
-        cases Transaction.check benv bout tx index with
-        | error e => intro h; cases h
-        | ok checked =>
-          simp only [bind, Except.bind]
-          intro h
-          rw [h]
-      observes := by
-        rw [hprep]
-        simp only [observed, message.erases, Except.toOption, Option.bind]
-        cases Message.run prepared.msg <;> rfl }
+      erases := by simp only [B2.Transaction.run, hcheck, bind, Except.bind]; rfl
+      observes := by simp only [prepareTransaction, hcheck, bind, Except.bind]; rfl }
+  | .ok checked =>
+    match hprep : Transaction.prepare checked tx index with
+    | .error error =>
+      pure {
+        value := .error error
+        messageRun := none
+        erases := by simp only [B2.Transaction.run, hcheck, hprep, bind, Except.bind]; rfl
+        observes := by simp only [prepareTransaction, hcheck, hprep, bind, Except.bind]; rfl }
+    | .ok prepared =>
+      let message ← runMessage sink authorizationRefund prepared.msg runId
+      let value : Except TransitionError (State × BlockOutput) := do
+        let run ← message.value.mapError (fun e => TransitionError.vm e.toEvmError)
+        (fun pair => (pair.1.state, pair.2)) <$>
+          B2.Transaction.settleRun checked prepared tx index run
+      let observed := match message.value with
+        | .error _ => none
+        | .ok run => some run
+      pure {
+        value := value
+        messageRun := observed
+        erases := by
+          simp only [value, message.erases, B2.Transaction.run, hcheck, hprep, bind, Except.bind]
+          cases Except.mapError (fun e => TransitionError.vm e.toEvmError) (Message.run prepared.msg) <;>
+            rfl
+        observes := by
+          simp only [prepareTransaction, hcheck, hprep, bind, Except.bind, observed, message.erases,
+            Except.toOption, Option.bind]
+          cases Message.run prepared.msg <;> rfl }
 
 /-- The traced transaction's value is the transaction run's state and block output. -/
 theorem runTransaction_erasure {benv : Benv} {bout : BlockOutput} {tx : Transaction}
     {index : Nat} (result : TransactionResult benv bout tx index) :
     result.value = (fun pair => (pair.1.state, pair.2)) <$> B2.Transaction.run benv bout tx index :=
   result.erases
-
-/-- **Bridge at the traced transaction's value.** For every monad, sink and input, the value the
-staged traced transaction returns is today's `processTransaction` result, and so the value
-`Jaune.TraceTransaction.runTransaction` returns. -/
-theorem runTransaction_value_eq {benv : Benv} {bout : BlockOutput} {tx : Transaction}
-    {index : Nat} (result : TransactionResult benv bout tx index)
-    (old : Jaune.TraceTransaction.TransactionResult benv bout tx index) :
-    result.value = old.value := by
-  rw [result.erases, B2.Transaction.run_output, old.erases, Bridge.G2a.processTransaction_eq_b2]
 
 end Jaune.Staging.TraceTransaction
