@@ -3,7 +3,7 @@ import Jaune.Bridge.G2b.CheckedIngress
 import Jaune.Bridge.G2b.CheckedReached
 import Jaune.Implementation.CheckedCachedDriver
 import Jaune.Bridge.G2b.FinalDriver
-import Jaune.Bridge.G2a.Run
+import Jaune.Run.Message
 
 namespace Jaune.Checked
 
@@ -59,30 +59,38 @@ theorem prepared_checkpoint_memory_wf {msg : Msg} {f : Jaune.Frame} {refund : Na
   hr.checkpoint_memory_wf (MemoryReachability.enterWith_run (start := f.checkpoint.toDevm)
     (Staging.TopLevel.prepare_frame_memory_wf hp) he) hs
 
-/-- The complete transaction-visible output of checked execution, using the proven preparation
-and rendering functions for the bridge candidate. -/
-def preparedMessageOutput (msg : Msg) : Except EvmError (Jaune.State × MsgCallOutput) :=
+/-- What checked execution of a top-level message records: the preparation and, for a frame, the
+checked frame's result, run from the proven preparation. -/
+def preparedMessageResult (msg : Msg) :
+    Except Fault (Staging.TopLevel.Preparation × Option Jaune.Frame.Result) :=
   match hp : Staging.TopLevel.prepare msg with
-  | .error fault => .error fault.toEvmError
-  | .ok (.refused h d) => (Staging.MessageRun.mk msg (.refused h d) none none).output
+  | .error fault => .error fault
+  | .ok (.refused h d) => .ok (.refused h d, none)
   | .ok (.frame f refund) => do
-    let r ← (Frame.runTop (Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp))).mapError Fault.toEvmError
-    match msg.benv.stat.rules.stateGas with
-    | none => f.output refund r
-    | some _ => f.outputAmsterdam r
+    let r ← Frame.runTop (Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp))
+    pure (.frame f refund, some r)
 
-/-- The transaction-visible output agrees for every top-level message, including preparation faults. -/
-theorem preparedMessageOutput_square (msg : Msg) : preparedMessageOutput msg = Jaune.processMessageCall msg := by
-  rw [← Jaune.Bridge.G2a.processMessageCall_eq]
-  unfold preparedMessageOutput
+/-- Checked execution records the top-level message run's preparation and result, for every
+top-level message, including preparation faults. -/
+theorem preparedMessageResult_square (msg : Msg) :
+    preparedMessageResult msg =
+      (fun run => (run.preparation, run.result)) <$> Staging.Message.run msg := by
+  unfold preparedMessageResult Staging.Message.run
   split
   · rename_i fault hp
-    rw [Jaune.Bridge.G2a.processMessageCall_of_fault hp]
+    rw [hp]
+    rfl
   · rename_i reason d hp
-    rw [Jaune.Bridge.G2a.processMessageCall_of_refused hp]
+    rw [hp]
     rfl
   · rename_i f refund hp
-    rw [Jaune.Bridge.G2a.processMessageCall_of_frame hp, Frame.runTop_prepared hp]
-    rfl
+    rw [Frame.runTop_prepared hp, hp]
+    unfold Jaune.Frame.runTop
+    simp only [bind, Except.bind]
+    cases he : Jaune.enterWith f f.checkpoint.toDevm with
+    | done result => cases result <;> rfl
+    | run evm =>
+      dsimp only
+      cases Jaune.settle f (Jaune.exec evm) <;> rfl
 
 end Jaune.Checked
