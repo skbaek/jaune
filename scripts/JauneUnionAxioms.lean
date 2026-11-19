@@ -36,6 +36,7 @@ import Jaune.StaticcallEffects
 import Jaune.TraceTransaction
 import Jaune.MessageCall.TraceJson
 import Jaune.Run.Trace
+import Jaune.Bridge.G2b.CheckedTrace
 import Jaune.Run.BodyT8n
 import Jaune.Run.BodyFactsT8n
 
