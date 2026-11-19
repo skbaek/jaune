@@ -127,6 +127,29 @@ class ClosureTests(unittest.TestCase):
         self.after['roots'].add('J.extra')
         self.assertEqual(self.compare()['verdict'], 'REGRESSION')
 
+    def test_closure_walk_visits_a_shared_expression_once(self):
+        class CountedExpr(list):
+            visits = 0
+
+            def __iter__(self):
+                self.visits += 1
+                return super().__iter__()
+
+        shared = CountedExpr(app(c('J.helper'), c('Nat.add')))
+        nested = shared
+        for _ in range(8):
+            nested = app(nested, nested)
+        constants = {'J.one': definition(nested), 'J.two': definition(shared),
+                     'J.helper': definition(['lit', 1])}
+
+        self.assertEqual(LEDGER.walk(constants, ['J.one', 'J.two'], {'J.helper'}),
+                         ({'J.one', 'J.two'}, {'J.helper'}, {'Nat', 'Nat.add'}))
+        self.assertEqual(shared.visits, 1)
+        self.assertEqual(LEDGER.walk(constants, ['J.one'], set()),
+                         ({'J.one', 'J.helper'}, set(), {'Nat', 'Nat.add'}))
+        self.assertEqual(shared.visits, 2)
+        self.assertEqual(LEDGER.references(('const', ('name', 'J.helper'), ()), set()), {'J.helper'})
+
     def test_maps_compose_in_order(self):
         self.after['constants']['J.Older.root'] = self.after['constants'].pop('J.Old.root')
         self.after['roots'] = set(self.after['constants'])

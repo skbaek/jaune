@@ -571,18 +571,21 @@ class Composed(MAP.Renamer):
         return new, 'exact' if new != name else 'unchanged'
 
 
-def references(record, found=None):
-    """Every `['name', X]` reference in an exported constant record."""
-    found = set() if found is None else found
-    if isinstance(record, list):
-        if len(record) == 2 and record[0] == 'name' and isinstance(record[1], str):
-            found.add(record[1])
+def references(record, seen):
+    """Names reached through nodes not yet visited in this closure walk."""
+    found = set()
+    pending = [record]
+    while pending:
+        node = pending.pop()
+        if not isinstance(node, (list, tuple, dict)) or id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, dict):
+            pending.extend(node.values())
+        elif len(node) == 2 and node[0] == 'name' and isinstance(node[1], str):
+            found.add(node[1])
         else:
-            for item in record:
-                references(item, found)
-    elif isinstance(record, dict):
-        for value in record.values():
-            references(value, found)
+            pending.extend(node)
     return found
 
 
@@ -590,6 +593,9 @@ def walk(constants, roots, stop):
     """The roots' dependency closure in `constants`, not entering `stop`
     names or names the export does not hold (non-Jaune constants)."""
     members, stopped, external, todo = set(), set(), set(), list(roots)
+    # A decoded expression pool may share nodes across declarations. The
+    # environment keeps them alive for the walk, so their identities are stable.
+    seen = set()
     while todo:
         name = todo.pop()
         if name in members:
@@ -601,7 +607,7 @@ def walk(constants, roots, stop):
             external.add(name)
             continue
         members.add(name)
-        todo.extend(references(constants[name]) - members)
+        todo.extend(references(constants[name], seen) - members)
     return members, stopped, external
 
 
