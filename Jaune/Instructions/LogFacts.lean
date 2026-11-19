@@ -2,8 +2,9 @@ import Jaune.Instructions.Log
 import Jaune.Instructions.MachineSteps
 import Jaune.MessageCall.CheckedPlain
 
-/-! The Log family's effect law, proved once, its table lemmas, and its bridge to
-`Checked.PlainOp.runCore` for `LOG0`–`LOG4`, for every input and every `Fork`. -/
+/-! The Log family's effect law, proved once, its table lemmas, and the lemma that
+`Checked.PlainOp.run` reads its rows for `LOG0`–`LOG4`, for every input and every `Fork`. The rows'
+agreement with the per-opcode arms is in `Jaune.Bridge.G2b.CheckedRowAgreement`. -/
 
 namespace Jaune.Checked
 
@@ -182,33 +183,28 @@ theorem Frame.State.liftLog_keeps (s : Frame.State)
 
 theorem PlainOp.logRow?_isSome_iff (op : Jaune.PlainOp) :
     (PlainOp.logRow? op).isSome = true ↔ ∃ n, op = .log n := by
-  cases op <;> simp [PlainOp.logRow?]
+  cases op <;> simp [PlainOp.logRow?, PlainOp.family]
 
 theorem PlainOp.logRow?_prices {op : Jaune.PlainOp} {row : LogRow}
     (h : PlainOp.logRow? op = some row) :
     row.base = Gas.log ∧ row.perByte = Gas.logData ∧ row.perTopic = Gas.logTopic ∧
       0 < row.base := by
-  cases op <;> simp only [PlainOp.logRow?, Option.some.injEq, reduceCtorEq] at h
+  cases op <;> simp only [PlainOp.logRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at h
   subst h
   exact ⟨rfl, rfl, rfl, by simp [Gas.log]⟩
 
-/-! ### Bridge -/
+/-! ### The dispatch reads the rows -/
 
-theorem PlainOp.logRow_step_eq (n : Fin 5) : LogRow.step { topics := n } = PlainOp.logStep n := rfl
+theorem PlainOp.logRow?_eq_some {op : Jaune.PlainOp} {row : LogRow} :
+    PlainOp.logRow? op = some row ↔ PlainOp.family op = .log row := by
+  unfold PlainOp.logRow?
+  cases PlainOp.family op <;> simp
 
-/-- **Bridge (`LOG0`–`LOG4`):** the row, lifted by `Frame.State.liftLog`, equals
-`Checked.PlainOp.runCore` for every `pc`, `CallContext` and `Frame.State` (hence every `Fork`). -/
-theorem PlainOp.logRow?_runCore_eq {op : Jaune.PlainOp} {row : LogRow}
-    (hrow : PlainOp.logRow? op = some row) (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftLog (row.step ctx s.machine) = PlainOp.runCore pc ctx s op := by
-  cases op <;> simp only [PlainOp.logRow?, Option.some.injEq, reduceCtorEq] at hrow
-  subst hrow
-  rfl
-
+/-- **Table lemma (`LOG0`–`LOG4`):** the row, lifted by `Frame.State.liftLog`, is `PlainOp.run`. -/
 theorem PlainOp.logRow?_run_eq {op : Jaune.PlainOp} {row : LogRow}
     (hrow : PlainOp.logRow? op = some row) (r : Frame.Running) :
-    r.state.liftLog (row.step r.context r.state.machine) = PlainOp.run r op :=
-  PlainOp.logRow?_runCore_eq hrow r.pc r.context r.state
+    r.state.liftLog (row.step r.context r.state.machine) = PlainOp.run r op := by
+  simp only [PlainOp.run, PlainOp.runCore, PlainOp.logRow?_eq_some.1 hrow, Family.run]
 
 /-- `LOG0`–`LOG4` keep the world and the trail, and of the substate change only the logs. -/
 theorem PlainOp.log_run_keeps {op : Jaune.PlainOp} (hrow : (PlainOp.logRow? op).isSome)

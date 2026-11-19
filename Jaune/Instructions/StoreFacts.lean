@@ -5,9 +5,10 @@ import Jaune.MessageCall.CheckedPlain
 
 Every theorem in this module proves that `SstoreRow.ofRules` and `TstoreRow.ofRules`, executed
 through `Frame.State.liftStore`, satisfy restricted-effect laws (explicit stack pop order, sentry
-bounds, gas-measure monotonicity, and exact world/substate/trail projections) and coincide with
-`Checked.PlainOp.runCore` / `PlainOp.run` across every `ForkRules` configuration and `Fork` without
-introducing any unrestricted state-transforming function. -/
+bounds, gas-measure monotonicity, and exact world/substate/trail projections), and that they are
+`PlainOp.run` for `SSTORE` and `TSTORE` by the dispatch's definition, across every `ForkRules`
+configuration and `Fork`, without introducing any unrestricted state-transforming function. Their
+agreement with the per-opcode arms is in `Jaune.Bridge.G2b.CheckedStoreAgreement`. -/
 
 namespace Jaune.Checked
 
@@ -615,421 +616,17 @@ theorem SstoreRow.ofRules_fork_gasCost_pos (f : Fork) :
 
 /-! ### `SstoreRow` bridge across all `ForkRules` and `Fork`s -/
 
-private theorem state_pop_eq (s : Frame.State) :
-    s.pop = match s.machine.pop with
-      | .error (e, m) => .error (e, s.withMachine m)
-      | .ok (x, m) => .ok (x, s.withMachine m) := by
-  unfold Frame.State.pop Frame.State.liftMachineValue
-  cases s.machine.pop with
-  | error e => rcases e with ⟨_, _⟩; rfl
-  | ok p => rcases p with ⟨_, _⟩; rfl
-
-private theorem state_chargeGas_eq (cost : Nat) (s : Frame.State) :
-    s.chargeGas cost = match s.machine.chargeGas cost with
-      | .error (e, m) => .error (e, s.withMachine m)
-      | .ok m => .ok (s.withMachine m) := by
-  unfold Frame.State.chargeGas Frame.State.liftMachine
-  cases s.machine.chargeGas cost with
-  | error e => rcases e with ⟨_, _⟩; rfl
-  | ok _ => rfl
-
-private theorem state_chargeStateGas_eq (amount : Nat) (s : Frame.State) :
-    s.chargeStateGas amount = match s.machine.chargeStateGas amount with
-      | .error (e, m) => .error (e, s.withMachine m)
-      | .ok m => .ok (s.withMachine m) := by
-  unfold Frame.State.chargeStateGas Frame.State.liftMachine
-  cases s.machine.chargeStateGas amount with
-  | error e => rcases e with ⟨_, _⟩; rfl
-  | ok _ => rfl
-
-private theorem except_assert_eq_ok {ε : Type} {p : Prop} [Decidable p] {e : ε} (h : p) :
-    Except.assert p e = .ok () := by
-  unfold Except.assert; simp [h]
-
-private theorem except_assert_eq_error {ε : Type} {p : Prop} [Decidable p] {e : ε} (h : ¬ p) :
-    Except.assert p e = .error e := by
-  unfold Except.assert; simp [h]
-
-private theorem assertDynamic_true {ctx : CallContext} {s : Frame.State}
-    (h : ctx.isStatic = true) :
-    Frame.State.assertDynamic ctx s = .error (.writeInStaticContext .none, s) := by
-  simp [Frame.State.assertDynamic, Except.assert, h]
-
-private theorem assertDynamic_false {ctx : CallContext} {s : Frame.State}
-    (h : ctx.isStatic = false) :
-    Frame.State.assertDynamic ctx s = .ok () := by
-  simp [Frame.State.assertDynamic, Except.assert, h]
-
-private theorem withMachine_twice (s : Frame.State) (m₁ m₂ : Machine) :
-    (s.withMachine m₁).withMachine m₂ = s.withMachine m₂ := rfl
-
-private theorem withMachine_gasLeft (s : Frame.State) (m : Machine) :
-    (s.withMachine m).gasLeft = m.gasLeft := rfl
-
-private theorem withMachine_originalStorageValue (s : Frame.State) (m : Machine)
-    (o : Jaune.State) (a : Address) (k : U256) :
-    (s.withMachine m).originalStorageValue o a k = s.originalStorageValue o a k := rfl
-
-private theorem withMachine_storageValue (s : Frame.State) (m : Machine)
-    (a : Address) (k : U256) :
-    (s.withMachine m).storageValue a k = s.storageValue a k := rfl
-
-private theorem withMachine_refund (s : Frame.State) (m : Machine) :
-    (s.withMachine m).refund = s.refund := rfl
-
-private theorem withMachine_accessedStorageKeys (s : Frame.State) (m : Machine) :
-    (s.withMachine m).accessedStorageKeys = s.accessedStorageKeys := rfl
-
-private theorem recordStorageRead_storageValue (rules : ForkRules) (a : Address) (k : U256)
-    (s : Frame.State) (a' : Address) (k' : U256) :
-    (s.recordStorageRead rules a k).storageValue a' k' = s.storageValue a' k' := rfl
-
-private theorem recordStorageRead_accessedStorageKeys (rules : ForkRules) (a : Address) (k : U256)
-    (s : Frame.State) :
-    (s.recordStorageRead rules a k).accessedStorageKeys = s.accessedStorageKeys := rfl
-
-private theorem recordStorageRead_refund (rules : ForkRules) (a : Address) (k : U256)
-    (s : Frame.State) :
-    (s.recordStorageRead rules a k).refund = s.refund := rfl
-
-private theorem addAccessedStorageKey_originalStorageValue (a : Address) (k : U256)
-    (s : Frame.State) (o : Jaune.State) (a' : Address) (k' : U256) :
-    (s.addAccessedStorageKey a k).originalStorageValue o a' k' =
-      s.originalStorageValue o a' k' := rfl
-
-private theorem addAccessedStorageKey_storageValue (a : Address) (k : U256)
-    (s : Frame.State) (a' : Address) (k' : U256) :
-    (s.addAccessedStorageKey a k).storageValue a' k' = s.storageValue a' k' := rfl
-
-private theorem addAccessedStorageKey_refund (a : Address) (k : U256) (s : Frame.State) :
-    (s.addAccessedStorageKey a k).refund = s.refund := rfl
-
-private theorem addAccessedStorageKey_machine (a : Address) (k : U256) (s : Frame.State) :
-    (s.addAccessedStorageKey a k).machine = s.machine := rfl
-
-private theorem recordStorageRead_machine (rules : ForkRules) (a : Address) (k : U256)
-    (s : Frame.State) :
-    (s.recordStorageRead rules a k).machine = s.machine := rfl
-
-private theorem withRefund_machine (s : Frame.State) (r : Int) :
-    (s.withRefund r).machine = s.machine := rfl
-
-private theorem sstoreBerlin_eq_sstoreLegacy (ctx : CallContext) (s : Frame.State)
-    (hs2 : ctx.block.rules.sstore = ⟨true, true⟩)
-    (hs3 : ctx.block.rules.access = .eip2929) :
-    PlainOp.sstoreBerlin ctx s = PlainOp.sstoreLegacy ctx s := by
-  unfold PlainOp.sstoreBerlin PlainOp.sstoreLegacy
-  simp only [bind, Except.bind]
-  cases hp1 : s.pop with
-  | error e1 => rfl
-  | ok p1 =>
-    rcases p1 with ⟨key, s1⟩
-    dsimp only
-    cases hp2 : s1.pop with
-    | error e2 => rfl
-    | ok p2 =>
-      rcases p2 with ⟨newVal, s2⟩
-      dsimp only
-      have hs_iff : (ctx.block.rules.sstore.stipendSentry = true → Gas.callStipend < s2.gasLeft) ↔
-          (Gas.callStipend < s2.gasLeft) := by simp [hs2]
-      by_cases hg : Gas.callStipend < s2.gasLeft
-      · have hgL : (ctx.block.rules.sstore.stipendSentry = true → Gas.callStipend < s2.gasLeft) :=
-          hs_iff.mpr hg
-        rw [except_assert_eq_ok hg, except_assert_eq_ok hgL]
-        simp only [hs2, hs3, sstoreRegimeGasCost, ↓reduceIte]
-      · have hgL : ¬ (ctx.block.rules.sstore.stipendSentry = true → Gas.callStipend < s2.gasLeft) :=
-          mt hs_iff.mp hg
-        rw [except_assert_eq_error hg, except_assert_eq_error hgL]
-
-private theorem liftStore_sstoreLegacy_eq (ctx : CallContext) (s : Frame.State)
-    (hs1 : ctx.block.rules.stateGas = none) :
-    s.liftStore ctx.block.rules ctx.recipient
-        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic (fun k => s.slotView ctx k)) =
-      PlainOp.sstoreLegacy ctx s := by
-  unfold Frame.State.liftStore SstoreRow.step SstoreRow.ofRules PlainOp.sstoreLegacy
-  simp only [hs1, Bool.false_and, Bool.false_eq_true, ↓reduceIte, Bool.not_false, state_pop_eq]
-  cases hp1 : s.machine.pop with
-  | error e1 =>
-    rcases e1 with ⟨err, m'⟩
-    rfl
-  | ok p1 =>
-    rcases p1 with ⟨key, m₁⟩
-    simp only [bind, Except.bind, Frame.State.withMachine_machine]
-    cases hp2 : m₁.pop with
-    | error e2 =>
-      rcases e2 with ⟨err, m'⟩
-      rfl
-    | ok p2 =>
-      rcases p2 with ⟨newVal, m₂⟩
-      dsimp only
-      have hsentry_iff : (m₂.gasLeft <
-            if ctx.block.rules.sstore.stipendSentry then Gas.callStipend + 1 else 0) ↔
-          ¬ (ctx.block.rules.sstore.stipendSentry = true → Gas.callStipend < m₂.gasLeft) := by
-        cases ctx.block.rules.sstore.stipendSentry <;> simp; omega
-      by_cases hsentry : (ctx.block.rules.sstore.stipendSentry = true →
-          Gas.callStipend < m₂.gasLeft)
-      · have hlt : ¬ (m₂.gasLeft <
-            if ctx.block.rules.sstore.stipendSentry then Gas.callStipend + 1 else 0) :=
-          mt hsentry_iff.mp (not_not.mpr hsentry)
-        have hsentry_raw : (ctx.block.rules.sstore.stipendSentry = true →
-            Gas.callStipend < ((s.withMachine m₁).withMachine m₂).gasLeft) := by
-          simpa [withMachine_twice, withMachine_gasLeft] using hsentry
-        rw [except_assert_eq_ok hsentry_raw]
-        simp only [hlt, ↓reduceIte, withMachine_twice, Machine.creditStateGasRefund_zero]
-        cases hacc : ctx.block.rules.access with
-        | flat g =>
-          simp only [Bool.false_and, Bool.false_eq_true, ↓reduceIte, Frame.State.slotView,
-            withMachine_originalStorageValue, withMachine_storageValue, withMachine_refund,
-            recordStorageRead_storageValue, recordStorageRead_refund, recordStorageRead_machine,
-            withRefund_machine, state_chargeGas_eq, Frame.State.withMachine_machine]
-          cases hcg : m₂.chargeGas (sstoreRegimeGasCost ctx.block.rules.sstore (.flat g) 0
-              newVal (s.originalStorageValue ctx.block.origState ctx.recipient key)
-              (s.storageValue ctx.recipient key)) with
-          | error e3 =>
-            rcases e3 with ⟨err, m'⟩
-            unfold Frame.State.applyStoreTouch
-            cases ctx.block.rules.sstore.netMetering <;> rfl
-          | ok m₄ =>
-            simp only [Machine.chargeStateGas_zero]
-            cases hstat : ctx.isStatic
-            · rw [assertDynamic_false hstat]
-              cases ctx.block.rules.sstore.netMetering <;> (unfold Frame.State.applyStoreTouch; rfl)
-            · rw [assertDynamic_true hstat]
-              cases ctx.block.rules.sstore.netMetering <;> (unfold Frame.State.applyStoreTouch; rfl)
-        | eip2929 =>
-          simp only [Bool.true_and]
-          by_cases hcold : (ctx.recipient, key) ∉ s.accessedStorageKeys
-          · have hdc : (s.slotView ctx key).cold = true := decide_eq_true hcold
-            simp only [hdc, ↓reduceIte]
-            have hcold_true : ((ctx.recipient, key) ∉ s.accessedStorageKeys) = True :=
-              eq_true hcold
-            simp only [hcold_true, ↓reduceIte, Frame.State.slotView,
-              withMachine_originalStorageValue, withMachine_storageValue,
-              withMachine_accessedStorageKeys, withMachine_refund,
-              recordStorageRead_storageValue, recordStorageRead_accessedStorageKeys,
-              recordStorageRead_refund, recordStorageRead_machine,
-              addAccessedStorageKey_refund, addAccessedStorageKey_machine, withRefund_machine,
-              state_chargeGas_eq, Frame.State.withMachine_machine]
-            cases hcg : m₂.chargeGas (sstoreRegimeGasCost ctx.block.rules.sstore .eip2929
-                Gas.coldSloadCost newVal
-                (s.originalStorageValue ctx.block.origState ctx.recipient key)
-                (s.storageValue ctx.recipient key)) with
-            | error e3 =>
-              rcases e3 with ⟨err, m'⟩
-              unfold Frame.State.applyStoreTouch
-              cases ctx.block.rules.sstore.netMetering <;> rfl
-            | ok m₄ =>
-              simp only [Machine.chargeStateGas_zero]
-              cases hstat : ctx.isStatic
-              · rw [assertDynamic_false hstat]
-                cases ctx.block.rules.sstore.netMetering <;> (unfold Frame.State.applyStoreTouch; rfl)
-              · rw [assertDynamic_true hstat]
-                cases ctx.block.rules.sstore.netMetering <;> (unfold Frame.State.applyStoreTouch; rfl)
-          · have hdc : (s.slotView ctx key).cold = false := decide_eq_false hcold
-            simp only [hdc, Bool.false_eq_true, ↓reduceIte]
-            have hcold_false : ((ctx.recipient, key) ∉ s.accessedStorageKeys) = False :=
-              eq_false hcold
-            simp only [hcold_false, ↓reduceIte, Frame.State.slotView,
-              withMachine_originalStorageValue, withMachine_storageValue,
-              withMachine_accessedStorageKeys, withMachine_refund,
-              recordStorageRead_storageValue, recordStorageRead_accessedStorageKeys,
-              recordStorageRead_refund, recordStorageRead_machine,
-              withRefund_machine, state_chargeGas_eq, Frame.State.withMachine_machine]
-            cases hcg : m₂.chargeGas (sstoreRegimeGasCost ctx.block.rules.sstore .eip2929 0
-                newVal (s.originalStorageValue ctx.block.origState ctx.recipient key)
-                (s.storageValue ctx.recipient key)) with
-            | error e3 =>
-              rcases e3 with ⟨err, m'⟩
-              unfold Frame.State.applyStoreTouch
-              cases ctx.block.rules.sstore.netMetering <;> rfl
-            | ok m₄ =>
-              simp only [Machine.chargeStateGas_zero]
-              cases hstat : ctx.isStatic
-              · rw [assertDynamic_false hstat]
-                cases ctx.block.rules.sstore.netMetering <;> (unfold Frame.State.applyStoreTouch; rfl)
-              · rw [assertDynamic_true hstat]
-                cases ctx.block.rules.sstore.netMetering <;> (unfold Frame.State.applyStoreTouch; rfl)
-      · have hlt : m₂.gasLeft <
-            if ctx.block.rules.sstore.stipendSentry then Gas.callStipend + 1 else 0 :=
-          hsentry_iff.mpr hsentry
-        have hsentry_raw : ¬ (ctx.block.rules.sstore.stipendSentry = true →
-            Gas.callStipend < ((s.withMachine m₁).withMachine m₂).gasLeft) := by
-          simpa [withMachine_twice, withMachine_gasLeft] using hsentry
-        rw [except_assert_eq_error hsentry_raw]
-        simp only [hlt, ↓reduceIte, withMachine_twice]
-        rfl
-
-private theorem liftStore_sstoreBerlin_eq (ctx : CallContext) (s : Frame.State)
-    (hs1 : ctx.block.rules.stateGas = none)
-    (hs2 : ctx.block.rules.sstore = ⟨true, true⟩)
-    (hs3 : ctx.block.rules.access = .eip2929) :
-    s.liftStore ctx.block.rules ctx.recipient
-        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic (fun k => s.slotView ctx k)) =
-      PlainOp.sstoreBerlin ctx s := by
-  rw [liftStore_sstoreLegacy_eq ctx s hs1]
-  exact (sstoreBerlin_eq_sstoreLegacy ctx s hs2 hs3).symm
-
-private theorem liftStore_sstoreAmsterdam_eq (state : StateGasRules) (ctx : CallContext)
-    (s : Frame.State) (hs : ctx.block.rules.stateGas = some state) :
-    s.liftStore ctx.block.rules ctx.recipient
-        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic (fun k => s.slotView ctx k)) =
-      PlainOp.sstoreAmsterdam state ctx s := by
-  unfold Frame.State.liftStore SstoreRow.step SstoreRow.ofRules PlainOp.sstoreAmsterdam
-  simp only [hs, Bool.true_and, Bool.not_true, Bool.false_and, Bool.false_eq_true, ↓reduceIte]
-  cases hstat : ctx.isStatic
-  · rw [assertDynamic_false hstat]
-    simp only [bind, Except.bind, state_pop_eq]
-    cases hp1 : s.machine.pop with
-    | error e1 =>
-      rcases e1 with ⟨err, m'⟩
-      rfl
-    | ok p1 =>
-      rcases p1 with ⟨key, m₁⟩
-      simp only [Frame.State.withMachine_machine]
-      cases hp2 : m₁.pop with
-      | error e2 =>
-        rcases e2 with ⟨err, m'⟩
-        rfl
-      | ok p2 =>
-        rcases p2 with ⟨newVal, m₂⟩
-        by_cases hcold : (ctx.recipient, key) ∉ s.accessedStorageKeys
-        · have hdc : (s.slotView ctx key).cold = true := decide_eq_true hcold
-          have hcold_true : ((ctx.recipient, key) ∉ s.accessedStorageKeys) = True :=
-            eq_true hcold
-          simp only [hdc, ↓reduceIte]
-          by_cases hg : max Gas.coldSloadCost (Gas.callStipend + 1) ≤ m₂.gasLeft
-          · have hlt : ¬ (m₂.gasLeft < max Gas.coldSloadCost (Gas.callStipend + 1)) := by omega
-            have hg_raw :
-                max (if (ctx.recipient, key) ∉ ((s.withMachine m₁).withMachine m₂).accessedStorageKeys
-                      then Gas.coldSloadCost else Gas.warmStorageReadCost)
-                    (Gas.callStipend + 1) ≤
-                  ((s.withMachine m₁).withMachine m₂).gasLeft := by
-              simpa [withMachine_twice, withMachine_gasLeft, withMachine_accessedStorageKeys,
-                hcold] using hg
-            rw [except_assert_eq_ok hg_raw]
-            simp only [hlt, ↓reduceIte, withMachine_twice, withMachine_accessedStorageKeys]
-            simp only [hcold_true, ↓reduceIte, Frame.State.slotView,
-              addAccessedStorageKey_originalStorageValue, withMachine_originalStorageValue,
-              recordStorageRead_storageValue, addAccessedStorageKey_storageValue,
-              withMachine_storageValue, recordStorageRead_refund, addAccessedStorageKey_refund,
-              withMachine_refund, addAccessedStorageKey_machine, recordStorageRead_machine,
-              withRefund_machine, state_chargeGas_eq, Frame.State.creditStateGasRefund,
-              Frame.State.liftMachinePure, Frame.State.withMachine_machine]
-            cases hcg : (m₂.creditStateGasRefund (sstoreAmsterdamStateRefund state newVal _ _)).chargeGas
-                (sstoreAmsterdamGasCost state newVal _ _ true) with
-            | error e3 =>
-              rcases e3 with ⟨err, m'⟩
-              unfold Frame.State.applyStoreTouch
-              rfl
-            | ok m₄ =>
-              simp only [state_chargeStateGas_eq, Frame.State.withMachine_machine]
-              cases hsg : m₄.chargeStateGas (sstoreAmsterdamStateGas state newVal _ _) with
-              | error e4 =>
-                rcases e4 with ⟨err, m'⟩
-                unfold Frame.State.applyStoreTouch
-                rfl
-              | ok m₅ =>
-                unfold Frame.State.applyStoreTouch
-                rfl
-          · have hlt : m₂.gasLeft < max Gas.coldSloadCost (Gas.callStipend + 1) := by omega
-            have hg_raw :
-                ¬ (max (if (ctx.recipient, key) ∉
-                        ((s.withMachine m₁).withMachine m₂).accessedStorageKeys
-                      then Gas.coldSloadCost else Gas.warmStorageReadCost)
-                    (Gas.callStipend + 1) ≤
-                  ((s.withMachine m₁).withMachine m₂).gasLeft) := by
-              simpa [withMachine_twice, withMachine_gasLeft, withMachine_accessedStorageKeys,
-                hcold] using hg
-            rw [except_assert_eq_error hg_raw]
-            simp only [hlt, ↓reduceIte, withMachine_twice]
-            rfl
-        · have hdc : (s.slotView ctx key).cold = false := decide_eq_false hcold
-          have hcold_false : ((ctx.recipient, key) ∉ s.accessedStorageKeys) = False :=
-            eq_false hcold
-          simp only [hdc, Bool.false_eq_true, ↓reduceIte]
-          by_cases hg : max Gas.warmStorageReadCost (Gas.callStipend + 1) ≤ m₂.gasLeft
-          · have hlt : ¬ (m₂.gasLeft < max Gas.warmStorageReadCost (Gas.callStipend + 1)) := by
-              omega
-            have hg_raw :
-                max (if (ctx.recipient, key) ∉ ((s.withMachine m₁).withMachine m₂).accessedStorageKeys
-                      then Gas.coldSloadCost else Gas.warmStorageReadCost)
-                    (Gas.callStipend + 1) ≤
-                  ((s.withMachine m₁).withMachine m₂).gasLeft := by
-              simpa [withMachine_twice, withMachine_gasLeft, withMachine_accessedStorageKeys,
-                hcold] using hg
-            rw [except_assert_eq_ok hg_raw]
-            simp only [hlt, ↓reduceIte, withMachine_twice, withMachine_accessedStorageKeys]
-            simp only [hcold_false, ↓reduceIte, Frame.State.slotView,
-              withMachine_originalStorageValue, recordStorageRead_storageValue,
-              withMachine_storageValue, recordStorageRead_refund, withMachine_refund,
-              state_chargeGas_eq, Frame.State.creditStateGasRefund, Frame.State.liftMachinePure,
-              Frame.State.withMachine_machine, recordStorageRead_machine, withRefund_machine]
-            cases hcg : (m₂.creditStateGasRefund (sstoreAmsterdamStateRefund state newVal _ _)).chargeGas
-                (sstoreAmsterdamGasCost state newVal _ _ false) with
-            | error e3 =>
-              rcases e3 with ⟨err, m'⟩
-              unfold Frame.State.applyStoreTouch
-              rfl
-            | ok m₄ =>
-              simp only [state_chargeStateGas_eq, Frame.State.withMachine_machine]
-              cases hsg : m₄.chargeStateGas (sstoreAmsterdamStateGas state newVal _ _) with
-              | error e4 =>
-                rcases e4 with ⟨err, m'⟩
-                unfold Frame.State.applyStoreTouch
-                rfl
-              | ok m₅ =>
-                unfold Frame.State.applyStoreTouch
-                rfl
-          · have hlt : m₂.gasLeft < max Gas.warmStorageReadCost (Gas.callStipend + 1) := by omega
-            have hg_raw :
-                ¬ (max (if (ctx.recipient, key) ∉
-                        ((s.withMachine m₁).withMachine m₂).accessedStorageKeys
-                      then Gas.coldSloadCost else Gas.warmStorageReadCost)
-                    (Gas.callStipend + 1) ≤
-                  ((s.withMachine m₁).withMachine m₂).gasLeft) := by
-              simpa [withMachine_twice, withMachine_gasLeft, withMachine_accessedStorageKeys,
-                hcold] using hg
-            rw [except_assert_eq_error hg_raw]
-            simp only [hlt, ↓reduceIte, withMachine_twice]
-            rfl
-  · rw [assertDynamic_true hstat]; rfl
-
-/-- **Bridge (`SSTORE`, all `ForkRules`):** `SstoreRow.ofRules ctx.block.rules` lifted through
-`Frame.State.liftStore` equals `Checked.PlainOp.runCore pc ctx s .sstore` for every `ForkRules`
-configuration, `pc`, `CallContext`, and `Frame.State`. -/
-theorem SstoreRow.ofRules_lift_eq (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftStore ctx.block.rules ctx.recipient
-        ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic (fun k => s.slotView ctx k)) =
-      PlainOp.runCore pc ctx s .sstore := by
-  dsimp only [PlainOp.runCore]
-  cases hs1 : ctx.block.rules.stateGas with
-  | none =>
-    cases hs2 : ctx.block.rules.sstore with
-    | mk net sent =>
-      cases hs3 : ctx.block.rules.access with
-      | flat g =>
-        cases net <;> cases sent <;> exact liftStore_sstoreLegacy_eq ctx s hs1
-      | eip2929 =>
-        cases net <;> cases sent
-        · exact liftStore_sstoreLegacy_eq ctx s hs1
-        · exact liftStore_sstoreLegacy_eq ctx s hs1
-        · exact liftStore_sstoreLegacy_eq ctx s hs1
-        · exact liftStore_sstoreBerlin_eq ctx s hs1 hs2 hs3
-  | some state =>
-    exact liftStore_sstoreAmsterdam_eq state ctx s hs1
-
 theorem SstoreRow.ofRules_run_eq (r : Frame.Running) :
     r.state.liftStore r.context.block.rules r.context.recipient
         ((SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-          (fun k => r.state.slotView r.context k)) =
-      PlainOp.run r .sstore :=
-  SstoreRow.ofRules_lift_eq r.pc r.context r.state
+          (r.state.slotView r.context.recipient r.context.block.origState)) =
+      PlainOp.run r .sstore := rfl
 
 theorem SstoreRow.ofRules_run_fork_eq (f : Fork) (r : Frame.Running)
     (hf : r.context.block.fork = f) :
     r.state.liftStore (Fork.ruleSet f) r.context.recipient
         ((SstoreRow.ofRules (Fork.ruleSet f)).step r.context.isStatic
-          (fun k => r.state.slotView r.context k)) =
+          (r.state.slotView r.context.recipient r.context.block.origState)) =
       PlainOp.run r .sstore := by
   have hr : r.context.block.rules = Fork.ruleSet f := by simp only [BenvStat.rules, hf]
   rw [← hr]
@@ -1090,14 +687,11 @@ theorem PlainOp.sstore_run_congr_fork (r : Frame.Running) (f' : Fork)
   have hrow : SstoreRow.ofRules (Fork.ruleSet f') =
       SstoreRow.ofRules (Fork.ruleSet r.context.block.fork) :=
     sstoreRow_ofRules_eq_of hsg.symm hss.symm hacc.symm hclr.symm
-  have hsv : (fun k => r.state.slotView
-      { r.context with block := { r.context.block with fork := f' } } k) =
-      (fun k => r.state.slotView r.context k) := rfl
   unfold Frame.State.liftStore
   dsimp only [BenvStat.rules] at hrow ⊢
-  rw [hsv, hrow]
+  rw [hrow]
   cases ((SstoreRow.ofRules (Fork.ruleSet r.context.block.fork)).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine) with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine) with
   | error err =>
     rcases err with ⟨e, m', touch⟩
     dsimp only
@@ -1115,7 +709,7 @@ theorem PlainOp.sstore_run_gasMeasure_lt (r : Frame.Running) (hacc : r.context.b
   rw [← SstoreRow.ofRules_run_eq] at hok
   unfold Frame.State.liftStore at hok
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | error e => simp [hs] at hok
   | ok res =>
     rcases res with ⟨m', touch⟩
@@ -1131,9 +725,9 @@ theorem PlainOp.sstore_run_memory (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   have hm := SstoreRow.step_memory (SstoreRow.ofRules r.context.block.rules) r.context.isStatic
-    (fun k => r.state.slotView r.context k) r.state.machine
+    (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res => simp [hs] at hm ⊢; exact hm
   | error err => simp [hs] at hm ⊢; exact hm
 
@@ -1143,9 +737,9 @@ theorem PlainOp.sstore_run_returnData (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   have hrd := SstoreRow.step_returnData (SstoreRow.ofRules r.context.block.rules) r.context.isStatic
-    (fun k => r.state.slotView r.context k) r.state.machine
+    (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res => simp [hs] at hrd ⊢; exact hrd
   | error err => simp [hs] at hrd ⊢; exact hrd
 
@@ -1154,7 +748,7 @@ theorem PlainOp.sstore_run_logs (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine <;>
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine <;>
     simp [Frame.State.applyStoreTouch_logs, Frame.State.logs]
 
 theorem PlainOp.sstore_run_selfDestructs (r : Frame.Running) :
@@ -1163,7 +757,7 @@ theorem PlainOp.sstore_run_selfDestructs (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine <;>
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine <;>
     simp [Frame.State.applyStoreTouch_selfDestructs, Frame.State.selfDestructs]
 
 theorem PlainOp.sstore_run_accessedAddresses (r : Frame.Running) :
@@ -1172,7 +766,7 @@ theorem PlainOp.sstore_run_accessedAddresses (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine <;>
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine <;>
     simp [Frame.State.applyStoreTouch_accessedAddresses, Frame.State.accessedAddresses]
 
 theorem PlainOp.sstore_run_touchedAccounts (r : Frame.Running) :
@@ -1181,7 +775,7 @@ theorem PlainOp.sstore_run_touchedAccounts (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine <;>
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine <;>
     simp [Frame.State.applyStoreTouch_touchedAccounts, Frame.State.touchedAccounts]
 
 theorem PlainOp.sstore_run_createdAccounts (r : Frame.Running) :
@@ -1190,7 +784,7 @@ theorem PlainOp.sstore_run_createdAccounts (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine <;>
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine <;>
     simp [Frame.State.applyStoreTouch_createdAccounts, Frame.State.createdAccounts]
 
 theorem PlainOp.sstore_run_transientStorage (r : Frame.Running) :
@@ -1199,7 +793,7 @@ theorem PlainOp.sstore_run_transientStorage (r : Frame.Running) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res =>
     rcases res with ⟨m', touch⟩
     have hnot : ∀ k v, touch.write ≠ some (.transient k v) := by
@@ -1219,7 +813,7 @@ theorem PlainOp.sstore_run_balance (r : Frame.Running) (a : Address) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res =>
     rcases res with ⟨m', touch⟩
     have hnot : ∀ k v, touch.write ≠ some (.transient k v) := by
@@ -1238,7 +832,7 @@ theorem PlainOp.sstore_run_code (r : Frame.Running) (a : Address) :
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res =>
     rcases res with ⟨m', touch⟩
     have hnot : ∀ k v, touch.write ≠ some (.transient k v) := by
@@ -1258,7 +852,7 @@ theorem PlainOp.sstore_run_storageValue_ne_addr (r : Frame.Running) {a : Address
   rw [← SstoreRow.ofRules_run_eq]
   unfold Frame.State.liftStore
   cases hs : (SstoreRow.ofRules r.context.block.rules).step r.context.isStatic
-      (fun k => r.state.slotView r.context k) r.state.machine with
+      (r.state.slotView r.context.recipient r.context.block.origState) r.state.machine with
   | ok res =>
     rcases res with ⟨m', touch⟩
     have hnot : ∀ k v, touch.write ≠ some (.transient k v) := by
@@ -1374,66 +968,11 @@ theorem TstoreRow.step_error {row : TstoreRow} {opcodes : OpcodeRules} {isStatic
               exact ⟨Or.inr (Or.inl rfl), rfl, rfl, rfl, by simp only [Machine.gasMeasure]; omega, rfl⟩
             · cases h
 
-theorem TstoreRow.ofRules_lift_eq (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftStore ctx.block.rules ctx.recipient
-        ((TstoreRow.ofRules ctx.block.rules).step ctx.block.rules.opcodes ctx.isStatic) =
-      PlainOp.runCore pc ctx s .tstore := by
-  unfold Frame.State.liftStore TstoreRow.step TstoreRow.ofRules PlainOp.runCore
-  dsimp only
-  by_cases hav : ctx.block.rules.opcodes.transient
-  · simp only [hav, ↓reduceIte, Bool.not_true, Bool.false_eq_true]
-    cases hsg : ctx.block.rules.stateGas with
-    | none =>
-      dsimp only [Option.isSome, Bool.false_and, Bool.false_eq_true, ↓reduceIte, Bool.not_false,
-        Bool.true_and, bind, Except.bind, Frame.State.pop, Frame.State.liftMachineValue]
-      cases hp1 : s.machine.pop with
-      | error e1 => rcases e1 with ⟨err, m'⟩; rfl
-      | ok p1 =>
-        obtain ⟨key, m₁⟩ := p1
-        dsimp only [Frame.State.withMachine_machine]
-        cases hp2 : m₁.pop with
-        | error e2 => rcases e2 with ⟨err, m'⟩; rfl
-        | ok p2 =>
-          obtain ⟨newVal, m₂⟩ := p2
-          dsimp only [Frame.State.withMachine_machine]
-          unfold Frame.State.chargeGas Frame.State.liftMachine
-          dsimp only [Frame.State.withMachine_machine]
-          cases hcg : m₂.chargeGas Gas.warmStorageReadCost with
-          | error e3 => rcases e3 with ⟨err, m'⟩; rfl
-          | ok m₃ =>
-            dsimp only [Frame.State.assertDynamic, Except.assert, Frame.State.applyStoreTouch]
-            by_cases hstat : ctx.isStatic <;> simp [hstat, withMachine_twice]
-    | some _ =>
-      dsimp only [Option.isSome, Bool.true_and, Bool.not_true, Bool.false_and, Bool.false_eq_true,
-        ↓reduceIte, bind, Except.bind, Frame.State.assertDynamic, Except.assert]
-      by_cases hstat : ctx.isStatic
-      · simp [hstat]; rfl
-      · simp only [hstat, Bool.not_false, ↓reduceIte]
-        unfold Frame.State.pop Frame.State.liftMachineValue
-        cases hp1 : s.machine.pop with
-        | error e1 => rcases e1 with ⟨err, m'⟩; rfl
-        | ok p1 =>
-          obtain ⟨key, m₁⟩ := p1
-          dsimp only [Frame.State.withMachine_machine]
-          cases hp2 : m₁.pop with
-          | error e2 => rcases e2 with ⟨err, m'⟩; rfl
-          | ok p2 =>
-            obtain ⟨newVal, m₂⟩ := p2
-            dsimp only [Frame.State.withMachine_machine]
-            unfold Frame.State.chargeGas Frame.State.liftMachine
-            dsimp only [Frame.State.withMachine_machine]
-            cases hcg : m₂.chargeGas Gas.warmStorageReadCost with
-            | error e3 => rcases e3 with ⟨err, m'⟩; rfl
-            | ok m₃ =>
-              simp [Frame.State.applyStoreTouch, withMachine_twice]
-  · simp [hav]; rfl
-
 theorem TstoreRow.ofRules_run_eq (r : Frame.Running) :
     r.state.liftStore r.context.block.rules r.context.recipient
         ((TstoreRow.ofRules r.context.block.rules).step r.context.block.rules.opcodes
           r.context.isStatic) =
-      PlainOp.run r .tstore :=
-  TstoreRow.ofRules_lift_eq r.pc r.context r.state
+      PlainOp.run r .tstore := rfl
 
 theorem TstoreRow.ofRules_run_fork_eq (f : Fork) (r : Frame.Running)
     (hf : r.context.block.fork = f) :

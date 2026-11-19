@@ -1,5 +1,8 @@
 import Jaune.CheckedSufficiencyWalk
 import Jaune.MessageCall.RunInvariants
+import Jaune.Instructions.ReadFacts
+import Jaune.Instructions.StoreFacts
+import Jaune.Instructions.Log
 
 /-! A running machine preserves its committed spill and has room for the caller's return push
 after a spawning opcode pops its arguments. -/
@@ -176,7 +179,6 @@ theorem applyTernary_inv (f : U256 → U256 → U256 → U256) (cost : Nat) (h :
 
 end State
 
-
 theorem State.assertDynamic_inv (ctx : CallContext) {s : Frame.State} {c n : Nat} (h : Inv c n s) :
     Walk (Inv c 0) (fun _ => True) (s.assertDynamic ctx) :=
   Walk.assert (h.weaken (Nat.zero_le _))
@@ -261,71 +263,270 @@ elab "inv_primitive" : tactic => withMainContext do
 
 local macro "inv_walk" : tactic => `(tactic| repeat' (first | inv_primitive | inv_leaf | split))
 
-private theorem logStep_inv (k : Fin 5) (ctx : CallContext) {m : Machine} {c : Nat}
-    (h : MInv c 0 m) : MWalk (MInv c 0) (fun p => MInv c 0 p.1) (PlainOp.logStep k ctx m) := by
-  unfold PlainOp.logStep
+theorem Machine.popWords_inv {c : Nat} {m : Machine} (a : Fin 4) (h : MInv c 0 m) :
+    MWalk (MInv c 0) (fun p => MInv c 0 p.2) (m.popWords a) := by
+  match a with
+  | 0 => exact h
+  | 1 => exact MWalk.mono (Machine.pop_inv h) fun _ hp => hp.weaken (Nat.zero_le _)
+  | 2 =>
+    refine MWalk.bind (Machine.pop_inv h) ?_
+    rintro ⟨x, m₁⟩ h₁
+    refine MWalk.bind (Machine.pop_inv (h₁.weaken (Nat.zero_le _))) ?_
+    rintro ⟨y, m₂⟩ h₂
+    exact h₂.weaken (Nat.zero_le _)
+  | 3 =>
+    refine MWalk.bind (Machine.pop_inv h) ?_
+    rintro ⟨x, m₁⟩ h₁
+    refine MWalk.bind (Machine.pop_inv (h₁.weaken (Nat.zero_le _))) ?_
+    rintro ⟨y, m₂⟩ h₂
+    refine MWalk.bind (Machine.pop_inv (h₂.weaken (Nat.zero_le _))) ?_
+    rintro ⟨z, m₃⟩ h₃
+    exact h₃.weaken (Nat.zero_le _)
+
+/-- The Word family's step keeps the bound (S4: one walk for every Word row). -/
+theorem WordRow.step_inv (row : WordRow) (o : OpcodeRules) (e : Word.Env) {c : Nat} {m : Machine}
+    (h : MInv c 0 m) : MWalk (MInv c 0) (MInv c 0) (row.step o e m) := by
+  unfold WordRow.step
+  cases ha : row.available o
+  · simp only [Bool.false_eq_true, ↓reduceIte]
+    exact h
+  · simp only [↓reduceIte]
+    refine MWalk.bind (Machine.popWords_inv row.arity h) ?_
+    rintro ⟨args, m₁⟩ h₁
+    refine MWalk.bind (Machine.chargeGas_inv _ h₁) ?_
+    intro m₂ h₂
+    split
+    · exact h₂
+    · exact Machine.push_inv _ h₂
+
+/-- The Shuffle family's step keeps the bound. -/
+theorem ShuffleRow.step_inv (row : ShuffleRow) (o : OpcodeRules) {c : Nat} {m : Machine}
+    (h : MInv c 0 m) : MWalk (MInv c 0) (MInv c 0) (row.step o m) := by
+  unfold ShuffleRow.step
+  cases ha : row.available o
+  · simp only [Bool.false_eq_true, ↓reduceIte]
+    exact h
+  · simp only [↓reduceIte]
+    refine MWalk.bind (Machine.chargeGas_inv _ h) ?_
+    intro m₁ h₁
+    split
+    · exact h₁
+    · rename_i sh
+      unfold Shuffle.run
+      split
+      · split
+        · exact h₁
+        · exact Machine.push_inv _ h₁
+      · split
+        · exact h₁
+        · rename_i st he
+          exact ⟨h₁.1, by
+            have hl := Jaune.RunInvariants.List.swap_length he
+            have := h₁.2
+            change st.length + 0 ≤ 1024
+            simp only [hl] at *; omega⟩
+      · split
+        · exact h₁
+        · rename_i st he
+          exact ⟨h₁.1, by
+            have hl := Jaune.RunInvariants.List.exchange_length he
+            have := h₁.2
+            change st.length + 0 ≤ 1024
+            simp only [hl] at *; omega⟩
+
+/-- The Memory family's step keeps the bound. -/
+theorem MemoryRow.step_inv (row : MemoryRow) (o : OpcodeRules) (ctx : CallContext) {c : Nat}
+    {m : Machine} (h : MInv c 0 m) : MWalk (MInv c 0) (MInv c 0) (row.step o ctx m) := by
+  unfold MemoryRow.step
+  cases ha : row.available o
+  · simp only [Bool.false_eq_true, ↓reduceIte]
+    exact h
+  · simp only [↓reduceIte]
+    refine MWalk.bind (Machine.popWords_inv row.arity h) ?_
+    rintro ⟨args, m₁⟩ h₁
+    refine MWalk.bind (Machine.chargeGas_inv _ h₁) ?_
+    intro m₂ h₂
+    split
+    · exact h₂
+    · exact h₂
+    · rename_i memory x _
+      exact MWalk.mono (Machine.push_inv (n := 0) x
+        (⟨h₂.1, h₂.2⟩ : MInv c 0 { m₂ with memory := memory })) (fun _ hp => hp)
+
+/-- The Log family's step keeps the bound. -/
+theorem LogRow.step_inv (row : LogRow) (ctx : CallContext) {c : Nat} {m : Machine}
+    (h : MInv c 0 m) : MWalk (MInv c 0) (fun p => MInv c 0 p.1) (row.step ctx m) := by
+  unfold LogRow.step
   inv_walk
 
-private theorem log_inv (k : Fin 5) (ctx : CallContext) {s : Frame.State} {c : Nat} (h : Inv c 0 s) :
-    Walk (Inv c 0) (Inv c 0) (PlainOp.liftLog (PlainOp.logStep k ctx) s) := by
-  have law := logStep_inv k ctx h
-  unfold PlainOp.liftLog
-  cases eqn : PlainOp.logStep k ctx s.machine with
-  | error e => rcases e with ⟨reason, m⟩; rw [eqn] at law; exact law
-  | ok result => rcases result with ⟨m, log⟩; rw [eqn] at law; exact law
+/-- A step of the Read or Store families: the machine on both channels, with a touch beside it. -/
+private def TouchInv {τ : Type} (c : Nat) :
+    Except (ExceptionalHalt × Machine × τ) (Machine × τ) → Prop
+  | .error (_, m, _) => MInv c 0 m
+  | .ok (m, _) => MInv c 0 m
 
-private theorem sstoreBerlin_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
-    Walk (Inv c 0) (Inv c 0) (PlainOp.sstoreBerlin ctx s) := by
-  unfold PlainOp.sstoreBerlin
+theorem ReadTarget.pop_inv (t : ReadTarget) {c : Nat} {m : Machine} (h : MInv c 0 m) :
+    MWalk (MInv c 0) (fun p => MInv c 0 p.2) (t.pop m) := by
+  cases t with
+  | account => exact MWalk.mono (Machine.popToAddress_inv h) fun _ hp => hp.weaken (Nat.zero_le _)
+  | slot => exact MWalk.mono (Machine.pop_inv h) fun _ hp => hp.weaken (Nat.zero_le _)
+  | transient => exact MWalk.mono (Machine.pop_inv h) fun _ hp => hp.weaken (Nat.zero_le _)
+  | recipient => exact h
+
+/-- The Read family's step keeps the bound. -/
+theorem ReadRow.step_inv (row : ReadRow) (rules : ForkRules) (ctx : CallContext) (v : ReadView)
+    {c : Nat} {m : Machine} (h : MInv c 0 m) : TouchInv c (row.step rules ctx v m) := by
+  rcases row with ⟨avail, target, price, result⟩
+  unfold ReadRow.step
   dsimp only
-  inv_walk
+  split
+  · exact h
+  · have hpop := ReadTarget.pop_inv target h
+    split
+    · rename_i e m' hp; exact (MWalk.cases hpop).1 _ _ hp
+    · rename_i key m₁ hp
+      have h₁ : MInv c 0 m₁ := (MWalk.cases hpop).2 _ hp
+      cases result with
+      | push f =>
+        simp only [ReadResult.finish]
+        have hc := MWalk.cases (Machine.chargeGas_inv (price.quote rules ctx v key).1 h₁)
+        split
+        · rename_i e m' he; exact hc.1 _ _ he
+        · rename_i m₂ he
+          have hp := MWalk.cases (Machine.push_inv (f ctx v.world key) (hc.2 _ he))
+          split
+          · rename_i e m' he'; exact hp.1 _ _ he'
+          · rename_i m₃ he'; exact hp.2 _ he'
+      | copyCode perWord =>
+        simp only [ReadResult.finish]
+        have p1 := MWalk.cases (Machine.popToNat_inv h₁)
+        split
+        · rename_i e m' he; exact p1.1 _ _ he
+        · rename_i d m₂ he
+          have p2 := MWalk.cases (Machine.popToNat_inv ((p1.2 _ he).weaken (Nat.zero_le _)))
+          split
+          · rename_i e m' he'; exact p2.1 _ _ he'
+          · rename_i o m₃ he'
+            have p3 := MWalk.cases (Machine.popToNat_inv ((p2.2 _ he').weaken (Nat.zero_le _)))
+            split
+            · rename_i e m' he''; exact p3.1 _ _ he''
+            · rename_i n m₄ he''
+              have h₄ : MInv c 0 m₄ := (p3.2 _ he'').weaken (Nat.zero_le _)
+              split
+              · rename_i e m' h5; exact (MWalk.cases (Machine.chargeGas_inv _ h₄)).1 _ _ h5
+              · rename_i m₅ h5
+                have h₅ := (MWalk.cases (Machine.chargeGas_inv _ h₄)).2 m₅ h5
+                exact h₅
 
-private theorem sstoreLegacy_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
-    Walk (Inv c 0) (Inv c 0) (PlainOp.sstoreLegacy ctx s) := by
-  unfold PlainOp.sstoreLegacy
-  dsimp only
-  inv_walk
+/-- The `SSTORE` row's step keeps the bound: a state-gas credit moves gas between the meters
+but keeps the committed spill. -/
+theorem SstoreRow.step_inv (row : SstoreRow) (isStatic : Bool) (slot : U256 → SlotView) {c : Nat}
+    {m : Machine} (h : MInv c 0 m) : TouchInv c (row.step isStatic slot m) := by
+  unfold SstoreRow.step
+  split
+  · exact h
+  · have p1 := MWalk.cases (Machine.pop_inv h)
+    split
+    · rename_i e m' he; exact p1.1 _ _ he
+    · rename_i key m₁ he
+      have p2 := MWalk.cases (Machine.pop_inv ((p1.2 _ he).weaken (Nat.zero_le _)))
+      split
+      · rename_i e m' he'; exact p2.1 _ _ he'
+      · rename_i v m₂ he'
+        have h₂ : MInv c 0 m₂ := (p2.2 _ he').weaken (Nat.zero_le _)
+        dsimp only
+        split
+        · exact h₂
+        · have h₃ : MInv c 0 (m₂.creditStateGasRefund
+              (row.stateGasRefund v (slot key).original (slot key).current)) := h₂
+          have p3 := MWalk.cases (Machine.chargeGas_inv
+            (row.gasCost (row.tracksWarmth && (slot key).cold) v (slot key).original (slot key).current) h₃)
+          split
+          · rename_i e m' h5; exact p3.1 _ _ h5
+          · rename_i m₄ h5
+            have p4 := MWalk.cases (Machine.chargeStateGas_inv
+              (row.stateGasCost v (slot key).original (slot key).current) (p3.2 _ h5))
+            split
+            · rename_i e m' h6; exact p4.1 _ _ h6
+            · rename_i m₅ h6
+              split
+              · exact p4.2 _ h6
+              · exact p4.2 _ h6
 
-private theorem sstoreAmsterdam_inv (state : StateGasRules) (ctx : CallContext) (s : Frame.State)
-    {c : Nat} (h : Inv c 0 s) : Walk (Inv c 0) (Inv c 0) (PlainOp.sstoreAmsterdam state ctx s) := by
-  unfold PlainOp.sstoreAmsterdam
-  refine Walk.bind (State.assertDynamic_inv ctx h) ?_
-  intro _ _
-  refine Walk.bind (State.pop_inv h) ?_
-  intro ⟨key, t⟩ ht
-  refine Walk.bind (State.pop_inv ht) ?_
-  intro ⟨value, u⟩ hu
-  refine Walk.bind (Walk.assert (H := Inv c 0) (MInv.weaken hu (Nat.zero_le _))) ?_
-  intro _ _
-  refine Walk.bind (State.chargeGas_inv _ (n := 0) ?_) ?_
-  · split <;> exact MInv.weaken hu (Nat.zero_le _)
-  · intro v hv
-    refine Walk.bind (State.chargeStateGas_inv _ hv) ?_
-    intro w hw
-    exact hw
+/-- The `TSTORE` row's step keeps the bound. -/
+theorem TstoreRow.step_inv (row : TstoreRow) (o : OpcodeRules) (isStatic : Bool) {c : Nat}
+    {m : Machine} (h : MInv c 0 m) : TouchInv c (row.step o isStatic m) := by
+  unfold TstoreRow.step
+  split
+  · exact h
+  · split
+    · exact h
+    · have p1 := MWalk.cases (Machine.pop_inv h)
+      split
+      · rename_i e m' he; exact p1.1 _ _ he
+      · rename_i key m₁ he
+        have p2 := MWalk.cases (Machine.pop_inv ((p1.2 _ he).weaken (Nat.zero_le _)))
+        split
+        · rename_i e m' he'; exact p2.1 _ _ he'
+        · rename_i v m₂ he'
+          have p3 := MWalk.cases (Machine.chargeGas_inv row.gasCost ((p2.2 _ he').weaken (Nat.zero_le _)))
+          split
+          · rename_i e m' h5; exact p3.1 _ _ h5
+          · rename_i m₃ h5
+            split
+            · exact p3.2 _ h5
+            · exact p3.2 _ h5
+
+/-- Every family step preserves the stack bound and the committed spill, on either exit: one
+walk per family (S4), read off for every instruction by its row. -/
+theorem Family.run_inv (f : Family) (x : Frame.Running) {c : Nat} (h : Inv c 0 x.state) :
+    Walk (Inv c 0) (Inv c 0) (f.run x) := by
+  cases f with
+  | word row => exact liftMachine_inv (P := Inv c 0) (WordRow.step_inv row _ _ h)
+  | shuffle row => exact liftMachine_inv (P := Inv c 0) (ShuffleRow.step_inv row _ h)
+  | memory row => exact liftMachine_inv (P := Inv c 0) (MemoryRow.step_inv row _ _ h)
+  | log row =>
+    have hl := LogRow.step_inv row x.context h
+    show Walk (Inv c 0) (Inv c 0) (x.state.liftLog (row.step x.context x.state.machine))
+    unfold Frame.State.liftLog
+    split <;> rename_i he <;> rw [he] at hl <;> exact hl
+  | read row =>
+    have hr := ReadRow.step_inv row x.context.block.rules x.context x.state.readView h
+    show Walk (Inv c 0) (Inv c 0) (x.state.liftRead _ _)
+    unfold Frame.State.liftRead
+    split <;> rename_i he <;> rw [he] at hr
+    all_goals
+      show MInv c 0 (Frame.State.machine _)
+      rw [(Frame.State.applyReadTouch_keeps _ _ _).1]
+      exact hr
+  | store kind =>
+    cases kind with
+    | persistent =>
+      have hs := SstoreRow.step_inv (SstoreRow.ofRules x.context.block.rules) x.context.isStatic
+        (x.state.slotView x.context.recipient x.context.block.origState) h
+      show Walk (Inv c 0) (Inv c 0) (x.state.liftStore _ _ _)
+      unfold Frame.State.liftStore
+      split <;> rename_i he <;> rw [he] at hs
+      all_goals
+        show MInv c 0 (Frame.State.machine _)
+        rw [Frame.State.applyStoreTouch_machine]
+        exact hs
+    | transient =>
+      have hs := TstoreRow.step_inv (TstoreRow.ofRules x.context.block.rules)
+        x.context.block.rules.opcodes x.context.isStatic h
+      show Walk (Inv c 0) (Inv c 0) (x.state.liftStore _ _ _)
+      unfold Frame.State.liftStore
+      split <;> rename_i he <;> rw [he] at hs
+      all_goals
+        show MInv c 0 (Frame.State.machine _)
+        rw [Frame.State.applyStoreTouch_machine]
+        exact hs
 
 /-- Ordinary instructions preserve the stack bound and the frame's committed spill on either exit. -/
 theorem PlainOp.runCore_inv (pc : Nat) (ctx : CallContext) (s : Frame.State) {c : Nat}
     (h : Inv c 0 s) (op : Jaune.PlainOp) :
-    Walk (Inv c 0) (Inv c 0) (PlainOp.runCore pc ctx s op) := by
-  cases op
-  case log k => exact log_inv k ctx h
-  case swap n =>
-    simp only [PlainOp.runCore]
-    inv_walk
-    rename_i m hm _ st he
-    have hl := Jaune.RunInvariants.List.swap_length he
-    refine ⟨hm.1, ?_⟩
-    change st.length + 0 ≤ 1024
-    rw [hl]
-    exact hm.2
-  case sstore =>
-    simp only [PlainOp.runCore]
-    split
-    · split <;> first | exact sstoreBerlin_inv _ _ h | exact sstoreLegacy_inv _ _ h
-    · exact sstoreAmsterdam_inv _ _ _ h
-  all_goals simp only [PlainOp.runCore]
-  all_goals inv_walk
+    Walk (Inv c 0) (Inv c 0) (PlainOp.runCore pc ctx s op) :=
+  Family.run_inv (PlainOp.family op) ⟨pc, ctx, s⟩ h
 
 /-- A successful jump leaves the same bound on its target state as an exceptional jump. -/
 theorem JumpOp.runCore_inv (pc : Nat) (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s)
@@ -524,7 +725,6 @@ private theorem step_create2_inv (ctx : CallContext) (s : Frame.State) {c : Nat}
   simp only [MessageOp.step]
   message_inv_walk
 
-
 theorem MessageOp.step_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s)
     (op : Jaune.MessageOp) : OutcomeInv c (MessageOp.step ctx s op) := by
   cases op with
@@ -553,27 +753,13 @@ private theorem toStep_inv {c pc : Nat} {o : MessageOp.Outcome}
   | done _ => exact ofHalt_inv h
   | spawn _ _ => exact h
 
-private theorem withStack_inv {c : Nat} {s : Frame.State} {l : List U256} (h : Inv c 0 s)
-    (hl : l.length = s.stack.length) : Inv c 0 (s.withStack l) :=
-  ⟨h.1, by change l.length + 0 ≤ 1024; rw [hl]; exact h.2⟩
-
 theorem NextOp.step_inv (r : Frame.Running) {c : Nat} (h : Inv c 0 r.state) (op : Jaune.NextOp) :
     StepInv c (NextOp.step r op) := by
   cases op with
   | plain p => exact ofHalt_inv (PlainOp.runCore_inv _ _ _ h p)
   | message m => exact toStep_inv (MessageOp.step_inv _ _ h m)
-  | push xs _ =>
-    simp only [NextOp.step]
-    split
-    · exact h
-    · apply ofHalt_inv
-      inv_walk
-  | dupn imm | swapn imm | exchange imm =>
-    apply ofHalt_inv
-    inv_walk
-    all_goals apply withStack_inv (by assumption)
-    all_goals first | exact Jaune.RunInvariants.List.swap_length (by assumption)
-                    | exact Jaune.RunInvariants.List.exchange_length (by assumption)
+  | push xs _ => exact ofHalt_inv (Family.run_inv _ r h)
+  | dupn imm | swapn imm | exchange imm => exact ofHalt_inv (Family.run_inv _ r h)
 
 /-- The single-step invariant for every decoder outcome and fork. -/
 theorem step_inv {r : Frame.Running} {c : Nat} (h : Inv c 0 r.state) {out : Step}

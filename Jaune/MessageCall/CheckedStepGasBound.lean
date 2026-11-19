@@ -1,6 +1,7 @@
 import Jaune.MessageCall.CheckedGasFacts
 import Jaune.MessageCall.CheckedPlainGasFacts
 import Jaune.MessageCall.CheckedMessageGasFacts
+import Jaune.Instructions.PushFacts
 
 /-! Gas bounds at the boundary between one grouped frame step and the driver. -/
 namespace Jaune.Checked
@@ -59,47 +60,18 @@ private theorem messageStep_bound {ctx : CallContext} {n pc : Nat} (o : MessageO
     | ok s => exact h.1 s rfl
   | spawn child pending => exact h.1
 
-local macro "stack_step" : tactic => `(tactic| (
-  apply ofHalt_bound
-  split
-  · apply Walk.bind (Frame.State.chargeGas_gas _ (Nat.le_refl _))
-    intro t ht
-    change t.machine.gasMeasure + 3 = _ at ht
-    split
-    · change t.machine.gasMeasure ≤ _; omega
-    · split
-      · change t.machine.gasMeasure ≤ _; omega
-      · first
-        | (apply Walk.mono (Frame.State.push_gas _ (by omega))
-           intro u hu
-           change u.machine.gasMeasure = t.machine.gasMeasure at hu
-           change u.machine.gasMeasure < _
-           omega)
-        | (change t.machine.gasMeasure < _; omega)
-  · exact Nat.le_refl _))
-
 theorem NextOp.step_gasBound (r : Frame.Running) (n : Jaune.NextOp) :
     (NextOp.step r n).GasBound r.context r.state.machine.gasMeasure := by
   cases n with
   | plain op => exact ofHalt_bound (PlainOp.runCore_gas r.pc r.context r.state op (Nat.le_refl _))
   | message op => exact messageStep_bound _ (MessageOp.step_gas r.context r.state op)
-  | push xs _ =>
-    simp only [NextOp.step]
-    split
-    · exact spill_le r.state
-    · apply ofHalt_bound
-      apply Walk.bind (Frame.State.chargeGas_gas _ (Nat.le_refl _))
-      intro t ht
-      change t.machine.gasMeasure + (if xs = [] then Gas.base else Gas.veryLow) = _ at ht
-      have pos : 0 < (if xs = [] then Gas.base else Gas.veryLow) := by split <;> decide
-      apply Walk.mono (Frame.State.push_gas _ (by omega))
-      intro u hu
-      change u.machine.gasMeasure = t.machine.gasMeasure at hu
-      change u.machine.gasMeasure < _
-      omega
-  | dupn imm => simp only [NextOp.step]; stack_step
-  | swapn imm => simp only [NextOp.step]; stack_step
-  | exchange imm => simp only [NextOp.step]; stack_step
+  | push xs _ => exact ofHalt_bound (WordRow.run_gas _ (NextOp.pushRow_cost_pos xs) r (Nat.le_refl _))
+  | dupn imm =>
+    exact ofHalt_bound (ShuffleRow.run_gas _ (by simp [NextOp.dupnRow, Gas.veryLow]) r (Nat.le_refl _))
+  | swapn imm =>
+    exact ofHalt_bound (ShuffleRow.run_gas _ (by simp [NextOp.swapnRow, Gas.veryLow]) r (Nat.le_refl _))
+  | exchange imm =>
+    exact ofHalt_bound (ShuffleRow.run_gas _ (by simp [NextOp.exchangeRow, Gas.veryLow]) r (Nat.le_refl _))
 
 /-- Every successful driver step obeys the budget of the frame at its program counter. -/
 theorem step_gasBound (r : Frame.Running) (out : Step) (h : step r = .ok out) :

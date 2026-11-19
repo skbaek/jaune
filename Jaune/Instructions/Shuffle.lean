@@ -63,23 +63,26 @@ def ShuffleRow.step (row : ShuffleRow) (opcodes : OpcodeRules) (m : Machine) :
   | none => throw (.invalidOpcode .none, m)
   | some sh => sh.run m
 
-/-- `DUP1`–`DUP16` and `SWAP1`–`SWAP16`. -/
-def PlainOp.shuffleRow? : Jaune.PlainOp → Option ShuffleRow
-  | .dup n => some { shuffle := some (.dup n.val) }
-  | .swap n => some { shuffle := some (.swap n.val) }
-  | _ => none
+/-- EIP-8024's `DUPN`: the immediate decodes to the duplicated index. -/
+def NextOp.dupnRow (imm : UInt8) : ShuffleRow :=
+  { available := OpcodeRules.stackAccess
+    shuffle := (decodeSingle imm).map (fun n => .dup (n - 1)) }
+
+/-- EIP-8024's `SWAPN`: the immediate decodes to the swapped index. -/
+def NextOp.swapnRow (imm : UInt8) : ShuffleRow :=
+  { available := OpcodeRules.stackAccess
+    shuffle := (decodeSingle imm).map (fun n => .swap (n - 1)) }
+
+/-- EIP-8024's `EXCHANGE`: the immediate decodes to the exchanged pair. -/
+def NextOp.exchangeRow (imm : UInt8) : ShuffleRow :=
+  { available := OpcodeRules.stackAccess
+    shuffle := (decodePair imm).map (fun pair => .exchange pair.1 pair.2) }
 
 /-- EIP-8024's `DUPN`, `SWAPN` and `EXCHANGE`: the immediate decodes to the shuffle. -/
 def NextOp.shuffleRow? : Jaune.NextOp → Option ShuffleRow
-  | .dupn imm => some
-    { available := OpcodeRules.stackAccess
-      shuffle := (decodeSingle imm).map (fun n => .dup (n - 1)) }
-  | .swapn imm => some
-    { available := OpcodeRules.stackAccess
-      shuffle := (decodeSingle imm).map (fun n => .swap (n - 1)) }
-  | .exchange imm => some
-    { available := OpcodeRules.stackAccess
-      shuffle := (decodePair imm).map (fun pair => .exchange pair.1 pair.2) }
+  | .dupn imm => some (NextOp.dupnRow imm)
+  | .swapn imm => some (NextOp.swapnRow imm)
+  | .exchange imm => some (NextOp.exchangeRow imm)
   | _ => none
 
 end Jaune.Checked

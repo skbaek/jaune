@@ -1,29 +1,29 @@
 import Jaune.Bridge.G2b.CheckedWalk
-import Jaune.MessageCall.CheckedPlain
+import Jaune.Bridge.G2b.CheckedDispatch
 import Jaune.MessageCall.Plain
 
 namespace Jaune.MemorySimulation
 
 private abbrev PlainSquare (pc : Nat) (ctx : CallContext) (s : Checked.Frame.State) (op : Jaune.PlainOp) :=
-  Square (Checked.PlainOp.runCore pc ctx s op) (Staging.PlainOp.runCore pc ctx s.toLegacy op)
+  Square (Checked.Arms.PlainOp.runCore pc ctx s op) (Staging.PlainOp.runCore pc ctx s.toLegacy op)
 
 local macro "plain_square" : tactic => `(tactic| (
   unfold PlainSquare
-  simp only [Checked.PlainOp.runCore, Staging.PlainOp.runCore]
+  simp only [Checked.Arms.PlainOp.runCore, Staging.PlainOp.runCore]
   checked_sq_walk))
 
 
 private theorem logStep (n : Fin 5) (ctx : CallContext) (m : Checked.Machine) :
-    Square (Checked.PlainOp.logStep n ctx m) (Staging.PlainOp.logStep n ctx m.toLegacy) := by
-  unfold Checked.PlainOp.logStep Staging.PlainOp.logStep
+    Square (Checked.Arms.PlainOp.logStep n ctx m) (Staging.PlainOp.logStep n ctx m.toLegacy) := by
+  unfold Checked.Arms.PlainOp.logStep Staging.PlainOp.logStep
   checked_sq_walk
 
 private theorem liftLog (n : Fin 5) (ctx : CallContext) (s : Checked.Frame.State) :
-    Square (Checked.PlainOp.liftLog (Checked.PlainOp.logStep n ctx) s)
+    Square (Checked.Arms.PlainOp.liftLog (Checked.Arms.PlainOp.logStep n ctx) s)
       (Staging.PlainOp.liftLog (Staging.PlainOp.logStep n ctx) s.toLegacy) := by
-  unfold Checked.PlainOp.liftLog Staging.PlainOp.liftLog
+  unfold Checked.Arms.PlainOp.liftLog Staging.PlainOp.liftLog
   rw [legacy_stateMachine, (logStep n ctx s.machine).legacy_eq]
-  rcases Checked.PlainOp.logStep n ctx s.machine with ⟨e,m⟩ | ⟨m,l⟩ <;> rfl
+  rcases Checked.Arms.PlainOp.logStep n ctx s.machine with ⟨e,m⟩ | ⟨m,l⟩ <;> rfl
 
 private theorem originalStorage_legacy (s : Checked.Frame.State) (orig : State) (a : Address) (key : U256) :
     s.toLegacy.originalStorageValue orig a key = s.originalStorageValue orig a key := rfl
@@ -40,8 +40,8 @@ local macro "storage_align" : tactic => `(tactic| simp only [erase_pair, erase_s
     legacy_recordAccountRead])
 
 private theorem sstoreBerlin (ctx : CallContext) (s : Checked.Frame.State) :
-    Square (Checked.PlainOp.sstoreBerlin ctx s) (Staging.PlainOp.sstoreBerlin ctx s.toLegacy) := by
-  unfold Checked.PlainOp.sstoreBerlin Staging.PlainOp.sstoreBerlin
+    Square (Checked.Arms.PlainOp.sstoreBerlin ctx s) (Staging.PlainOp.sstoreBerlin ctx s.toLegacy) := by
+  unfold Checked.Arms.PlainOp.sstoreBerlin Staging.PlainOp.sstoreBerlin
   refine Square.bind (Frame.State.pop s) ?_
   rintro ⟨k, t⟩
   refine Square.bind (Frame.State.pop t) ?_
@@ -61,8 +61,8 @@ private theorem sstoreBerlin (ctx : CallContext) (s : Checked.Frame.State) :
     repeat' first | storage_align | checked_sq_one
 
 private theorem sstoreLegacy (ctx : CallContext) (s : Checked.Frame.State) :
-    Square (Checked.PlainOp.sstoreLegacy ctx s) (Staging.PlainOp.sstoreLegacy ctx s.toLegacy) := by
-  unfold Checked.PlainOp.sstoreLegacy Staging.PlainOp.sstoreLegacy
+    Square (Checked.Arms.PlainOp.sstoreLegacy ctx s) (Staging.PlainOp.sstoreLegacy ctx s.toLegacy) := by
+  unfold Checked.Arms.PlainOp.sstoreLegacy Staging.PlainOp.sstoreLegacy
   refine Square.bind (Frame.State.pop s) ?_
   rintro ⟨k, t⟩
   refine Square.bind (Frame.State.pop t) ?_
@@ -81,8 +81,8 @@ private theorem sstoreLegacy (ctx : CallContext) (s : Checked.Frame.State) :
   all_goals repeat' first | storage_align | checked_sq_one
 
 private theorem sstoreAmsterdam (sg : StateGasRules) (ctx : CallContext) (s : Checked.Frame.State) :
-    Square (Checked.PlainOp.sstoreAmsterdam sg ctx s) (Staging.PlainOp.sstoreAmsterdam sg ctx s.toLegacy) := by
-  unfold Checked.PlainOp.sstoreAmsterdam Staging.PlainOp.sstoreAmsterdam
+    Square (Checked.Arms.PlainOp.sstoreAmsterdam sg ctx s) (Staging.PlainOp.sstoreAmsterdam sg ctx s.toLegacy) := by
+  unfold Checked.Arms.PlainOp.sstoreAmsterdam Staging.PlainOp.sstoreAmsterdam
   refine Square.bind (Frame.State.assertDynamic s ctx) ?_
   intro u
   refine Square.bind (Frame.State.pop s) ?_
@@ -277,7 +277,7 @@ private theorem plain_sload (pc : Nat) (ctx : CallContext) (s : Checked.Frame.St
 private theorem plain_sstore (pc : Nat) (ctx : CallContext) (s : Checked.Frame.State) :
     PlainSquare pc ctx s .sstore := by
   unfold PlainSquare
-  simp only [Checked.PlainOp.runCore, Staging.PlainOp.runCore]
+  simp only [Checked.Arms.PlainOp.runCore, Staging.PlainOp.runCore]
   cases hs : ctx.block.rules.stateGas with
   | some sg => exact sstoreAmsterdam sg ctx s
   | none =>
@@ -311,8 +311,8 @@ private theorem plain_swap (pc : Nat) (ctx : CallContext) (s : Checked.Frame.Sta
 private theorem plain_log (pc : Nat) (ctx : CallContext) (s : Checked.Frame.State) (n : Fin 5) :
     PlainSquare pc ctx s (.log n) := liftLog n ctx s
 
-theorem PlainOp.runCore (pc : Nat) (ctx : CallContext) (s : Checked.Frame.State) (op : Jaune.PlainOp) :
-    Square (Checked.PlainOp.runCore pc ctx s op) (Staging.PlainOp.runCore pc ctx s.toLegacy op) := by
+private theorem PlainOp.runArms (pc : Nat) (ctx : CallContext) (s : Checked.Frame.State) (op : Jaune.PlainOp) :
+    Square (Checked.Arms.PlainOp.runCore pc ctx s op) (Staging.PlainOp.runCore pc ctx s.toLegacy op) := by
   cases op with
   | add => exact plain_add pc ctx s
   | mul => exact plain_mul pc ctx s
@@ -384,5 +384,12 @@ theorem PlainOp.runCore (pc : Nat) (ctx : CallContext) (s : Checked.Frame.State)
   | dup n => exact plain_dup pc ctx s n
   | swap n => exact plain_swap pc ctx s n
   | log n => exact plain_log pc ctx s n
+
+/-- The checked plain instructions against the staged ones, composed through the family dispatch's
+bridge (`Checked.PlainOp.runCore_arms`) and the per-opcode squares above. -/
+theorem PlainOp.runCore (pc : Nat) (ctx : CallContext) (s : Checked.Frame.State) (op : Jaune.PlainOp) :
+    Square (Checked.PlainOp.runCore pc ctx s op) (Staging.PlainOp.runCore pc ctx s.toLegacy op) := by
+  rw [Checked.PlainOp.runCore_arms]
+  exact PlainOp.runArms pc ctx s op
 
 end Jaune.MemorySimulation

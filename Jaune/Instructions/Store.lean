@@ -51,11 +51,12 @@ structure SlotView where
   refund : Int
 deriving DecidableEq
 
-/-- Project a read-only `SlotView` at `(ctx.recipient, key)` from `Frame.State`. -/
-def Frame.State.slotView (ctx : CallContext) (key : U256) (s : Frame.State) : SlotView where
-  cold := decide ((ctx.recipient, key) ∉ s.accessedStorageKeys)
-  original := s.originalStorageValue ctx.block.origState ctx.recipient key
-  current := s.storageValue ctx.recipient key
+/-- Read a slot at the recipient in the transaction-start and current states. -/
+def Frame.State.slotView (s : Frame.State) (recipient : Address) (originalState : Jaune.State)
+    (key : U256) : SlotView where
+  cold := decide ((recipient, key) ∉ s.accessedStorageKeys)
+  original := s.originalStorageValue originalState recipient key
+  current := s.storageValue recipient key
   refund := s.refund
 
 /-- Apply a restricted `StoreTouch` at `recipient` under `rules` to `s`. -/

@@ -3,9 +3,10 @@ import Jaune.Instructions.MachineSteps
 import Jaune.Instructions.WordFacts
 import Jaune.MessageCall.CheckedStep
 
-/-! The Shuffle family's effect law, proved once, its per-row table lemmas, and its bridges to
-the checked interpreter: `Checked.PlainOp.runCore` for `DUP`/`SWAP` and `Checked.NextOp.step`
-for `DUPN`/`SWAPN`/`EXCHANGE`, for every input and every `Fork`. -/
+/-! The Shuffle family's effect law, proved once, its per-row table lemmas, and the lemmas that the
+checked interpreter reads its rows: `Checked.PlainOp.run` for `DUP`/`SWAP` and
+`Checked.NextOp.step` for `DUPN`/`SWAPN`/`EXCHANGE`, for every input and every `Fork`. The rows'
+agreement with the per-opcode arms is in `Jaune.Bridge.G2b.CheckedRowAgreement`. -/
 
 namespace Jaune.Checked
 
@@ -157,102 +158,57 @@ theorem ShuffleRow.step_gasMeasure_lt_of_ok {row : ShuffleRow} {opcodes : Opcode
 
 theorem PlainOp.shuffleRow?_isSome_iff (op : Jaune.PlainOp) :
     (PlainOp.shuffleRow? op).isSome = true ↔ (∃ n, op = .dup n) ∨ (∃ n, op = .swap n) := by
-  cases op <;> simp [PlainOp.shuffleRow?]
+  cases op <;> simp [PlainOp.shuffleRow?, PlainOp.family]
 
 theorem NextOp.shuffleRow?_isSome_iff (n : Jaune.NextOp) :
     (NextOp.shuffleRow? n).isSome = true ↔
       (∃ i, n = .dupn i) ∨ (∃ i, n = .swapn i) ∨ (∃ i, n = .exchange i) := by
-  cases n <;> simp [NextOp.shuffleRow?]
+  cases n <;> simp [NextOp.shuffleRow?, NextOp.dupnRow, NextOp.swapnRow, NextOp.exchangeRow]
 
 theorem PlainOp.shuffleRow?_cost {op : Jaune.PlainOp} {row : ShuffleRow}
     (h : PlainOp.shuffleRow? op = some row) : row.cost = Gas.veryLow ∧ 0 < row.cost := by
-  cases op <;> simp only [PlainOp.shuffleRow?, Option.some.injEq, reduceCtorEq] at h <;>
+  cases op <;> simp only [PlainOp.shuffleRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at h <;>
     subst h <;> exact ⟨rfl, by simp [Gas.veryLow]⟩
 
 theorem NextOp.shuffleRow?_cost {n : Jaune.NextOp} {row : ShuffleRow}
     (h : NextOp.shuffleRow? n = some row) : row.cost = Gas.veryLow ∧ 0 < row.cost := by
-  cases n <;> simp only [NextOp.shuffleRow?, Option.some.injEq, reduceCtorEq] at h <;>
+  cases n <;> simp only [NextOp.shuffleRow?, NextOp.dupnRow, NextOp.swapnRow, NextOp.exchangeRow, Option.some.injEq, reduceCtorEq] at h <;>
     subst h <;> exact ⟨rfl, by simp [Gas.veryLow]⟩
 
 /-- `DUP` and `SWAP` read no rule field. -/
 theorem PlainOp.shuffleRow?_available {op : Jaune.PlainOp} {row : ShuffleRow}
     (h : PlainOp.shuffleRow? op = some row) (opcodes : OpcodeRules) :
     row.available opcodes = true := by
-  cases op <;> simp only [PlainOp.shuffleRow?, Option.some.injEq, reduceCtorEq] at h <;>
+  cases op <;> simp only [PlainOp.shuffleRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at h <;>
     subst h <;> rfl
 
 /-- The only rule field EIP-8024's rows read: `opcodes.stackAccess`. -/
 theorem NextOp.shuffleRow?_available {n : Jaune.NextOp} {row : ShuffleRow}
     (h : NextOp.shuffleRow? n = some row) (opcodes : OpcodeRules) :
     row.available opcodes = opcodes.stackAccess := by
-  cases n <;> simp only [NextOp.shuffleRow?, Option.some.injEq, reduceCtorEq] at h <;>
+  cases n <;> simp only [NextOp.shuffleRow?, NextOp.dupnRow, NextOp.swapnRow, NextOp.exchangeRow, Option.some.injEq, reduceCtorEq] at h <;>
     subst h <;> rfl
 
-/-! ### Bridges -/
+/-! ### Table lemmas: the dispatch reads the rows -/
 
-private theorem liftMachine_congr {ε : Type} {f g : Machine → Except (ε × Machine) Machine}
-    (s : Frame.State) (h : f s.machine = g s.machine) : s.liftMachine f = s.liftMachine g := by
-  unfold Frame.State.liftMachine
-  rw [h]
-
-/-- **Bridge (`DUP1`–`DUP16`, `SWAP1`–`SWAP16`):** the row, lifted by `liftMachine`, equals
-`Checked.PlainOp.runCore` for every `pc`, `CallContext` and `Frame.State` (hence every `Fork`). -/
-theorem PlainOp.shuffleRow?_runCore_eq {op : Jaune.PlainOp} {row : ShuffleRow}
-    (hrow : PlainOp.shuffleRow? op = some row) (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftMachine (row.step ctx.block.rules.opcodes) = PlainOp.runCore pc ctx s op := by
-  cases op <;> simp only [PlainOp.shuffleRow?, Option.some.injEq, reduceCtorEq] at hrow <;>
-    subst hrow <;> dsimp only [PlainOp.runCore] <;> refine liftMachine_congr s ?_ <;>
-    simp only [ShuffleRow.step, Shuffle.run, ↓reduceIte, bind, Except.bind] <;>
-    cases s.machine.chargeGas Gas.veryLow <;> rfl
+theorem PlainOp.shuffleRow?_eq_some {op : Jaune.PlainOp} {row : ShuffleRow} :
+    PlainOp.shuffleRow? op = some row ↔ PlainOp.family op = .shuffle row := by
+  unfold PlainOp.shuffleRow?
+  cases PlainOp.family op <;> simp
 
 theorem PlainOp.shuffleRow?_run_eq {op : Jaune.PlainOp} {row : ShuffleRow}
     (hrow : PlainOp.shuffleRow? op = some row) (r : Frame.Running) :
-    r.state.liftMachine (row.step r.context.block.rules.opcodes) = PlainOp.run r op :=
-  PlainOp.shuffleRow?_runCore_eq hrow r.pc r.context r.state
+    r.state.liftMachine (row.step r.context.block.rules.opcodes) = PlainOp.run r op := by
+  simp only [PlainOp.run, PlainOp.runCore, PlainOp.shuffleRow?_eq_some.1 hrow, Family.run]
 
-/-- **Bridge (`DUPN`, `SWAPN`, `EXCHANGE`):** the row, lifted by `liftMachine` and turned into a
-step at the next program counter, equals `Checked.NextOp.step` for every running frame (hence
-every `Fork`). -/
+/-- `DUPN`, `SWAPN` and `EXCHANGE` are their rows, lifted by `liftMachine` and turned into a step
+at the next program counter, by the definition of `NextOp.step`. -/
 theorem NextOp.shuffleRow?_step_eq {n : Jaune.NextOp} {row : ShuffleRow}
     (hrow : NextOp.shuffleRow? n = some row) (r : Frame.Running) :
     Step.ofHalt (r.pc + n.size) (r.state.liftMachine (row.step r.context.block.rules.opcodes)) =
       NextOp.step r n := by
-  cases n <;> simp only [NextOp.shuffleRow?, Option.some.injEq, reduceCtorEq] at hrow <;>
-    subst hrow <;> simp only [NextOp.step] <;> congr 1
-  all_goals
-    by_cases ha : r.context.block.rules.opcodes.stackAccess
-    case neg =>
-      simp [ShuffleRow.step, ha, throw, throwThe, MonadExceptOf.throw, bind, Except.bind,
-        Frame.State.liftMachine, Frame.State.withMachine]
-    simp only [ShuffleRow.step, ha, ↓reduceIte, bind, Except.bind,
-      Frame.State.chargeGas, Frame.State.liftMachine]
-    cases hc : r.state.machine.chargeGas Gas.veryLow with
-    | error err => rfl
-    | ok m => ?_
-    simp only
-  next imm =>
-    cases hd : decodeSingle imm with
-    | none => rfl
-    | some n =>
-      simp only [Option.map_some, Shuffle.run, Frame.State.push, Frame.State.liftMachine,
-        Frame.State.withMachine, Frame.State.stack]
-      cases m.stack[n - 1]? with
-      | none => rfl
-      | some w => cases Machine.push w m <;> rfl
-  next imm =>
-    cases hd : decodeSingle imm with
-    | none => rfl
-    | some n =>
-      simp only [Option.map_some, Shuffle.run, Frame.State.withStack, Frame.State.withMachine,
-        Frame.State.stack]
-      cases List.swap m.stack (n - 1) <;> rfl
-  next imm =>
-    cases hd : decodePair imm with
-    | none => rfl
-    | some p =>
-      simp only [Option.map_some, Shuffle.run, Frame.State.withStack, Frame.State.withMachine,
-        Frame.State.stack]
-      cases List.exchange m.stack p.1 p.2 <;> rfl
+  cases n <;> simp only [NextOp.shuffleRow?, NextOp.dupnRow, NextOp.swapnRow, NextOp.exchangeRow, Option.some.injEq, reduceCtorEq] at hrow <;>
+    subst hrow <;> rfl
 
 /-! ### What the lift keeps, and fork uniformity -/
 
@@ -293,7 +249,7 @@ theorem PlainOp.shuffle_run_congr_fork {op : Jaune.PlainOp}
   | none => simp [h] at hrow
   | some row =>
     rw [← PlainOp.shuffleRow?_run_eq h, ← PlainOp.shuffleRow?_run_eq h]
-    refine liftMachine_congr r.state ?_
+    refine Frame.State.liftMachine_congr r.state ?_
     simp only [ShuffleRow.step, PlainOp.shuffleRow?_available h]
 
 /-- EIP-8024's operations depend on the fork only through `opcodes.stackAccess`. -/

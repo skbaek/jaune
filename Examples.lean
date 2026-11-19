@@ -4,3 +4,6 @@ import Examples.Prefix
 import Examples.ShapePilot
 import Examples.FinalShapePilot
 import Examples.CheckedShapePilot
+import Examples.CheckedPrefix
+import Examples.CheckedExecution
+import Examples.CheckedArithmetic
