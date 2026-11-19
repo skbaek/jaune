@@ -45,7 +45,7 @@ theorem WordRow.run_gas (row : WordRow) (hpos : ∀ args, 0 < row.cost args) (x 
   apply plainGas_of h
   apply liftMachine_law
   · intro e out he
-    have hl := WordRow.step_gasMeasure_le row x.context.block.rules.opcodes ⟨x.pc, x.context.toChecked⟩
+    have hl := WordRow.step_gasMeasure_le row x.context.block.rules.opcodes ⟨x.pc, x.context⟩
       x.state.machine
     rw [he] at hl
     exact hl
@@ -84,8 +84,8 @@ theorem MemoryRow.run_gas (row : MemoryRow) (hpos : ∀ args, 0 < row.base args)
 theorem LogRow.run_gas (row : LogRow) (hpos : 0 < row.base) (x : Frame.Running)
     {n : Nat} (h : x.state.machine.gasMeasure ≤ n) : PlainGas x.state n ((Family.log row).run x) := by
   apply plainGas_of h
-  have hf := LogRow.step_frame row x.context.toChecked x.state.machine
-  show Walk _ _ (x.state.liftLog (row.step x.context.toChecked x.state.machine))
+  have hf := LogRow.step_frame row x.context x.state.machine
+  show Walk _ _ (x.state.liftLog (row.step x.context x.state.machine))
   unfold Frame.State.liftLog
   split <;> rename_i he <;> rw [he] at hf
   · obtain ⟨hg, hsg, _⟩ := hf
@@ -213,10 +213,10 @@ private theorem readRow?_price_pos {op : Jaune.PlainOp} {row : ReadRow}
     simp only [ReadPrice.quote, Gas.low, Gas.warmStorageReadCost]; omega
 
 theorem ReadRow.run_gas (row : ReadRow) (x : Frame.Running)
-    (hpos : ∀ key, 0 < (row.price.quote x.context.block.rules x.context.toChecked x.state.readView key).1)
+    (hpos : ∀ key, 0 < (row.price.quote x.context.block.rules x.context x.state.readView key).1)
     {n : Nat} (h : x.state.machine.gasMeasure ≤ n) : PlainGas x.state n ((Family.read row).run x) := by
   apply plainGas_of h
-  have hs := ReadRow.step_gas row x.context.block.rules x.context.toChecked x.state.readView x.state.machine hpos
+  have hs := ReadRow.step_gas row x.context.block.rules x.context x.state.readView x.state.machine hpos
   show Walk _ _ (x.state.liftRead _ _)
   unfold Frame.State.liftRead
   split <;> rename_i he <;> rw [he] at hs
@@ -232,7 +232,7 @@ theorem PlainOp.sstore_run_gas (x : Frame.Running) {n : Nat} (h : x.state.machin
   apply plainGas_of h
   cases hr : (Family.store .persistent).run x with
   | ok s' =>
-    exact PlainOp.sstore_run_gasMeasure_lt x (BenvStat.rules_valid x.context.block).access hr
+    exact PlainOp.sstore_run_gasMeasure_lt x (BlockContext.rules_valid x.context.block).access hr
   | error p =>
     obtain ⟨e, s'⟩ := p
     show s'.machine.gasMeasure ≤ _
@@ -269,7 +269,7 @@ theorem PlainOp.tstore_run_gas (x : Frame.Running) {n : Nat} (h : x.state.machin
 /-- Each plain instruction either halts within the input gas bound or continues with a strictly
 smaller measure. This includes the state-gas spill in both bounds. A corollary of the families'
 gas walks and the table's positivity lemmas. -/
-theorem PlainOp.runCore_gas (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.PlainOp)
+theorem PlainOp.runCore_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) (op : Jaune.PlainOp)
     {n : Nat} (h : s.machine.gasMeasure ≤ n) :
     Walk (·.machine.gasMeasure ≤ n) (·.machine.gasMeasure < s.machine.gasMeasure)
       (PlainOp.runCore pc ctx s op) := by
@@ -284,7 +284,7 @@ theorem PlainOp.runCore_gas (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.Stat
     exact LogRow.run_gas row (PlainOp.logRow?_prices (PlainOp.logRow?_eq_some.2 hf)).2.2.2 _ h
   | read row =>
     exact ReadRow.run_gas row ⟨pc, ctx, s⟩
-      (readRow?_price_pos (PlainOp.readRow?_eq_some.2 hf) ctx.toChecked s.readView) h
+      (readRow?_price_pos (PlainOp.readRow?_eq_some.2 hf) ctx s.readView) h
   | store kind =>
     cases kind with
     | persistent => exact PlainOp.sstore_run_gas ⟨pc, ctx, s⟩ h

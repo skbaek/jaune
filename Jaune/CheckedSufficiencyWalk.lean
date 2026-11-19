@@ -371,7 +371,7 @@ theorem chargeStateGas_gas (a : Nat) {s : Frame.State} (h : s.machine.gasMeasure
       (s.chargeStateGas a) :=
   Walk.liftMachine (Machine.chargeStateGas_gas a h)
 
-theorem assertDynamic_gas (ctx : Jaune.CallContext) {s : Frame.State} (h : s.machine.gasMeasure ≤ n) :
+theorem assertDynamic_gas (ctx : CallContext) {s : Frame.State} (h : s.machine.gasMeasure ≤ n) :
     Walk (·.machine.gasMeasure ≤ n) (fun _ : Unit => True) (s.assertDynamic ctx) :=
   Walk.assert (H := (·.machine.gasMeasure ≤ n)) h
 

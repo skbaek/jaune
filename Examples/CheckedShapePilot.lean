@@ -15,7 +15,7 @@ refused otherwise. -/
 def checkedFrame (f : Jaune.Frame) : Option Checked.Frame :=
   let m := f.checkpoint.machine
   if h : m.memory.data.size ≤ m.memory.size then
-    some ⟨f.message,
+    some ⟨Checked.Message.ofLegacy f.message,
       { machine :=
           { stack := m.stack, memory := ⟨m.memory.data, m.memory.size, h⟩, gasLeft := m.gasLeft
             stateGas := m.stateGas, returnData := m.returnData }

@@ -265,7 +265,7 @@ theorem NextOp.shuffle_step_congr_fork {n : Jaune.NextOp}
     rw [← NextOp.shuffleRow?_step_eq hr, ← NextOp.shuffleRow?_step_eq hr]
     congr 2
     funext m
-    simp only [ShuffleRow.step, NextOp.shuffleRow?_available hr, BenvStat.rules] at h ⊢
+    simp only [ShuffleRow.step, NextOp.shuffleRow?_available hr, BlockContext.rules] at h ⊢
     rw [h]
 
 end Jaune.Checked

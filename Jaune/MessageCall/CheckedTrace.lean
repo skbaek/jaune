@@ -1,5 +1,7 @@
 import Jaune.MessageCall.Trace
 import Jaune.MessageCall.CheckedExec
+import Jaune.Bridge.G2b.CheckedFrame
+import Jaune.Run.CheckedMessage
 
 /-!
 # The staged message-level tracer over the checked interpreter (goal `jaune-shape-and-names-v1`, G2b, F1e)
@@ -30,6 +32,8 @@ tracer's returns do onto its driver. This module sits outside `Jaune.lean`'s imp
 
 namespace Jaune.Checked.Trace
 
+variable [LegacyTransaction]
+
 open Jaune
 
 /-! ### Projections onto the trace's event vocabulary -/
@@ -46,7 +50,7 @@ def state (s : Frame.State) : Jaune.Frame.State :=
 def devm (s : Frame.State) : Devm := (state s).toDevm
 
 /-- A checked frame as the event's frame. -/
-def frame (f : Frame) : Jaune.Frame := ⟨f.message, state f.checkpoint⟩
+def frame (f : Frame) : Jaune.Frame := f.toLegacy
 
 /-- A running frame of the message `msg` as the event's running machine. -/
 def evm (msg : Jaune.Message) (r : Frame.Running) : Evm := ⟨r.pc, msg.sevm, devm r.state⟩
@@ -70,7 +74,8 @@ def pending (p : Staging.Pending) : Pending := ⟨p.target, p.newAccountCharged,
 
 /-- One checked step as the event's step. A fault is shown as the raw result it ends the run
 with. -/
-def step : Except Fault Step → Jaune.Step
+def step (result : Except Fault Step) : Jaune.Step :=
+  match result with
   | .error fault => .halt (faultRaw fault)
   | .ok (.exit e) => .halt (exitRaw e)
   | .ok (.next pc s) => .next pc (devm s)
@@ -81,7 +86,7 @@ memory is empty. -/
 def topFrame (msg : Msg) (isCreate : Bool) : Frame :=
   let top := Jaune.Frame.ofTop msg isCreate
   let s := top.checkpoint
-  ⟨top.message,
+  ⟨Message.ofLegacy top.message,
     ⟨⟨s.machine.stack, Memory.empty, s.machine.gasLeft, s.machine.stateGas, s.machine.returnData⟩,
       s.world, s.substate, s.trail⟩⟩
 
@@ -106,14 +111,14 @@ def resumedRaw : Except Fault (Except (ExceptionalHalt × Frame.State) Frame.Sta
   | .ok (.ok s) => .ok (devm s)
 
 /-- How the driver goes on after a resumption. -/
-def continueWith (context : Jaune.CallContext) (pc fuel : Nat) :
+def continueWith (context : CallContext) (pc fuel : Nat) :
     Except Fault (Except (ExceptionalHalt × Frame.State) Frame.State) → Fueled Fault Frame.Exit
   | .error fault => Fueled.ofExcept (.error fault)
   | .ok (.error (reason, s)) => Fueled.ofExcept (.ok (.halted reason s))
   | .ok (.ok s) => Checked.execFueled ⟨pc, context, s⟩ fuel
 
 /-- The driver's spawn tail, read through `resumed`. -/
-theorem execFueled_tail (context : Jaune.CallContext) (rules : ForkRules) (child : Frame)
+theorem execFueled_tail (context : CallContext) (rules : ForkRules) (child : Frame)
     (p : Staging.Pending) (pc fuel : Nat) (settled : Except Fault Frame.Result) :
     (match (generalizing := false) some settled with
       | none => Fueled.exhausted
@@ -210,8 +215,8 @@ def execFueled {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m) (msg : 
           pure ⟨Fueled.ofExcept (.error fault), nextFrame + 1, by
             rw [execFueled_spawn hstep, hentry]; dsimp only; rw [hresume]; rfl⟩
       | .run cr =>
-        sink (.entered childContext (frame child) (.run (evm child.message cr)))
-        let childResult ← execFueled sink child.message cr fuel childContext (nextFrame + 1)
+        sink (.entered childContext (frame child) (.run (evm child.toLegacy.message cr)))
+        let childResult ← execFueled sink child.toLegacy.message cr fuel childContext (nextFrame + 1)
         match hchild : childResult.value.run with
         | none =>
           sink (.exited context none)
@@ -296,8 +301,8 @@ def runFrame {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m) (f : Fram
     pure ⟨settled.map (fun value => ⟨none, value⟩), 1, by
       simp only [Checked.Frame.runTopWithRoot, hentry]⟩
   | .run r =>
-    sink (.entered context (frame f) (.run (evm f.message r)))
-    let result ← exec sink f.message r context 1
+    sink (.entered context (frame f) (.run (evm f.toLegacy.message r)))
+    let result ← exec sink f.toLegacy.message r context 1
     let settled := result.value >>= settle f
     sink (.settled context (frame f) settled)
     pure ⟨settled.map (fun value => ⟨some r, value⟩), result.nextFrame, by
@@ -314,8 +319,8 @@ structure PreparedResult (preparation : TopLevel.Preparation) where
 /-- Trace the same prepared run as the interpreter. A refusal emits no frame
 event. On entry the caller's refund hook precedes the first frame event. -/
 def runPrepared {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m)
-    (reportRefund : Nat → m Unit) (preparation : TopLevel.Preparation) (runId : String) :
-    m (PreparedResult preparation) := do
+    (reportRefund : Nat → m Unit) (preparation : TopLevel.Preparation) (runId : String)
+    : m (PreparedResult preparation) := do
   match hprep : preparation with
   | .refused reason => pure ⟨.ok (.refused reason), by rw [hprep]; rfl⟩
   | .frame f refund =>
@@ -324,5 +329,18 @@ def runPrepared {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m)
     pure ⟨result.run.map (.frame f refund), by
       rw [result.run_erases, hprep]
       rfl⟩
+
+structure InputResult (input : TopLevel.Input) where
+  run : Except Fault TopLevel.Run
+  erases : run = TopLevel.runNative input
+
+/-- Prepare a native input once and trace the same frame execution as the untraced runner. -/
+def runInput {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m)
+    (reportRefund : Nat → m Unit) (input : TopLevel.Input) (runId : String) : m (InputResult input) := do
+  match h : TopLevel.prepareNative input with
+  | .error fault => pure ⟨.error fault, by rw [TopLevel.runNative, h]; rfl⟩
+  | .ok prepared =>
+    let result ← runPrepared sink reportRefund prepared.toPreparation runId
+    pure ⟨result.run, by rw [result.erases, TopLevel.runNative, h]; rfl⟩
 
 end Jaune.Checked.Trace

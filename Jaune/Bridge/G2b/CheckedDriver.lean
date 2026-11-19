@@ -7,6 +7,8 @@ import Jaune.MessageCall.FinalExec
 
 namespace Jaune.Checked
 
+variable [LegacyTransaction]
+
 
 
 theorem execFueled_toLegacy (fuel : Nat) (r : Frame.Running) :

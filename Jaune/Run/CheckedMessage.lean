@@ -38,6 +38,7 @@ def systemInput (block : BlockContext) (state : State) (createdAccounts : AdrSet
         originalState := state } }
     kind := .call
     codeAddress := some recipient
+    target := some recipient
     gas := systemTransactionGas
     stateGasGrant
     transfersValue := false
@@ -50,6 +51,10 @@ def systemInput (block : BlockContext) (state : State) (createdAccounts : AdrSet
 inductive Prepared where
   | refused (reason : Refusal)
   | frame (message : Message) (checkpoint : Frame.State) (authorizationRefund : Nat)
+
+def Prepared.toPreparation : Prepared → Preparation
+  | .refused reason => .refused reason
+  | .frame message checkpoint refund => .frame ⟨message, checkpoint⟩ refund
 
 /-- Apply one authorization before state gas. Successful recovery warms the authority
 before its code and nonce are checked. -/
@@ -263,6 +268,10 @@ def prepareNative (input : Input) : Except Fault Prepared :=
     | .error (.fault fault, _) => .error fault
     | .error (.halt reason, s) => .ok (.refused (.stateGas reason input.message.stateGasGrant
         s.trail.accountReads s.trail.storageReads))
+
+/-- Prepare and execute a top-level Checked input, preserving the entered root when present. -/
+def runNative (input : Input) : Except Fault Run :=
+  prepareNative input >>= fun prepared => prepared.toPreparation.run
 
 end TopLevel
 

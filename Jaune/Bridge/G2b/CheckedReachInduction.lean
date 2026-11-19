@@ -14,7 +14,7 @@ private def StagedRunningPost : Except Fault Staging.Step → Prop
   | .ok (.spawn f _ _) => f.checkpoint.machine.memory.Wf
   | _ => True
 
-private theorem post_erase (x : Except Fault Checked.Step) :
+private theorem post_erase [Checked.LegacyTransaction] (x : Except Fault Checked.Step) :
     StagedRunningPost (x.map Checked.Step.toLegacy) := by
   cases x with
   | error f => trivial
@@ -31,7 +31,7 @@ private theorem post_of_observe (x : Step) (h : StagedRunningPost x.observe) :
   | next _ _ => exact h
   | spawn _ _ _ => exact h
 
-variable (hstep : ∀ r : Checked.Frame.Running,
+variable (hstep : ∀ [Checked.LegacyTransaction] (r : Checked.Frame.Running),
     Staging.step r.toLegacy = (Checked.step r).map Checked.Step.toLegacy)
 include hstep
 
@@ -39,8 +39,10 @@ private theorem step_post (evm : Evm) (h : evm.dyna.memory.Wf) :
     RunningPost (Evm.step evm) := by
   let r := Checked.Frame.Running.ofLegacy (Frame.Running.ofEvm evm) h
   have hp : StagedRunningPost (Staging.step (Frame.Running.ofEvm evm)) := by
-    change StagedRunningPost (Staging.step r.toLegacy)
-    rw [hstep]
+    letI : Checked.LegacyTransaction := ⟨evm.sta.tenvStat⟩
+    have hraw : r.toLegacy = Frame.Running.ofEvm evm :=
+      Checked.Frame.Running.toLegacy_ofLegacy _ _
+    rw [← hraw, hstep]
     exact post_erase _
   unfold Staging.step at hp
   rw [Frame.Running.getOp_ofEvm] at hp

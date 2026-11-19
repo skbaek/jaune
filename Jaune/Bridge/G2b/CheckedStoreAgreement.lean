@@ -1,3 +1,4 @@
+import Jaune.Bridge.G2b.CheckedContext
 import Jaune.Bridge.G2b.CheckedPlainArms
 import Jaune.Instructions.StoreFacts
 
@@ -53,13 +54,13 @@ private theorem except_assert_eq_error {ε : Type} {p : Prop} [Decidable p] {e :
 
 private theorem assertDynamic_true {ctx : Jaune.CallContext} {s : Frame.State}
     (h : ctx.isStatic = true) :
-    Frame.State.assertDynamic ctx s = .error (.writeInStaticContext .none, s) := by
-  simp [Frame.State.assertDynamic, Except.assert, h]
+    Frame.State.assertDynamic ctx.toChecked s = .error (.writeInStaticContext .none, s) := by
+  simp [Frame.State.assertDynamic, Except.assert, Jaune.CallContext.toChecked_isStatic, h]
 
 private theorem assertDynamic_false {ctx : Jaune.CallContext} {s : Frame.State}
     (h : ctx.isStatic = false) :
-    Frame.State.assertDynamic ctx s = .ok () := by
-  simp [Frame.State.assertDynamic, Except.assert, h]
+    Frame.State.assertDynamic ctx.toChecked s = .ok () := by
+  simp [Frame.State.assertDynamic, Except.assert, Jaune.CallContext.toChecked_isStatic, h]
 
 private theorem withMachine_twice (s : Frame.State) (m₁ m₂ : Machine) :
     (s.withMachine m₁).withMachine m₂ = s.withMachine m₂ := rfl
@@ -454,11 +455,12 @@ theorem TstoreRow.ofRules_lift_eq (pc : Nat) (ctx : Jaune.CallContext) (s : Fram
           cases hcg : m₂.chargeGas Gas.warmStorageReadCost with
           | error e3 => rcases e3 with ⟨err, m'⟩; rfl
           | ok m₃ =>
-            dsimp only [Frame.State.assertDynamic, Except.assert, Frame.State.applyStoreTouch]
+            dsimp only [Frame.State.assertDynamic, Except.assert, Jaune.CallContext.toChecked_isStatic, Frame.State.applyStoreTouch]
             by_cases hstat : ctx.isStatic <;> simp [hstat, withMachine_twice]
     | some _ =>
       dsimp only [Option.isSome, Bool.true_and, Bool.not_true, Bool.false_and, Bool.false_eq_true,
-        ↓reduceIte, bind, Except.bind, Frame.State.assertDynamic, Except.assert]
+        ↓reduceIte, bind, Except.bind, Frame.State.assertDynamic, Except.assert,
+        Jaune.CallContext.toChecked_isStatic]
       by_cases hstat : ctx.isStatic
       · simp [hstat]; rfl
       · simp only [hstat, Bool.not_false, ↓reduceIte]

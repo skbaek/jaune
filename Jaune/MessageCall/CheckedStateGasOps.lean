@@ -202,7 +202,7 @@ local macro "meter_walk" : tactic => `(tactic| repeat' first
   | split)
 
 /-- Jump instructions preserve the state-gas meter on both successful and exceptional exits. -/
-theorem JumpOp.runCore_meter (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.JumpOp) :
+theorem JumpOp.runCore_meter (pc : Nat) (ctx : CallContext) (s : Frame.State) (op : Jaune.JumpOp) :
     Walk (·.machine.stateGas = s.machine.stateGas) (fun p => p.2.machine.stateGas = s.machine.stateGas)
       (JumpOp.runCore pc ctx s op) := by
   cases op <;> simp only [JumpOp.runCore]
@@ -324,8 +324,8 @@ theorem Family.run_meter (f : Family) (x : Frame.Running)
   | shuffle row => exact liftMachine_meter (ShuffleRow.step_stateGas row _ _)
   | memory row => exact liftMachine_meter (MemoryRow.step_stateGas row _ _ _)
   | log row =>
-    have hf := LogRow.step_frame row x.context.toChecked x.state.machine
-    show Walk _ _ (x.state.liftLog (row.step x.context.toChecked x.state.machine))
+    have hf := LogRow.step_frame row x.context x.state.machine
+    show Walk _ _ (x.state.liftLog (row.step x.context x.state.machine))
     unfold Frame.State.liftLog
     split <;> rename_i he <;> rw [he] at hf
     · exact hf.2.1
@@ -343,8 +343,8 @@ theorem Family.run_meter (f : Family) (x : Frame.Running)
   | store kind =>
     cases kind with
     | persistent =>
-      have hs := SstoreRow.step_meter (SstoreRow.ofRules x.context.block.rules) x.context.toChecked.isStatic
-        (x.state.slotView x.context.toChecked.recipient x.context.toChecked.tx.originalState) x.state.machine
+      have hs := SstoreRow.step_meter (SstoreRow.ofRules x.context.block.rules) x.context.isStatic
+        (x.state.slotView x.context.recipient x.context.tx.originalState) x.state.machine
         (by intro a b d; simp [SstoreRow.ofRules, hn]) (by intro a b d; simp [SstoreRow.ofRules, hn])
       show Walk _ _ (x.state.liftStore _ _ _)
       unfold Frame.State.liftStore
@@ -355,7 +355,7 @@ theorem Family.run_meter (f : Family) (x : Frame.Running)
         exact hs
     | transient =>
       have hs := TstoreRow.step_meter (TstoreRow.ofRules x.context.block.rules)
-        x.context.block.rules.opcodes x.context.toChecked.isStatic x.state.machine
+        x.context.block.rules.opcodes x.context.isStatic x.state.machine
       show Walk _ _ (x.state.liftStore _ _ _)
       unfold Frame.State.liftStore
       split <;> rename_i he <;> rw [he] at hs
@@ -366,7 +366,7 @@ theorem Family.run_meter (f : Family) (x : Frame.Running)
 
 /-- A plain instruction preserves the incoming meter when state gas is disabled. The state-gas-enabled storage
 branches take a separate charge and are excluded by the rules premise. -/
-theorem PlainOp.runCore_meter (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State)
+theorem PlainOp.runCore_meter (pc : Nat) (ctx : CallContext) (s : Frame.State)
     (hn : ctx.block.rules.stateGas = none) (op : Jaune.PlainOp) :
     Walk (·.machine.stateGas = s.machine.stateGas) (·.machine.stateGas = s.machine.stateGas)
       (PlainOp.runCore pc ctx s op) :=
@@ -387,7 +387,7 @@ private theorem creditBeneficiary_meter (rules : ForkRules) (a : Address) (v : U
   unfold Frame.State.creditBeneficiary
   split <;> rfl
 
-private theorem selfdestruct_meter (ctx : Jaune.CallContext) (s : Frame.State)
+private theorem selfdestruct_meter (ctx : CallContext) (s : Frame.State)
     (hn : ctx.block.rules.stateGas = none) :
     exitMeter s.machine.stateGas (HaltOp.run ctx s .selfdestruct) := by
   simp only [HaltOp.run, hn]
@@ -411,7 +411,7 @@ private theorem selfdestruct_meter (ctx : Jaune.CallContext) (s : Frame.State)
       · exact (creditBeneficiary_meter _ _ _ _).trans h₂
 
 /-- Before state gas, a halt instruction leaves the meter intact, including exceptional exits. -/
-theorem HaltOp.run_meter (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.HaltOp)
+theorem HaltOp.run_meter (ctx : CallContext) (s : Frame.State) (op : Jaune.HaltOp)
     (hn : ctx.block.rules.stateGas = none) {exit} (h : HaltOp.run ctx s op = .ok exit) :
     exit.state.machine.stateGas = s.machine.stateGas := by
   suffices hp : exitMeter s.machine.stateGas (HaltOp.run ctx s op) by
@@ -444,7 +444,7 @@ private theorem outcome_stateGasZero {x} (h : Walk (·.machine.stateGas = .zero)
     MessageOp.Outcome.StateGasZero x) : (MessageOp.Outcome.ofExcept x).StateGasZero := by
   cases x <;> exact h
 
-theorem genericCall.step_stateGasZero {ctx : Jaune.CallContext} {s : Frame.State}
+theorem genericCall.step_stateGasZero {ctx : CallContext} {s : Frame.State}
     (hn : ctx.block.rules.stateGas = none) (hs : s.machine.stateGas = .zero)
     (gas : Nat) (value : U256) (caller target codeAddress : Address)
     (transfers isStaticcall : Bool) (inputIndex inputSize outputIndex outputSize : Nat)
@@ -458,7 +458,7 @@ theorem genericCall.step_stateGasZero {ctx : Jaune.CallContext} {s : Frame.State
     intro _ h; exact h
   · exact ⟨hn, rfl, hs⟩
 
-theorem genericCreate.step_stateGasZero {ctx : Jaune.CallContext} {s : Frame.State}
+theorem genericCreate.step_stateGasZero {ctx : CallContext} {s : Frame.State}
     (hn : ctx.block.rules.stateGas = none) (hs : s.machine.stateGas = .zero)
     (endowment : U256) (address : Address) (start size : Nat) :
     (genericCreate.step ctx s endowment address start size).StateGasZero := by
@@ -507,37 +507,37 @@ local macro "message_meter" : tactic => `(tactic| (
          intro _ h; exact h
        · apply genericCall.step_stateGasZero <;> assumption)))
 
-private theorem call_meter {ctx : Jaune.CallContext} {s : Frame.State}
+private theorem call_meter {ctx : CallContext} {s : Frame.State}
     (hn : ctx.block.rules.stateGas = none) (hs : s.machine.stateGas = .zero) :
     (MessageOp.step ctx s .call).StateGasZero := by
   simp only [MessageOp.step, hn]
   message_meter
 
-private theorem callcode_meter {ctx : Jaune.CallContext} {s : Frame.State}
+private theorem callcode_meter {ctx : CallContext} {s : Frame.State}
     (hn : ctx.block.rules.stateGas = none) (hs : s.machine.stateGas = .zero) :
     (MessageOp.step ctx s .callcode).StateGasZero := by
   simp only [MessageOp.step, hn]
   message_meter
 
-private theorem delegatecall_meter {ctx : Jaune.CallContext} {s : Frame.State}
+private theorem delegatecall_meter {ctx : CallContext} {s : Frame.State}
     (hn : ctx.block.rules.stateGas = none) (hs : s.machine.stateGas = .zero) :
     (MessageOp.step ctx s .delegatecall).StateGasZero := by
   simp only [MessageOp.step, hn]
   message_meter
 
-private theorem staticcall_meter {ctx : Jaune.CallContext} {s : Frame.State}
+private theorem staticcall_meter {ctx : CallContext} {s : Frame.State}
     (hn : ctx.block.rules.stateGas = none) (hs : s.machine.stateGas = .zero) :
     (MessageOp.step ctx s .staticcall).StateGasZero := by
   simp only [MessageOp.step, hn]
   message_meter
 
-private theorem create_meter {ctx : Jaune.CallContext} {s : Frame.State}
+private theorem create_meter {ctx : CallContext} {s : Frame.State}
     (hn : ctx.block.rules.stateGas = none) (hs : s.machine.stateGas = .zero) :
     (MessageOp.step ctx s .create).StateGasZero := by
   simp only [MessageOp.step, hn]
   message_meter
 
-private theorem create2_meter {ctx : Jaune.CallContext} {s : Frame.State}
+private theorem create2_meter {ctx : CallContext} {s : Frame.State}
     (hn : ctx.block.rules.stateGas = none) (hs : s.machine.stateGas = .zero) :
     (MessageOp.step ctx s .create2).StateGasZero := by
   simp only [MessageOp.step, hn]
@@ -546,7 +546,7 @@ private theorem create2_meter {ctx : Jaune.CallContext} {s : Frame.State}
   · exact hs
 
 /-- Every message instruction keeps the zero meter at each return and at each spawn. -/
-theorem MessageOp.step_stateGasZero {ctx : Jaune.CallContext} {s : Frame.State}
+theorem MessageOp.step_stateGasZero {ctx : CallContext} {s : Frame.State}
     (hn : ctx.block.rules.stateGas = none) (hs : s.machine.stateGas = .zero)
     (op : Jaune.MessageOp) : (MessageOp.step ctx s op).StateGasZero := by
   cases op with

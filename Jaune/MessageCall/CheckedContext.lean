@@ -1,4 +1,3 @@
-import Jaune.MessageCall.CheckedFrame
 import Jaune.MessageCall.State
 
 /-!
@@ -11,8 +10,6 @@ the block record is `BlockContext`, whose fields `timestamp` and `gasLimit` are 
 names them. The other fields of today's message (`target`, `gas`, `codeAddress`,
 `disablePrecompiles`, the value-transfer flag) are read only at `enter` and stay on the message.
 
-The instruction rows take this typed context. The existing frame supplies it through
-`CallContext.toChecked` until frame entry carries the typed context directly.
 -/
 
 namespace Jaune.Checked
@@ -44,39 +41,35 @@ structure Message where
   context : CallContext
   kind : Jaune.Message.Kind
   codeAddress : Option Address
+  target : Option Address
   gas : Nat
   stateGasGrant : Nat
   transfersValue : Bool
   disablePrecompiles : Bool
 
-/-- The machine and lifetime groups when top-level preparation begins. -/
-def Message.initialCheckpoint (message : Message) (world : World)
-    (accessedAddresses : AdrSet) (accessedStorageKeys : KeySet) (createdAccounts selfDestructs : AdrSet) :
-    Frame.State :=
-  let context := message.context
-  let logs := match context.block.rules.stateGas with
-    | none => []
-    | some _ =>
-      if message.transfersValue then
-        if context.caller = context.recipient ∨ context.value = 0 then []
-        else [transferLog context.caller context.recipient context.value]
-      else []
-  { machine := {
-      stack := [], memory := .empty, gasLeft := message.gas, returnData := []
-      stateGas := ⟨message.stateGasGrant, message.stateGasGrant, 0, 0⟩ }
-    world
-    substate := { logs, refund := 0, selfDestructs, accessedAddresses, accessedStorageKeys }
-    trail := { createdAccounts } }
+/-- Move value in the world selected for frame entry. -/
+def Message.transfer (m : Message) (world : World) : Except Fault World :=
+  if m.transfersValue ∧ m.context.value ≠ 0 then
+    match world.subtractBalance m.context.caller m.context.value with
+    | none => .error (.internal (.assertion .none))
+    | some world => .ok (world.addBalance m.context.recipient m.context.value)
+  else .ok world
 
-/-- Input to top-level preparation. Authorization tuples are consumed before the frame runs. -/
-structure TopLevel.Input where
-  message : Message
-  checkpoint : Frame.State
-  authorizationList : List Authorization
+/-- The transfer emits a log under state-gas rules when value moves between distinct accounts. -/
+def Message.transferLogs (m : Message) : List Log :=
+  match m.context.block.rules.stateGas with
+  | none => []
+  | some _ =>
+    if m.transfersValue ∧ m.context.caller ≠ m.context.recipient ∧ m.context.value ≠ 0 then
+      [transferLog m.context.caller m.context.recipient m.context.value]
+    else []
 
 end Jaune.Checked
 
 namespace Jaune
+
+/-- The rules selected by a block context satisfy the fork invariants. -/
+theorem BlockContext.rules_valid (b : BlockContext) : b.rules.Valid := Fork.ruleSet_valid b.fork
 
 /-- The block record a frame reads, from the shared `BenvStat`. -/
 def BenvStat.toBlockContext (b : BenvStat) : BlockContext :=
@@ -99,3 +92,41 @@ def CallContext.toChecked (c : CallContext) : Checked.CallContext :=
 instance : Inhabited Checked.CallContext := ⟨(default : CallContext).toChecked⟩
 
 end Jaune
+
+namespace Jaune.Checked
+
+/-- Reconstruct the waiting context for comparison and trace observation. The template supplies
+the transaction fields outside the interpreter's context. -/
+def CallContext.toLegacy (c : CallContext) (template : TenvStat := default) : Jaune.CallContext :=
+  { caller := c.caller, recipient := c.recipient, value := c.value, calldata := c.calldata
+    code := c.code, depthLeft := c.depthLeft, isStatic := c.isStatic
+    tx := { template with
+      origin := c.tx.origin
+      gasPrice := c.tx.gasPrice
+      blobVersionedHashes := c.tx.blobVersionedHashes }
+    block := {
+      fork := c.block.fork
+      chainId := c.block.chainId
+      origState := c.tx.originalState
+      blockGasLimit := c.block.gasLimit
+      blockHashes := c.block.blockHashes
+      coinbase := c.block.coinbase
+      number := c.block.number
+      baseFeePerGas := c.block.baseFeePerGas
+      time := c.block.timestamp
+      prevRandao := c.block.prevRandao
+      excessBlobGas := c.block.excessBlobGas
+      parentBeaconBlockRoot := c.block.parentBeaconBlockRoot
+      slotNumber := c.block.slotNumber } }
+
+/-- Project the static fields used by the Checked interpreter from a waiting message. -/
+def Message.ofLegacy (m : Jaune.Message) : Message :=
+  ⟨m.context.toChecked, m.kind, m.codeAddress, m.target, m.gas, m.stateGasGrant,
+    m.transfersValue, m.disablePrecompiles⟩
+
+/-- Observe a Checked message through the waiting message interface. -/
+def Message.toLegacy (m : Message) (template : TenvStat := default) : Jaune.Message :=
+  ⟨m.context.toLegacy template, m.kind, m.codeAddress, m.target, m.gas, m.stateGasGrant,
+    m.transfersValue, m.disablePrecompiles⟩
+
+end Jaune.Checked

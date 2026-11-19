@@ -5,6 +5,7 @@ import Jaune.Bridge.G2b.CheckedContext
 import Jaune.Implementation.CheckedCachedDriver
 import Jaune.Bridge.G2b.FinalDriver
 import Jaune.MessageCall.SpawnFacts
+import Jaune.MessageCall.CheckedSpawnFacts
 import Jaune.Run.CheckedMessage
 import Jaune.Run.CheckedTransaction
 import Jaune.Run.Message
@@ -16,20 +17,30 @@ namespace Jaune.Checked
 def Frame.Running.ofEvm (evm : Evm) (hw : evm.dyna.memory.Wf) : Frame.Running :=
   Frame.Running.ofLegacy (Jaune.Frame.Running.ofEvm evm) hw
 
+private theorem Frame.Running.ofEvm_toLegacy (evm : Evm) (hw : evm.dyna.memory.Wf) :
+    @Frame.Running.toLegacy (Frame.Running.ofEvm evm hw) ⟨evm.sta.tenvStat⟩ =
+      Jaune.Frame.Running.ofEvm evm :=
+  Frame.Running.toLegacy_ofLegacy _ _
+
 theorem step_ofEvm (evm : Evm) (hw : evm.dyna.memory.Wf) (ho : evm.dyna.output = []) :
+    letI : LegacyTransaction := ⟨evm.sta.tenvStat⟩
     (step (Frame.Running.ofEvm evm hw)).map Step.toLegacy = (Jaune.Evm.step evm).observe := by
-  rw [← MemorySimulation.step]
+  letI : LegacyTransaction := ⟨evm.sta.tenvStat⟩
+  change (step (Frame.Running.ofEvm evm hw)).map Step.toLegacy = _
+  rw [← MemorySimulation.step, Frame.Running.ofEvm_toLegacy]
   exact Staging.step_ofEvm evm ho
 
 theorem execFueled_square (fuel : Nat) (evm : Evm) (hw : evm.dyna.memory.Wf) (ho : evm.dyna.output = []) :
     (execFueled (Frame.Running.ofEvm evm hw) fuel).run.map (Except.map Frame.Exit.toLegacy) =
       (Jaune.execFueled evm fuel).run.map Jaune.Frame.Exit.ofExecution := by
-  rw [← execFueled_toLegacy]
+  letI : LegacyTransaction := ⟨evm.sta.tenvStat⟩
+  rw [← @execFueled_toLegacy ‹LegacyTransaction›, Frame.Running.ofEvm_toLegacy]
   exact Jaune.execFueled_square fuel evm ho
 
 theorem exec_square (evm : Evm) (hw : evm.dyna.memory.Wf) (ho : evm.dyna.output = []) :
     (exec (Frame.Running.ofEvm evm hw)).map Frame.Exit.toLegacy = Jaune.Frame.Exit.ofExecution (Jaune.exec evm) := by
-  rw [← exec_toLegacy]
+  letI : LegacyTransaction := ⟨evm.sta.tenvStat⟩
+  rw [← @exec_toLegacy ‹LegacyTransaction›, Frame.Running.ofEvm_toLegacy]
   exact Jaune.exec_square evm ho
 
 theorem execFueledCached_square (fuel : Nat) (evm : Evm) (hw : evm.dyna.memory.Wf) (ho : evm.dyna.output = []) :
@@ -39,14 +50,15 @@ theorem execFueledCached_square (fuel : Nat) (evm : Evm) (hw : evm.dyna.memory.W
   exact execFueled_square fuel evm hw ho
 
 /-- Full outward result, for every checked frame and every fork. -/
-theorem Frame.runTop_square (f : Frame) : Frame.runTop f = Jaune.Frame.runTop f.toLegacy := by
+theorem Frame.runTop_square [LegacyTransaction] (f : Frame) : Frame.runTop f = Jaune.Frame.runTop f.toLegacy := by
   rw [← Jaune.Frame.runTop_square, ← Frame.runTop_toLegacy]
 
 /-- A top-level preparation always supplies the evidence to convert its checkpoint exactly. -/
 theorem Frame.runTop_prepared {msg : Msg} {f : Jaune.Frame} {refund : Nat}
     (hp : TopLevel.prepare msg = .ok (.frame f refund)) :
     Frame.runTop (Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp)) = Jaune.Frame.runTop f := by
-  rw [Frame.runTop_square, Frame.toLegacy_ofLegacy]
+  letI : LegacyTransaction := ⟨f.message.context.tx⟩
+  rw [@Frame.runTop_square ‹LegacyTransaction›, Frame.toLegacy_ofLegacy]
 
 /-- The checked frame entered by transaction preparation names its kind and code address
 coherently, including after authorization and delegation resolution. -/
@@ -86,15 +98,15 @@ theorem Frame.entry_static_error {f : Jaune.Frame} {start : Devm} {evm : Evm}
     · cases h; exact ⟨rfl, rfl⟩
 
 /-- The legacy entry observes the same immediate settlement or entered frame. -/
-theorem Frame.enterWith_square (f : Frame) :
+theorem Frame.enterWith_square [LegacyTransaction] (f : Frame) :
     (Jaune.enterWith f.toLegacy f.toLegacy.checkpoint.toDevm).observe =
       (enterWith f f.checkpoint).toLegacy := by
   rw [Jaune.Frame.Entry.observe_enterWith _ rfl, Staging.enterWith_ofDevm_toDevm,
     show f.toLegacy.checkpoint = f.checkpoint.toLegacy from rfl, enterWith_toLegacy]
 
 /-- Observe the entered machine and settled result without entering the frame a second time. -/
-private theorem Frame.runTopWithRoot_observes (f : Frame) :
-    f.runTopWithRoot.map (fun run => (run.root.map (fun r => r.toLegacy.toEvm f.message), run.result)) =
+private theorem Frame.runTopWithRoot_observes [LegacyTransaction] (f : Frame) :
+    f.runTopWithRoot.map (fun run => (run.root.map (fun r => r.toLegacy.toEvm f.toLegacy.message), run.result)) =
       match Jaune.enterWith f.toLegacy f.toLegacy.checkpoint.toDevm with
       | .done result => result.map (fun r => (none, r))
       | .run evm => (Jaune.settle f.toLegacy (Jaune.exec evm)).map (fun r => (some evm, r)) := by
@@ -118,10 +130,10 @@ private theorem Frame.runTopWithRoot_observes (f : Frame) :
           using entry.symm
       have ho := Jaune.enterWith_run_output rfl hw
       obtain ⟨hs, he⟩ := Frame.entry_static_error hw
-      have hroot : r.toLegacy.toEvm f.message = evm := by
-        have hm : Jaune.Message.ofSevm evm.sta f.message.kind f.message.stateGasGrant = f.message := by
+      have hroot : r.toLegacy.toEvm f.toLegacy.message = evm := by
+        have hm : Jaune.Message.ofSevm evm.sta f.message.kind f.message.stateGasGrant = f.toLegacy.message := by
           rw [hs]
-          exact Jaune.Message.ofSevm_sevm f.message
+          exact Jaune.Message.ofSevm_sevm f.toLegacy.message
         rw [hr, ← hm]
         exact Jaune.Frame.Running.toEvm_ofEvm _ _ ho he
       have hx : (exec r).map Frame.Exit.toLegacy = Jaune.Frame.Exit.ofExecution (Jaune.exec evm) := by
@@ -161,7 +173,11 @@ through preparation. -/
 def observe (msg : Msg) (prepared : Jaune.TopLevel.Preparation) : Run → TopLevelRun
   | .refused _ => ⟨msg, prepared, none, none⟩
   | .frame f _ run =>
-    ⟨msg, prepared, run.root.map (fun r => r.toLegacy.toEvm f.message), some run.result⟩
+    let waiting := match prepared with
+      | .frame waiting _ => waiting.message
+      | .refused .. => f.message.toLegacy msg.tenv.stat
+    letI : LegacyTransaction := ⟨waiting.context.tx⟩
+    ⟨msg, prepared, run.root.map (fun r => r.toLegacy.toEvm waiting), some run.result⟩
 
 theorem run_observe (msg : Msg) (prepared : Jaune.TopLevel.Preparation)
     (hp : Jaune.TopLevel.prepare msg = .ok prepared) :
@@ -171,6 +187,7 @@ theorem run_observe (msg : Msg) (prepared : Jaune.TopLevel.Preparation)
   cases prepared with
   | refused reason halted => rfl
   | frame f refund =>
+    letI : LegacyTransaction := ⟨f.message.context.tx⟩
     let checked := Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp)
     have h := congrArg (Except.map fun (root, result) =>
         (⟨msg, .frame f refund, root, some result⟩ : TopLevelRun)) (checked.runTopWithRoot_observes)
@@ -261,7 +278,7 @@ private theorem prepare_frame_block {msg : Msg} {f : Jaune.Frame} {refund : Nat}
 including authorization writes and delegation resolution. -/
 theorem run_frame_originalState {msg : Msg} {f : Frame} {refund : Nat} {result : Frame.TopRun}
     (h : run msg = .ok (.frame f refund result)) :
-    f.message.context.toChecked.tx.originalState = msg.benv.stat.origState := by
+    f.message.context.tx.originalState = msg.benv.stat.origState := by
   obtain ⟨prep, hp, hr⟩ := Except.bind_eq_ok h
   unfold prepare at hp
   split at hp
@@ -298,7 +315,7 @@ theorem refundCounter_observe {msg : Msg} {prepared : Jaune.TopLevel.Preparation
       rw [he] at hr
       cases hr
       have block : (Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp)).message.context.block =
-          msg.benv.stat := prepare_frame_block hp
+          msg.benv.stat.toBlockContext := congrArg BenvStat.toBlockContext (prepare_frame_block hp)
       simp only [Run.refundCounter, observe, TopLevelRun.refundCounter, TopLevelRun.stateGasRules, block]
       cases result.result <;> rfl
 
@@ -344,7 +361,7 @@ theorem runSystemCall_observe (benv : Benv) (target : Address) (code : ByteArray
 theorem runSystemCall_frame_originalState {benv : Benv} {target : Address} {code : ByteArray}
     {data : Bytes} {f : Frame} {refund : Nat} {result : Frame.TopRun} {observed : TopLevelRun}
     (h : runSystemCall benv target code data = .ok (.frame f refund result, observed)) :
-    f.message.context.toChecked.tx.originalState = benv.state := by
+    f.message.context.tx.originalState = benv.state := by
   unfold runSystemCall at h
   dsimp only at h
   split at h
@@ -362,10 +379,6 @@ theorem runSystemCall_frame_originalState {benv : Benv} {target : Address} {code
 end TopLevel
 
 /-- Map the waiting immutable message onto the Checked context supplied to the frame. -/
-def Message.ofLegacy (message : Jaune.Message) : Message :=
-  ⟨message.context.toChecked, message.kind, message.codeAddress, message.gas, message.stateGasGrant,
-    message.transfersValue, message.disablePrecompiles⟩
-
 private theorem initialCheckpoint_observe (msg : Msg) (isCreate : Bool) :
     (Message.ofLegacy (Jaune.Message.ofTop msg isCreate)).initialCheckpoint
       ⟨msg.benv.state, msg.tenv.transientStorage, msg.benv.storageWrites⟩
@@ -804,7 +817,7 @@ private theorem resolveCodeDelegation_observe (msg : Msg) (isCreate : Bool) :
 /-- The native observation of the waiting Checked preparation. -/
 def Prepared.ofWaiting : Preparation → Prepared
   | .refused reason => .refused reason
-  | .frame f refund => .frame (Message.ofLegacy f.message) f.checkpoint refund
+  | .frame f refund => .frame f.message f.checkpoint refund
 
 private theorem Prepared.ofWaiting_frameOfTop (msg : Msg) (isCreate : Bool) (refund : Nat)
     (h : (Jaune.Frame.ofTop msg isCreate).checkpoint.machine.memory.Wf) :
@@ -953,6 +966,14 @@ theorem prepareNative_observe (msg : Msg) :
     rw [hg]
     exact prepareWithoutStateGas_observe msg hgas
   | some rules => exact prepareNative_amsterdam_observe msg rules hgas
+
+/-- Native preparation and execution agree with the Checked observation of the waiting run. -/
+theorem runNative_observe (msg : Msg) : runNative (Input.ofLegacy msg) = run msg := by
+  unfold runNative run
+  rw [prepareNative_observe]
+  cases prepare msg with
+  | error => rfl
+  | ok prepared => cases prepared <;> rfl
 
 /-- The shared system-call entry preserves its own start world, gas grant, and access sets. -/
 theorem systemInput_observe (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :

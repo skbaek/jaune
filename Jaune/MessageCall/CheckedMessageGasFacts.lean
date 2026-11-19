@@ -17,7 +17,7 @@ def Frame.State.spill (s : Frame.State) : Nat :=
 /-- The call-family obligation against the measure `n` the step began with: a finished
 operation leaves less, and a spawn's child grant plus its checkpoint's measure is less, with the
 child under the spawning frame's rules. -/
-def MessageOp.Outcome.GasDecreasing (ctx : Jaune.CallContext) (n : Nat) : MessageOp.Outcome → Prop
+def MessageOp.Outcome.GasDecreasing (ctx : CallContext) (n : Nat) : MessageOp.Outcome → Prop
   | .done r => ∀ s, r = .ok s → s.machine.gasMeasure < n
   | .spawn child _ =>
       child.message.gas + child.checkpoint.machine.gasMeasure < n ∧
@@ -28,10 +28,10 @@ def MessageOp.Outcome.Halt (n : Nat) : MessageOp.Outcome → Prop
   | .done r => ∀ p, r = .error p → p.2.spill ≤ n
   | .spawn _ _ => True
 
-private abbrev OutcomeBound (ctx : Jaune.CallContext) (n : Nat) (outcome : MessageOp.Outcome) :=
+private abbrev OutcomeBound (ctx : CallContext) (n : Nat) (outcome : MessageOp.Outcome) :=
   outcome.GasDecreasing ctx n ∧ outcome.Halt n
 
-private theorem ofExcept_bound {ctx : Jaune.CallContext} {n : Nat}
+private theorem ofExcept_bound {ctx : CallContext} {n : Nat}
     {x : Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
     (h : Walk (·.machine.gasMeasure ≤ n) (OutcomeBound ctx n) x) :
     OutcomeBound ctx n (MessageOp.Outcome.ofExcept x) := by
@@ -47,13 +47,13 @@ private theorem ofExcept_bound {ctx : Jaune.CallContext} {n : Nat}
       unfold Machine.gasMeasure at h
       omega
 
-private theorem done_bound {ctx : Jaune.CallContext} {n : Nat} {s : Frame.State}
+private theorem done_bound {ctx : CallContext} {n : Nat} {s : Frame.State}
     (h : s.machine.gasMeasure < n) : OutcomeBound ctx n (.done (.ok s)) := by
   constructor
   · intro t ht; cases ht; exact h
   · intro p hp; contradiction
 
-private theorem pushZero_bound (ctx : Jaune.CallContext) (s : Frame.State) {n : Nat}
+private theorem pushZero_bound (ctx : CallContext) (s : Frame.State) {n : Nat}
     (h : s.machine.gasMeasure < n) :
     Walk (·.machine.gasMeasure ≤ n) (OutcomeBound ctx n) (do
       let u ← s.push 0
@@ -69,7 +69,7 @@ private theorem restoreChildGas_measure (s : Frame.State) (gas reservoir : Nat) 
     Machine.restoreChildGas, Machine.gasMeasure]
   omega
 
-private theorem genericCall_bound (ctx : Jaune.CallContext) (s : Frame.State) (gas : Nat) (value : U256)
+private theorem genericCall_bound (ctx : CallContext) (s : Frame.State) (gas : Nat) (value : U256)
     (caller target codeAddress : Address) (transfersValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat) (code : ByteArray) (disablePrecompiles : Bool)
     {n : Nat} (h : s.machine.gasMeasure + gas < n) :
@@ -84,7 +84,7 @@ private theorem genericCall_bound (ctx : Jaune.CallContext) (s : Frame.State) (g
     omega
   · exact ⟨⟨by change gas + s.machine.gasMeasure < n; omega, rfl⟩, True.intro⟩
 
-private theorem genericCallAmsterdam_bound (ctx : Jaune.CallContext) (state : StateGasRules)
+private theorem genericCallAmsterdam_bound (ctx : CallContext) (state : StateGasRules)
     (s : Frame.State) (gas reservoir : Nat) (value : U256) (caller target codeAddress : Address)
     (transfersValue isStaticcall : Bool) (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles newAccountCharged insufficientBalance : Bool) {n : Nat}
@@ -119,7 +119,7 @@ private theorem createBudget (s : Frame.State) :
   change s.gasLeft - except64th s.gasLeft + (s.machine.stateGas.spilled + s.machine.stateGas.committedSpill) + except64th s.gasLeft = _
   omega
 
-private theorem genericCreate_bound (ctx : Jaune.CallContext) (s : Frame.State) (endowment : U256)
+private theorem genericCreate_bound (ctx : CallContext) (s : Frame.State) (endowment : U256)
     (address : Address) (offset size : Nat) {n : Nat} (h : s.machine.gasMeasure < n) :
     OutcomeBound ctx n (genericCreate.step ctx s endowment address offset size) := by
   unfold genericCreate.step
@@ -148,7 +148,7 @@ private theorem genericCreate_bound (ctx : Jaune.CallContext) (s : Frame.State) 
         · rfl
       · trivial
 
-private theorem genericCreateAmsterdam_bound (ctx : Jaune.CallContext) (rules : StateGasRules)
+private theorem genericCreateAmsterdam_bound (ctx : CallContext) (rules : StateGasRules)
     (s : Frame.State) (endowment : U256) (address : Address) (offset size : Nat) {n : Nat}
     (h : s.machine.gasMeasure < n) :
     OutcomeBound ctx n (genericCreateAmsterdam.step ctx rules s endowment address offset size) := by
@@ -234,11 +234,11 @@ private theorem chargeGrant {s : Frame.State} {n value gas : Nat}
   change t.machine.gasMeasure + _ = s.machine.gasMeasure at ht
   omega
 
-private theorem accessPositive {ctx : Jaune.CallContext} (a : Address) (warm : AdrSet) :
+private theorem accessPositive {ctx : CallContext} (a : Address) (warm : AdrSet) :
     0 < (match ctx.block.rules.access with
       | .eip2929 => ctx.block.rules.gas.accessCost a warm
       | .flat g => g.call) := by
-  have valid := BenvStat.rules_valid ctx.block
+  have valid := BlockContext.rules_valid ctx.block
   cases ha : ctx.block.rules.access with
   | flat g => exact (valid.flatAccess ha).2.2.2.2
   | eip2929 => exact valid.gas.accessCost_pos _ _
@@ -269,14 +269,14 @@ local macro "creation_walk" : tactic => `(tactic| (
   message_pops
   first | (apply genericCreate_bound; message_arith) | (apply genericCreateAmsterdam_bound; message_arith)))
 
-private theorem create_bound (ctx : Jaune.CallContext) (s : Frame.State) :
+private theorem create_bound (ctx : CallContext) (s : Frame.State) :
     OutcomeBound ctx s.machine.gasMeasure (MessageOp.step ctx s .create) := by
-  have cost := (BenvStat.rules_valid ctx.block).gas.2.1
+  have cost := (BlockContext.rules_valid ctx.block).gas.2.1
   cases hs : ctx.block.rules.stateGas <;> simp only [MessageOp.step, hs] <;> creation_walk
 
-private theorem create2_bound (ctx : Jaune.CallContext) (s : Frame.State) :
+private theorem create2_bound (ctx : CallContext) (s : Frame.State) :
     OutcomeBound ctx s.machine.gasMeasure (MessageOp.step ctx s .create2) := by
-  have cost := (BenvStat.rules_valid ctx.block).gas.2.1
+  have cost := (BlockContext.rules_valid ctx.block).gas.2.1
   simp only [MessageOp.step]
   split
   · split <;> creation_walk
@@ -295,7 +295,7 @@ private theorem addGas_measure (s : Frame.State) (gas : Nat) :
     s.gasLeft + s.machine.stateGas.spilled + s.machine.stateGas.committedSpill + gas
   omega
 
-private theorem refundResult_bound (s : Frame.State) (gas : Nat) {ctx : Jaune.CallContext} {n : Nat}
+private theorem refundResult_bound (s : Frame.State) (gas : Nat) {ctx : CallContext} {n : Nat}
     (h : s.machine.gasMeasure + gas < n) :
     Walk (·.machine.gasMeasure ≤ n) (OutcomeBound ctx n) (do
       let t ← s.push 0
@@ -308,7 +308,7 @@ private theorem refundResult_bound (s : Frame.State) (gas : Nat) {ctx : Jaune.Ca
   rw [addGas_measure, ht]
   exact h
 
-private theorem refundResult'_bound (s : Frame.State) (gas : Nat) {ctx : Jaune.CallContext} {n : Nat}
+private theorem refundResult'_bound (s : Frame.State) (gas : Nat) {ctx : CallContext} {n : Nat}
     (h : s.machine.gasMeasure + gas < n) :
     Walk (·.machine.gasMeasure ≤ n) (OutcomeBound ctx n) (do
       let t ← s.push 0
@@ -328,13 +328,13 @@ local macro "call_walk " ctx:term : tactic => `(tactic| (
   apply Walk.bind (Frame.State.popToAddress_gas (by message_arith))
   rintro ⟨callee, b⟩ hb
   try (apply Walk.bind (Frame.State.pop_gas (by message_arith)); rintro ⟨value, v⟩ hv;
-       have paid := stipend_covered ($ctx).block.rules value (BenvStat.rules_valid ($ctx).block))
+       have paid := stipend_covered ($ctx).block.rules value (BlockContext.rules_valid ($ctx).block))
   iterate 3 (apply Walk.bind (Frame.State.popToNat_gas (by message_arith)); rintro ⟨_, _⟩ _)
   apply Walk.bind (Frame.State.popToNat_gas (by message_arith))
   rintro ⟨_, t⟩ ht
   try dsimp only at *
   have flat := accessPositive (ctx := $ctx) callee t.accessedAddresses
-  have warm := (BenvStat.rules_valid ($ctx).block).gas.accessCost_pos callee t.accessedAddresses
+  have warm := (BlockContext.rules_valid ($ctx).block).gas.accessCost_pos callee t.accessedAddresses
   message_pops
   refine Walk.bind (chargeForCall ?_ ?_) ?_
   · try simp only [accessDelegation_measure, completeDelegation_measure, accessState_measure,
@@ -354,26 +354,26 @@ local macro "call_walk " ctx:term : tactic => `(tactic| (
      · apply genericCall_bound
        message_arith)))
 
-private theorem staticcall_bound (ctx : Jaune.CallContext) (s : Frame.State) :
+private theorem staticcall_bound (ctx : CallContext) (s : Frame.State) :
     OutcomeBound ctx s.machine.gasMeasure (MessageOp.step ctx s .staticcall) := by
   cases hs : ctx.block.rules.stateGas <;> simp only [MessageOp.step, hs] <;> call_walk ctx
 
 
-private theorem delegatecall_bound (ctx : Jaune.CallContext) (s : Frame.State) :
+private theorem delegatecall_bound (ctx : CallContext) (s : Frame.State) :
     OutcomeBound ctx s.machine.gasMeasure (MessageOp.step ctx s .delegatecall) := by
   cases hs : ctx.block.rules.stateGas <;> simp only [MessageOp.step, hs] <;> call_walk ctx
 
-private theorem callcode_bound (ctx : Jaune.CallContext) (s : Frame.State) :
+private theorem callcode_bound (ctx : CallContext) (s : Frame.State) :
     OutcomeBound ctx s.machine.gasMeasure (MessageOp.step ctx s .callcode) := by
   cases hs : ctx.block.rules.stateGas <;> simp only [MessageOp.step, hs] <;> call_walk ctx
 
-private theorem call_legacy_bound (ctx : Jaune.CallContext) (s : Frame.State)
+private theorem call_legacy_bound (ctx : CallContext) (s : Frame.State)
     (hs : ctx.block.rules.stateGas = none) :
     OutcomeBound ctx s.machine.gasMeasure (MessageOp.step ctx s .call) := by
   simp only [MessageOp.step, hs]
   call_walk ctx
 
-private theorem call_state_bound (ctx : Jaune.CallContext) (s : Frame.State) (state : StateGasRules)
+private theorem call_state_bound (ctx : CallContext) (s : Frame.State) (state : StateGasRules)
     (hs : ctx.block.rules.stateGas = some state) :
     OutcomeBound ctx s.machine.gasMeasure (MessageOp.step ctx s .call) := by
   simp only [MessageOp.step, hs]
@@ -384,12 +384,12 @@ private theorem call_state_bound (ctx : Jaune.CallContext) (s : Frame.State) (st
   rintro ⟨callee, b⟩ hb
   apply Walk.bind (Frame.State.pop_gas (by message_arith))
   rintro ⟨value, v⟩ hv
-  have paid := stipend_covered ctx.block.rules value (BenvStat.rules_valid ctx.block)
+  have paid := stipend_covered ctx.block.rules value (BlockContext.rules_valid ctx.block)
   iterate 3 (apply Walk.bind (Frame.State.popToNat_gas (by message_arith)); rintro ⟨_, _⟩ _)
   apply Walk.bind (Frame.State.popToNat_gas (by message_arith))
   rintro ⟨_, t⟩ ht
   try dsimp only at *
-  have warm := (BenvStat.rules_valid ctx.block).gas.accessCost_pos callee t.accessedAddresses
+  have warm := (BlockContext.rules_valid ctx.block).gas.accessCost_pos callee t.accessedAddresses
   message_pops
   refine Walk.bind (Frame.State.chargeGas_gas _ ?_) ?_
   · message_arith
@@ -412,7 +412,7 @@ private theorem call_state_bound (ctx : Jaune.CallContext) (s : Frame.State) (st
 
 /-- A message instruction funds its continuation or its child and suspended frame, and an
 exceptional halt retains at most the input gas measure. -/
-theorem MessageOp.step_gas (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.MessageOp) :
+theorem MessageOp.step_gas (ctx : CallContext) (s : Frame.State) (op : Jaune.MessageOp) :
     (MessageOp.step ctx s op).GasDecreasing ctx s.machine.gasMeasure ∧
     (MessageOp.step ctx s op).Halt s.machine.gasMeasure := by
   cases op with

@@ -4,6 +4,8 @@ import Jaune.Bridge.G2b.CheckedOutcomes
 
 namespace Jaune.Checked
 
+variable [LegacyTransaction]
+
 section Simulation
 variable
     (hstep : ∀ r : Frame.Running, Staging.step r.toLegacy = (step r).map Step.toLegacy)
@@ -33,7 +35,7 @@ theorem execFueled_toLegacy_of_parts (fuel : Nat) (r : Frame.Running) :
             (match Staging.resume r.context.block.rules p child.checkpoint.toLegacy result with
               | .error fault => Fueled.ofExcept (.error fault)
               | .ok (.error (reason, s)) => Fueled.ofExcept (.ok (Jaune.Frame.Exit.halted reason s))
-              | .ok (.ok s) => Staging.execFueled ⟨pc, r.context, s⟩ fuel).run =
+              | .ok (.ok s) => Staging.execFueled ⟨pc, r.context.inLegacy, s⟩ fuel).run =
               (match resume r.context.block.rules p child.checkpoint result with
                 | .error fault => Fueled.ofExcept (.error fault)
                 | .ok (.error (reason, s)) => Fueled.ofExcept (.ok (Frame.Exit.halted reason s))

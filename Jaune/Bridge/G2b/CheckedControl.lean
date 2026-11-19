@@ -3,6 +3,8 @@ import Jaune.MessageCall.CheckedControl
 
 namespace Jaune.MemorySimulation
 
+variable [Checked.LegacyTransaction]
+
 theorem Frame.Exit.catchHalt {x : Except (ExceptionalHalt × Checked.Frame.State) (Except Fault Checked.Frame.Exit)}
     {y : Except (ExceptionalHalt × Frame.State) (Except Fault Frame.Exit)} (h : Square x y) :
     Square (Checked.Frame.Exit.catchHalt x) (Jaune.Frame.Exit.catchHalt y) := by
@@ -12,15 +14,15 @@ theorem Frame.Exit.catchHalt {x : Except (ExceptionalHalt × Checked.Frame.State
   | error p => cases p; rfl
   | ok o => cases o <;> rfl
 
-theorem JumpOp.runCore (pc : Nat) (ctx : CallContext) (s : Checked.Frame.State) (j : Jaune.JumpOp) :
-    Square (Checked.JumpOp.runCore pc ctx s j) (Staging.JumpOp.runCore pc ctx s.toLegacy j) := by
+theorem JumpOp.runCore (pc : Nat) (ctx : Checked.CallContext) (s : Checked.Frame.State) (j : Jaune.JumpOp) :
+    Square (Checked.JumpOp.runCore pc ctx s j) (Staging.JumpOp.runCore pc ctx.inLegacy s.toLegacy j) := by
   cases j <;> simp only [Checked.JumpOp.runCore, Staging.JumpOp.runCore] <;> checked_sq_walk
 
 theorem JumpOp.run (r : Checked.Frame.Running) (j : Jaune.JumpOp) :
     Square (Checked.JumpOp.run r j) (Staging.JumpOp.run r.toLegacy j) := by
   unfold Checked.JumpOp.run Staging.JumpOp.run
   rw [show r.toLegacy.state = r.state.toLegacy from rfl, show r.toLegacy.pc = r.pc from rfl,
-    show r.toLegacy.context = r.context from rfl, (JumpOp.runCore r.pc r.context r.state j).legacy_eq]
+    show r.toLegacy.context = r.context.inLegacy from rfl, (JumpOp.runCore r.pc r.context r.state j).legacy_eq]
   rcases Checked.JumpOp.runCore r.pc r.context r.state j with ⟨e, s⟩ | ⟨pc, s⟩ <;> rfl
 
 private theorem subtractBalance_toLegacy (s : Checked.Frame.State) (a : Address) (v : U256) :
@@ -65,17 +67,22 @@ local macro "selfdestruct_align" : tactic => `(tactic| simp only [subtractBalanc
   legacy_createdAccounts, legacy_selfDestructs, legacy_setBalance, legacy_addSelfDestruct,
   legacy_addBalance, legacy_gasLeft, erase_pair, erase_state, erase_same])
 
-private theorem selfdestruct_before (ctx : CallContext) (s : Checked.Frame.State)
+private theorem selfdestruct_before (ctx : Checked.CallContext) (s : Checked.Frame.State)
     (hr : ctx.block.rules.stateGas = none) :
-    Square (Checked.HaltOp.run ctx s .selfdestruct) (Staging.HaltOp.run ctx s.toLegacy .selfdestruct) := by
-  simp only [Checked.HaltOp.run, Staging.HaltOp.run, hr]
+    Square (Checked.HaltOp.run ctx s .selfdestruct) (Staging.HaltOp.run ctx.inLegacy s.toLegacy .selfdestruct) := by
+  simp only [Checked.HaltOp.run, Staging.HaltOp.run, Checked.CallContext.inLegacy_rules,
+    Checked.CallContext.inLegacy_recipient, hr]
   apply Frame.Exit.catchHalt
   refine Square.bind (Frame.State.popToAddress s) ?_
   rintro ⟨donee, s1⟩
   dsimp only
   simp only [erase_pair, erase_state, erase_same]
-  cases ha : ctx.block.rules.access <;>
-    try (by_cases hcold : donee ∈ s1.accessedAddresses <;>
+  have access (schedule : AccessSchedule) : (∃ gas, schedule = .flat gas) ∨ schedule = .eip2929 := by
+    cases schedule
+    · exact .inl ⟨_, rfl⟩
+    · exact .inr rfl
+  rcases access ctx.block.rules.access with ⟨_, ha⟩ | ha <;> simp only [ha]
+  all_goals try (by_cases hcold : donee ∈ s1.accessedAddresses <;>
       simp only [recordAccountRead_accessedAddresses, legacy_recordAccountRead_accessedAddresses,
         legacy_accessedAddresses, hcold, not_true_eq_false, not_false_eq_true, ↓reduceIte])
   all_goals
@@ -90,10 +97,11 @@ private theorem selfdestruct_before (ctx : CallContext) (s : Checked.Frame.State
     · selfdestruct_align
       split <;> rfl
 
-private theorem selfdestruct_amsterdam (ctx : CallContext) (s : Checked.Frame.State) (sg : StateGasRules)
+private theorem selfdestruct_amsterdam (ctx : Checked.CallContext) (s : Checked.Frame.State) (sg : StateGasRules)
     (hr : ctx.block.rules.stateGas = some sg) :
-    Square (Checked.HaltOp.run ctx s .selfdestruct) (Staging.HaltOp.run ctx s.toLegacy .selfdestruct) := by
-  simp only [Checked.HaltOp.run, Staging.HaltOp.run, hr]
+    Square (Checked.HaltOp.run ctx s .selfdestruct) (Staging.HaltOp.run ctx.inLegacy s.toLegacy .selfdestruct) := by
+  simp only [Checked.HaltOp.run, Staging.HaltOp.run, Checked.CallContext.inLegacy_rules,
+    Checked.CallContext.inLegacy_recipient, hr]
   apply Frame.Exit.catchHalt
   refine Square.bind (Frame.State.assertDynamic s ctx) ?_
   intro _
@@ -117,8 +125,8 @@ private theorem selfdestruct_amsterdam (ctx : CallContext) (s : Checked.Frame.St
     · selfdestruct_align
       split <;> rfl
 
-theorem HaltOp.run (ctx : CallContext) (s : Checked.Frame.State) (h : Jaune.HaltOp) :
-    Square (Checked.HaltOp.run ctx s h) (Staging.HaltOp.run ctx s.toLegacy h) := by
+theorem HaltOp.run (ctx : Checked.CallContext) (s : Checked.Frame.State) (h : Jaune.HaltOp) :
+    Square (Checked.HaltOp.run ctx s h) (Staging.HaltOp.run ctx.inLegacy s.toLegacy h) := by
   cases h with
   | stop => rfl
   | return_ | revert =>

@@ -43,13 +43,13 @@ turned into a step at the next program counter, by the definition of `NextOp.ste
 theorem NextOp.pushRow_step_eq (xs : Bytes) (hxs : xs.length ≤ 32) (r : Frame.Running) :
     Step.ofHalt (r.pc + (NextOp.push xs hxs).size)
         (r.state.liftMachine ((NextOp.pushRow xs).step r.context.block.rules.opcodes
-          ⟨r.pc, r.context.toChecked⟩)) =
+          ⟨r.pc, r.context⟩)) =
       NextOp.step r (.push xs hxs) := rfl
 
 theorem NextOp.pushRow?_step_eq {n : Jaune.NextOp} {row : WordRow}
     (hrow : NextOp.pushRow? n = some row) (r : Frame.Running) :
     Step.ofHalt (r.pc + n.size)
-        (r.state.liftMachine (row.step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩)) =
+        (r.state.liftMachine (row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩)) =
       NextOp.step r n := by
   cases n <;> simp only [NextOp.pushRow?, Option.some.injEq, reduceCtorEq] at hrow
   subst hrow
@@ -58,11 +58,11 @@ theorem NextOp.pushRow?_step_eq {n : Jaune.NextOp} {row : WordRow}
 /-- A push keeps the world, the substate and the trail, on both channels. -/
 theorem NextOp.pushRow_lift_keeps (xs : Bytes) (r : Frame.Running) :
     (match r.state.liftMachine ((NextOp.pushRow xs).step r.context.block.rules.opcodes
-        ⟨r.pc, r.context.toChecked⟩) with
+        ⟨r.pc, r.context⟩) with
       | .ok s' | .error (_, s') =>
         s'.world = r.state.world ∧ s'.substate = r.state.substate ∧ s'.trail = r.state.trail) := by
   unfold Frame.State.liftMachine
-  cases (NextOp.pushRow xs).step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩ r.state.machine <;>
+  cases (NextOp.pushRow xs).step r.context.block.rules.opcodes ⟨r.pc, r.context⟩ r.state.machine <;>
     exact ⟨rfl, rfl, rfl⟩
 
 /-- A push depends on the fork only through `opcodes.push0`. -/
@@ -73,8 +73,8 @@ theorem NextOp.push_step_congr_fork (xs : Bytes) (hxs : xs.length ≤ 32) (r : F
         (.push xs hxs) =
       NextOp.step r (.push xs hxs) := by
   rw [← NextOp.pushRow_step_eq xs hxs, ← NextOp.pushRow_step_eq xs hxs]
-  simp only [BenvStat.rules] at h ⊢
+  simp only [BlockContext.rules] at h ⊢
   rw [NextOp.pushRow_step_irrel xs (Fork.ruleSet f').opcodes
-    (Fork.ruleSet r.context.block.fork).opcodes _ ⟨r.pc, r.context.toChecked⟩ h.symm]
+    (Fork.ruleSet r.context.block.fork).opcodes _ ⟨r.pc, r.context⟩ h.symm]
 
 end Jaune.Checked

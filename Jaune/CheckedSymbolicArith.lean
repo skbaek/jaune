@@ -91,7 +91,7 @@ theorem step_stackUnderflow (r : Frame.Running) (op : Op)
   | [_], _ => rfl
 
 /-- Prepend a covered binary operation to a run from its successor, preserving its end. -/
-def prepend {pc : Nat} {ctx : Jaune.CallContext} {pre : Frame.State} {e : Frame.Run.End}
+def prepend {pc : Nat} {ctx : CallContext} {pre : Frame.State} {e : Frame.Run.End}
     (op : Op) (x y : U256) (rest : List U256)
     (decoded : PlainOp.At ctx.code pc op.rinst)
     (stack : pre.machine.stack = x :: y :: rest)

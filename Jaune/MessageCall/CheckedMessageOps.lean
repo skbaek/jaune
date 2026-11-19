@@ -72,6 +72,38 @@ def completeDelegationAccess (s : Frame.State) (delegated : Bool) (adr : Address
 
 /-! ### Building a child's message -/
 
+/-- The message a call-family operation sends its child. -/
+def callMessage (ctx : CallContext) (gas : Nat) (value : U256) (caller target codeAddress : Address)
+    (transfersValue isStaticcall : Bool) (calldata : Bytes) (code : ByteArray)
+    (disablePrecompiles : Bool) : Message :=
+  { context :=
+      { caller := caller, recipient := target, value := value, calldata := calldata, code := code
+        depthLeft := ctx.depthLeft - 1, isStatic := isStaticcall || ctx.isStatic, tx := ctx.tx
+        block := ctx.block }
+    kind := .call
+    codeAddress := some codeAddress
+    target := some target
+    gas := gas
+    stateGasGrant := 0
+    transfersValue := transfersValue
+    disablePrecompiles := disablePrecompiles }
+
+/-- The message a creation operation sends its child: the initcode is the code run, the calldata
+is empty. -/
+def createMessage (ctx : CallContext) (createGas : Nat) (endowment : U256) (newAddress : Address)
+    (initcode : Bytes) : Message :=
+  { context :=
+      { caller := ctx.recipient, recipient := newAddress, value := endowment, calldata := []
+        code := .mk <| .mk initcode, depthLeft := ctx.depthLeft - 1, isStatic := false
+        tx := ctx.tx, block := ctx.block }
+    kind := .create
+    codeAddress := none
+    target := none
+    gas := createGas
+    stateGasGrant := 0
+    transfersValue := true
+    disablePrecompiles := false }
+
 /-! ### The four tails -/
 
 /-- `generic_create` before state gas: the initcode bound, the child grant, the preflight, the
@@ -101,7 +133,7 @@ def genericCreate.step (ctx : CallContext) (s : Frame.State) (endowment : U256)
        target.code.size ≠ 0) then
       let s ← s.push 0
       return .done (.ok s)
-    let message := Staging.createMessage ctx createGas endowment newAddress calldata
+    let message := createMessage ctx createGas endowment newAddress calldata
     return .spawn ⟨message, s⟩ ⟨.create newAddress, false⟩
 
 /-- `generic_call` before state gas: the depth check, and the spawn. -/
@@ -117,7 +149,7 @@ def genericCall.step (ctx : CallContext) (s : Frame.State) (gas : Nat) (value : 
   else
     let calldata := s1.memory.data.sliceD inputIndex inputSize 0
     let message :=
-      Staging.callMessage ctx gas value caller target codeAddress shouldTransferValue isStaticcall
+      callMessage ctx gas value caller target codeAddress shouldTransferValue isStaticcall
         calldata code disablePrecompiles
     .spawn ⟨message, s1⟩ ⟨.call outputIndex outputSize, false⟩
 
@@ -138,7 +170,7 @@ def genericCallAmsterdam.step (ctx : CallContext) (state : StateGasRules) (s : F
   else
     let calldata := s1.memory.data.sliceD inputIndex inputSize 0
     let message :=
-      { Staging.callMessage ctx gas value caller target codeAddress shouldTransferValue isStaticcall
+      { callMessage ctx gas value caller target codeAddress shouldTransferValue isStaticcall
           calldata code disablePrecompiles
         with stateGasGrant := reservoir }
     .spawn ⟨message, s1⟩ ⟨.call outputIndex outputSize, newAccountCharged⟩
@@ -172,7 +204,7 @@ def genericCreateAmsterdam.step (ctx : CallContext) (state : StateGasRules) (s :
     let ⟨reservoir, s⟩ := s.drainStateGasReservoir
     let s := s.incrNonce ctx.recipient
     let message :=
-      { Staging.createMessage ctx createGas endowment newAddress calldata with stateGasGrant := reservoir }
+      { createMessage ctx createGas endowment newAddress calldata with stateGasGrant := reservoir }
     return .spawn ⟨message, s⟩ ⟨.create newAddress, decide newAccountCharged⟩
 
 /-! ### The step -/

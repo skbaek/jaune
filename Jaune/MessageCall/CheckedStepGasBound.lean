@@ -32,7 +32,7 @@ theorem Frame.Exit.reverted_settledGasLe_iff (bytes : Bytes) (s : Frame.State)
 
 /-- An exit can settle, a continuation spends gas, and a child plus its checkpoint costs
 strictly less than the calling frame's starting measure. -/
-def Step.GasBound (ctx : Jaune.CallContext) (n : Nat) : Step → Prop
+def Step.GasBound (ctx : CallContext) (n : Nat) : Step → Prop
   | .exit e => e.SettledGasLe n
   | .next _ s => s.machine.gasMeasure < n
   | .spawn child _ _ => child.message.gas + child.checkpoint.machine.gasMeasure < n ∧
@@ -43,7 +43,7 @@ private theorem spill_le (s : Frame.State) : s.spill ≤ s.machine.gasMeasure :=
     s.machine.gasLeft + s.machine.stateGas.spilled + s.machine.stateGas.committedSpill
   omega
 
-private theorem ofHalt_bound {ctx : Jaune.CallContext} {pc n : Nat}
+private theorem ofHalt_bound {ctx : CallContext} {pc n : Nat}
     {x : Except (ExceptionalHalt × Frame.State) Frame.State}
     (h : Walk (·.machine.gasMeasure ≤ n) (·.machine.gasMeasure < n) x) :
     (Step.ofHalt pc x).GasBound ctx n := by
@@ -51,7 +51,7 @@ private theorem ofHalt_bound {ctx : Jaune.CallContext} {pc n : Nat}
   | error p => exact (spill_le p.2).trans h
   | ok s => exact h
 
-private theorem messageStep_bound {ctx : Jaune.CallContext} {n pc : Nat} (o : MessageOp.Outcome)
+private theorem messageStep_bound {ctx : CallContext} {n pc : Nat} (o : MessageOp.Outcome)
     (h : o.GasDecreasing ctx n ∧ o.Halt n) : (o.toStep pc).GasBound ctx n := by
   cases o with
   | done result =>

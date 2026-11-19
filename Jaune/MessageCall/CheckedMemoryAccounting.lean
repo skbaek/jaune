@@ -33,7 +33,7 @@ private theorem push_done_ne_spawn (d : Frame.State) (c : Frame) (p : Staging.Pe
 
 /-- A call's spawn: the child's gas is the grant, the checkpoint is the caller with its return
 data cleared, and the caller waits on its output window. -/
-theorem genericCall.step_spawn_call {ctx : Jaune.CallContext} {parent : Frame.State} {gas : Nat}
+theorem genericCall.step_spawn_call {ctx : CallContext} {parent : Frame.State} {gas : Nat}
     {value : U256} {caller target codeAddress : Address}
     {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat}
@@ -51,7 +51,7 @@ theorem genericCall.step_spawn_call {ctx : Jaune.CallContext} {parent : Frame.St
     exact ⟨rfl, rfl, rfl⟩
 
 /-- A call's child runs under its caller's block and transaction records. -/
-theorem genericCall.step_spawn_context {ctx : Jaune.CallContext} {parent : Frame.State} {gas : Nat}
+theorem genericCall.step_spawn_context {ctx : CallContext} {parent : Frame.State} {gas : Nat}
     {value : U256} {caller target codeAddress : Address}
     {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat}
@@ -67,7 +67,7 @@ theorem genericCall.step_spawn_context {ctx : Jaune.CallContext} {parent : Frame
     exact ⟨rfl, rfl⟩
 
 /-- A call's child receives the requested input window of its caller's memory. -/
-theorem genericCall.step_spawn_data {ctx : Jaune.CallContext} {parent : Frame.State} {gas : Nat}
+theorem genericCall.step_spawn_data {ctx : CallContext} {parent : Frame.State} {gas : Nat}
     {value : U256} {caller target codeAddress : Address}
     {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat}
@@ -85,7 +85,7 @@ theorem genericCall.step_spawn_data {ctx : Jaune.CallContext} {parent : Frame.St
 
 /-- The spawned call's input has the requested length, even when reading beyond the caller's
 materialized memory. -/
-theorem genericCall.step_spawn_data_length {ctx : Jaune.CallContext} {parent : Frame.State} {gas : Nat}
+theorem genericCall.step_spawn_data_length {ctx : CallContext} {parent : Frame.State} {gas : Nat}
     {value : U256} {caller target codeAddress : Address}
     {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat}
@@ -294,7 +294,7 @@ theorem charged_call_input_length_lt_two_pow_160 {before charged : Frame.State}
   · exact (hcost.trans (Nat.le_add_left _ _)).trans ((Nat.le_add_right _ _).trans hw)
   · omega
 
-theorem call_spawn_transfer_error_reply_bound {ctx : Jaune.CallContext} {s : Frame.State} {gas : Nat}
+theorem call_spawn_transfer_error_reply_bound {ctx : CallContext} {s : Frame.State} {gas : Nat}
     {value : U256} {caller target codeAddress : Address} {transfer staticCall : Bool}
     {ii il oi ol : Nat} {code : ByteArray} {disabled : Bool} {child : Frame} {p : Staging.Pending} {fault : Fault}
     (hspawn : genericCall.step ctx s gas value caller target codeAddress transfer staticCall ii il oi ol code disabled =
@@ -525,7 +525,7 @@ private theorem push_returnData {s t : Frame.State} {w : U256} (h : s.push w = .
   rfl
 
 private theorem genericCall_reply
-    (ctx : Jaune.CallContext) (s : Frame.State) (gas : Nat) (value : U256) (caller target codeAddress : Address)
+    (ctx : CallContext) (s : Frame.State) (gas : Nat) (value : U256) (caller target codeAddress : Address)
     (transfer staticCall : Bool) (ii il oi ol : Nat) (code : ByteArray) (disabled : Bool)
     (hn : ctx.block.rules.stateGas = none) (hgas : gas < 2 ^ 256 + Gas.callStipend) (hi : il < 2 ^ 160) :
     CallReplyBound ctx.block.rules (genericCall.step ctx s gas value caller target codeAddress transfer staticCall
@@ -576,7 +576,7 @@ local macro "reply_stack_simp" : tactic => `(tactic|
     Frame.State.withMachine, bind, Except.bind, Pure.pure, Except.pure, MessageOp.Outcome.ofExcept])
 
 private theorem call_reply_fixed
-    (ctx : Jaune.CallContext) (s : Frame.State) (gas callee value ii il oi ol : U256) (rest : List U256)
+    (ctx : CallContext) (s : Frame.State) (gas callee value ii il oi ol : U256) (rest : List U256)
     (hs : s.stack = gas :: callee :: value :: ii :: il :: oi :: ol :: rest)
     (hn : ctx.block.rules.stateGas = none) (hsource : Machine.memoryPotential s.machine < 2 ^ 256 ∨ il.toNat < 2 ^ 160) :
     CallReplyBound ctx.block.rules (MessageOp.step ctx s .call) := by
@@ -600,7 +600,7 @@ private theorem call_reply_fixed
       · exact bound
 
 private theorem call_reply_paid
-    (ctx : Jaune.CallContext) (s : Frame.State) (hn : ctx.block.rules.stateGas = none)
+    (ctx : CallContext) (s : Frame.State) (hn : ctx.block.rules.stateGas = none)
     (hpot : Machine.memoryPotential s.machine < 2 ^ 256) :
     CallReplyBound ctx.block.rules (MessageOp.step ctx s .call) := by
   rcases s with ⟨⟨stack, mem, left, meter, rd⟩, world, sub, trail⟩
@@ -658,7 +658,7 @@ private theorem zero_call_step_cost {s charged : Frame.State} {gas : U256} {extr
   exact hp
 
 private theorem zero_call_resume_aux
-    {ctx : Jaune.CallContext} {before charged : Frame.State} {gas : U256} {extra cs ii il oi ol : Nat}
+    {ctx : CallContext} {before charged : Frame.State} {gas : U256} {extra cs ii il oi ol : Nat}
     {caller target codeAddress : Address} {transfer staticCall : Bool} {code : ByteArray} {disabled : Bool}
     {child : Frame} {p : Staging.Pending} {r : Frame.Result} {rules : ForkRules}
     {x : Except (ExceptionalHalt × Frame.State) Frame.State}
@@ -713,7 +713,7 @@ theorem call_spawn_code_reply_bound
 
 /-- The actual grant and input of a spawned native call bound its raw output. -/
 theorem call_spawn_native_reply_bound
-    {ctx : Jaune.CallContext} {before charged : Frame.State} {gas value : U256} {extra ii il oi ol : Nat}
+    {ctx : CallContext} {before charged : Frame.State} {gas value : U256} {extra ii il oi ol : Nat}
     {caller target codeAddress : Address} {transfer staticCall : Bool} {code : ByteArray} {disabled : Bool}
     {child : Frame} {p : Staging.Pending} {world : World} {adr : Address} {e : Frame.Exit} (base : Nat)
     (hc : before.chargeGas (base + before.extCost [(ii, il), (oi, ol)]) = .ok charged)
@@ -729,7 +729,7 @@ theorem call_spawn_native_reply_bound
   · rw [(genericCall.step_spawn_call hs).1]
     exact calculateMsgCallGas_word_child_lt_with_stipend ..
 
-private theorem zero_call_resume_size {ctx : Jaune.CallContext} {before charged post : Frame.State}
+private theorem zero_call_resume_size {ctx : CallContext} {before charged post : Frame.State}
     {gas value : U256} {extra cs ii il oi ol : Nat} {caller target codeAddress : Address}
     {transfer staticCall : Bool} {code : ByteArray} {disabled : Bool} {child : Frame} {p : Staging.Pending}
     {rules : ForkRules} {r : Frame.Result}
@@ -744,7 +744,7 @@ private theorem zero_call_resume_size {ctx : Jaune.CallContext} {before charged 
   exact hm
 
 /-- A caller with a word-sized potential receives fewer than 2^160 bytes after CALL. -/
-theorem MessageOp.step_call_returnData_length_lt_two_pow_160 (ctx : Jaune.CallContext) (s : Frame.State)
+theorem MessageOp.step_call_returnData_length_lt_two_pow_160 (ctx : CallContext) (s : Frame.State)
     (hn : ctx.block.rules.stateGas = none) (hpot : Machine.memoryPotential s.machine < 2 ^ 256) :
     match MessageOp.step ctx s .call with
     | .done x => ∀ post, x = .ok post → post.returnData.length < 2 ^ 160
@@ -754,7 +754,7 @@ theorem MessageOp.step_call_returnData_length_lt_two_pow_160 (ctx : Jaune.CallCo
   exact call_reply_paid ctx s hn hpot
 
 /-- A word-sized gas operand and a 160-bit input length bound the return data of CALL. -/
-theorem MessageOp.step_call_returnData_length_lt_two_pow_160_of_input_size (ctx : Jaune.CallContext) (s : Frame.State)
+theorem MessageOp.step_call_returnData_length_lt_two_pow_160_of_input_size (ctx : CallContext) (s : Frame.State)
     (gas callee value ii il oi ol : U256) (rest : List U256)
     (hs : s.stack = gas :: callee :: value :: ii :: il :: oi :: ol :: rest)
     (hn : ctx.block.rules.stateGas = none) (hi : il.toNat < 2 ^ 160) :
@@ -767,7 +767,7 @@ theorem MessageOp.step_call_returnData_length_lt_two_pow_160_of_input_size (ctx 
 
 /-- For a zero-value spawn, settlement and resume account for child gas, caller memory and the copy window. -/
 theorem zero_call_spawn_resume_raw_accounting
-    {ctx : Jaune.CallContext} {before charged : Frame.State} {gas : U256} {extra cs ii il oi ol : Nat}
+    {ctx : CallContext} {before charged : Frame.State} {gas : U256} {extra cs ii il oi ol : Nat}
     {caller target codeAddress : Address} {transfer staticCall : Bool} {code : ByteArray} {disabled : Bool}
     {child : Frame} {p : Staging.Pending} {rules : ForkRules} {run : Frame.Running}
     {x : Except (ExceptionalHalt × Frame.State) Frame.State}

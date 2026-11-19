@@ -1,4 +1,4 @@
-import Jaune.MessageCall.CheckedContext
+import Jaune.MessageCall.CheckedFrame
 import Jaune.Run.Transaction
 
 namespace Jaune.Checked
@@ -45,6 +45,7 @@ def Transaction.prepare (block : BlockContext) (originalState : State)
         originalState } }
     kind := if target.isNone then .create else .call
     codeAddress := target
+    target
     gas := allocation.executionGas
     stateGasGrant := allocation.stateGasReservoir
     transfersValue := true

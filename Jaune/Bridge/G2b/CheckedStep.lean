@@ -6,6 +6,8 @@ import Jaune.MessageCall.FinalStep
 
 namespace Jaune.MemorySimulation
 
+variable [Checked.LegacyTransaction]
+
 instance eraseStep : Erases Checked.Step Staging.Step := ⟨Checked.Step.toLegacy⟩
 
 private theorem Step.ofHalt (pc : Nat) {x : Except (ExceptionalHalt × Checked.Frame.State) Checked.Frame.State}
@@ -39,13 +41,15 @@ theorem NextOp.step (r : Checked.Frame.Running) (op : Jaune.NextOp) :
   rw [Checked.NextOp.step_arms]
   cases op <;> simp only [Checked.Arms.NextOp.step, Staging.NextOp.step]
   case message m =>
-    change erase _ = (Staging.MessageOp.step r.context r.state.toLegacy m).toStep _
+    change erase _ = (Staging.MessageOp.step r.context.inLegacy r.state.toLegacy m).toStep _
     rw [← (show (Checked.MessageOp.step r.context r.state m).toLegacy = _ from MessageOp.step ..)]
     apply MessageOp.Outcome.toStep
   case plain op =>
     apply Step.ofHalt
     rw [← Checked.PlainOp.run_arms]
-    exact PlainOp.runCore r.pc r.context r.state op
+    simpa only [Checked.PlainOp.run, Staging.PlainOp.run, Checked.Frame.Running.toLegacy,
+      Checked.CallContext.inLegacy, Checked.CallContext.toChecked_toLegacy] using
+      PlainOp.runCore r.pc r.context.inLegacy r.state op
   all_goals repeat' first | apply Step.ofHalt | checked_sq_one
 
 theorem step (r : Checked.Frame.Running) :
@@ -60,7 +64,7 @@ theorem step (r : Checked.Frame.Running) :
     | jump j => exact congrArg Except.ok (Step.ofJump (JumpOp.run r j)).symm
     | halt h =>
       dsimp only
-      rw [show r.toLegacy.context = r.context from rfl, show r.toLegacy.state = r.state.toLegacy from rfl,
+      rw [show r.toLegacy.context = r.context.inLegacy from rfl, show r.toLegacy.state = r.state.toLegacy from rfl,
         ← (show erase (Checked.HaltOp.run r.context r.state h) = _ from HaltOp.run ..)]
       cases Checked.HaltOp.run r.context r.state h <;> rfl
 

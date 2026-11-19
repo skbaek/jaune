@@ -312,15 +312,15 @@ read view, is `PlainOp.run`, on both channels with their touches. -/
 theorem PlainOp.readRow?_run_eq {op : Jaune.PlainOp} {row : ReadRow}
     (hrow : PlainOp.readRow? op = some row) (r : Frame.Running) :
     r.state.liftRead r.context.block.rules
-        (row.step r.context.block.rules r.context.toChecked r.state.readView) = PlainOp.run r op := by
+        (row.step r.context.block.rules r.context r.state.readView) = PlainOp.run r op := by
   simp only [PlainOp.run, PlainOp.runCore, PlainOp.readRow?_eq_some.1 hrow, Family.run]
 
 theorem PlainOp.readRow?_run_fork_eq (f : Fork) {op : Jaune.PlainOp} {row : ReadRow}
     (hrow : PlainOp.readRow? op = some row) (r : Frame.Running)
     (hf : r.context.block.fork = f) :
     r.state.liftRead (Fork.ruleSet f)
-        (row.step (Fork.ruleSet f) r.context.toChecked r.state.readView) = PlainOp.run r op := by
-  have hr : r.context.block.rules = Fork.ruleSet f := by simp only [BenvStat.rules, hf]
+        (row.step (Fork.ruleSet f) r.context r.state.readView) = PlainOp.run r op := by
+  have hr : r.context.block.rules = Fork.ruleSet f := by simp only [BlockContext.rules, hf]
   rw [← hr]
   exact PlainOp.readRow?_run_eq hrow r
 
@@ -357,7 +357,7 @@ theorem PlainOp.read_run_congr_fork {op : Jaune.PlainOp} (hread : (PlainOp.readR
     cases op <;> simp only [PlainOp.readRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at hrow <;>
       subst hrow
     all_goals
-      simp only [Frame.State.liftRead, ReadRow.step, ReadPrice.quote, BenvStat.rules,
+      simp only [Frame.State.liftRead, ReadRow.step, ReadPrice.quote, BlockContext.rules,
         Frame.State.applyReadTouch, Frame.State.recordAccountRead,
         Frame.State.recordStorageRead] at h1 h2 h3 h4 ⊢
       simp only [h1, h2, h3, h4]

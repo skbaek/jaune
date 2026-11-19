@@ -13,8 +13,8 @@ export Erases (erase)
 instance (priority := low) eraseId : Erases α α := ⟨id⟩
 instance eraseMachine : Erases Checked.Machine Machine := ⟨Checked.Machine.toLegacy⟩
 instance eraseState : Erases Checked.Frame.State Frame.State := ⟨Checked.Frame.State.toLegacy⟩
-instance eraseFrame : Erases Checked.Frame Frame := ⟨Checked.Frame.toLegacy⟩
-instance eraseRunning : Erases Checked.Frame.Running Frame.Running := ⟨Checked.Frame.Running.toLegacy⟩
+instance eraseFrame [Checked.LegacyTransaction] : Erases Checked.Frame Frame := ⟨fun f => f.toLegacy⟩
+instance eraseRunning [Checked.LegacyTransaction] : Erases Checked.Frame.Running Frame.Running := ⟨fun r => r.toLegacy⟩
 instance eraseExit : Erases Checked.Frame.Exit Frame.Exit := ⟨Checked.Frame.Exit.toLegacy⟩
 instance eraseProd [Erases α γ] [Erases β δ] : Erases (α × β) (γ × δ) :=
   ⟨fun p => (erase p.1, erase p.2)⟩
@@ -222,9 +222,10 @@ theorem Square.assert {ε ζ : Type} [Erases ε ζ] (p : Prop) [Decidable p] (e 
     Square (Except.assert p e) (Except.assert p (erase e : ζ)) := by
   by_cases hp : p <;> simp only [Except.assert, hp, ite_true, ite_false] <;> rfl
 
-theorem Frame.State.assertDynamic (s : Checked.Frame.State) (ctx : CallContext) :
-    Square (s.assertDynamic ctx) (s.toLegacy.assertDynamic ctx) := by
+theorem Frame.State.assertDynamic [Checked.LegacyTransaction] (s : Checked.Frame.State) (ctx : Checked.CallContext) :
+    Square (s.assertDynamic ctx) (s.toLegacy.assertDynamic ctx.inLegacy) := by
   unfold Checked.Frame.State.assertDynamic Jaune.Frame.State.assertDynamic
+  rw [Checked.CallContext.inLegacy_isStatic]
   apply Square.assert
 
 theorem Frame.State.memWrite (s : Checked.Frame.State) (i : Nat) (b : Bytes) :

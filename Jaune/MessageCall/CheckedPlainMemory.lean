@@ -288,12 +288,12 @@ theorem Family.run_memoryPotential (f : Family) (x : Frame.Running) :
   | shuffle row => exact Walk.liftMachine (Hm := Within _) (Pm := Within _) (ShuffleRow.step_within row _ _)
   | memory row => exact Walk.liftMachine (Hm := Within _) (Pm := Within _) (MemoryRow.step_within row _ _ _)
   | log row =>
-    have core := LogRow.step_within row x.context.toChecked x.state.machine
-    show Walk _ _ (x.state.liftLog (row.step x.context.toChecked x.state.machine))
+    have core := LogRow.step_within row x.context x.state.machine
+    show Walk _ _ (x.state.liftLog (row.step x.context x.state.machine))
     unfold Frame.State.liftLog
     split <;> rename_i he <;> rw [he] at core <;> exact core
   | read row =>
-    have hr := ReadRow.step_within row x.context.block.rules x.context.toChecked x.state.readView x.state.machine
+    have hr := ReadRow.step_within row x.context.block.rules x.context x.state.readView x.state.machine
     show Walk _ _ (x.state.liftRead _ _)
     unfold Frame.State.liftRead
     split <;> rename_i he <;> rw [he] at hr
@@ -329,7 +329,7 @@ theorem Family.run_memoryPotential (f : Family) (x : Frame.Running) :
         exact within_of rfl (by simp only [Frame.State.withMachine_machine, Machine.gasMeasure]; omega)
 
 /-- A plain instruction can spend the frame’s gas and expand memory up to its original potential. -/
-theorem PlainOp.runCore_memoryPotential (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.PlainOp)
+theorem PlainOp.runCore_memoryPotential (pc : Nat) (ctx : CallContext) (s : Frame.State) (op : Jaune.PlainOp)
     (_hn : ctx.block.rules.stateGas = none) :
     Walk (fun t => Machine.memoryPotential t.machine ≤ Machine.memoryPotential s.machine)
       (fun t => Machine.memoryPotential t.machine ≤ Machine.memoryPotential s.machine)

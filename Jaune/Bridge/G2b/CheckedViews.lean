@@ -354,17 +354,17 @@ def Exec.toLegacy {r out} (run : Exec r out) :
   | .cont hs next => .cont (by rw [MemorySimulation.step, hs]; rfl) next.toLegacy
   | .doneErr hs he hr =>
     .doneErr (step_spawn_toLegacy hs) (enter_done_toLegacy he)
-      (by rw [resumeCaller_toLegacy, show r.toLegacy.context = r.context from rfl, hr]; rfl)
+      (by rw [resumeCaller_toLegacy, show r.toLegacy.context.block.rules = r.context.block.rules from rfl, hr]; rfl)
   | .doneOk hs he hr next =>
     .doneOk (step_spawn_toLegacy hs) (enter_done_toLegacy he)
-      (by rw [resumeCaller_toLegacy, show r.toLegacy.context = r.context from rfl, hr]; rfl)
+      (by rw [resumeCaller_toLegacy, show r.toLegacy.context.block.rules = r.context.block.rules from rfl, hr]; rfl)
       next.toLegacy
   | .runErr hs he child hr =>
     .runErr (step_spawn_toLegacy hs) (enter_run_toLegacy he) child.toLegacy
-      (by rw [settle_bind_toLegacy, resumeCaller_toLegacy, show r.toLegacy.context = r.context from rfl, hr]; rfl)
+      (by rw [settle_bind_toLegacy, resumeCaller_toLegacy, show r.toLegacy.context.block.rules = r.context.block.rules from rfl, hr]; rfl)
   | .runOk hs he child hr next =>
     .runOk (step_spawn_toLegacy hs) (enter_run_toLegacy he) child.toLegacy
-      (by rw [settle_bind_toLegacy, resumeCaller_toLegacy, show r.toLegacy.context = r.context from rfl, hr]; rfl)
+      (by rw [settle_bind_toLegacy, resumeCaller_toLegacy, show r.toLegacy.context.block.rules = r.context.block.rules from rfl, hr]; rfl)
       next.toLegacy
 termination_by structural run
 

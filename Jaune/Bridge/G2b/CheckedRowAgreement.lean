@@ -21,6 +21,8 @@ hence every `Fork`, on both channels. They are the inputs of the cut's bridge
 
 namespace Jaune.Checked.Arms
 
+variable [LegacyTransaction]
+
 open Jaune
 
 private theorem liftMachine_congr {ε : Type} {f g : Machine → Except (ε × Machine) Machine}
@@ -228,7 +230,7 @@ for every running frame (hence every `Fork`). -/
 theorem NextOp.pushRow_step_eq (xs : Bytes) (hxs : xs.length ≤ 32) (r : Frame.Running) :
     Step.ofHalt (r.pc + (NextOp.push xs hxs).size)
         (r.state.liftMachine ((NextOp.pushRow xs).step r.context.block.rules.opcodes
-          ⟨r.pc, r.context.toChecked⟩)) =
+          ⟨r.pc, r.context⟩)) =
       NextOp.step r (.push xs hxs) := by
   simp only [NextOp.step]
   by_cases hnil : xs = []
@@ -251,7 +253,7 @@ theorem NextOp.pushRow_step_eq (xs : Bytes) (hxs : xs.length ≤ 32) (r : Frame.
 theorem NextOp.pushRow?_step_eq {n : Jaune.NextOp} {row : WordRow}
     (hrow : NextOp.pushRow? n = some row) (r : Frame.Running) :
     Step.ofHalt (r.pc + n.size)
-        (r.state.liftMachine (row.step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩)) =
+        (r.state.liftMachine (row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩)) =
       NextOp.step r n := by
   cases n <;> simp only [NextOp.pushRow?, Option.some.injEq, reduceCtorEq] at hrow
   subst hrow

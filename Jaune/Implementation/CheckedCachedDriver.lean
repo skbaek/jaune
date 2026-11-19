@@ -58,7 +58,7 @@ private theorem CalldataCache.get_fst
 
 /-- The cached producer of a call's spawn: `Checked.genericCall.step` with the calldata slice
 taken through the cache. -/
-private def genericCall.stepCached (ctx : Jaune.CallContext) (s : Frame.State) (gas : Nat)
+private def genericCall.stepCached (ctx : CallContext) (s : Frame.State) (gas : Nat)
     (value : U256) (caller target codeAddress : Address) (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat) (code : ByteArray)
     (disablePrecompiles : Bool) (cache : Option CalldataCache) :
@@ -71,11 +71,11 @@ private def genericCall.stepCached (ctx : Jaune.CallContext) (s : Frame.State) (
   else
     let (calldata, cache) := CalldataCache.get cache s1.memory.data inputIndex inputSize
     let message :=
-      Staging.callMessage ctx gas value caller target codeAddress shouldTransferValue isStaticcall
+      callMessage ctx gas value caller target codeAddress shouldTransferValue isStaticcall
         calldata code disablePrecompiles
     (.spawn ⟨message, s1⟩ ⟨.call outputIndex outputSize, false⟩, cache)
 
-private theorem genericCall.stepCached_fst (ctx : Jaune.CallContext) (s : Frame.State) (gas : Nat)
+private theorem genericCall.stepCached_fst (ctx : CallContext) (s : Frame.State) (gas : Nat)
     (value : U256) (caller target codeAddress : Address) (shouldTransferValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat) (code : ByteArray)
     (disablePrecompiles : Bool) (cache : Option CalldataCache) :
@@ -118,7 +118,7 @@ private theorem Except.map_pure' {ε α β : Type} (f : α → β) (a : α) :
 /-- Cache-threaded specialization of `Checked.MessageOp.step`. The four call opcodes' arms without
 state gas are reproduced verbatim with `genericCall.stepCached` in place of `genericCall.step` and
 the cache threaded through the early returns; every other arm is the ordinary definition. -/
-private def MessageOp.stepCached (ctx : Jaune.CallContext) (s : Frame.State)
+private def MessageOp.stepCached (ctx : CallContext) (s : Frame.State)
     (cache : Option CalldataCache) : MessageOp → MessageOp.Outcome × Option CalldataCache
   | .call =>
     match ctx.block.rules.stateGas with
@@ -265,7 +265,7 @@ private def MessageOp.stepCached (ctx : Jaune.CallContext) (s : Frame.State)
         Except (ExceptionalHalt × Frame.State) (MessageOp.Outcome × Option CalldataCache))
   | x => (MessageOp.step ctx s x, cache)
 
-private theorem MessageOp.stepCached_fst (ctx : Jaune.CallContext) (s : Frame.State)
+private theorem MessageOp.stepCached_fst (ctx : CallContext) (s : Frame.State)
     (cache : Option CalldataCache) (x : MessageOp) :
     (MessageOp.stepCached ctx s cache x).1 = MessageOp.step ctx s x := by
   cases x <;> simp only [MessageOp.stepCached, MessageOp.step]

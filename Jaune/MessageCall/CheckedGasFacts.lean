@@ -8,7 +8,7 @@ open Jaune
 
 /-- Jumps charge execution gas on every continuation. A rejected jump stays within
 the same upper bound as its input, including failures while popping its operands. -/
-theorem JumpOp.runCore_gas (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.JumpOp)
+theorem JumpOp.runCore_gas (pc : Nat) (ctx : CallContext) (s : Frame.State) (op : Jaune.JumpOp)
     {n : Nat} (h : s.machine.gasMeasure ≤ n) :
     Walk (·.machine.gasMeasure ≤ n) (fun p => p.2.machine.gasMeasure < s.machine.gasMeasure)
       (JumpOp.runCore pc ctx s op) := by
@@ -63,7 +63,7 @@ private theorem catchHalt_gas {n : Nat}
     exact h
   | ok res => exact h
 
-private theorem return_gas (ctx : Jaune.CallContext) (s : Frame.State) (isRevert : Bool) :
+private theorem return_gas (ctx : CallContext) (s : Frame.State) (isRevert : Bool) :
     ExitGas s.machine.gasMeasure
       (HaltOp.run ctx s (if isRevert then .revert else .return_)) := by
   cases isRevert <;> simp only [Bool.false_eq_true, ↓reduceIte, HaltOp.run] <;>
@@ -103,7 +103,7 @@ private theorem subtractBalance_machine {s t : Frame.State} {a : Address} {v : U
   case none => contradiction
   case some w => cases h; rfl
 
-private theorem selfdestruct_gas (ctx : Jaune.CallContext) (s : Frame.State) :
+private theorem selfdestruct_gas (ctx : CallContext) (s : Frame.State) :
     ExitGas s.machine.gasMeasure (HaltOp.run ctx s .selfdestruct) := by
   cases hs : ctx.block.rules.stateGas with
   | none =>
@@ -163,7 +163,7 @@ private theorem selfdestruct_gas (ctx : Jaune.CallContext) (s : Frame.State) :
             Frame.State.withWorld_machine, hwv] <;> omega
 
 /-- Every exit from a halting instruction stays within the starting gas measure. -/
-theorem HaltOp.run_gas (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.HaltOp)
+theorem HaltOp.run_gas (ctx : CallContext) (s : Frame.State) (op : Jaune.HaltOp)
     (exit : Frame.Exit) (h : HaltOp.run ctx s op = .ok exit) :
     exit.state.machine.gasMeasure ≤ s.machine.gasMeasure := by
   cases op with

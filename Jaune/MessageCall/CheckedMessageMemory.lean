@@ -31,7 +31,7 @@ private theorem refund_potential (s : Frame.State) (gas : Nat) :
       s.machine.stateGas.committedSpill + calculateMemoryGasCost s.memory.size + gas
   omega
 
-theorem genericCall.step_memoryAccounted (ctx : Jaune.CallContext) (s : Frame.State) (gas : Nat)
+theorem genericCall.step_memoryAccounted (ctx : CallContext) (s : Frame.State) (gas : Nat)
     (value : U256) (caller target codeAddress : Address) (transfer staticCall : Bool)
     (ii il oi ol : Nat) (code : ByteArray) (disabled : Bool) {n : Nat}
     (h : Machine.memoryPotential s.machine + gas ≤ n)
@@ -45,7 +45,7 @@ theorem genericCall.step_memoryAccounted (ctx : Jaune.CallContext) (s : Frame.St
     · intro _ hs; exact hs
   · exact ⟨h, hw⟩
 
-theorem genericCreate.step_memoryAccounted (ctx : Jaune.CallContext) (s : Frame.State) (value : U256)
+theorem genericCreate.step_memoryAccounted (ctx : CallContext) (s : Frame.State) (value : U256)
     (address : Address) (start size : Nat) {n : Nat} (h : Machine.memoryPotential s.machine ≤ n) :
     (genericCreate.step ctx s value address start size).MemoryAccounted n := by
   have grant : except64th s.gasLeft ≤ s.gasLeft := Nat.sub_le _ _
@@ -91,7 +91,7 @@ local macro "pop_message_operands" : tactic => `(tactic| repeat' first
   | (refine Walk.bind (Frame.State.popToNat_memoryPotential (by first | assumption | exact Nat.le_refl _)) ?_;
       intro ⟨_, _⟩ _))
 
-private theorem create_memory (ctx : Jaune.CallContext) (s : Frame.State) (hn : ctx.block.rules.stateGas = none) :
+private theorem create_memory (ctx : CallContext) (s : Frame.State) (hn : ctx.block.rules.stateGas = none) :
     (MessageOp.step ctx s .create).MemoryAccounted (Machine.memoryPotential s.machine) := by
   simp only [MessageOp.step, hn]
   apply outcome_memory
@@ -101,7 +101,7 @@ private theorem create_memory (ctx : Jaune.CallContext) (s : Frame.State) (hn : 
   apply genericCreate.step_memoryAccounted
   exact ht
 
-private theorem create2_memory (ctx : Jaune.CallContext) (s : Frame.State) (hn : ctx.block.rules.stateGas = none) :
+private theorem create2_memory (ctx : CallContext) (s : Frame.State) (hn : ctx.block.rules.stateGas = none) :
     (MessageOp.step ctx s .create2).MemoryAccounted (Machine.memoryPotential s.machine) := by
   simp only [MessageOp.step, hn]
   split
@@ -140,7 +140,7 @@ private theorem grant_le_cost (value gas left ext extra : Nat)
   simp only [calculateMsgCallGas]
   split <;> omega
 
-private theorem value_stipend_le_transfer (ctx : Jaune.CallContext) (value : U256) (extra : Nat) :
+private theorem value_stipend_le_transfer (ctx : CallContext) (value : U256) (extra : Nat) :
     (if value.toNat = 0 then 0 else Gas.callStipend) ≤ extra + (if value = 0 then 0 else ctx.block.rules.gas.callValue) := by
   by_cases hv : value = 0
   · subst value
@@ -187,7 +187,7 @@ local macro "call_charge" : tactic => `(tactic| (
        · apply genericCall.step_memoryAccounted <;> first | exact ht | exact call_output_covered _ _ _ _ _)))
 
 local macro "call_memory_fact " name:ident " for " op:term : command =>
-  `(private theorem $name (ctx : Jaune.CallContext) (s : Frame.State) (hn : ctx.block.rules.stateGas = none) :
+  `(private theorem $name (ctx : CallContext) (s : Frame.State) (hn : ctx.block.rules.stateGas = none) :
       (MessageOp.step ctx s $op).MemoryAccounted (Machine.memoryPotential s.machine) := by
       simp only [MessageOp.step, hn]
       call_charge)
@@ -198,7 +198,7 @@ call_memory_fact staticcall_memory for .staticcall
 call_memory_fact delegatecall_memory for .delegatecall
 
 /-- The charged memory ranges cover the return target and the child grant remains inside the original potential. -/
-theorem MessageOp.step_memoryAccounted (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.MessageOp)
+theorem MessageOp.step_memoryAccounted (ctx : CallContext) (s : Frame.State) (op : Jaune.MessageOp)
     (hn : ctx.block.rules.stateGas = none) :
     (MessageOp.step ctx s op).MemoryAccounted (Machine.memoryPotential s.machine) := by
   cases op with

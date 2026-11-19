@@ -1,5 +1,6 @@
 import Batteries.Tactic.OpenPrivate
 import Jaune.MessageCall.CheckedStep
+import Jaune.Bridge.G2b.CheckedFrame
 
 /-!
 # Bridge: the per-opcode checked arms, the old side of the family dispatch (G2b, W4 step H)
@@ -78,7 +79,7 @@ def sstoreBerlin (ctx : Jaune.CallContext) (s : Frame.State) :
   let s := s.withRefund <|
     sstoreNewRefundCounter rules.gas new_value original_value current_value s.refund
   let s ← s.chargeGas gasCost3
-  s.assertDynamic ctx
+  s.assertDynamic ctx.toChecked
   -- `set_storage` asserts `get_account_optional(address)`: an account read.
   .ok ((s.recordAccountRead rules ct).setStorageValue ct key new_value)
 
@@ -113,7 +114,7 @@ def sstoreLegacy (ctx : Jaune.CallContext) (s : Frame.State) :
     | true, .eip2929 =>
       sstoreNewRefundCounter rules.gas new_value original_value current_value s.refund
   let s ← s.chargeGas gasCost3
-  s.assertDynamic ctx
+  s.assertDynamic ctx.toChecked
   .ok ((s.recordAccountRead rules ct).setStorageValue ct key new_value)
 
 /-- `SSTORE` under the Amsterdam shape (`stateGas = some state`): the static check first, an
@@ -121,7 +122,7 @@ explicit gas check, warming before the reads, and the state creation in the seco
 def sstoreAmsterdam (state : StateGasRules) (ctx : Jaune.CallContext) (s : Frame.State) :
     Except (ExceptionalHalt × Frame.State) Frame.State := do
   let rules := ctx.block.rules
-  s.assertDynamic ctx
+  s.assertDynamic ctx.toChecked
   let ⟨key, s⟩ ← s.pop
   let ⟨new_value, s⟩ ← s.pop
   let ct := ctx.recipient
@@ -422,11 +423,11 @@ def runCore (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) :
         let ⟨key, s⟩ ← s.pop
         let ⟨new_value, s⟩ ← s.pop
         let s ← s.chargeGas Gas.warmStorageReadCost
-        s.assertDynamic ctx
+        s.assertDynamic ctx.toChecked
         .ok (s.setTransientValue ctx.recipient key new_value)
       | some _ => do
         -- Static execution is rejected before stack access or charging.
-        s.assertDynamic ctx
+        s.assertDynamic ctx.toChecked
         let ⟨key, s⟩ ← s.pop
         let ⟨new_value, s⟩ ← s.pop
         let s ← s.chargeGas Gas.warmStorageReadCost
@@ -434,13 +435,13 @@ def runCore (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) :
     else .error (.invalidOpcode .none, s)
 
 /-- A running frame's plain instruction (the form W4 states its table over). -/
-def run (x : Frame.Running) (op : Jaune.PlainOp) :
+def run [LegacyTransaction] (x : Frame.Running) (op : Jaune.PlainOp) :
     Except (ExceptionalHalt × Frame.State) Frame.State :=
-  runCore x.pc x.context x.state op
+  runCore x.pc x.context.inLegacy x.state op
 
 end PlainOp
 /-- The operations that go on to the next instruction. -/
-def NextOp.step (r : Frame.Running) (n : NextOp) : Step :=
+def NextOp.step [LegacyTransaction] (r : Frame.Running) (n : NextOp) : Step :=
   let pc := r.pc + n.size
   let rules := r.context.block.rules
   match n with

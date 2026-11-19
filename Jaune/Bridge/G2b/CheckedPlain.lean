@@ -83,7 +83,10 @@ private theorem sstoreLegacy (ctx : CallContext) (s : Checked.Frame.State) :
 private theorem sstoreAmsterdam (sg : StateGasRules) (ctx : CallContext) (s : Checked.Frame.State) :
     Square (Checked.Arms.PlainOp.sstoreAmsterdam sg ctx s) (Staging.PlainOp.sstoreAmsterdam sg ctx s.toLegacy) := by
   unfold Checked.Arms.PlainOp.sstoreAmsterdam Staging.PlainOp.sstoreAmsterdam
-  refine Square.bind (Frame.State.assertDynamic s ctx) ?_
+  have dynamic : Square (s.assertDynamic ctx.toChecked) (s.toLegacy.assertDynamic ctx) := by
+    unfold Checked.Frame.State.assertDynamic Jaune.Frame.State.assertDynamic
+    exact Square.assert (!ctx.isStatic) (ExceptionalHalt.writeInStaticContext .none, s)
+  refine Square.bind dynamic ?_
   intro u
   refine Square.bind (Frame.State.pop s) ?_
   rintro ⟨k, t⟩
@@ -388,7 +391,7 @@ private theorem PlainOp.runArms (pc : Nat) (ctx : CallContext) (s : Checked.Fram
 /-- The checked plain instructions against the staged ones, composed through the family dispatch's
 bridge (`Checked.PlainOp.runCore_arms`) and the per-opcode squares above. -/
 theorem PlainOp.runCore (pc : Nat) (ctx : CallContext) (s : Checked.Frame.State) (op : Jaune.PlainOp) :
-    Square (Checked.PlainOp.runCore pc ctx s op) (Staging.PlainOp.runCore pc ctx s.toLegacy op) := by
+    Square (Checked.PlainOp.runCore pc ctx.toChecked s op) (Staging.PlainOp.runCore pc ctx s.toLegacy op) := by
   rw [Checked.PlainOp.runCore_arms]
   exact PlainOp.runArms pc ctx s op
 

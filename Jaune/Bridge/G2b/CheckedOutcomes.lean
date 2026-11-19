@@ -6,6 +6,8 @@ import Jaune.MessageCall.FinalExec
 
 namespace Jaune.Checked
 
+variable [LegacyTransaction]
+
 def Step.toLegacy : Step → Staging.Step
   | .exit e => .exit e.toLegacy
   | .next pc s => .next pc s.toLegacy

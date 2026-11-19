@@ -57,7 +57,7 @@ def finalState (base : Checked.Frame.State) (a b : UInt8) (g : Nat) (s : List U2
   Checked.SymbolicArith.post .add (Bytes.toU256 [b]) (Bytes.toU256 [a]) s (afterSecond base a b g s)
 
 /-- The call context running this code. -/
-abbrev context (ctx : CallContext) (a b : UInt8) : CallContext := { ctx with code := code a b }
+abbrev context (ctx : Checked.CallContext) (a b : UInt8) : Checked.CallContext := { ctx with code := code a b }
 
 theorem final_stack (base : Checked.Frame.State) (a b : UInt8) (g : Nat) (s : List U256) :
     (finalState base a b g s).machine.stack = (Bytes.toU256 [b] + Bytes.toU256 [a]) :: s := rfl
@@ -92,7 +92,7 @@ theorem final_substate_trail (base : Checked.Frame.State) (a b : UInt8) (g : Nat
 
 section Steps
 
-variable (ctx : CallContext) (base : Checked.Frame.State) (a b : UInt8) (g : Nat) (s : List U256)
+variable (ctx : Checked.CallContext) (base : Checked.Frame.State) (a b : UInt8) (g : Nat) (s : List U256)
 
 theorem step0 (gas : 9 ≤ g) (room : s.length < 1023) :
     Checked.step ⟨0, context ctx a b, initial base g s⟩ = .ok (.next 2 (afterFirst base a g s)) :=
@@ -127,7 +127,7 @@ theorem step5 :
 end Steps
 
 /-- One run on the checked interpreter. -/
-def execution (ctx : CallContext) (base : Checked.Frame.State) (a b : UInt8) (g : Nat) (s : List U256)
+def execution (ctx : Checked.CallContext) (base : Checked.Frame.State) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) :
     Checked.Frame.Run ⟨0, context ctx a b, initial base g s⟩
       (.exit (.ok (.finished [] (finalState base a b g s)))) :=
@@ -160,7 +160,7 @@ private theorem halt_inv {r : Checked.Frame.Running} {x out}
     cases h.symm.trans h'
 
 /-- Every run from this start state ends in `finalState`. -/
-theorem result (ctx : CallContext) (base : Checked.Frame.State) (a b : UInt8) (g : Nat) (s : List U256)
+theorem result (ctx : Checked.CallContext) (base : Checked.Frame.State) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) {out}
     (d : Checked.Frame.Run ⟨0, context ctx a b, initial base g s⟩ (.exit out)) :
     out = .ok (.finished [] (finalState base a b g s)) :=
@@ -170,13 +170,13 @@ theorem result (ctx : CallContext) (base : Checked.Frame.State) (a b : UInt8) (g
   halt_inv d5 (step5 ctx base a b g s)
 
 /-- Adequacy connects the run to the checked total interpreter. -/
-theorem interpreter (ctx : CallContext) (base : Checked.Frame.State) (a b : UInt8) (g : Nat) (s : List U256)
+theorem interpreter (ctx : Checked.CallContext) (base : Checked.Frame.State) (a b : UInt8) (g : Nat) (s : List U256)
     (gas : 9 ≤ g) (room : s.length < 1023) :
     Checked.exec ⟨0, context ctx a b, initial base g s⟩ = .ok (.finished [] (finalState base a b g s)) :=
   (Checked.Frame.Run.exec_iff _ _).mp ⟨execution ctx base a b g s gas room⟩
 
 /-- The premises are satisfiable: exactly nine gas and an empty stack. -/
-theorem concrete (ctx : CallContext) (base : Checked.Frame.State) (a b : UInt8) :
+theorem concrete (ctx : Checked.CallContext) (base : Checked.Frame.State) (a b : UInt8) :
     Checked.exec ⟨0, context ctx a b, initial base 9 []⟩ = .ok (.finished [] (finalState base a b 9 [])) ∧
       (finalState base a b 9 []).machine.gasLeft = 0 :=
   ⟨interpreter ctx base a b 9 [] (by decide) (by decide), final_gas base a b 9 []⟩
@@ -212,7 +212,7 @@ error: Tactic `decide` proved that the proposition
 is false
 -/
 #guard_msgs in
-example (ctx : CallContext) (base : Checked.Frame.State) (a b : UInt8) :
+example (ctx : Checked.CallContext) (base : Checked.Frame.State) (a b : UInt8) :
     Checked.exec ⟨0, context ctx a b, initial base 8 []⟩ = .ok (.finished [] (finalState base a b 8 [])) :=
   interpreter ctx base a b 8 [] (by decide) (by decide)
 

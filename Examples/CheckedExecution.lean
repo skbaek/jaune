@@ -55,7 +55,7 @@ theorem final_substate_trail (base : Checked.Frame.State) (a b : UInt8) :
   ⟨rfl, rfl⟩
 
 /-- A data-valued run on the checked interpreter, from `Checked.SymbolicPush.prepend`. -/
-def execution (ctx : CallContext) (base : Checked.Frame.State) (a b : UInt8) :
+def execution (ctx : Checked.CallContext) (base : Checked.Frame.State) (a b : UInt8) :
     Checked.Frame.Run ⟨0, { ctx with code := code a b }, initial base⟩
       (.exit (.ok (.finished [] (finalState base a b)))) := by
   apply Checked.SymbolicPush.prepend [a] (by simp) (first a b)
@@ -70,7 +70,7 @@ def execution (ctx : CallContext) (base : Checked.Frame.State) (a b : UInt8) :
     (l := .stop) (last a b))
 
 /-- Adequacy connects the run to the checked total interpreter. -/
-theorem interpreter (ctx : CallContext) (base : Checked.Frame.State) (a b : UInt8) :
+theorem interpreter (ctx : Checked.CallContext) (base : Checked.Frame.State) (a b : UInt8) :
     Checked.exec ⟨0, { ctx with code := code a b }, initial base⟩ =
       .ok (.finished [] (finalState base a b)) :=
   (Checked.Frame.Run.exec_iff _ _).mp ⟨execution ctx base a b⟩

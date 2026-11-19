@@ -33,6 +33,8 @@ tag.
 
 namespace Jaune.Bridge.G2b.CheckedTrace
 
+variable [Checked.LegacyTransaction]
+
 open Jaune
 
 /-! ### What the projection forgets -/
@@ -193,7 +195,7 @@ theorem resume_output {rules : ForkRules} {p : Pending} {saved : Frame.State}
     · intro h; cases h; rfl
 
 /-- How the old caller goes on after its child, against the new one. -/
-inductive ResumedRel (msg : Message) (pc : Nat) (sta : Sevm) (context : CallContext) :
+inductive ResumedRel (msg : Message) (pc : Nat) (sta : Sevm) (context : Checked.CallContext) :
     Execution → Except Fault (Except (ExceptionalHalt × Checked.Frame.State) Checked.Frame.State) →
     Prop
   /-- Both go on, from related states. -/
@@ -213,8 +215,9 @@ theorem resumedRel {msg : Message} {r : Checked.Frame.Running} {evm : Evm} (h : 
     ResumedRel msg pc evm.sta r.context
       (Trace.resumedRaw evm.sta.benvStat.rules (Checked.Trace.frame child) p settled)
       (Checked.Trace.resumed r.context.block.rules child (Staging.Pending.ofLegacy p) settled) := by
-  have hctx : r.context = CallContext.ofSevm evm.sta := congrArg Frame.Running.context h.running
-  have hrules : r.context.block.rules = evm.sta.benvStat.rules := by rw [hctx]; rfl
+  have hctx : r.context.inLegacy = CallContext.ofSevm evm.sta := congrArg Frame.Running.context h.running
+  have hrules : r.context.block.rules = evm.sta.benvStat.rules :=
+      congrArg (fun ctx : CallContext => ctx.block.rules) hctx
   rcases settled with fault | result
   · apply ResumedRel.stopped
     · intro s hs; cases hs
@@ -246,7 +249,7 @@ theorem resumedRel {msg : Message} {r : Checked.Frame.Running} {evm : Evm} (h : 
         Checked.Trace.devm, hs, state_eq]
     · have hdo : d.output = [] := (ho d rfl).trans hpo
       refine .resumed ⟨?_, h.static, hdo⟩ ?_
-      · show (⟨pc, r.context, s.toLegacy⟩ : Frame.Running) = ⟨pc, CallContext.ofSevm evm.sta, _⟩
+      · show (⟨pc, r.context.inLegacy, s.toLegacy⟩ : Frame.Running) = ⟨pc, CallContext.ofSevm evm.sta, _⟩
         rw [hctx, ← hr]
       · simp only [normRaw, Frame.Exit.ofExecution, Frame.Exit.toExecution, Checked.Trace.resumedRaw,
           Checked.Trace.devm, hr, hdo, state_eq]
@@ -614,9 +617,9 @@ theorem checked_run_none {msg : Message} {r : Checked.Frame.Running} {fuel : Nat
         sink (.instruction context (Checked.Trace.evm msg r)
           (Checked.Trace.step (.ok (.spawn child p pc))))
         sink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) (.run (Checked.Trace.evm child.message cr)))
+          (Checked.Trace.frame child) (.run (Checked.Trace.evm child.toLegacy.message cr)))
         let n ← Checked.Trace.CertifiedResult.nextFrame <$>
-          Checked.Trace.execFueled sink child.message cr fuel
+          Checked.Trace.execFueled sink child.toLegacy.message cr fuel
             { context with frame := nextFrame, depth := context.depth + 1 } (nextFrame + 1)
         sink (.exited context none)
         pure n) := by
@@ -646,9 +649,9 @@ theorem checked_run_ok {msg : Message} {r : Checked.Frame.Running} {fuel : Nat}
         sink (.instruction context (Checked.Trace.evm msg r)
           (Checked.Trace.step (.ok (.spawn child p pc))))
         sink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) (.run (Checked.Trace.evm child.message cr)))
+          (Checked.Trace.frame child) (.run (Checked.Trace.evm child.toLegacy.message cr)))
         let n ← Checked.Trace.CertifiedResult.nextFrame <$>
-          Checked.Trace.execFueled sink child.message cr fuel
+          Checked.Trace.execFueled sink child.toLegacy.message cr fuel
             { context with frame := nextFrame, depth := context.depth + 1 } (nextFrame + 1)
         sink (.settled { context with frame := nextFrame, depth := context.depth + 1 }
           (Checked.Trace.frame child) (x >>= Checked.settle child))
@@ -691,9 +694,9 @@ theorem checked_run_stop {msg : Message} {r : Checked.Frame.Running} {fuel : Nat
         sink (.instruction context (Checked.Trace.evm msg r)
           (Checked.Trace.step (.ok (.spawn child p pc))))
         sink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) (.run (Checked.Trace.evm child.message cr)))
+          (Checked.Trace.frame child) (.run (Checked.Trace.evm child.toLegacy.message cr)))
         let n ← Checked.Trace.CertifiedResult.nextFrame <$>
-          Checked.Trace.execFueled sink child.message cr fuel
+          Checked.Trace.execFueled sink child.toLegacy.message cr fuel
             { context with frame := nextFrame, depth := context.depth + 1 } (nextFrame + 1)
         sink (.settled { context with frame := nextFrame, depth := context.depth + 1 }
           (Checked.Trace.frame child) (x >>= Checked.settle child))
@@ -742,7 +745,7 @@ theorem execFueled_events (fuel : Nat) :
     have hrel := step_rel h
     have hpost := OutputWalk.Evm.step_post evm h.output
     have hevm := h.evm_eq
-    have hctx : r.context = CallContext.ofSevm evm.sta := congrArg Frame.Running.context h.running
+    have hctx : r.context.inLegacy = CallContext.ofSevm evm.sta := congrArg Frame.Running.context h.running
     cases hc : Checked.step r with
     | error fault =>
       rw [hc] at hrel
@@ -792,7 +795,7 @@ theorem execFueled_events (fuel : Nat) :
           rw [hdevm]
           refine bind_congr fun _ => ?_
           refine ih msg _ _ context nextFrame ⟨?_, h.static, hd⟩
-          show (⟨pc, r.context, s.toLegacy⟩ : Frame.Running) = ⟨pc, CallContext.ofSevm evm.sta, _⟩
+          show (⟨pc, r.context.inLegacy, s.toLegacy⟩ : Frame.Running) = ⟨pc, CallContext.ofSevm evm.sta, _⟩
           rw [hctx, hs]
         | spawn child p pc' =>
           rw [hw] at hrel; simp [Jaune.Step.observe, Except.map, Checked.Step.toLegacy] at hrel
@@ -820,7 +823,8 @@ theorem execFueled_events (fuel : Nat) :
             simp only [normalize, normStep, hevm, Checked.Trace.step, normPending,
               Checked.Trace.pending]
             rfl
-          have hrules : r.context.block.rules = evm.sta.benvStat.rules := by rw [hctx]; rfl
+          have hrules : r.context.block.rules = evm.sta.benvStat.rules :=
+            congrArg (fun ctx : CallContext => ctx.block.rules) hctx
           have hentry := enter_rel child
           cases hce : Checked.enter child with
           | done settled =>
@@ -861,9 +865,9 @@ theorem execFueled_events (fuel : Nat) :
                 simp only [Frame.Entry.observe, Checked.Frame.Entry.toLegacy,
                   Staging.Frame.Entry.run.injEq] at hentry
                 exact ⟨cevm, rfl, hentry.symm⟩
-            have hR : Related child.message cr cevm :=
+            have hR : Related child.toLegacy.message cr cevm :=
               ⟨hcr, enterWith_run_sta hwe, enter_run_output hwe⟩
-            have hcevm : Checked.Trace.evm child.message cr = normEvm cevm := hR.evm_eq
+            have hcevm : Checked.Trace.evm child.toLegacy.message cr = normEvm cevm := hR.evm_eq
             have hrun := execFueled_rel fuel hR
             cases hcx : (Checked.execFueled cr fuel).run with
             | none =>
@@ -873,7 +877,7 @@ theorem execFueled_events (fuel : Nat) :
               rw [checked_run_none sink hc hce hcx, trace_run_none _ hw hwe hwx]
               simp only [hinstr]; simp only [normalize_entered_run, normalize_exited_none, hcevm]
               refine bind_congr fun _ => bind_congr fun _ => ?_
-              rw [ih child.message cr cevm _ (nextFrame + 1) hR]
+              rw [ih child.toLegacy.message cr cevm _ (nextFrame + 1) hR]
             | some x =>
               rw [hcx] at hrun
               obtain ⟨raw, hwx, hraw⟩ : ∃ raw, (Jaune.execFueled cevm fuel).run = some raw ∧
@@ -903,7 +907,7 @@ theorem execFueled_events (fuel : Nat) :
                 simp only [normalize_entered_run, normalize_settled, normalize_resumed, hcevm,
                   hsettle, hraw']
                 refine bind_congr fun _ => bind_congr fun _ => ?_
-                rw [ih child.message cr cevm _ (nextFrame + 1) hR]
+                rw [ih child.toLegacy.message cr cevm _ (nextFrame + 1) hR]
                 refine bind_congr fun n => bind_congr fun _ => bind_congr fun _ => ?_
                 exact ih msg _ _ context n hR'
               | stopped hne hraw' =>
@@ -912,7 +916,7 @@ theorem execFueled_events (fuel : Nat) :
                 simp only [normalize_entered_run, normalize_exited_some, normalize_settled,
                   normalize_resumed, hcevm, hsettle, stopRows, hraw']
                 refine bind_congr fun _ => bind_congr fun _ => ?_
-                rw [ih child.message cr cevm _ (nextFrame + 1) hR]
+                rw [ih child.toLegacy.message cr cevm _ (nextFrame + 1) hR]
 
 theorem trace_exec (evm : Evm) (context : Trace.Context) (nextFrame : Nat) :
     Trace.ExecutionResult.nextFrame <$> Trace.exec sink evm context nextFrame =
@@ -1001,7 +1005,7 @@ theorem runFrame_nextFrame (f : Checked.Frame) (runId : String) :
         simp only [Frame.Entry.observe, Checked.Frame.Entry.toLegacy,
           Staging.Frame.Entry.run.injEq] at hentry
         exact ⟨evm, rfl, hentry.symm⟩
-    have hR : Related f.message r evm := ⟨hr, enterWith_run_sta hwe, enterWith_run_output rfl hwe⟩
+    have hR : Related f.toLegacy.message r evm := ⟨hr, enterWith_run_sta hwe, enterWith_run_output rfl hwe⟩
     have hsettle : settle (Checked.Trace.frame f) (Jaune.exec evm) = Checked.exec r >>= Checked.settle f := by
       apply settle_rel
       rw [← Checked.exec_toLegacy, hr]
@@ -1065,6 +1069,7 @@ theorem runFrame_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
 
 /-- The checked top-level frame of a message projects onto the `Devm` one. -/
 theorem frame_topFrame (msg : Msg) (isCreate : Bool) :
+    letI : Checked.LegacyTransaction := ⟨msg.tenv.stat⟩
     Checked.Trace.frame (Checked.Trace.topFrame msg isCreate) = Frame.ofTop msg isCreate := rfl
 
 /-- **The message runner's call.** `TraceMain` traces a message as
@@ -1072,11 +1077,14 @@ theorem frame_topFrame (msg : Msg) (isCreate : Bool) :
 `Checked.Trace.topFrame msg isCreate` writes the same rows and returns the same result. -/
 theorem runFrame_json_top (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
     (trace frames : IO.FS.Handle) (msg : Msg) (isCreate : Bool) (runId : String) :
+    letI : Checked.LegacyTransaction := ⟨msg.tenv.stat⟩
     (fun x => (x.value, x.nextFrame)) <$>
         Checked.Trace.runFrame (TraceJson.sink cfg state trace frames)
           (Checked.Trace.topFrame msg isCreate) runId =
       (fun x => (x.value, x.nextFrame)) <$>
         Trace.runFrame (TraceJson.sink cfg state trace frames) (Frame.ofTop msg isCreate) runId := by
+  letI : Checked.LegacyTransaction := ⟨msg.tenv.stat⟩
+  change (fun x => (x.value, x.nextFrame)) <$> Checked.Trace.runFrame _ _ _ = _
   rw [runFrame_json, frame_topFrame]
 
 /-- The Checked result and the observation consumed by the current transaction settlement. -/
@@ -1101,9 +1109,13 @@ def runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
         rfl
       refund_erases := rfl }
   | .ok prepared =>
+    let template : Checked.LegacyTransaction := ⟨match prepared with
+      | .frame waiting _ => waiting.message.context.tx
+      | .refused .. => msg.tenv.stat⟩
     let reportRefund := if msg.benv.stat.rules.stateGas.isNone && msg.target.isSome
       then authorizationRefund else fun _ => pure ()
-    let result ← Checked.Trace.runPrepared sink reportRefund (Checked.TopLevel.ofPreparation msg prepared hp) runId
+    let result ← @Checked.Trace.runPrepared template m _ sink reportRefund
+      (Checked.TopLevel.ofPreparation msg prepared hp) runId
     pure {
       value := result.run.map (Checked.TopLevel.observe msg prepared)
       run := result.run
@@ -1128,7 +1140,7 @@ theorem runMessage_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State
       (fun _ => ()) <$> TraceTransaction.runMessage
         (TraceJson.sink cfg state trace frames) authorizationRefund msg runId := by
   let sink := TraceJson.sink cfg state trace frames
-  have frameEffects (f : Checked.Frame) :
+  have frameEffects [Checked.LegacyTransaction] (f : Checked.Frame) :
       (fun _ => ()) <$> Checked.Trace.runFrame sink f runId =
         (fun _ => ()) <$> Trace.runFrame sink (Checked.Trace.frame f) runId := by
     have h := congrArg (Functor.map (fun _ => ())) (runFrame_json cfg state trace frames f runId)
@@ -1144,9 +1156,11 @@ theorem runMessage_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State
     split <;> rename_i h <;> rw [hp] at h <;> cases h
     simp only [Checked.TopLevel.ofPreparation, Checked.Trace.runPrepared, pure_bind, map_pure]
   · rename_i frame refund hp
+    letI : Checked.LegacyTransaction := ⟨frame.message.context.tx⟩
     let f := Checked.Frame.ofLegacy frame (Staging.TopLevel.prepare_frame_memory_wf hp)
     have hFrame := frameEffects f
-    rw [frame_eq, Checked.Frame.toLegacy_ofLegacy] at hFrame
+    have projection : f.toLegacy = frame := Checked.Frame.toLegacy_ofLegacy _ _
+    rw [frame_eq, projection] at hFrame
     unfold runMessage
     split <;> rename_i h <;> rw [hp] at h <;> cases h
     simp only [← bind_pure_comp, sink] at hFrame
@@ -1193,7 +1207,7 @@ theorem TransactionResult.frame_originalState {benv bout tx index}
     (result : TransactionResult benv bout tx index) {msg : Msg} {f : Checked.Frame}
     {refund : Nat} {run : Checked.Frame.TopRun}
     (h : result.checkedRun = some (msg, .frame f refund run)) :
-    f.message.context.toChecked.tx.originalState = benv.state := by
+    f.message.context.tx.originalState = benv.state := by
   rw [result.observesChecked] at h
   cases hp : TraceTransaction.prepareTransaction benv bout tx index with
   | error => rw [hp] at h; cases h

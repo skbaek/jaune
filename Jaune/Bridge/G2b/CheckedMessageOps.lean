@@ -3,6 +3,8 @@ import Jaune.Bridge.G2b.CheckedWalk
 
 namespace Jaune.Checked
 
+variable [LegacyTransaction]
+
 def MessageOp.Outcome.toLegacy : MessageOp.Outcome → Staging.MessageOp.Outcome
   | .done (.error (reason, s)) => .done (.error (reason, s.toLegacy))
   | .done (.ok s) => .done (.ok s.toLegacy)
@@ -11,6 +13,8 @@ def MessageOp.Outcome.toLegacy : MessageOp.Outcome → Staging.MessageOp.Outcome
 end Jaune.Checked
 
 namespace Jaune.MemorySimulation
+
+variable [Checked.LegacyTransaction]
 
 instance eraseOutcome : Erases Checked.MessageOp.Outcome Staging.MessageOp.Outcome :=
   ⟨Checked.MessageOp.Outcome.toLegacy⟩
@@ -60,31 +64,39 @@ private theorem memExtends_legacy (s : Checked.Frame.State) (p : List (Nat × Na
 local macro "message_align" : tactic => `(tactic| simp only [accessDelegation_legacy, completeDelegation_legacy,
   delegationCost_legacy, addAccessedAddress_legacy, memExtends_legacy, erase_pair, erase_state, erase_same])
 
-theorem genericCall.step (ctx : CallContext) (s : Checked.Frame.State) (g : Nat) (v : U256)
+theorem genericCall.step (ctx : Checked.CallContext) (s : Checked.Frame.State) (g : Nat) (v : U256)
     (c t a : Address) (transfer static : Bool) (i n o k : Nat) (code : ByteArray) (disable : Bool) :
     Square (Checked.genericCall.step ctx s g v c t a transfer static i n o k code disable)
-      (Staging.genericCall.step ctx s.toLegacy g v c t a transfer static i n o k code disable) := by
+      (Staging.genericCall.step ctx.inLegacy s.toLegacy g v c t a transfer static i n o k code disable) := by
   unfold Checked.genericCall.step Staging.genericCall.step
-  split <;> first | rfl | (apply MessageOp.Outcome.ofExcept; checked_sq_walk)
+  simp only [Checked.CallContext.inLegacy_depthLeft]
+  by_cases hd : ctx.depthLeft = 0 <;> simp only [hd, ↓reduceIte]
+  · apply MessageOp.Outcome.ofExcept
+    checked_sq_walk
+  · rfl
 
-theorem genericCallAmsterdam.step (ctx : CallContext) (rules : StateGasRules) (s : Checked.Frame.State)
+theorem genericCallAmsterdam.step (ctx : Checked.CallContext) (rules : StateGasRules) (s : Checked.Frame.State)
     (g res : Nat) (v : U256) (c t a : Address) (transfer static : Bool) (i n o k : Nat)
     (code : ByteArray) (disable charged insuff : Bool) :
     Square (Checked.genericCallAmsterdam.step ctx rules s g res v c t a transfer static i n o k code disable charged insuff)
-      (Staging.genericCallAmsterdam.step ctx rules s.toLegacy g res v c t a transfer static i n o k code disable charged insuff) := by
+      (Staging.genericCallAmsterdam.step ctx.inLegacy rules s.toLegacy g res v c t a transfer static i n o k code disable charged insuff) := by
   unfold Checked.genericCallAmsterdam.step Staging.genericCallAmsterdam.step
-  split <;> first | rfl | (apply MessageOp.Outcome.ofExcept; cases charged <;> checked_sq_walk)
+  simp only [Checked.CallContext.inLegacy_depthLeft]
+  by_cases hd : ctx.depthLeft = 0 ∨ insuff <;> simp only [hd, ↓reduceIte]
+  · apply MessageOp.Outcome.ofExcept
+    cases charged <;> checked_sq_walk
+  · rfl
 
-theorem genericCreate.step (ctx : CallContext) (s : Checked.Frame.State) (v : U256) (a : Address) (i n : Nat) :
-    Square (Checked.genericCreate.step ctx s v a i n) (Staging.genericCreate.step ctx s.toLegacy v a i n) := by
+theorem genericCreate.step (ctx : Checked.CallContext) (s : Checked.Frame.State) (v : U256) (a : Address) (i n : Nat) :
+    Square (Checked.genericCreate.step ctx s v a i n) (Staging.genericCreate.step ctx.inLegacy s.toLegacy v a i n) := by
   unfold Checked.genericCreate.step Staging.genericCreate.step
   apply MessageOp.Outcome.ofExcept
   checked_sq_walk
 
-theorem genericCreateAmsterdam.step (ctx : CallContext) (rules : StateGasRules) (s : Checked.Frame.State)
+theorem genericCreateAmsterdam.step (ctx : Checked.CallContext) (rules : StateGasRules) (s : Checked.Frame.State)
     (v : U256) (a : Address) (i n : Nat) :
     Square (Checked.genericCreateAmsterdam.step ctx rules s v a i n)
-      (Staging.genericCreateAmsterdam.step ctx rules s.toLegacy v a i n) := by
+      (Staging.genericCreateAmsterdam.step ctx.inLegacy rules s.toLegacy v a i n) := by
   unfold Checked.genericCreateAmsterdam.step Staging.genericCreateAmsterdam.step
   apply MessageOp.Outcome.ofExcept
   checked_sq_walk
@@ -121,116 +133,140 @@ local macro "message_walk" : tactic => `(tactic| repeat' first
   | (with_reducible apply MessageOp.Outcome.ofExcept)
   | checked_sq_one)
 
-private theorem message_call_legacy (ctx : CallContext) (s : Checked.Frame.State)
+private theorem message_call_legacy (ctx : Checked.CallContext) (s : Checked.Frame.State)
     (hr : ctx.block.rules.stateGas = none) :
-    Square (Checked.MessageOp.step ctx s .call) (Staging.MessageOp.step ctx s.toLegacy .call) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .call) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .call) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_call_state (ctx : CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
+private theorem message_call_state (ctx : Checked.CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
     (hr : ctx.block.rules.stateGas = some rules) :
-    Square (Checked.MessageOp.step ctx s .call) (Staging.MessageOp.step ctx s.toLegacy .call) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .call) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .call) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_call (ctx : CallContext) (s : Checked.Frame.State) :
-    Square (Checked.MessageOp.step ctx s .call) (Staging.MessageOp.step ctx s.toLegacy .call) := by
+private theorem message_call (ctx : Checked.CallContext) (s : Checked.Frame.State) :
+    Square (Checked.MessageOp.step ctx s .call) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .call) := by
   cases hr : ctx.block.rules.stateGas with
   | none => exact message_call_legacy ctx s hr
   | some rules => exact message_call_state ctx s rules hr
 
-private theorem message_callcode_legacy (ctx : CallContext) (s : Checked.Frame.State)
+private theorem message_callcode_legacy (ctx : Checked.CallContext) (s : Checked.Frame.State)
     (hr : ctx.block.rules.stateGas = none) :
-    Square (Checked.MessageOp.step ctx s .callcode) (Staging.MessageOp.step ctx s.toLegacy .callcode) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .callcode) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .callcode) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_callcode_state (ctx : CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
+private theorem message_callcode_state (ctx : Checked.CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
     (hr : ctx.block.rules.stateGas = some rules) :
-    Square (Checked.MessageOp.step ctx s .callcode) (Staging.MessageOp.step ctx s.toLegacy .callcode) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .callcode) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .callcode) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_callcode (ctx : CallContext) (s : Checked.Frame.State) :
-    Square (Checked.MessageOp.step ctx s .callcode) (Staging.MessageOp.step ctx s.toLegacy .callcode) := by
+private theorem message_callcode (ctx : Checked.CallContext) (s : Checked.Frame.State) :
+    Square (Checked.MessageOp.step ctx s .callcode) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .callcode) := by
   cases hr : ctx.block.rules.stateGas with
   | none => exact message_callcode_legacy ctx s hr
   | some rules => exact message_callcode_state ctx s rules hr
 
-private theorem message_delegatecall_legacy (ctx : CallContext) (s : Checked.Frame.State)
+private theorem message_delegatecall_legacy (ctx : Checked.CallContext) (s : Checked.Frame.State)
     (hr : ctx.block.rules.stateGas = none) :
-    Square (Checked.MessageOp.step ctx s .delegatecall) (Staging.MessageOp.step ctx s.toLegacy .delegatecall) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .delegatecall) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .delegatecall) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_delegatecall_state (ctx : CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
+private theorem message_delegatecall_state (ctx : Checked.CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
     (hr : ctx.block.rules.stateGas = some rules) :
-    Square (Checked.MessageOp.step ctx s .delegatecall) (Staging.MessageOp.step ctx s.toLegacy .delegatecall) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .delegatecall) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .delegatecall) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_delegatecall (ctx : CallContext) (s : Checked.Frame.State) :
-    Square (Checked.MessageOp.step ctx s .delegatecall) (Staging.MessageOp.step ctx s.toLegacy .delegatecall) := by
+private theorem message_delegatecall (ctx : Checked.CallContext) (s : Checked.Frame.State) :
+    Square (Checked.MessageOp.step ctx s .delegatecall) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .delegatecall) := by
   cases hr : ctx.block.rules.stateGas with
   | none => exact message_delegatecall_legacy ctx s hr
   | some rules => exact message_delegatecall_state ctx s rules hr
 
-private theorem message_staticcall_legacy (ctx : CallContext) (s : Checked.Frame.State)
+private theorem message_staticcall_legacy (ctx : Checked.CallContext) (s : Checked.Frame.State)
     (hr : ctx.block.rules.stateGas = none) :
-    Square (Checked.MessageOp.step ctx s .staticcall) (Staging.MessageOp.step ctx s.toLegacy .staticcall) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .staticcall) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .staticcall) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_staticcall_state (ctx : CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
+private theorem message_staticcall_state (ctx : Checked.CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
     (hr : ctx.block.rules.stateGas = some rules) :
-    Square (Checked.MessageOp.step ctx s .staticcall) (Staging.MessageOp.step ctx s.toLegacy .staticcall) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .staticcall) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .staticcall) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_staticcall (ctx : CallContext) (s : Checked.Frame.State) :
-    Square (Checked.MessageOp.step ctx s .staticcall) (Staging.MessageOp.step ctx s.toLegacy .staticcall) := by
+private theorem message_staticcall (ctx : Checked.CallContext) (s : Checked.Frame.State) :
+    Square (Checked.MessageOp.step ctx s .staticcall) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .staticcall) := by
   cases hr : ctx.block.rules.stateGas with
   | none => exact message_staticcall_legacy ctx s hr
   | some rules => exact message_staticcall_state ctx s rules hr
 
-private theorem message_create_legacy (ctx : CallContext) (s : Checked.Frame.State)
+private theorem message_create_legacy (ctx : Checked.CallContext) (s : Checked.Frame.State)
     (hr : ctx.block.rules.stateGas = none) :
-    Square (Checked.MessageOp.step ctx s .create) (Staging.MessageOp.step ctx s.toLegacy .create) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .create) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .create) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_create_state (ctx : CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
+private theorem message_create_state (ctx : Checked.CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
     (hr : ctx.block.rules.stateGas = some rules) :
-    Square (Checked.MessageOp.step ctx s .create) (Staging.MessageOp.step ctx s.toLegacy .create) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .create) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .create) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_create (ctx : CallContext) (s : Checked.Frame.State) :
-    Square (Checked.MessageOp.step ctx s .create) (Staging.MessageOp.step ctx s.toLegacy .create) := by
+private theorem message_create (ctx : Checked.CallContext) (s : Checked.Frame.State) :
+    Square (Checked.MessageOp.step ctx s .create) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .create) := by
   cases hr : ctx.block.rules.stateGas with
   | none => exact message_create_legacy ctx s hr
   | some rules => exact message_create_state ctx s rules hr
 
-private theorem message_create2_legacy (ctx : CallContext) (s : Checked.Frame.State)
+private theorem message_create2_legacy (ctx : Checked.CallContext) (s : Checked.Frame.State)
     (hr : ctx.block.rules.stateGas = none) :
-    Square (Checked.MessageOp.step ctx s .create2) (Staging.MessageOp.step ctx s.toLegacy .create2) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .create2) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .create2) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_create2_state (ctx : CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
+private theorem message_create2_state (ctx : Checked.CallContext) (s : Checked.Frame.State) (rules : StateGasRules)
     (hr : ctx.block.rules.stateGas = some rules) :
-    Square (Checked.MessageOp.step ctx s .create2) (Staging.MessageOp.step ctx s.toLegacy .create2) := by
-  simp only [Checked.MessageOp.step, Staging.MessageOp.step, hr]
+    Square (Checked.MessageOp.step ctx s .create2) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .create2) := by
+  simp only [Checked.MessageOp.step, Staging.MessageOp.step, Checked.CallContext.inLegacy_rules, Checked.CallContext.inLegacy_caller,
+    Checked.CallContext.inLegacy_recipient, Checked.CallContext.inLegacy_depthLeft,
+    Checked.CallContext.inLegacy_isStatic, Checked.CallContext.inLegacy_value, hr]
   message_walk
 
-private theorem message_create2 (ctx : CallContext) (s : Checked.Frame.State) :
-    Square (Checked.MessageOp.step ctx s .create2) (Staging.MessageOp.step ctx s.toLegacy .create2) := by
+private theorem message_create2 (ctx : Checked.CallContext) (s : Checked.Frame.State) :
+    Square (Checked.MessageOp.step ctx s .create2) (Staging.MessageOp.step ctx.inLegacy s.toLegacy .create2) := by
   cases hr : ctx.block.rules.stateGas with
   | none => exact message_create2_legacy ctx s hr
   | some rules => exact message_create2_state ctx s rules hr
 
-theorem MessageOp.step (ctx : CallContext) (s : Checked.Frame.State) (op : Jaune.MessageOp) :
-    Square (Checked.MessageOp.step ctx s op) (Staging.MessageOp.step ctx s.toLegacy op) := by
+theorem MessageOp.step (ctx : Checked.CallContext) (s : Checked.Frame.State) (op : Jaune.MessageOp) :
+    Square (Checked.MessageOp.step ctx s op) (Staging.MessageOp.step ctx.inLegacy s.toLegacy op) := by
   cases op with
   | call => exact message_call ctx s
   | callcode => exact message_callcode ctx s

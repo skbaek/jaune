@@ -24,6 +24,8 @@ walked here.
 
 namespace Jaune.Checked
 
+variable [LegacyTransaction]
+
 open Jaune
 
 private theorem family_store_persistent {op : Jaune.PlainOp}
@@ -37,23 +39,23 @@ private theorem family_store_transient {op : Jaune.PlainOp}
 /-- **Bridge (the plain instructions):** the family dispatch equals the per-opcode arms, for
 every program counter, call context and frame state (hence every `Fork`), on both channels. -/
 theorem PlainOp.runCore_arms (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State)
-    (op : Jaune.PlainOp) : PlainOp.runCore pc ctx s op = Arms.PlainOp.runCore pc ctx s op := by
+    (op : Jaune.PlainOp) : PlainOp.runCore pc ctx.toChecked s op = Arms.PlainOp.runCore pc ctx s op := by
   cases h : PlainOp.family op with
   | word row =>
     rw [← Arms.PlainOp.wordRow?_runCore_eq (PlainOp.wordRow?_eq_some.2 h) pc ctx s]
-    simp only [PlainOp.runCore, h, Family.run]
+    simp only [PlainOp.runCore, h, Family.run, Jaune.CallContext.toChecked_rules]
   | shuffle row =>
     rw [← Arms.PlainOp.shuffleRow?_runCore_eq (PlainOp.shuffleRow?_eq_some.2 h) pc ctx s]
-    simp only [PlainOp.runCore, h, Family.run]
+    simp only [PlainOp.runCore, h, Family.run, Jaune.CallContext.toChecked_rules]
   | memory row =>
     rw [← Arms.PlainOp.memoryRow?_runCore_eq (PlainOp.memoryRow?_eq_some.2 h) pc ctx s]
-    simp only [PlainOp.runCore, h, Family.run]
+    simp only [PlainOp.runCore, h, Family.run, Jaune.CallContext.toChecked_rules]
   | log row =>
     rw [← Arms.PlainOp.logRow?_runCore_eq (PlainOp.logRow?_eq_some.2 h) pc ctx s]
-    simp only [PlainOp.runCore, h, Family.run]
+    simp only [PlainOp.runCore, h, Family.run, Jaune.CallContext.toChecked_rules]
   | read row =>
     rw [← Arms.PlainOp.readRow?_runCore_eq (PlainOp.readRow?_eq_some.2 h) pc ctx s]
-    simp only [PlainOp.runCore, h, Family.run]
+    simp only [PlainOp.runCore, h, Family.run, Jaune.CallContext.toChecked_rules]
   | store kind =>
     cases kind with
     | persistent =>
@@ -67,8 +69,9 @@ theorem PlainOp.runCore_arms (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.Sta
 
 /-- **Bridge (the plain instructions, on a running frame).** -/
 theorem PlainOp.run_arms (x : Frame.Running) (op : Jaune.PlainOp) :
-    PlainOp.run x op = Arms.PlainOp.run x op :=
-  PlainOp.runCore_arms x.pc x.context x.state op
+    PlainOp.run x op = Arms.PlainOp.run x op := by
+  simpa only [PlainOp.run, Arms.PlainOp.run, CallContext.inLegacy, CallContext.toChecked_toLegacy] using
+    PlainOp.runCore_arms x.pc x.context.inLegacy x.state op
 
 /-- **Bridge (the non-message operations, and the step as a whole):** `NextOp.step`, whose push,
 `DUPN`, `SWAPN` and `EXCHANGE` arms run their rows and whose plain arm runs the family dispatch,

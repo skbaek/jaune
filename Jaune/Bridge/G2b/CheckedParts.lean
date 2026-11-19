@@ -7,17 +7,35 @@ import Jaune.Bridge.G2b.PrecompileInput
 
 namespace Jaune.Checked
 
+variable [LegacyTransaction]
+
+private theorem Frame.legacyKind (f : Frame) : f.toLegacy.message.kind = f.message.kind := rfl
+private theorem Frame.legacyCodeAddress (f : Frame) : f.toLegacy.message.codeAddress = f.message.codeAddress := rfl
+private theorem Frame.legacyDisablePrecompiles (f : Frame) :
+    f.toLegacy.message.disablePrecompiles = f.message.disablePrecompiles := rfl
+private theorem Frame.legacyRules (f : Frame) : f.toLegacy.message.context.block.rules = f.message.context.block.rules := rfl
+private theorem Frame.legacyRecipient (f : Frame) : f.toLegacy.message.context.recipient = f.message.context.recipient := rfl
+private theorem Frame.legacyTransfer (f : Frame) (w : World) :
+    f.toLegacy.message.transfer w = f.message.transfer w := rfl
+
+private theorem Frame.legacyAvailable (f : Frame) (a : Address) :
+    (!f.toLegacy.message.disablePrecompiles && decide (f.toLegacy.message.context.block.rules.isPrecompile a)) =
+      (!f.message.disablePrecompiles && decide (f.message.context.block.rules.isPrecompile a)) := rfl
+
+local macro "frame_fields" : tactic => `(tactic| simp only [Frame.legacyKind, Frame.legacyCodeAddress,
+  Frame.legacyDisablePrecompiles, Frame.legacyRules, Frame.legacyRecipient, Frame.legacyTransfer])
+
 theorem Frame.startState_toLegacy (f : Frame) : f.startState.toLegacy = f.toLegacy.startState := rfl
 
 theorem Frame.enteredWorld_toLegacy (f : Frame) : f.toLegacy.enteredWorld = f.enteredWorld := by
   unfold Jaune.Frame.enteredWorld Checked.Frame.enteredWorld
-  simp only [show f.toLegacy.message = f.message from rfl]
+  frame_fields
   cases f.message.kind <;> rfl
 
 theorem Frame.entered_toLegacy (f : Frame) (s : Frame.State) (w : World) :
     Staging.Frame.entered f.toLegacy s.toLegacy w = (Frame.entered f s w).toLegacy := by
   unfold Frame.entered Staging.Frame.entered Jaune.Frame.enteredCreatedAccounts Frame.enteredCreatedAccounts
-  simp only [show f.toLegacy.message = f.message from rfl]
+  frame_fields
   cases f.message.kind <;> rfl
 
 theorem runPrecompile_toLegacy (r : Frame.Running) (a : Address) :
@@ -54,10 +72,12 @@ theorem settle_toLegacy (f : Frame) (e : Frame.Exit) :
     Staging.settle f.toLegacy e.toLegacy = settle f e := by
   cases e with
   | reverted out s | halted out s =>
-    simp only [Staging.settle, Frame.Exit.toLegacy, settle, Frame.enteredWorld_toLegacy, show f.toLegacy.message = f.message from rfl]
+    simp only [Staging.settle, Frame.Exit.toLegacy, settle, Frame.enteredWorld_toLegacy]
+    frame_fields
     cases f.message.context.block.rules.stateGas <;> rfl
   | finished out s =>
-    simp only [Staging.settle, Frame.Exit.toLegacy, settle, Frame.enteredWorld_toLegacy, show f.toLegacy.message = f.message from rfl]
+    simp only [Staging.settle, Frame.Exit.toLegacy, settle, Frame.enteredWorld_toLegacy]
+    frame_fields
     change (match f.message.kind with | .call => _ | .create => _) = _
     cases f.message.kind with
     | call => rfl
@@ -72,7 +92,8 @@ theorem settle_toLegacy (f : Frame) (e : Frame.Exit) :
 theorem enterWith_toLegacy (f : Frame) (s : Frame.State) :
     Staging.enterWith f.toLegacy s.toLegacy = (enterWith f s).toLegacy := by
   unfold Staging.enterWith enterWith
-  simp only [Frame.enteredWorld_toLegacy, Frame.entered_toLegacy, show f.toLegacy.message = f.message from rfl]
+  simp only [Frame.enteredWorld_toLegacy, Frame.entered_toLegacy, Frame.legacyTransfer,
+    Frame.legacyCodeAddress, Frame.legacyAvailable]
   cases htransfer : f.message.transfer f.enteredWorld with
   | error fault => rfl
   | ok world =>

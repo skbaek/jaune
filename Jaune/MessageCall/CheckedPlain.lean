@@ -19,7 +19,7 @@ its refund and its reads. -/
 def Family.run (f : Family) (x : Frame.Running) :
     Except (ExceptionalHalt × Frame.State) Frame.State :=
   let rules := x.context.block.rules
-  let context := x.context.toChecked
+  let context := x.context
   match f with
   | .word row => x.state.liftMachine (row.step rules.opcodes ⟨x.pc, context⟩)
   | .shuffle row => x.state.liftMachine (row.step rules.opcodes)
@@ -41,7 +41,7 @@ namespace PlainOp
 /-- The plain instructions over the lifetime-grouped state: each runs its family's step on its
 row. `pc` is the program counter (`PC` reads it), `ctx` what the frame reads of its message, `s`
 its state. -/
-def runCore (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.PlainOp) :
+def runCore (pc : Nat) (ctx : CallContext) (s : Frame.State) (op : Jaune.PlainOp) :
     Except (ExceptionalHalt × Frame.State) Frame.State :=
   (PlainOp.family op).run ⟨pc, ctx, s⟩
 
