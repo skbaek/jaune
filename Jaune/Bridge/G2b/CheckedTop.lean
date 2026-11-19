@@ -5,6 +5,7 @@ import Jaune.Bridge.G2b.CheckedContext
 import Jaune.Implementation.CheckedCachedDriver
 import Jaune.Bridge.G2b.FinalDriver
 import Jaune.MessageCall.SpawnFacts
+import Jaune.Run.CheckedTransaction
 import Jaune.Run.Message
 import Jaune.Run.SystemCall
 
@@ -117,9 +118,9 @@ private theorem Frame.runTopWithRoot_observes (f : Frame) :
       have ho := Jaune.enterWith_run_output rfl hw
       obtain ⟨hs, he⟩ := Frame.entry_static_error hw
       have hroot : r.toLegacy.toEvm f.message = evm := by
-        have hm : Message.ofSevm evm.sta f.message.kind f.message.stateGasGrant = f.message := by
+        have hm : Jaune.Message.ofSevm evm.sta f.message.kind f.message.stateGasGrant = f.message := by
           rw [hs]
-          exact Message.ofSevm_sevm f.message
+          exact Jaune.Message.ofSevm_sevm f.message
         rw [hr, ← hm]
         exact Jaune.Frame.Running.toEvm_ofEvm _ _ ho he
       have hx : (exec r).map Frame.Exit.toLegacy = Jaune.Frame.Exit.ofExecution (Jaune.exec evm) := by
@@ -358,5 +359,85 @@ theorem runSystemCall_frame_originalState {benv : Benv} {target : Address} {code
     exact run_frame_originalState checkedRun
 
 end TopLevel
+
+/-- Map the waiting immutable message onto the Checked context supplied to the frame. -/
+def Message.ofLegacy (message : Jaune.Message) : Message :=
+  ⟨message.context.toChecked, message.kind, message.codeAddress, message.gas, message.stateGasGrant,
+    message.transfersValue, message.disablePrecompiles⟩
+
+private theorem initialCheckpoint_observe (msg : Msg) :
+    (Message.ofLegacy (Jaune.Message.ofTop msg msg.target.isNone)).initialCheckpoint
+      ⟨msg.benv.state, msg.tenv.transientStorage, msg.benv.storageWrites⟩
+      msg.accessedAddresses msg.accessedStorageKeys msg.benv.createdAccounts msg.inheritedDeletions =
+    Frame.State.ofLegacy (Jaune.Frame.State.ofDevm (initDevm msg)) Mem.wf_empty := by
+  have rules : msg.benv.stat.toBlockContext.rules = msg.benv.stat.rules := rfl
+  cases hgas : msg.benv.stat.rules.stateGas
+  · simp only [Message.initialCheckpoint, Message.ofLegacy, Jaune.Message.ofTop, initDevm,
+      Jaune.CallContext.toChecked, rules, hgas]
+    rfl
+  · simp only [Message.initialCheckpoint, Message.ofLegacy, Jaune.Message.ofTop, initDevm,
+      Jaune.CallContext.toChecked, rules, hgas]
+    by_cases htransfer : msg.shouldTransferValue = true
+    · by_cases hlog : msg.caller = msg.currentTarget ∨ msg.value = 0 <;>
+        simp only [htransfer, Devm.emitTransferLog, hlog, ↓reduceIte] <;> rfl
+    · simp only [htransfer]
+      rfl
+
+/-- The full observation of a waiting top-level preparation input. -/
+def TopLevel.Input.ofLegacy (msg : Msg) : TopLevel.Input :=
+  ⟨Message.ofLegacy (Jaune.Message.ofTop msg msg.target.isNone),
+    Frame.State.ofLegacy (Jaune.Frame.State.ofDevm (initDevm msg)) Mem.wf_empty, msg.tenv.stat.auths⟩
+
+/-- Project the current prepared transaction onto the Checked settlement inputs. -/
+def Transaction.Prepared.ofLegacy (prepared : Jaune.Transaction.Prepared) : Transaction.Prepared :=
+  ⟨prepared.bout, prepared.sender, prepared.effectiveGasPrice, prepared.txBlobGasUsed,
+    prepared.calldataFloorGasCost, .ofLegacy prepared.msg⟩
+
+/-- On the admitted block and transaction snapshot, native preparation produces the full
+Checked input observed from the waiting preparation, including fee failures. -/
+theorem Transaction.prepare_observe (admitted : Jaune.Transaction.Admitted) (tx : Jaune.Transaction)
+    (index : Nat) :
+    prepare admitted.benv.stat.toBlockContext admitted.benv.stat.origState admitted tx =
+      (Jaune.Transaction.prepare admitted tx index).map Prepared.ofLegacy := by
+  unfold prepare Jaune.Transaction.prepare
+  simp only [BenvStat.toBlockContext, BlockContext.rules, BenvStat.rules]
+  let fee := if tx.isEip4844 then
+    calculateDataFee (Fork.ruleSet admitted.benv.stat.fork).blob admitted.benv.stat.excessBlobGas tx else 0
+  let charged := (admitted.benv.state.incrNonce admitted.sender).subBal admitted.sender
+    (Jaune.Nat.toU256 (tx.gasLimit * admitted.effectiveGasPrice + fee))
+  change (Jaune.Option.toExcept _ charged >>= _) =
+    (Jaune.Option.toExcept _ charged >>= _).map Prepared.ofLegacy
+  cases charged with
+  | none => rfl
+  | some state =>
+    simp only [Jaune.Option.toExcept, bind, Except.bind]
+    unfold prepareMessage
+    cases tx.type.to? <;>
+      simp only [Option.isNone, ↓reduceIte, pure, Except.pure, Except.map,
+        Prepared.ofLegacy, TopLevel.Input.ofLegacy] <;>
+      rw [← initialCheckpoint_observe] <;> rfl
+
+theorem _root_.Jaune.Transaction.admit_originalState {benv : Benv} {bout : BlockOutput}
+    {tx : Jaune.Transaction} {index : Nat} {admitted : Jaune.Transaction.Admitted}
+    (h : Jaune.Transaction.admit benv bout tx index = .ok admitted) :
+    admitted.benv.stat.origState = benv.state := by
+  unfold Jaune.Transaction.admit at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨_, _⟩, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨_, _, _, _⟩, _, h⟩ := Except.bind_eq_ok h
+  cases h
+  rfl
+
+/-- At the signed transaction boundary, the native message retains the world at admission. -/
+theorem Transaction.prepare_originalState {benv : Benv} {bout : BlockOutput} {tx : Jaune.Transaction}
+    {index : Nat} {admitted : Jaune.Transaction.Admitted} {prepared : Transaction.Prepared}
+    (ha : Jaune.Transaction.admit benv bout tx index = .ok admitted)
+    (hp : prepare admitted.benv.stat.toBlockContext admitted.benv.stat.origState admitted tx = .ok prepared) :
+    prepared.input.message.context.tx.originalState = benv.state := by
+  unfold prepare at hp
+  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+  cases target : tx.type.to? <;> simp only [target, pure, Except.pure] at hp <;> cases hp <;>
+    exact Jaune.Transaction.admit_originalState ha
 
 end Jaune.Checked

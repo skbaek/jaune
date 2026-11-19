@@ -1171,13 +1171,7 @@ private theorem prepared_originalState {benv : Benv} {bout : BlockOutput} {tx : 
     (h : TraceTransaction.prepareTransaction benv bout tx index = .ok prepared) :
     prepared.msg.benv.stat.origState = benv.state := by
   obtain ⟨checked, hc, hp⟩ := Except.bind_eq_ok h
-  have hchecked : checked.benv.stat.origState = benv.state := by
-    unfold Transaction.admit at hc
-    obtain ⟨_, _, hc⟩ := Except.bind_eq_ok hc
-    obtain ⟨_, _, hc⟩ := Except.bind_eq_ok hc
-    obtain ⟨⟨_, _⟩, _, hc⟩ := Except.bind_eq_ok hc
-    obtain ⟨⟨_, _, _, _⟩, _, hc⟩ := Except.bind_eq_ok hc
-    cases hc; rfl
+  have hchecked : checked.benv.stat.origState = benv.state := Transaction.admit_originalState hc
   unfold Transaction.prepare at hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨msg, hm, hp⟩ := Except.bind_eq_ok hp

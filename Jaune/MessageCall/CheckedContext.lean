@@ -1,4 +1,4 @@
-import Jaune.MessageCall
+import Jaune.MessageCall.CheckedFrame
 
 /-!
 # What a checked step reads of its message (goal `jaune-shape-and-names-v1`, G2b, decision 13)
@@ -37,5 +37,40 @@ structure CallContext : Type where
   tx : TransactionContext
   /-- What the frame reads of its block. -/
   block : BlockContext
+
+/-- The immutable inputs of a Checked frame. Its checkpoint carries the rollback state. -/
+structure Message where
+  context : CallContext
+  kind : Jaune.Message.Kind
+  codeAddress : Option Address
+  gas : Nat
+  stateGasGrant : Nat
+  transfersValue : Bool
+  disablePrecompiles : Bool
+
+/-- The machine and lifetime groups when top-level preparation begins. -/
+def Message.initialCheckpoint (message : Message) (world : World)
+    (accessedAddresses : AdrSet) (accessedStorageKeys : KeySet) (createdAccounts selfDestructs : AdrSet) :
+    Frame.State :=
+  let context := message.context
+  let logs := match context.block.rules.stateGas with
+    | none => []
+    | some _ =>
+      if message.transfersValue then
+        if context.caller = context.recipient ∨ context.value = 0 then []
+        else [transferLog context.caller context.recipient context.value]
+      else []
+  { machine := {
+      stack := [], memory := .empty, gasLeft := message.gas, returnData := []
+      stateGas := ⟨message.stateGasGrant, message.stateGasGrant, 0, 0⟩ }
+    world
+    substate := { logs, refund := 0, selfDestructs, accessedAddresses, accessedStorageKeys }
+    trail := { createdAccounts } }
+
+/-- Input to top-level preparation. Authorization tuples are consumed before the frame runs. -/
+structure TopLevel.Input where
+  message : Message
+  checkpoint : Frame.State
+  authorizationList : List Authorization
 
 end Jaune.Checked

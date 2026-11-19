@@ -126,6 +126,7 @@
   "TraceMain": "adapter",
   "Jaune.Run.Message": "specification",
   "Jaune.Run.Transaction": "specification",
+  "Jaune.Run.CheckedTransaction": "specification",
   "Jaune.MessageCall.Plain": "specification",
   "Jaune.Bridge.G2b.Plain": "bridge",
   "Jaune.MessageCall.Control": "specification",
