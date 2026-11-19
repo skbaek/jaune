@@ -5,6 +5,7 @@ import Jaune.Bridge.G2b.CheckedContext
 import Jaune.Implementation.CheckedCachedDriver
 import Jaune.Bridge.G2b.FinalDriver
 import Jaune.MessageCall.SpawnFacts
+import Jaune.Run.CheckedMessage
 import Jaune.Run.CheckedTransaction
 import Jaune.Run.Message
 import Jaune.Run.SystemCall
@@ -365,8 +366,8 @@ def Message.ofLegacy (message : Jaune.Message) : Message :=
   ⟨message.context.toChecked, message.kind, message.codeAddress, message.gas, message.stateGasGrant,
     message.transfersValue, message.disablePrecompiles⟩
 
-private theorem initialCheckpoint_observe (msg : Msg) :
-    (Message.ofLegacy (Jaune.Message.ofTop msg msg.target.isNone)).initialCheckpoint
+private theorem initialCheckpoint_observe (msg : Msg) (isCreate : Bool) :
+    (Message.ofLegacy (Jaune.Message.ofTop msg isCreate)).initialCheckpoint
       ⟨msg.benv.state, msg.tenv.transientStorage, msg.benv.storageWrites⟩
       msg.accessedAddresses msg.accessedStorageKeys msg.benv.createdAccounts msg.inheritedDeletions =
     Frame.State.ofLegacy (Jaune.Frame.State.ofDevm (initDevm msg)) Mem.wf_empty := by
@@ -383,10 +384,179 @@ private theorem initialCheckpoint_observe (msg : Msg) :
     · simp only [htransfer]
       rfl
 
+private def legacyInput (msg : Msg) (isCreate : Bool) : TopLevel.Input :=
+  let message := Message.ofLegacy (Jaune.Message.ofTop msg isCreate)
+  let checkpoint := message.initialCheckpoint ⟨msg.benv.state, msg.tenv.transientStorage, msg.benv.storageWrites⟩
+    msg.accessedAddresses msg.accessedStorageKeys msg.benv.createdAccounts msg.inheritedDeletions
+  ⟨message, checkpoint, msg.tenv.stat.auths⟩
+
 /-- The full observation of a waiting top-level preparation input. -/
-def TopLevel.Input.ofLegacy (msg : Msg) : TopLevel.Input :=
-  ⟨Message.ofLegacy (Jaune.Message.ofTop msg msg.target.isNone),
-    Frame.State.ofLegacy (Jaune.Frame.State.ofDevm (initDevm msg)) Mem.wf_empty, msg.tenv.stat.auths⟩
+def TopLevel.Input.ofLegacy (msg : Msg) : TopLevel.Input := legacyInput msg msg.target.isNone
+
+/-- The mapped checkpoint is the actual initial machine on the waiting side. -/
+theorem TopLevel.Input.ofLegacy_checkpoint (msg : Msg) :
+    (ofLegacy msg).checkpoint =
+      Frame.State.ofLegacy (Jaune.Frame.State.ofDevm (initDevm msg)) Mem.wf_empty :=
+  initialCheckpoint_observe msg msg.target.isNone
+
+namespace TopLevel
+
+private theorem authorizationStep_observe (auth : Authorization) (msg : Msg) (refund : U256)
+    (isCreate : Bool) :
+    (authorizationStep auth (legacyInput msg isCreate) refund).mapError Fault.toEvmError =
+      (setDelegationStep auth msg refund).map (fun (next, refund) => (legacyInput next isCreate, refund)) := by
+  have block : (legacyInput msg isCreate).message.context.block = msg.benv.stat.toBlockContext := rfl
+  have world (authority : Address) :
+      ((legacyInput msg isCreate).checkpoint.addAccessedAddress authority).world.state = msg.benv.state := rfl
+  unfold authorizationStep setDelegationStep
+  simp only [block, world, BenvStat.toBlockContext, BlockContext.rules, BenvStat.rules]
+  by_cases hchain : (auth.chainId != Jaune.UInt64.toU256 msg.benv.stat.chainId && auth.chainId != 0) = true
+  · simp only [hchain, ↓reduceIte]
+    rfl
+  · simp only [hchain]
+    by_cases hnonce : auth.nonce = UInt64.max
+    · simp only [hnonce, ↓reduceIte]
+      rfl
+    · simp only [hnonce, ↓reduceIte]
+      cases recovered : recoverAuthority auth with
+      | error fault => cases fault <;> rfl
+      | ok authority =>
+        by_cases hcode : ¬((msg.benv.state.get authority).code.isEmpty ∨
+            isValidDelegation (msg.benv.state.get authority).code)
+        · simp only [hcode]
+          rfl
+        · simp only [hcode, ↓reduceIte]
+          by_cases haccount : ((msg.benv.state.get authority).nonce != auth.nonce) = true
+          · simp only [haccount, ↓reduceIte]
+            rfl
+          · simp only [haccount, Bool.false_eq_true, ↓reduceIte, Except.map, Except.mapError,
+              Frame.State.writeDelegation, legacyInput, Message.initialCheckpoint, Message.ofLegacy,
+              Jaune.Message.ofTop, Frame.State.addAccessedAddress, Substate.addAccessedAddress,
+              Frame.State.withWorld, Frame.State.withSubstate, Msg.setCode, Msg.incrNonce,
+              World.clearStorageWritesIfEmpty, Benv.clearStorageWritesIfEmpty]
+            rfl
+
+private theorem authorizationLoop_observe (auths : List Authorization) (msg : Msg) (refund : U256)
+    (isCreate : Bool) :
+    (authorizationLoop auths (legacyInput msg isCreate) refund).mapError Fault.toEvmError =
+      (setDelegationLoop auths msg refund).map (fun (next, refund) => (legacyInput next isCreate, refund)) := by
+  induction auths generalizing msg refund with
+  | nil => rfl
+  | cons auth rest ih =>
+    have step := authorizationStep_observe auth msg refund isCreate
+    unfold authorizationLoop setDelegationLoop
+    cases ha : authorizationStep auth (legacyInput msg isCreate) refund <;>
+      cases hb : setDelegationStep auth msg refund <;>
+      simp only [ha, hb, Except.mapError, Except.map] at step <;>
+      cases step
+    · rfl
+    · exact ih _ _
+
+private theorem applyAuthorizations_observe (msg : Msg) (isCreate : Bool) :
+    (applyAuthorizations (legacyInput msg isCreate)).mapError Fault.toEvmError =
+      (Jaune.TopLevel.applyAuthorizations msg).map
+        (fun (next, refund) => (legacyInput next isCreate, refund)) := by
+  have enabled : (legacyInput msg isCreate).message.context.block.rules.delegationEnabled =
+      msg.benv.stat.rules.delegationEnabled := rfl
+  have auths : (legacyInput msg isCreate).authorizationList = msg.tenv.stat.auths := rfl
+  unfold applyAuthorizations Jaune.TopLevel.applyAuthorizations setDelegation
+  simp only [enabled, auths]
+  by_cases skip : (!msg.benv.stat.rules.delegationEnabled || msg.tenv.stat.auths.isEmpty) = true
+  · simp only [skip, ↓reduceIte]
+    rfl
+  · simp only [skip]
+    have loop := authorizationLoop_observe msg.tenv.stat.auths msg 0 isCreate
+    cases hn : authorizationLoop msg.tenv.stat.auths (legacyInput msg isCreate) 0 <;>
+      cases ho : setDelegationLoop msg.tenv.stat.auths msg 0 <;>
+      simp only [hn, ho, Except.mapError, Except.map] at loop <;>
+      cases loop
+    · rfl
+    · rename_i pair
+      obtain ⟨next, refund⟩ := pair
+      have address : (legacyInput next isCreate).message.codeAddress = next.codeAddress := rfl
+      simp only [bind, Except.bind, address]
+      cases next.codeAddress <;> rfl
+
+private theorem resolveCodeDelegation_observe (msg : Msg) (isCreate : Bool) :
+    resolveCodeDelegation (legacyInput msg isCreate) =
+      legacyInput (Jaune.TopLevel.resolveCodeDelegation msg) isCreate := by
+  have destination : (legacyInput msg isCreate).message.context.block.rules.delegatedCodeAddress
+      (legacyInput msg isCreate).message.context.code =
+      msg.benv.stat.rules.delegatedCodeAddress msg.code := rfl
+  unfold resolveCodeDelegation Jaune.TopLevel.resolveCodeDelegation
+  simp only [destination]
+  cases msg.benv.stat.rules.delegatedCodeAddress msg.code <;> rfl
+
+/-- The native observation of the waiting Checked preparation. -/
+def Prepared.ofWaiting : Preparation → Prepared
+  | .refused reason => .refused reason
+  | .frame f refund => .frame (Message.ofLegacy f.message) f.checkpoint refund
+
+private theorem Prepared.ofWaiting_frameOfTop (msg : Msg) (isCreate : Bool) (refund : Nat)
+    (h : (Jaune.Frame.ofTop msg isCreate).checkpoint.machine.memory.Wf) :
+    ofWaiting (.frame (Frame.ofLegacy (Jaune.Frame.ofTop msg isCreate) h) refund) =
+      .frame (legacyInput msg isCreate).message (legacyInput msg isCreate).checkpoint refund := by
+  simp only [ofWaiting, Frame.ofLegacy, Jaune.Frame.ofTop, legacyInput]
+  rw [initialCheckpoint_observe]
+
+/-- Ordinary native preparation agrees on the full refusal, fault, or prepared frame. -/
+theorem prepareWithoutStateGas_observe (msg : Msg) (hgas : msg.benv.stat.rules.stateGas = none) :
+    prepareWithoutStateGas (Input.ofLegacy msg) = (prepare msg).map Prepared.ofWaiting := by
+  cases target : msg.target with
+  | none =>
+    rw [show Input.ofLegacy msg = legacyInput msg true by simp only [Input.ofLegacy, target, Option.isNone]]
+    change (if accountHasCodeOrNonce msg.benv.state msg.currentTarget then
+      Except.ok (Prepared.refused (.collision (.addressCollision .none)))
+      else Except.ok (Prepared.frame (legacyInput msg true).message (legacyInput msg true).checkpoint 0)) = _
+    by_cases collision : accountHasCodeOrNonce msg.benv.state msg.currentTarget
+    · have waiting : Jaune.TopLevel.prepare msg = .ok (.refused (.addressCollision .none) (initDevm msg)) := by
+        simp only [Jaune.TopLevel.prepare, target, Option.isNone, ↓reduceIte,
+          Jaune.TopLevel.prepare.create, hgas, collision]
+      simp only [collision, ↓reduceIte]
+      unfold prepare
+      split <;> rename_i h <;> rw [waiting] at h <;> cases h
+      simp only [Except.map, ofPreparation, hgas, Prepared.ofWaiting]
+    · have waiting : Jaune.TopLevel.prepare msg = .ok (.frame (Jaune.Frame.ofTop msg true) 0) := by
+        simp only [Jaune.TopLevel.prepare, target, Option.isNone, Bool.false_eq_true, ↓reduceIte,
+          Jaune.TopLevel.prepare.create, hgas, collision]
+      simp only [collision, Bool.false_eq_true, ↓reduceIte]
+      unfold prepare
+      split <;> rename_i h <;> rw [waiting] at h <;> cases h
+      simp only [Except.map, ofPreparation, Prepared.ofWaiting_frameOfTop]
+  | some address =>
+    rw [show Input.ofLegacy msg = legacyInput msg false by simp only [Input.ofLegacy, target, Option.isNone]]
+    change (do
+      let (authorized, refund) ← applyAuthorizations (legacyInput msg false)
+      let resolved := resolveCodeDelegation authorized
+      pure (Prepared.frame resolved.message resolved.checkpoint refund)) = _
+    have agreement := applyAuthorizations_observe msg false
+    cases hn : applyAuthorizations (legacyInput msg false) <;>
+      cases ho : Jaune.TopLevel.applyAuthorizations msg <;>
+      simp only [hn, ho, Except.mapError, Except.map] at agreement <;>
+      cases agreement
+    · rename_i fault
+      have waiting : Jaune.TopLevel.prepare msg = .error fault := by
+        simp only [Jaune.TopLevel.prepare, target, Option.isNone, Bool.false_eq_true, ↓reduceIte,
+          Jaune.TopLevel.prepare.call, hgas]
+        split <;> rename_i h <;> rw [ho] at h <;> cases h
+        cases fault <;> rfl
+      unfold prepare
+      split <;> rename_i h <;> rw [waiting] at h <;> cases h
+      rfl
+    · rename_i pair
+      obtain ⟨next, refund⟩ := pair
+      have waiting : Jaune.TopLevel.prepare msg =
+          .ok (.frame (Jaune.Frame.ofTop (Jaune.TopLevel.resolveCodeDelegation next) false) refund) := by
+        simp only [Jaune.TopLevel.prepare, target, Option.isNone, Bool.false_eq_true, ↓reduceIte,
+          Jaune.TopLevel.prepare.call, hgas]
+        split <;> rename_i h <;> rw [ho] at h <;> cases h
+        rfl
+      unfold prepare
+      split <;> rename_i h <;> rw [waiting] at h <;> cases h
+      simp only [bind, Except.bind, pure, Except.pure, resolveCodeDelegation_observe,
+        Except.map, ofPreparation, Prepared.ofWaiting_frameOfTop]
+
+end TopLevel
 
 /-- Project the current prepared transaction onto the Checked settlement inputs. -/
 def Transaction.Prepared.ofLegacy (prepared : Jaune.Transaction.Prepared) : Transaction.Prepared :=
@@ -414,8 +584,7 @@ theorem Transaction.prepare_observe (admitted : Jaune.Transaction.Admitted) (tx 
     unfold prepareMessage
     cases tx.type.to? <;>
       simp only [Option.isNone, ↓reduceIte, pure, Except.pure, Except.map,
-        Prepared.ofLegacy, TopLevel.Input.ofLegacy] <;>
-      rw [← initialCheckpoint_observe] <;> rfl
+        Prepared.ofLegacy, TopLevel.Input.ofLegacy, legacyInput] <;> rfl
 
 theorem _root_.Jaune.Transaction.admit_originalState {benv : Benv} {bout : BlockOutput}
     {tx : Jaune.Transaction} {index : Nat} {admitted : Jaune.Transaction.Admitted}

@@ -125,6 +125,7 @@
   "MemoryProbe": "adapter",
   "TraceMain": "adapter",
   "Jaune.Run.Message": "specification",
+  "Jaune.Run.CheckedMessage": "specification",
   "Jaune.Run.Transaction": "specification",
   "Jaune.Run.CheckedTransaction": "specification",
   "Jaune.MessageCall.Plain": "specification",
