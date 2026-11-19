@@ -57,8 +57,6 @@ inductive TransactionValidationError : Type
   | emptyAuthorizationList (detail : ErrorDetail)
   /-- A typed transaction whose type number exceeds the fork's `maxType`. -/
   | typePreFork (txType : Nat) (detail : ErrorDetail)
-  /-- A typed transaction whose type byte is not supported (decision 16). -/
-  | typeNotSupported (txType : Nat) (detail : ErrorDetail)
 deriving DecidableEq, Repr
 
 /-- The tag a transaction-rejection reason renders under. -/
@@ -85,7 +83,6 @@ def TransactionValidationError.tag : TransactionValidationError → String
   | .type4ContractCreation _ => type4ContractCreationTag
   | .emptyAuthorizationList _ => emptyAuthorizationListTag
   | .typePreFork _ _ => typePreForkTag
-  | .typeNotSupported _ _ => typeNotSupportedTag
 
 /-- The diagnostic payload of a transaction-rejection reason. -/
 def TransactionValidationError.detail : TransactionValidationError → ErrorDetail
@@ -99,7 +96,7 @@ def TransactionValidationError.detail : TransactionValidationError → ErrorDeta
   | .type3BlobCountExceeded d | .type3BlobCountLimitExceeded d
   | .type3ContractCreation d | .type3InvalidBlobVersionedHash d
   | .type3ZeroBlobs d | .type4ContractCreation d
-  | .emptyAuthorizationList d | .typePreFork _ d | .typeNotSupported _ d => d
+  | .emptyAuthorizationList d | .typePreFork _ d => d
 
 /-- The one renderer for `TransactionValidationError`. -/
 def TransactionValidationError.render (e : TransactionValidationError) : String :=
@@ -117,8 +114,7 @@ def TransactionValidationError.all : List TransactionValidationError :=
     .type3BlobCountExceeded .none, .type3BlobCountLimitExceeded .none,
     .type3ContractCreation .none, .type3InvalidBlobVersionedHash .none,
     .type3ZeroBlobs .none, .type4ContractCreation .none,
-    .emptyAuthorizationList .none, .typePreFork 3 .none,
-    .typeNotSupported 5 .none ]
+    .emptyAuthorizationList .none, .typePreFork 3 .none ]
 
 /-- `B256` carries no `Repr` of its own; the block-rejection type below derives
 one, and its `blockAccessListHash` reason now carries a hash as data. Rendered
@@ -2032,13 +2028,14 @@ def Bytes.toExceptTransaction : Bytes → Except TransitionError Transaction
     | 0x04, _ =>
       .error <| .decode <| DecodeError.structure "type-4 transaction"
         "expected a list of thirteen fields"
-    -- Decision 16 (W2-T): an unknown envelope type byte (anything outside
-    -- `0x01`-`0x04`, including `0x00`, `0x05`-`0x7F` and `0x80`-`0xFF`) is a
-    -- block rejection (`typeNotSupported`), matching EELS `TransactionTypeError`
-    -- and geth `ErrTxTypeNotSupported`.
+    -- An unknown envelope type has no reviewed fixture identity
+    -- (`TYPE_NOT_SUPPORTED` is outside this build's vocabulary), and its
+    -- message has carried the internal tag since inception -- it was never
+    -- classifiable. It stays a typed internal reason and fails closed; naming
+    -- the identity would be an explicit vocabulary extension, not a default.
     | x, _ =>
-      .error <| .transaction <| .typeNotSupported x.toNat <|
-        .text s!"type-{x} transactions do not exist (EIP-2718), the block is invalid"
+      .error <| .internal <| .invariant <|
+        .text s!"type-{x} txs do not exist, decoding failed"
 
 /-- Strict typed-transaction-decoder soundness. Every transaction the typed
 envelope decoder produces satisfies `Tx.WireWellFormed`, for each of the four
@@ -2105,17 +2102,6 @@ theorem Bytes.toExceptTransaction_wireWellFormed {xs : Bytes} {tx : Transaction}
     · exact absurd h (by simp)
     · exact absurd h (by simp)
 
-/-- Decision 16: any typed-envelope slot whose first byte is not `0x01`-`0x04`
-is rejected with `TransactionValidationError.typeNotSupported`. -/
-theorem Bytes.toExceptTransaction_unknown_typeNotSupported {x : UInt8} (xs : Bytes)
-    (hx : x ≠ 0x01 ∧ x ≠ 0x02 ∧ x ≠ 0x03 ∧ x ≠ 0x04) :
-    Bytes.toExceptTransaction (x :: xs) =
-      .error (.transaction (.typeNotSupported x.toNat
-        (.text s!"type-{x} transactions do not exist (EIP-2718), the block is invalid"))) := by
-  unfold Bytes.toExceptTransaction
-  dsimp only
-  split <;> first | rfl | (exfalso; simp_all)
-
 /-- S5 admission: a decoded transaction is admissible only when its type
 number fits the rules (`tx.type.index ≤ rules.txr.maxType`). A typed envelope
 from a later fork fails here with its own transaction reason, `typePreFork`
@@ -2143,16 +2129,6 @@ def decodeTransaction (rules : ForkRules) : Bytes ⊕ Transaction → Except Tra
     checkTransactionTypeAdmitted rules tx
     .ok tx
   | .inr tx => .ok tx
-
-/-- Decision 16 lifted to `decodeTransaction`: any byte-string slot with an unknown
-first byte fails with `typeNotSupported`, independent of fork rules. -/
-theorem decodeTransaction_unknown_typeNotSupported (rules : ForkRules) {x : UInt8} (xs : Bytes)
-    (hx : x ≠ 0x01 ∧ x ≠ 0x02 ∧ x ≠ 0x03 ∧ x ≠ 0x04) :
-    decodeTransaction rules (.inl (x :: xs)) =
-      .error (.transaction (.typeNotSupported x.toNat
-        (.text s!"type-{x} transactions do not exist (EIP-2718), the block is invalid"))) := by
-  simp only [decodeTransaction, Bytes.toExceptTransaction_unknown_typeNotSupported xs hx,
-    bind, Except.bind]
 
 def systemTransactionEnvironment (benv : Benv) : Tenv :=
   {

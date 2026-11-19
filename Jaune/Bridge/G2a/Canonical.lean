@@ -19,7 +19,7 @@ so the restatements say what the old ones said.
 
 namespace Jaune.Bridge.G2a
 
-open Jaune
+open Jaune Jaune.Staging
 
 /-- The old `processTransaction_canonical`, from the staged one. -/
 theorem processTransaction_canonical_of_staged {benv : Benv} (h : benv.Canonical)

@@ -24,10 +24,10 @@ open Jaune
 -- Golden guards. Each vocabulary is pinned constructor-by-constructor to the
 -- tag it renders under, so a migrated producer cannot silently change an
 -- externally observed message or route a reason to the wrong identity.
-#guard TransactionValidationError.all.length = 23
-#guard TransactionValidationError.all.eraseDups.length = 23
+#guard TransactionValidationError.all.length = 22
+#guard TransactionValidationError.all.eraseDups.length = 22
 #guard TransactionValidationError.all.map TransactionValidationError.tag = transactionExceptionTags
-#guard (TransactionValidationError.all.map TransactionValidationError.tag).eraseDups.length = 23
+#guard (TransactionValidationError.all.map TransactionValidationError.tag).eraseDups.length = 22
 #guard TransactionValidationError.render
     (.insufficientMaxFeePerBlobGas (.text "insufficient max fee per blob gas"))
   = "InsufficientMaxFeePerBlobGasError : insufficient max fee per blob gas"
@@ -35,8 +35,6 @@ open Jaune
   = "NonceMismatchTooHighError"
 #guard TransactionValidationError.render (.intrinsicGasTooLow (.text "needs 21000, has 20999"))
   = "IntrinsicGasTooLowError : needs 21000, has 20999"
-#guard TransactionValidationError.render (.typeNotSupported 5 .none)
-  = "TypeNotSupportedError"
 
 #guard BlockValidationError.all.length = 32
 #guard BlockValidationError.all.eraseDups.length = 32
@@ -792,10 +790,9 @@ private def shortWidthScalar : Bytes := 0x01 :: List.replicate 30 0x00
 #guard txDecFails isStructureD <| Bytes.toExceptTransaction []
 #guard ¬ txDecFails isStructureD (Bytes.toExceptTransaction [0x05])
 #guard (Bytes.toExceptTransaction [0x05]).toOption.isNone
--- Decision 16 (W2-T): an unknown envelope type byte is a transaction rejection
--- (`typeNotSupported`), proved for all `x ∉ {1,2,3,4}` by
--- `Bytes.toExceptTransaction_unknown_typeNotSupported`.
-#guard txFails (fun e => match e with | .transaction (.typeNotSupported 5 _) => true | _ => false)
+-- The unknown-type reason is the fail-closed internal one, never a decode or
+-- rejection identity a fixture could score.
+#guard txFails (fun e => match e with | .internal _ => true | _ => false)
   (Bytes.toExceptTransaction [0x05])
 
 ---------------- FORK ARCHITECTURE CHECKS ----------------

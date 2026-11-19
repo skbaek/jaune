@@ -93,7 +93,6 @@ inductive FixtureException where
   | txType4TransactionPreFork
   | txType1TransactionPreFork
   | txType2TransactionPreFork
-  | txTypeNotSupported
 deriving DecidableEq, BEq, Repr, Inhabited
 
 namespace FixtureException
@@ -150,7 +149,6 @@ def all : List FixtureException :=
     ++ [txType4EmptyAuthorizationList, txType4TransactionContractCreation]
     ++ [txType3TransactionPreFork, txType4TransactionPreFork]
     ++ [txType1TransactionPreFork, txType2TransactionPreFork]
-    ++ [txTypeNotSupported]
 
 /-- The canonical spelling of an identity: byte-for-byte the token the fixtures
 use. -/
@@ -214,7 +212,6 @@ def toString : FixtureException → String
   | txType4TransactionPreFork => "TransactionException.TYPE_4_TX_PRE_FORK"
   | txType1TransactionPreFork => "TransactionException.TYPE_1_TX_PRE_FORK"
   | txType2TransactionPreFork => "TransactionException.TYPE_2_TX_PRE_FORK"
-  | txTypeNotSupported => "TransactionException.TYPE_NOT_SUPPORTED"
 
 instance : ToString FixtureException := ⟨toString⟩
 
@@ -423,7 +420,6 @@ def ofTransactionValidationError : TransactionValidationError → Option Fixture
   | .typePreFork 3 _ => some txType3TransactionPreFork
   | .typePreFork 4 _ => some txType4TransactionPreFork
   | .typePreFork _ _ => none
-  | .typeNotSupported _ _ => some txTypeNotSupported
 
 /-- The official identity of a block-validation rejection.
 
@@ -523,10 +519,10 @@ open FixtureException
 -- transaction-type identities the Shanghai-to-Cancun and Cancun-to-Prague
 -- transition fixtures name (goal U11a), plus the type-1 and type-2 pre-fork
 -- identities the pre-London cases name (U11d).
-#guard all.length = 53
+#guard all.length = 52
 
 -- `toString` is injective, so no two identities collapse to one token.
-#guard (all.map toString).eraseDups.length = 53
+#guard (all.map toString).eraseDups.length = 52
 
 -- `toString`/`ofString?` round trip on all 47, in both directions.
 #guard all.all (fun e => ofString? e.toString == some e)
@@ -767,8 +763,6 @@ def fixtureInventory : List String :=
 #guard ofTransactionValidationError (.typePreFork 2 .none) == some txType2TransactionPreFork
 #guard (ofTransactionValidationError (.typePreFork 0 .none)).isNone
 #guard (ofTransactionValidationError (.typePreFork 5 .none)).isNone
-#guard ofTransactionValidationError (.typeNotSupported 5 .none) == some txTypeNotSupported
-#guard ofTransactionValidationError (.typeNotSupported 0 .none) == some txTypeNotSupported
 #guard ofDecodeError (.leadingZeros .none) == some blockRlpStructuresEncoding
 #guard ofDecodeError (.fieldOverflow64 .none) == some blockRlpInvalidFieldOverflow64
 #guard ofDecodeError (.withdrawalsNotRead .none) == some blockRlpWithdrawalsNotRead

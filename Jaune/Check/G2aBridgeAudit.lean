@@ -1,6 +1,7 @@
 import AxiomAudit
 import Jaune.Bridge.G2a.Block
 import Jaune.Bridge.G2a.Canonical
+import Jaune.Bridge.G2a.Decode
 import Jaune.Bridge.G2a.Old.T8n
 import Jaune.Bridge.AccountWrite
 import Jaune.Bridge.Import
@@ -34,6 +35,9 @@ import Jaune.Run.BodyFacts
 #expect_axioms Jaune.Bridge.G2a.Old.T8n.foldTransactions_eq [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Bridge.G2a.Old.T8n.runStateTest_eq [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Bridge.G2a.Old.T8n.runBlockchain_eq [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Bytes.toExceptTransaction_unknown_typeNotSupported [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.decodeTransaction_unknown_typeNotSupported [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Transaction.settleRun_state [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Bridge.G2a.E.stateTransitionCoreE_difference [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Bridge.G2a.decodeTransaction_difference [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Bridge.G2a.mapM_decodeTransaction_difference [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Bridge.G2a.applyBody_difference [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Bridge.G2a.stateTransitionCoreE_difference [Classical.choice, Quot.sound, propext]
