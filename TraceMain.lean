@@ -1,10 +1,9 @@
 import Jaune.MessageCall.TraceJson
-import Jaune.Run.Trace
+import Jaune.MessageCall.CheckedTrace
 import Jaune.Adapter.IO
-import Jaune.MessageCall.Top
 
 /-! Standalone message or signed-transaction tracing. Inputs state their scope;
-transaction mode uses the proof-carrying public-pipeline driver. -/
+both modes run the Checked tracer. -/
 open Lean Jaune
 
 namespace Jaune.TraceRunner
@@ -153,8 +152,9 @@ def run (inputPath outputPath : String) : IO Unit := do
   let state ← IO.mkRef ({} : TraceJson.State)
   let details ← match selected with
     | .message msg => do
-      let frame := Frame.ofTop msg msg.target.isNone
-      let _ ← Trace.runFrame (TraceJson.sink cfg state trace frames) frame runId
+      let frame := Checked.Trace.topFrame msg msg.target.isNone
+      let _ ← @Checked.Trace.runFrame ⟨msg.tenv.stat⟩ IO _
+        (TraceJson.sink cfg state trace frames) frame runId
       if !(← state.get).closed then throw (IO.userError "trace did not complete")
       pure [("scope", Json.str "message"), ("outcome", Json.str "executed"),
         ("traceComplete", Json.bool true),
@@ -165,7 +165,7 @@ def run (inputPath outputPath : String) : IO Unit := do
         let current ← state.get
         if current.started then throw (IO.userError "authorization refund arrived after frame entry")
         state.set { current with rootRefund := amount }
-      let result ← TraceTransaction.runTransaction
+      let result ← @Checked.Trace.runTransaction ⟨default⟩ IO _
         (TraceJson.sink transactionCfg state trace frames) refund initial .init tx 0 runId
       let current ← state.get
       if current.started && !current.closed then throw (IO.userError "transaction frame did not close")
@@ -178,15 +178,15 @@ def run (inputPath outputPath : String) : IO Unit := do
         if T8n.operational error then throw (IO.userError ("transaction: " ++ error.render))
         pure (identity ++ [("outcome", Json.str "rejected"), ("traceComplete", Json.bool false),
           ("error", Json.str error.render)])
-      | .ok ⟨postState, bout⟩ =>
-        let run ← result.messageRun.toIO "accepted transaction has no message output"
-        if run.returnData.length > cfg.maxDataBytes then
+      | .ok ⟨run, bout⟩ =>
+        let effects := run.message.settlement run.entry
+        if effects.returnData.length > cfg.maxDataBytes then
           throw (IO.userError "trace: output exceeds maxDataBytes")
         writeRow cfg trace (Json.mkObj [
-          ("stateRoot", Json.str (T8n.hexU256 postState.root)),
-          ("output", Json.str (T8n.hexBytes run.returnData)),
+          ("stateRoot", Json.str (T8n.hexU256 run.state.root)),
+          ("output", Json.str (T8n.hexBytes effects.returnData)),
           ("gasUsed", Json.str (T8n.hexQuantity bout.cumulativeGasUsed)),
-          ("pass", Json.bool run.error.isNone)])
+          ("pass", Json.bool effects.error.isNone)])
         pure (identity ++ [("outcome", Json.str "executed"), ("traceComplete", Json.bool true)])
   let final ← state.get
   let metadata := Json.mkObj ([("runId", .str runId), ("fork", .str forkName),

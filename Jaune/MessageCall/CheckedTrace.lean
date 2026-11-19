@@ -1,7 +1,7 @@
 import Jaune.MessageCall.Trace
 import Jaune.MessageCall.CheckedExec
 import Jaune.Bridge.G2b.CheckedFrame
-import Jaune.Run.CheckedMessage
+import Jaune.Run.CheckedTransaction
 
 /-!
 # The staged message-level tracer over the checked interpreter (goal `jaune-shape-and-names-v1`, G2b, F1e)
@@ -342,5 +342,33 @@ def runInput {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m)
   | .ok prepared =>
     let result ← runPrepared sink reportRefund prepared.toPreparation runId
     pure ⟨result.run, by rw [result.erases, TopLevel.runNative, h]; rfl⟩
+
+/-- The traced transaction settles through the same Checked runner as an untraced one. -/
+structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction)
+    (index : Nat) where
+  value : Except TransitionError (TransactionRun × BlockOutput)
+  erases : value = Transaction.run benv bout tx index
+
+/-- Trace an admitted signed transaction once, then settle the typed message. Ordinary calls
+report the authorization refund before entry. A preparation refusal emits no frame events. -/
+def runTransaction {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m)
+    (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction)
+    (index : Nat) (runId : String) : m (TransactionResult benv bout tx index) := do
+  match ha : Jaune.Transaction.admit benv bout tx index with
+  | .error error =>
+    pure ⟨.error error, by simp only [Transaction.run, ha, bind, Except.bind]⟩
+  | .ok admitted =>
+    match hp : Transaction.prepare admitted.benv.stat.toBlockContext admitted.benv.stat.origState admitted tx with
+    | .error error =>
+      pure ⟨.error error, by simp only [Transaction.run, ha, hp, bind, Except.bind]⟩
+    | .ok prepared =>
+      let message := prepared.input.message
+      let reportRefund := if message.context.block.rules.stateGas.isNone && message.target.isSome
+        then authorizationRefund else fun _ => pure ()
+      let result ← runInput sink reportRefund prepared.input runId
+      let value := do
+        let run ← result.run.mapError (fun fault => TransitionError.vm fault.toEvmError)
+        Transaction.settleRun admitted prepared tx index run
+      pure ⟨value, by simp only [value, result.erases, Transaction.run, ha, hp, bind, Except.bind]⟩
 
 end Jaune.Checked.Trace
