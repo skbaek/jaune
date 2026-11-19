@@ -526,10 +526,16 @@ constructor and recursor metadata and definition safety. Bound variable names
 and expression metadata are erased; universe parameters are indexed by
 position. Theorem proof terms are not compared: theorem types and attributes
 are checked, while the repository's axiom audit retains its separate job.
-Generated constants are matched by their finite type/body/attribute graphs,
-with a consistent bijection, rather than by generated names. Unreferenced
-generated nodes are included too. A conservative matching failure is a refusal
-to establish fidelity, not evidence that the two definitions differ.
+Substantive generated constants (all non-theorem constants, any constant with
+non-default attributes, any generated constant outside realized-theorem
+leaves `eq_N`/`eq_def`/`else_eq`/`splitter`/`congr_simp`/`proof_N`, and
+anything referenced by any substantive constant, guard, check, or attribute
+command anywhere in the candidate) are matched by their finite
+type/body/attribute graphs, with a consistent bijection, rather than by generated
+names. Unreferenced, attribute-free compiler-realized theorems are excluded and
+recorded in `ignored_unreferenced_realized_theorems`. A conservative matching
+failure is a refusal to establish fidelity, not evidence that the two
+definitions differ.
 
 The map is applied as a function on compiler names (namespace prefixes,
 private names, module rows). A declaration that Lean names itself — an
@@ -759,8 +765,8 @@ environment, in one run instead of stopping at the first (normalization errors
 are recorded per item); the verdict still fails on any mismatch.
 
 The low-level comparator's verdict remains `exported-modules`. It can compare
-archived schema-3 to schema-6 exports as well as schema 7 (the candidate
-workflow below requires schema 7), but neither a list
+archived schema-3 to schema-7 exports as well as schema 8 (the candidate
+workflow requires schema 8), but neither a list
 of bundles nor an import list alone binds a candidate. Schema 4 introduced
 records of the transitive
 imports actually loaded by the frontend, with the logical paths of each
@@ -828,6 +834,32 @@ Local imports must resolve to the artifacts just built in that checkout;
 uninventoried or shadowed local imports fail. Optional artifact parts cannot
 appear or disappear unnoticed. The logical module path is retained before
 following file symlinks, matching Lean's loading of separately cached parts.
+
+#### Schema 8 DAG exports, `--from-olean`, `--cache-dir`, and SCC component compare
+
+- **Schema 8 exports:** `jaune-naming-fidelity` interns `Level` and `Expr`
+  bottom-up into shared `level_pool`/`expr_pool` DAG arrays (erasing binder names
+  and `mdata` while preserving `BinderInfo` and `nonDep`), replaces per-export
+  `imports` path maps with path-free `import_modules`, and pre-indexes `simp`
+  entries and deterministic `equation_origin` provenance.
+- **`.olean`/`.ilean` fast path (`--from-olean`) and `--imports-batch`:**
+  Built producer modules without macros/syntax extensions, `#guard`/checked
+  commands, `openScoped`, or local/scoped attributes extract directly from
+  verified `.olean`/`.olean.private`/`.ilean` artifacts; unsupported forms exit
+  with code `3` and automatically fall back to full elaboration. `--imports-batch`
+  resolves all transitive import artifacts in one command. `naming-tree.py plan`
+  refuses to plan edits on modules captured with `--from-olean` (pass
+  `--plan-only` or `--full-elab-module`).
+- **Persistent content-addressed cache (`--cache-dir`) and `.meta.json`:**
+  Snapshot schema `4` records `.ilean` bindings alongside `.olean` artifacts and
+  validates a lightweight `<M>.meta.json` sidecar for each export.
+- **Per-component SCC topological comparison (`naming-candidate.py compare`):**
+  Unaffected byte-identical modules whose `.meta.json` constants, references,
+  and imports are disjoint from the map pass without opening `.export.json`;
+  active/promoted modules are grouped by `module`/`relocation`/`public_from`
+  equivalence classes and compared in dependency-first Tarjan SCC order with
+  cross-component global context and verified generated-constant propagation.
+  Legacy per-environment batched comparison remains available with `--environments`.
 
 #### Incremental capture
 
@@ -932,9 +964,10 @@ what a consumer that inspects the identifier sees. Such a site needs a
 separate, reviewed change (or a map that avoids the capture). Without
 pre-resolution the whole quotation is compared literally.
 
-Captures must come from the schema-7 exporter on both sides; `compare`
+Captures must come from the schema-8 exporter on both sides; `compare`
 refuses older exports (recapture with the current tooling). Planning reads
-only sources and references and still accepts schema 4 to 7.
+sources and references from full-elab captures and still accepts schema 4 to 8
+(refusing edits on `from_olean` modules).
 
 A successful result is labelled `candidate-affected-local-closure`, with both
 candidate inventory digests. The Git HEAD alone is not the input identity: a

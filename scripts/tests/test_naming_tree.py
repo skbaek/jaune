@@ -449,6 +449,34 @@ class NamingTreeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'does not match the imported package source'):
             TREE.build_plan(fixture2.root, snapshot, fixture2.map, True, [dep])
 
+    def test_from_olean_capture_refuses_when_edits_are_needed_and_allows_untouched(self):
+        files = {'A.lean': 'def old := 1\n', 'B.lean': 'def untouched := 2\n', 'lakefile.lean': ''}
+        (self.directory / 'from_olean').mkdir()
+        fixture = TreeFixture(self.directory / 'from_olean' / 'ok', files, {})
+        text_a = files['A.lean']
+        fixture.export('A', decls={'A.old': (0, len(text_a) - 1, text_a.index('old'))},
+                       commands=[(0, len(text_a.encode()), 'Lean.Parser.Command.declaration', '[anonymous]',
+                                  [], [False] * 3)],
+                       eof=[0, '[anonymous]', []], from_olean=False)
+        fixture.export('B', decls={'B.untouched': (0, len(files['B.lean']) - 1, files['B.lean'].index('untouched'))},
+                       commands=[], eof=[0, '[anonymous]', []], from_olean=True)
+        row = dict(old='A.old', new='A.renamed', kind='declaration', layer='execution', rule='4', source='x')
+        plan = fixture.plan([row])
+        self.assertEqual(plan['status'], 'planned')
+
+        fixture2 = TreeFixture(self.directory / 'from_olean' / 'blocked', files, {})
+        fixture2.export('A', decls={'A.old': (0, len(text_a) - 1, text_a.index('old'))},
+                        commands=[], eof=[0, '[anonymous]', []], from_olean=True)
+        fixture2.export('B', decls={'B.untouched': (0, len(files['B.lean']) - 1, files['B.lean'].index('untouched'))},
+                        commands=[], eof=[0, '[anonymous]', []], from_olean=True)
+        with self.assertRaisesRegex(ValueError, '--full-elab-module A'):
+            fixture2.plan([row])
+
+        # A module row affecting an untouched --from-olean file must also refuse.
+        row_mod = dict(old='B', new='B2', kind='module', layer='execution', rule='4', source='x')
+        with self.assertRaisesRegex(ValueError, '--full-elab-module B'):
+            fixture.plan([row_mod])
+
 
 class TreeFixture:
     """A git checkout plus a schema-3 capture whose exports carry syntax rows."""
@@ -482,7 +510,7 @@ class TreeFixture:
         line = text.count('\n', 0, i)
         return [line, len(text[text.rfind('\n', 0, i) + 1:i].encode('utf-16-le')) // 2]
 
-    def export(self, module, decls, commands, eof, refs=(), namespaces=()):
+    def export(self, module, decls, commands, eof, refs=(), namespaces=(), from_olean=False):
         text = self.files[module + '.lean']
         def b(i):
             return len(text[:i].encode())
@@ -500,10 +528,13 @@ class TreeFixture:
                      decls={name: self.lsp(text, start) + self.lsp(text, end) +
                             self.lsp(text, sel) + self.lsp(text, sel + len(name.split('.')[-1]))
                             for name, (start, end, sel) in decls.items()},
-                     naming_syntax=dict(version=2, literal_ranges=[], named_arguments=[],
+                     naming_syntax=dict(version=2, literal_ranges=[],
+                                        named_arguments=None if from_olean else [],
                                         namespaces=[[b(x), b(y), *rest] for x, y, *rest in namespaces],
                                         commands=[[b(x), b(y), *rest] for x, y, *rest in commands],
-                                        imports=[], unresolved_syntax=[], eof_scope=eof))
+                                        imports=[],
+                                        unresolved_syntax=None if from_olean else [],
+                                        eof_scope=eof, from_olean=from_olean))
         path = self.capture / f'{module}.json'
         constants = {name: dict(kernel=['theorem'], attributes={}, equation_origin=None) for name in decls}
         path.write_text(json.dumps(dict(schema_version=6, lean_version='fixture', source=text, index=index,

@@ -1136,6 +1136,175 @@ class NamingFidelityTests(unittest.TestCase):
         with self.assertRaisesRegex(CHECK.Mismatch, "became \\['Other'\\]"):
             self.run_check()
 
+    def _schema8_file(self, path, source, decl_names, constants, expr_pool, level_pool=None, module='M'):
+        decls = {}
+        for dname in decl_names:
+            leaf = dname.rsplit('.', 1)[-1]
+            pos = source.index(leaf)
+            prefix = source[:pos]
+            line = prefix.count('\n')
+            col = pos - (prefix.rfind('\n') + 1)
+            decls[dname] = [line, col, line, col + len(leaf)]
+        data = dict(
+            schema_version=8,
+            lean_version='fixture',
+            import_modules=[],
+            source=source,
+            level_pool=level_pool if level_pool is not None else [],
+            expr_pool=expr_pool,
+            index=dict(version=5, module=module, directImports=[], decls=decls, references={},
+                       naming_syntax=dict(version=2, commands=[], from_olean=True)),
+            constants=constants,
+            guards=[],
+            attribute_syntax=[],
+            checked_commands=[],
+        )
+        path.write_text(json.dumps(data))
+        return path
+
+    def test_schema8_pool_roundtrip_binder_info_and_let_nondep_controls(self):
+        levels = [['zero'], ['succ', 0]]
+        pool = [
+            ['sort', 1],                                       # 0: Type
+            ['const', ['name', 'Nat'], []],                    # 1: Nat
+            ['bvar', 0],                                       # 2: #0
+            ['nat', 0],                                        # 3: 0
+            ['forall', 'Lean.BinderInfo.default', 1, 1],       # 4: Nat -> Nat
+            ['forall', 'Lean.BinderInfo.implicit', 0, 4],      # 5: {α : Type} -> Nat -> Nat
+            ['lam', 'Lean.BinderInfo.default', 1, 2],          # 6: fun (x : Nat) => x
+            ['let', False, 1, 3, 2],                           # 7: let x : Nat := 0; x
+            ['lam', 'Lean.BinderInfo.implicit', 1, 2],         # 8: fun {x : Nat} => x (mutation)
+            ['forall', 'Lean.BinderInfo.default', 0, 4],       # 9: (α : Type) -> Nat -> Nat (mutation)
+            ['let', True, 1, 3, 2],                            # 10: have x : Nat := 0; x (mutation)
+        ]
+        def defn(type_id, val_id):
+            return dict(kernel=dict(universes=0, type=type_id, payload=['definition', 'Lean.DefinitionSafety.safe', val_id]),
+                        attributes={}, equation_origin=None)
+        mapping = dict(
+            schema_version=1, retired_tokens=[], allowed_abbreviations=[],
+            entries=[
+                dict(old='N.old', new='N.new', kind='declaration', layer='execution', rule='4', source='t'),
+                dict(old='N.old_let', new='N.new_let', kind='declaration', layer='execution', rule='4', source='t'),
+            ])
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            b_path = self._schema8_file(
+                root / 'b.json', 'def old := 0\ndef old_let := 0\n', ['N.old', 'N.old_let'],
+                {'N.old': defn(5, 6), 'N.old_let': defn(4, 7)}, pool, levels)
+            a_ok = self._schema8_file(
+                root / 'a_ok.json', 'def new := 0\ndef new_let := 0\n', ['N.new', 'N.new_let'],
+                {'N.new': defn(5, 6), 'N.new_let': defn(4, 7)}, pool, levels)
+            self.assertEqual(CHECK.check(CHECK.read_exports([b_path]), CHECK.read_exports([a_ok]), mapping)['status'], 'OK')
+
+            for label, after_consts in (
+                ('lam-binder-info', {'N.new': defn(5, 8), 'N.new_let': defn(4, 7)}),
+                ('forall-binder-info', {'N.new': defn(9, 6), 'N.new_let': defn(4, 7)}),
+                ('let-nondep', {'N.new': defn(5, 6), 'N.new_let': defn(4, 10)}),
+            ):
+                with self.subTest(label=label):
+                    a_bad = self._schema8_file(
+                        root / f'{label}.json', 'def new := 0\ndef new_let := 0\n', ['N.new', 'N.new_let'],
+                        after_consts, pool, levels)
+                    with self.assertRaisesRegex(CHECK.Mismatch, 'kernel'):
+                        CHECK.check(CHECK.read_exports([b_path]), CHECK.read_exports([a_bad]), mapping)
+
+    def test_unreferenced_realized_theorem_holder_shift_and_biting_controls(self):
+        def thm(type_expr, attrs=None):
+            return dict(kernel=dict(type=type_expr, universes=0, payload=['theorem']),
+                        attributes=attrs or {}, equation_origin=None)
+        self.renames = self.entries()
+        self.before = snapshot(
+            {'N.f': constant(1), 'N.f.eq_1': thm(['nat', 1]), 'N.f._proof_1_1': thm(['nat', 1]),
+             'N.f._simp_1_3': thm(['nat', 1])},
+            ['N.f'])
+        self.after = snapshot({'N.f': constant(1), 'N.f.eq_1': thm(['nat', 1])}, ['N.f'])
+        self.before['owners'] = {'N.f': 'A', 'N.f.eq_1': 'A', 'N.f._proof_1_1': 'A', 'N.f._simp_1_3': 'A'}
+        self.after['owners'] = {'N.f': 'A', 'N.f.eq_1': 'A'}
+        self.before['holders'] = {'N.f': {'A'}, 'N.f.eq_1': {'A', 'B'}, 'N.f._proof_1_1': {'A'}, 'N.f._simp_1_3': {'A'}}
+        self.after['holders'] = {'N.f': {'A'}, 'N.f.eq_1': {'A'}}
+        verdict = self.run_check()
+        self.assertEqual(verdict['status'], 'OK')
+        self.assertIn('N.f.eq_1', verdict['ignored_unreferenced_realized_theorems']['before'])
+        self.assertIn('N.f._proof_1_1', verdict['ignored_unreferenced_realized_theorems']['before'])
+        self.assertIn('N.f._simp_1_3', verdict['ignored_unreferenced_realized_theorems']['before'])
+
+        # Unreferenced realized theorem disappearing on one side also passes and is audited.
+        self.after = snapshot({'N.f': constant(1)}, ['N.f'])
+        self.after['owners'], self.after['holders'] = {'N.f': 'A'}, {'N.f': {'A'}}
+        verdict2 = self.run_check()
+        self.assertEqual(verdict2['status'], 'OK')
+        self.assertEqual(verdict2['ignored_unreferenced_realized_theorems']['before'],
+                         ['N.f._proof_1_1', 'N.f._simp_1_3', 'N.f.eq_1'])
+        self.assertEqual(verdict2['ignored_unreferenced_realized_theorems']['after'], [])
+
+        # Biting control A: referenced eq_1 / _proof_1 / _simp_1 with mutated statement MUST fail.
+        for sym in ('N.f.eq_1', 'N.f._proof_1', 'N.f._simp_1'):
+            with self.subTest(sym=sym):
+                self.before = snapshot({'N.f': constant(1), 'N.user': constant(ref(sym)), sym: thm(['nat', 1])},
+                                       ['N.f', 'N.user'])
+                self.after = snapshot({'N.f': constant(1), 'N.user': constant(ref(sym)), sym: thm(['nat', 2])},
+                                      ['N.f', 'N.user'])
+                with self.assertRaises(CHECK.Mismatch):
+                    self.run_check()
+
+        # Biting control B: unreferenced @[simp] eq_1 with mutated type or holder shift MUST fail.
+        self.before = snapshot({'N.f': constant(1), 'N.f.eq_1': thm(['nat', 1], {'simp': True})}, ['N.f'])
+        self.after = snapshot({'N.f': constant(1), 'N.f.eq_1': thm(['nat', 2], {'simp': True})}, ['N.f'])
+        self.before['holders'] = {'N.f': {'A'}, 'N.f.eq_1': {'A', 'B'}}
+        self.after['holders'] = {'N.f': {'A'}, 'N.f.eq_1': {'A'}}
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
+    def test_shared_dag_reviewed_quotation_occurs_more_than_once_under_expr_eq_cache(self):
+        def add_ident_pool(raw, parts, decl):
+            pool = []
+            def add(node):
+                pool.append(node)
+                return len(pool) - 1
+            def mk_const(n):
+                return add(['const', ['name', n], []])
+            def mk_app(f, *xs):
+                cur = f
+                for x in xs:
+                    cur = add(['app', cur, x])
+                return cur
+            def mk_name(ps):
+                return mk_app(mk_const(f'Lean.Name.mkStr{len(ps)}'), *[add(['str', p]) for p in ps])
+            t_id = mk_const('T')
+            nil_t = mk_app(mk_const('List.nil'), t_id)
+            nil_s = mk_app(mk_const('List.nil'), mk_const('String'))
+            preres = mk_app(mk_const('Lean.Syntax.Preresolved.decl'), mk_name(decl.split('.')), nil_s)
+            pre_list = mk_app(mk_const('List.cons'), t_id, preres, nil_t)
+            raw_ss = mk_app(mk_const("String.toRawSubstring'"), add(['str', raw]))
+            q_id = mk_app(mk_const('Lean.Syntax.ident'), mk_const('Lean.SourceInfo.none'),
+                          raw_ss, mk_name(parts), pre_list)
+            pair_id = mk_app(q_id, q_id)
+            nat_id = mk_const('Nat')
+            return pool, nat_id, q_id, pair_id
+
+        mapping = CHECK.MAP.Renamer([dict(old='Jaune.B256', new='Jaune.U256', kind='declaration')])
+        rec = dict(module='M', constant='N.m', before='B256', after='Jaune.U256', map_old='Jaune.B256',
+                   map_new='Jaune.U256', decision='d', reason='r', precedent='p')
+        b_pool, b_nat, b_q, b_pair = add_ident_pool('B256', ['B256'], 'Jaune.B256')
+        a_pool, a_nat, a_q, a_pair = add_ident_pool('Jaune.U256', ['Jaune', 'U256'], 'Jaune.U256')
+        def defn(t, v):
+            return dict(kernel=dict(universes=0, type=t, payload=['definition', 'Lean.DefinitionSafety.safe', v]),
+                        attributes={}, equation_origin=None)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            b1 = self._schema8_file(root / 'b1.json', 'def m := 1\n', ['N.m'], {'N.m': defn(b_nat, b_q)}, b_pool)
+            a1 = self._schema8_file(root / 'a1.json', 'def m := 1\n', ['N.m'], {'N.m': defn(a_nat, a_q)}, a_pool)
+            used = set()
+            verdict = CHECK.Comparison(CHECK.read_exports([b1]), CHECK.read_exports([a1]), mapping, [rec], used).run()
+            self.assertEqual((verdict['status'], used), ('OK', {0}))
+
+            # Duplicated shared DAG quotation q_id referenced twice via pair_id=['app', q_id, q_id]
+            # must NOT bypass single-occurrence check under _expr_eq_cache.
+            b2 = self._schema8_file(root / 'b2.json', 'def m := 1\n', ['N.m'], {'N.m': defn(b_nat, b_pair)}, b_pool)
+            a2 = self._schema8_file(root / 'a2.json', 'def m := 1\n', ['N.m'], {'N.m': defn(a_nat, a_pair)}, a_pool)
+            with self.assertRaisesRegex(CHECK.Mismatch, 'occurs more than once'):
+                CHECK.Comparison(CHECK.read_exports([b2]), CHECK.read_exports([a2]), mapping, [rec], set()).run()
+
 
 if __name__ == '__main__':
     unittest.main()

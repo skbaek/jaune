@@ -635,8 +635,8 @@ class IncrementalCaptureTests(unittest.TestCase):
         import os
         from unittest import mock
         cold, _, _ = self.capture()
-        os.environ['FAKE_SCHEMA'] = '8'
-        with mock.patch.object(CHECK.FIDELITY, 'CURRENT_SCHEMA', 8):
+        os.environ['FAKE_SCHEMA'] = '9'
+        with mock.patch.object(CHECK.FIDELITY, 'CURRENT_SCHEMA', 9):
             _, ran, _ = self.capture([cold])
         # Every export reruns; `--imports` outputs (their own schema, same
         # exporter binary) do not depend on the export schema and are reused.
@@ -732,6 +732,313 @@ class IncrementalCaptureTests(unittest.TestCase):
             calls = [(None, None, label, []) for label in 'ABCDE']
             order = CHECK.longest_first(calls, [dict(directory=prior)])
             self.assertEqual([calls[i][2] for i in order], ['D', 'E', 'B', 'C', 'A'])
+
+    def test_cache_dir_from_olean_and_exit3_fallback(self):
+        import argparse
+        import os
+        cache_dir = self.tmp / 'shared-cache'
+        os.environ['FAKE_OLEAN_EXIT3'] = 'B'
+        try:
+            def run_cached():
+                self.runs += 1
+                self.calls.write_text('')
+                args = argparse.Namespace(
+                    root=self.root, output=self.tmp / f'cache-out{self.runs}', source_dir=['.'],
+                    module=['C', 'D'], source_only=[], build_prefix=json.dumps(['python3', str(FAKES / 'fake_build.py')]),
+                    tool_root=None, tool_build_prefix=None, admit_command='["true"]', release_command='["true"]',
+                    reuse=None, cache_dir=cache_dir, jobs=2, plan_only=False)
+                CHECK.capture(args)
+                return args.output, sorted(l for l in self.calls.read_text().splitlines()), json.loads(
+                    (args.output / 'snapshot.json').read_bytes())
+
+            out1, ran1, snap1 = run_cached()
+            self.assertEqual(snap1['schema_version'], 4)
+            self.assertEqual(ran1, ['export B', 'imports A', 'imports B', 'imports C', 'imports D',
+                                    'olean A', 'olean C', 'olean D', 'olean-exit3 B'])
+            self.assertEqual(snap1['exports']['A']['from_olean'], True)
+            self.assertEqual(snap1['exports']['B']['from_olean'], False)
+            self.assertTrue((out1 / 'A.meta.json').is_file())
+
+            # Second capture into fresh output dir reuses both olean (A,C,D) and fallback elab (B) from --cache-dir.
+            _, ran2, snap2 = run_cached()
+            self.assertEqual(ran2, ['imports A', 'imports B', 'imports C', 'imports D', 'olean-exit3 B'])
+            self.assertTrue(snap2['provenance']['A']['export'].get('cache_hit'))
+            self.assertTrue(snap2['provenance']['B']['export'].get('cache_hit'))
+
+            # Leaf edit to A invalidates A in --cache-dir AND B's fallback elab_key (since B imports A's changed .olean);
+            # downstream C (unchanged own .olean in fake_build) stays cached under olean_key!
+            self.edit('A.lean', 'def a := 99\n')
+            _, ran3, _ = run_cached()
+            self.assertEqual(ran3, ['export B', 'imports A', 'imports B', 'imports C', 'imports D', 'olean A', 'olean-exit3 B'])
+        finally:
+            os.environ.pop('FAKE_OLEAN_EXIT3', None)
+
+
+class ComponentCompareTests(unittest.TestCase):
+    def _build_snapshot(self, root_dir, modules_spec):
+        """Materialize a schema-4 snapshot with real Schema-8 `.export.json` + `.meta.json`."""
+        root_dir = Path(root_dir)
+        root_dir.mkdir(parents=True, exist_ok=True)
+        files = {}
+        mods = {}
+        headers_mods = {}
+        artifacts = {}
+        local_built = {}
+        local_ileans = {}
+        exports = {}
+        for mod, spec in modules_spec.items():
+            src = spec['source']
+            rel = f'{mod}.lean'
+            src_sha = CHECK.sha(src.encode())
+            files[rel] = src_sha
+            imps = list(spec.get('imports', ()))
+            mods[mod] = dict(path=rel, sha256=src_sha, imports=imps, is_module=False)
+            direct_info = [[i, False, False, False] for i in imps]
+            headers_mods[mod] = dict(path=rel, is_module=False, direct_imports=direct_info)
+
+            olean = root_dir / f'{mod}.olean'
+            olean.write_text(f'olean {mod}')
+            ilean = root_dir / f'{mod}.ilean'
+            ilean.write_text('{}')
+            arts = {part: (dict(path=str(olean), sha256=CHECK.file_sha(olean)) if part == 'olean' else None)
+                    for part in CHECK.PARTS}
+            artifacts[mod] = arts
+            local_built[mod] = arts
+            local_ileans[mod] = dict(path=str(ilean), sha256=CHECK.file_sha(ilean))
+
+            decls = {}
+            for dname in spec.get('roots', ()):
+                leaf = dname.rsplit('.', 1)[-1]
+                idx_pos = src.find(leaf)
+                if idx_pos >= 0:
+                    prefix = src[:idx_pos]
+                    line = prefix.count('\n')
+                    col = idx_pos - (prefix.rfind('\n') + 1)
+                    decls[dname] = [line, col, line, col + len(leaf), line, col, line, col + len(leaf)]
+            expr_pool = spec.get('expr_pool', [])
+            level_pool = spec.get('level_pool', [])
+            export_obj = dict(
+                schema_version=8,
+                lean_version='fixture',
+                import_modules=sorted(imps),
+                source=src,
+                level_pool=level_pool,
+                expr_pool=expr_pool,
+                index=dict(version=5, module=mod, directImports=direct_info, decls=decls, references={},
+                           naming_syntax=dict(version=2, commands=[], from_olean=spec.get('from_olean', True))),
+                constants=spec['constants'],
+                guards=spec.get('guards', []),
+                attribute_syntax=spec.get('attribute_syntax', []),
+                checked_commands=spec.get('checked_commands', []),
+            )
+            exp_path = root_dir / f'{mod}.export.json'
+            exp_path.write_bytes(CHECK.compact(export_obj).encode())
+            exp_sha = CHECK.file_sha(exp_path)
+            meta = CHECK.FIDELITY.extract_module_meta(exp_path, exp_sha)
+            meta_path = root_dir / f'{mod}.meta.json'
+            meta_path.write_bytes(CHECK.compact(meta).encode())
+            exports[mod] = dict(path=exp_path.name, sha256=exp_sha, meta_path=meta_path.name,
+                                meta_sha256=CHECK.file_sha(meta_path), from_olean=spec.get('from_olean', True))
+
+        source_before = dict(head='fixture', source_dirs=['.'], files=files, modules=mods)
+        headers = dict(schema_version=1, lean_version='fixture', modules=headers_mods)
+        (root_dir / 'source-before.json').write_text(json.dumps(source_before))
+        (root_dir / 'headers.json').write_text(json.dumps(headers))
+        candidate = CHECK.bind_headers(source_before, headers)
+        roots = sorted(modules_spec)
+        selected = CHECK.closure(candidate['modules'], roots)
+        snap = dict(
+            schema_version=4, status='OK', build=dict(exit=0),
+            candidate=candidate, roots=roots, selected=selected, source_only=[], producers=selected,
+            headers_sha256=CHECK.file_sha(root_dir / 'headers.json'),
+            exporter_sha256='fake-exporter', tool_sources={},
+            artifacts=artifacts, local_built=local_built, local_ileans=local_ileans, exports=exports,
+        )
+        snap_path = root_dir / 'snapshot.json'
+        snap_path.write_text(json.dumps(snap))
+        return snap_path
+
+    @staticmethod
+    def _defn(type_id, val_id):
+        return dict(kernel=dict(universes=0, type=type_id, payload=['definition', 'Lean.DefinitionSafety.safe', val_id]),
+                    attributes={}, equation_origin=None)
+
+    def test_cross_component_renamed_generated_constant_and_mutation_control(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            b_pool = [['nat', 7], ['const', ['name', 'Upstream.inst_1'], []], ['const', ['name', 'Nat'], []]]
+            a_pool = [['nat', 7], ['const', ['name', 'Upstream.inst_2'], []], ['const', ['name', 'Nat'], []],
+                      ['const', ['name', 'Upstream.other'], []]]
+            u_pool = [['nat', 1], ['const', ['name', 'Nat'], []]]
+            before_spec = {
+                'Unaffected': dict(source='def keep := 1\n', roots=['Unaffected.keep'], expr_pool=u_pool,
+                                   constants={'Unaffected.keep': self._defn(1, 0)}),
+                'Upstream': dict(source='def old := 7\n', roots=['Upstream.old'], expr_pool=[['nat', 7], ['const', ['name', 'Nat'], []]],
+                                 constants={'Upstream.old': self._defn(1, 0), 'Upstream.inst_1': self._defn(1, 0)}),
+                'Downstream': dict(source='def use := 7\n', imports=['Upstream'], roots=['Downstream.use'], expr_pool=b_pool,
+                                   constants={'Downstream.use': self._defn(2, 1)}),
+            }
+            after_spec = {
+                'Unaffected': before_spec['Unaffected'],
+                'Upstream': dict(source='def new := 7\n', roots=['Upstream.new'], expr_pool=[['nat', 7], ['const', ['name', 'Nat'], []]],
+                                 constants={'Upstream.new': self._defn(1, 0), 'Upstream.inst_2': self._defn(1, 0)}),
+                'Downstream': dict(source='def use2 := 7\n', imports=['Upstream'], roots=['Downstream.use2'], expr_pool=a_pool,
+                                   constants={'Downstream.use2': self._defn(2, 1)}),
+            }
+            row_u = dict(old='Upstream.old', new='Upstream.new', kind='declaration', layer='execution', rule='4', source='t')
+            row_d = dict(old='Downstream.use', new='Downstream.use2', kind='declaration', layer='execution', rule='4', source='t')
+            mapping = dict(EMPTY, entries=[row_u, row_d])
+            b_path = self._build_snapshot(root / 'before', before_spec)
+            a_path = self._build_snapshot(root / 'after', after_spec)
+            verdict = CHECK.compare_components(b_path, a_path, mapping)
+            self.assertEqual(verdict['fast_path_modules'], ['Unaffected'])
+            self.assertEqual([c['before_modules'] for c in verdict['active_components']], [['Upstream'], ['Downstream']])
+
+            # Negative control: mutating Downstream.use2 to reference Upstream.other must fail!
+            bad_spec = copy.deepcopy(after_spec)
+            bad_spec['Downstream']['constants']['Downstream.use2'] = self._defn(2, 3)
+            bad_path = self._build_snapshot(root / 'bad', bad_spec)
+            with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'external generated constant'):
+                CHECK.compare_components(b_path, bad_path, mapping)
+
+    def test_global_uniform_namespace_and_multi_component_reloc_aux_controls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # CompA moves Ns.a -> NewNs.a and holds ``Ns` (`Name.mkStr1 "Ns"); CompB leaves Ns.b unmoved.
+            lit_pool = [
+                ['const', ['name', 'Lean.Name.mkStr1'], []],
+                ['str', 'Ns'],
+                ['app', 0, 1],
+                ['const', ['name', 'Lean.Name'], []],
+                ['const', ['name', 'Lean.Name.mkStr1'], []],
+                ['str', 'NewNs'],
+                ['app', 4, 5],
+            ]
+            u_pool = [['nat', 1], ['const', ['name', 'Nat'], []]]
+            before_ns = {
+                'CompA': dict(source='def a := 1\ndef lit := 1\n', roots=['Ns.a', 'CompA.lit'], expr_pool=lit_pool + u_pool,
+                              constants={'Ns.a': self._defn(8, 7), 'CompA.lit': self._defn(3, 2)}),
+                'CompB': dict(source='def b := 1\n', roots=['Ns.b'], expr_pool=u_pool,
+                              constants={'Ns.b': self._defn(1, 0)}),
+            }
+            after_ok = copy.deepcopy(before_ns)
+            after_ok['CompA']['source'] = 'def a2 := 1\ndef lit := 1\n'
+            after_ok['CompA']['roots'] = ['NewNs.a', 'CompA.lit']
+            after_ok['CompA']['constants'] = {'NewNs.a': self._defn(8, 7), 'CompA.lit': self._defn(3, 2)}
+            after_ok['CompB']['source'] = 'def b := 1 -- changed\n'
+            row_a = dict(old='Ns.a', new='NewNs.a', kind='declaration', layer='execution', rule='4', source='t')
+            map_ns = dict(EMPTY, entries=[row_a])
+            bp = self._build_snapshot(root / 'ns_b', before_ns)
+            ap = self._build_snapshot(root / 'ns_a', after_ok)
+            self.assertEqual(CHECK.compare_components(bp, ap, map_ns)['status'], 'OK')
+
+            after_bad = copy.deepcopy(after_ok)
+            after_bad['CompA']['constants']['CompA.lit'] = self._defn(3, 6)  # wrongly changed `Ns` -> `NewNs`
+            abp = self._build_snapshot(root / 'ns_bad', after_bad)
+            with self.assertRaises(CHECK.FIDELITY.Mismatch):
+                CHECK.compare_components(bp, abp, map_ns)
+
+            # Multi-component is_reloc_aux control: M3 (unrelocated) also holds M1.f.match_1
+            m_pool = [['nat', 5], ['const', ['name', 'Nat'], []], ['const', ['name', 'M1.f.match_1'], []],
+                      ['const', ['name', 'M1.f.match_2'], []]]
+            reloc_b = {
+                'M1': dict(source='def f := 5\n', roots=['M1.f'], expr_pool=m_pool,
+                           constants={'M1.f': self._defn(1, 2), 'M1.f.match_1': self._defn(1, 0)}),
+                'M2': dict(source='def g := 1\n', roots=['M2.g'], expr_pool=m_pool,
+                           constants={'M2.g': self._defn(1, 0)}),
+                'M3': dict(source='def h := 1\n', roots=['M3.h'], expr_pool=m_pool,
+                           constants={'M3.h': self._defn(1, 0), 'M1.f.match_1': self._defn(1, 0)}),
+            }
+            reloc_a = {
+                'M1': dict(source='def moved := 1\n', roots=[], expr_pool=m_pool, constants={}),
+                'M2': dict(source='def g := 1\ndef f := 5\n', roots=['M2.g', 'M1.f'], expr_pool=m_pool,
+                           constants={'M2.g': self._defn(1, 0), 'M1.f': self._defn(1, 3), 'M1.f.match_2': self._defn(1, 0)}),
+                'M3': dict(source='def h := 1 -- changed\n', roots=['M3.h'], expr_pool=m_pool,
+                           constants={'M3.h': self._defn(1, 0), 'M1.f.match_1': self._defn(1, 0)}),
+            }
+            row_r = dict(old='M1.f', new='M1.f', kind='relocation', layer='execution', rule='4', source='t',
+                         from_module='M1', to_module='M2')
+            rb = self._build_snapshot(root / 'rel_b', reloc_b)
+            ra = self._build_snapshot(root / 'rel_a', reloc_a)
+            with self.assertRaises(CHECK.FIDELITY.Mismatch):
+                CHECK.compare_components(rb, ra, dict(EMPTY, entries=[row_r]))
+
+    def test_fast_path_disjointness_promotes_unapplied_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pool_u = [
+                ['nat', 1], ['const', ['name', 'Nat'], []],
+                ['const', ['name', 'Lean.Name.mkStr2'], []], ['str', 'V'], ['str', 'lit'],
+                ['app', 2, 3], ['app', 5, 4], ['const', ['name', 'Lean.Name'], []],
+            ]
+            pool_v = [['nat', 2], ['const', ['name', 'Nat'], []]]
+            spec_b = {
+                'U': dict(source='def stay := 1\ndef ns_keep := 1\ndef use_lit := 1\n',
+                          roots=['U.stay', 'Ns.keep', 'U.use_lit'],
+                          expr_pool=pool_u,
+                          constants={
+                              'U.stay': self._defn(1, 0),
+                              'Ns.keep': self._defn(1, 0),
+                              'U.use_lit': self._defn(7, 6),
+                          }),
+                'V': dict(source='def lit := 2\ndef other := 2\n',
+                          roots=['V.lit', 'V.other'],
+                          expr_pool=pool_v,
+                          constants={
+                              'V.lit': self._defn(1, 0),
+                              'V.other': self._defn(1, 0),
+                          }),
+            }
+            spec_other = copy.deepcopy(spec_b)
+            spec_other['V']['source'] = 'def lit := 2\ndef other2 := 2\n'
+            spec_other['V']['roots'] = ['V.lit', 'V.other2']
+            spec_other['V']['constants'] = {'V.lit': self._defn(1, 0), 'V.other2': self._defn(1, 0)}
+            spec_vlit = copy.deepcopy(spec_b)
+            spec_vlit['V']['source'] = 'def lit_new := 2\ndef other := 2\n'
+            spec_vlit['V']['roots'] = ['V.lit_new', 'V.other']
+            spec_vlit['V']['constants'] = {'V.lit_new': self._defn(1, 0), 'V.other': self._defn(1, 0)}
+
+            bp = self._build_snapshot(root / 'b', spec_b)
+            ap = self._build_snapshot(root / 'a', spec_b)
+            ap_other = self._build_snapshot(root / 'a_other', spec_other)
+            ap_vlit = self._build_snapshot(root / 'a_vlit', spec_vlit)
+
+            # Disjoint map (EMPTY and unrelated V.other -> V.other2) keeps U on fast_path.
+            self.assertEqual(CHECK.compare_components(bp, ap, EMPTY)['fast_path_modules'], ['U', 'V'])
+            verdict_other = CHECK.compare_components(
+                bp, ap_other,
+                dict(EMPTY, entries=[dict(old='V.other', new='V.other2', kind='declaration', layer='execution', rule='4', source='t')]))
+            self.assertEqual(verdict_other['fast_path_modules'], ['U'])
+
+            # Unapplied declaration or namespace rows touching U promote U and fail.
+            for entry in (
+                dict(old='U.stay', new='U.moved', kind='declaration', layer='execution', rule='4', source='t'),
+                dict(old='Ns', new='NewNs', kind='namespace', layer='execution', rule='4', source='t'),
+            ):
+                with self.assertRaises(CHECK.FIDELITY.Mismatch):
+                    CHECK.compare_components(bp, ap, dict(EMPTY, entries=[entry]))
+
+            # Cross-module V.lit -> V.lit_new updated in V while U stays byte-identical with
+            # Lean.Name.mkStr2 "V" "lit" MUST promote U off fast_path and fail!
+            vlit_map = dict(EMPTY, entries=[
+                dict(old='V.lit', new='V.lit_new', kind='declaration', layer='execution', rule='4', source='t')])
+            with self.assertRaises(CHECK.FIDELITY.Mismatch):
+                CHECK.compare_components(bp, ap_vlit, vlit_map)
+
+    def test_compare_components_refuses_export_mode_flip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pool = [['nat', 1], ['const', ['name', 'Nat'], []]]
+            spec_b = {'M': dict(source='def old := 1\n', roots=['M.old'], expr_pool=pool,
+                                constants={'M.old': self._defn(1, 0)}, from_olean=True)}
+            spec_a = {'M': dict(source='def new := 1\n', roots=['M.new'], expr_pool=pool,
+                                constants={'M.new': self._defn(1, 0)}, from_olean=False)}
+            bp = self._build_snapshot(root / 'b', spec_b)
+            ap = self._build_snapshot(root / 'a', spec_a)
+            mapping = dict(EMPTY, entries=[
+                dict(old='M.old', new='M.new', kind='declaration', layer='execution', rule='4', source='t')])
+            with self.assertRaisesRegex(ValueError, 'export mode mismatch'):
+                CHECK.compare_components(bp, ap, mapping)
 
 
 if __name__ == '__main__':

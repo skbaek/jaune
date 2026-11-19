@@ -3,6 +3,7 @@
 import argparse
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -127,7 +128,150 @@ def run(directory, exporter):
     else:
         raise ValueError('unsupported command was silently omitted')
     records.append(dict(control='unsupported-command', status='REFUSED'))
+    records.extend(from_olean_controls(directory, exporter))
     return dict(status='OK', controls=records, restored_sha256=APPLY.digest(source.read_bytes()))
+
+
+def from_olean_controls(directory, exporter):
+    """Real compiler controls for --from-olean extraction and exit-3 fallback."""
+    original = (
+        b'namespace FidelityOlean\n\n'
+        b'structure Tx where\n'
+        b'  gas : Nat\n\n'
+        b'def work (n : Nat) : Nat := n + 1\n'
+        b'def fast (n : Nat) : Nat := n + 1\n\n'
+        b'@[csimp] theorem work_eq_fast : @work = @fast := rfl\n'
+        b'@[simp] theorem work_zero : work 0 = 1 := rfl\n'
+        b'@[inline] def value : Nat := 7\n\n'
+        b'class Tag (\xce\xb1 : Type) where\n'
+        b'  tag : Nat\n\n'
+        b'instance : Tag Nat := \xe2\x9f\xa81\xe2\x9f\xa9\n'
+        b'instance : Tag Nat := \xe2\x9f\xa82\xe2\x9f\xa9\n\n'
+        b'def transaction : Tx := { gas := 11 }\n\n'
+        b'end FidelityOlean\n'
+    )
+    module = 'FidelityOlean'
+    source = directory / f'{module}.lean'
+    source.write_bytes(original)
+    env_proc = subprocess.run(
+        ['lake', 'env', sys.executable, '-c', 'import json, os; print(json.dumps(dict(os.environ)))'],
+        cwd=ROOT, capture_output=True, text=True)
+    if env_proc.returncode:
+        raise ValueError(f'from-olean lake env exit {env_proc.returncode}: {env_proc.stdout}{env_proc.stderr}')
+    olean_env = json.loads(env_proc.stdout)
+    old_lp = olean_env.get('LEAN_PATH', '')
+    olean_env['LEAN_PATH'] = str(directory) + (os.pathsep + old_lp if old_lp else '')
+
+    def compile_and_export(content, target):
+        source.write_bytes(content)
+        olean = directory / f'{module}.olean'
+        ilean = directory / f'{module}.ilean'
+        for p in (directory / f'{module}.olean.server', directory / f'{module}.olean.private'):
+            if p.exists():
+                p.unlink()
+        comp = subprocess.run(
+            ['lean', '-R', str(directory), '-o', str(olean), '-i', str(ilean), str(source)],
+            cwd=ROOT, env=olean_env, capture_output=True, text=True)
+        target.with_suffix('.compile.log').write_text(comp.stdout + comp.stderr)
+        if comp.returncode:
+            raise ValueError(f'{target.stem} compile exit {comp.returncode}: {comp.stdout}{comp.stderr}')
+        argv = [str(exporter), '--from-olean', str(source), module, str(ilean), str(target)]
+        proc = subprocess.run(argv, cwd=ROOT, env=olean_env, capture_output=True, text=True)
+        target.with_suffix('.log').write_text(proc.stdout + proc.stderr)
+        save(target.with_suffix('.command.json'), dict(argv=argv, cwd=str(ROOT), exit=proc.returncode))
+        return proc.returncode, proc.stdout + proc.stderr
+
+    before = directory / 'olean-before.json'
+    rc, msg = compile_and_export(original, before)
+    if rc:
+        raise ValueError(f'from-olean baseline exit {rc}: {msg}')
+    before_json = json.loads(before.read_text())
+    if before_json['index'].get('naming_syntax', {}).get('from_olean') is not True:
+        raise ValueError('from-olean baseline missing from_olean=True marker')
+    mapping = dict(schema_version=1, retired_tokens=[], allowed_abbreviations=[], entries=[
+        dict(old='FidelityOlean.Tx.gas', new='FidelityOlean.Tx.gasLimit', kind='field', layer='execution',
+             rule='2', source='Synthetic from-olean fidelity control')])
+    renamed = original.replace(b'  gas : Nat', b'  gasLimit : Nat').replace(b'{ gas := 11 }', b'{ gasLimit := 11 }')
+    variants = [
+        ('olean-rename', renamed, None),
+        ('olean-body', renamed.replace(b'def value : Nat := 7', b'def value : Nat := 8'), 'kernel'),
+        ('olean-csimp', renamed.replace(b'@[csimp] ', b''), 'attributes'),
+        ('olean-simp', renamed.replace(b'@[simp] ', b''), 'attributes'),
+        ('olean-instance-order', renamed.replace(
+            b'instance : Tag Nat := \xe2\x9f\xa81\xe2\x9f\xa9\ninstance : Tag Nat := \xe2\x9f\xa82\xe2\x9f\xa9',
+            b'instance : Tag Nat := \xe2\x9f\xa82\xe2\x9f\xa9\ninstance : Tag Nat := \xe2\x9f\xa81\xe2\x9f\xa9'),
+         'generated-constant match'),
+    ]
+    records = []
+    for label, content, expected in variants:
+        if content == renamed and expected is not None:
+            raise ValueError(f'{label}: mutation did not apply')
+        after = directory / f'{label}.json'
+        rc, msg = compile_and_export(content, after)
+        if rc:
+            raise ValueError(f'{label}: unexpected --from-olean exit {rc}: {msg}')
+        if json.loads(after.read_text())['index'].get('naming_syntax', {}).get('from_olean') is not True:
+            raise ValueError(f'{label}: missing from_olean=True')
+        try:
+            result = CHECK.check(CHECK.read_exports([before]), CHECK.read_exports([after]), mapping)
+        except CHECK.Mismatch as error:
+            if expected is None or expected not in str(error):
+                raise ValueError(f'{label}: wrong rejection: {error}') from error
+            result = dict(status='REGRESSION', rejection=str(error))
+        else:
+            if expected is not None:
+                raise ValueError(f'{label}: mutation escaped the --from-olean control')
+        save(directory / f'{label}-verdict.json', result)
+        records.append(dict(control=label, status=result['status']))
+        source.write_bytes(original)
+        if source.read_bytes() != original:
+            raise ValueError('restoration differs from green baseline')
+
+    for label, suffix in (
+        ('olean-exit3-guard', b'\n#guard FidelityOlean.value == 7\n'),
+        ('olean-exit3-erase-simp', b'\nattribute [-simp] FidelityOlean.work_zero\n'),
+        ('olean-exit3-cmd-macro', b'\nlocal macro "my_cmd" : command => `(command| def z_macro : Nat := 1)\nmy_cmd\n'),
+    ):
+        after = directory / f'{label}.json'
+        rc, msg = compile_and_export(renamed + suffix, after)
+        if rc != 3:
+            raise ValueError(f'{label}: expected exit 3 fallback, got {rc}: {msg}')
+        records.append(dict(control=label, status='EXIT_3_FALLBACK'))
+        source.write_bytes(original)
+        if source.read_bytes() != original:
+            raise ValueError('restoration differs from green baseline')
+
+    # Positive control: tactic-only syntax / local macro_rules / local macro pass --from-olean (exit 0).
+    tactic_suffix = (
+        b'\nsyntax "my_rfl" : tactic\n'
+        b'local macro_rules | `(tactic| my_rfl) => `(tactic| rfl)\n'
+        b'local macro "my_rfl2" : tactic => `(tactic| rfl)\n'
+        b'set_option hygiene false in\n'
+        b'local macro "my_rfl3" : tactic => `(tactic| rfl)\n'
+        b'theorem tactic_ok : FidelityOlean.value = 7 := by my_rfl\n'
+        b'theorem tactic_ok2 : FidelityOlean.value = 7 := by my_rfl2\n'
+        b'theorem tactic_ok3 : FidelityOlean.value = 7 := by my_rfl3\n'
+    )
+    tactic_after = directory / 'olean-tactic-macro.json'
+    rc, msg = compile_and_export(renamed + tactic_suffix, tactic_after)
+    if rc:
+        raise ValueError(f'olean-tactic-macro: unexpected --from-olean exit {rc}: {msg}')
+    tactic_json = json.loads(tactic_after.read_text())
+    if (tactic_json['index'].get('naming_syntax', {}).get('from_olean') is not True or
+            'tactic_ok' not in tactic_json['constants'] or
+            'tactic_ok2' not in tactic_json['constants'] or
+            'tactic_ok3' not in tactic_json['constants']):
+        raise ValueError('olean-tactic-macro: missing from_olean marker or tactic theorems')
+    empty_map = dict(schema_version=1, retired_tokens=[], allowed_abbreviations=[], entries=[])
+    tactic_bundle = CHECK.read_exports([tactic_after])
+    tactic_verdict = CHECK.check(tactic_bundle, CHECK.read_exports([tactic_after]), empty_map)
+    if tactic_verdict['status'] != 'OK':
+        raise ValueError(f'olean-tactic-macro: unexpected check verdict {tactic_verdict}')
+    records.append(dict(control='olean-tactic-macro', status='OK'))
+    source.write_bytes(original)
+    if source.read_bytes() != original:
+        raise ValueError('restoration differs from green baseline')
+    return records
 
 
 ELAB_RENAMED = [(b'  | dot\n', b'  | point\n'), (b'`(Shape.dot)', b'`(Shape.point)')]

@@ -444,7 +444,21 @@ def syntaxExtras (env : Environment) (header : Syntax) (trees : Array InfoTree)
    ("namespaces", toJson namespaces), ("commands", toJson commandRows), ("eof_scope", eof),
    ("imports", toJson (importRows header)), ("unresolved_syntax", toJson caseRows),
    ("constructor_binders", toJson (constructorBinderRows commands)),
-   ("quotation_identifiers", toJson (commands.foldl (fun acc c => acc ++ quotationRows c) #[]))]
+   ("quotation_identifiers", toJson (commands.foldl (fun acc c => acc ++ quotationRows c) #[])),
+   ("from_olean", toJson false)]
+
+/-- Version-2 syntax provenance when extracted from `.olean`/`.ilean` without info trees.
+`named_arguments` and `unresolved_syntax` are `null` and `from_olean` is `true` so planners
+refuse editing from this bundle while still reading `namespaces`/`commands`/`decls`. -/
+def syntaxExtrasOlean (env : Environment) (header : Syntax) (commands : Array Syntax) :
+    List (String × Json) :=
+  let (namespaces, commandRows, eof) := scopeRows env commands
+  [("named_arguments", Json.null),
+   ("namespaces", toJson namespaces), ("commands", toJson commandRows), ("eof_scope", eof),
+   ("imports", toJson (importRows header)), ("unresolved_syntax", Json.null),
+   ("constructor_binders", toJson (constructorBinderRows commands)),
+   ("quotation_identifiers", toJson (commands.foldl (fun acc c => acc ++ quotationRows c) #[])),
+   ("from_olean", toJson true)]
 
 partial def identifiersIn (stx : Syntax) : Array Syntax :=
   if stx.isIdent then #[stx]

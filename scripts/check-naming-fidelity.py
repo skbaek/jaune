@@ -14,11 +14,10 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
-# Schema 7 keys explicit attributes per declaration and records elaboration
-# attributes beyond the first tracked set and instance order; the candidate
-# workflow requires it, the low-level comparator still reads archived exports.
-SCHEMAS = (3, 4, 5, 6, 7)
-CURRENT_SCHEMA = 7
+# Schema 8 stores per-module level/expr DAG pools, path-free import module
+# lists, deterministic equation provenance, and optional --from-olean metadata.
+SCHEMAS = (3, 4, 5, 6, 7, 8)
+CURRENT_SCHEMA = 8
 
 
 def load(filename):
@@ -34,6 +33,117 @@ APPLY = load('apply-naming-map.py')
 
 def encoded(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'))
+
+
+_NONE_DIGEST = hashlib.sha256(b'N').digest()
+_TRUE_DIGEST = hashlib.sha256(b'T').digest()
+_FALSE_DIGEST = hashlib.sha256(b'F').digest()
+
+
+def _atom_digest(x):
+    if x is None:
+        return _NONE_DIGEST
+    if isinstance(x, bool):
+        return _TRUE_DIGEST if x else _FALSE_DIGEST
+    if isinstance(x, int):
+        b = str(x).encode('ascii')
+        return hashlib.sha256(b'I' + len(b).to_bytes(8, 'little') + b).digest()
+    if isinstance(x, float):
+        b = repr(x).encode('ascii')
+        return hashlib.sha256(b'R' + len(b).to_bytes(8, 'little') + b).digest()
+    if isinstance(x, str):
+        b = x.encode('utf-8')
+        return hashlib.sha256(b'S' + len(b).to_bytes(8, 'little') + b).digest()
+    raise TypeError(f'unsupported dag_digest atom: {type(x).__name__}')
+
+
+def dag_digest(value):
+    """Injective, type-tagged, DAG-memoized structural SHA-256 hex digest."""
+    if not isinstance(value, (list, dict)):
+        return _atom_digest(value).hex()
+    memo = {}
+    str_cache = {}
+    stack = [(value, False)]
+    while stack:
+        cur, ready = stack.pop()
+        if isinstance(cur, list):
+            cid = id(cur)
+            if cid in memo:
+                continue
+            if not ready:
+                stack.append((cur, True))
+                for x in cur:
+                    if isinstance(x, (list, dict)) and id(x) not in memo:
+                        stack.append((x, False))
+            else:
+                h = hashlib.sha256(b'L' + len(cur).to_bytes(8, 'little'))
+                for x in cur:
+                    if isinstance(x, (list, dict)):
+                        h.update(memo[id(x)])
+                    elif isinstance(x, str):
+                        sd = str_cache.get(x)
+                        if sd is None:
+                            sb = x.encode('utf-8')
+                            sd = hashlib.sha256(b'S' + len(sb).to_bytes(8, 'little') + sb).digest()
+                            str_cache[x] = sd
+                        h.update(sd)
+                    else:
+                        h.update(_atom_digest(x))
+                memo[cid] = h.digest()
+        elif isinstance(cur, dict):
+            cid = id(cur)
+            if cid in memo:
+                continue
+            if not ready:
+                stack.append((cur, True))
+                for v in cur.values():
+                    if isinstance(v, (list, dict)) and id(v) not in memo:
+                        stack.append((v, False))
+            else:
+                items = sorted(cur.items())
+                h = hashlib.sha256(b'D' + len(items).to_bytes(8, 'little'))
+                for k, v in items:
+                    kd = str_cache.get(k) if isinstance(k, str) else None
+                    if kd is None:
+                        kd = _atom_digest(k)
+                        if isinstance(k, str):
+                            str_cache[k] = kd
+                    h.update(kd)
+                    h.update(memo[id(v)] if isinstance(v, (list, dict)) else _atom_digest(v))
+                memo[cid] = h.digest()
+    return memo[id(value)].hex()
+
+
+def dag_equal(left, right):
+    """Exact structural equality over potentially DAG-shared JSON graphs."""
+    seen = set()
+    stack = [(left, right)]
+    while stack:
+        a, b = stack.pop()
+        if a is b:
+            continue
+        if type(a) is not type(b):
+            return False
+        if isinstance(a, list):
+            if len(a) != len(b):
+                return False
+            pair_id = (id(a), id(b))
+            if pair_id in seen:
+                continue
+            seen.add(pair_id)
+            stack.extend(zip(a, b))
+        elif isinstance(a, dict):
+            if a.keys() != b.keys():
+                return False
+            pair_id = (id(a), id(b))
+            if pair_id in seen:
+                continue
+            seen.add(pair_id)
+            for k in a:
+                stack.append((a[k], b[k]))
+        elif a != b:
+            return False
+    return True
 
 
 class Mismatch(ValueError):
@@ -94,22 +204,44 @@ def _preresolved(e):
 RAW_SUBSTRING = ('String.toRawSubstring', "String.toRawSubstring'")
 
 
-def _spelling(val):
-    """(components, wrapper) of a quotation's `val`: a name literal, possibly
-    under `Lean.addMacroScope mainModule NAME scopes`."""
-    head, args = _unwind(val)
-    if head == 'Lean.addMacroScope' and len(args) == 3:
-        parts = _name(args[1])
-        return (None, None) if parts is None else (parts, ['addMacroScope', quoted_identifiers(args[0]),
-                                                           quoted_identifiers(args[2])])
-    parts = _name(val)
-    return parts, None
-
-
 def plain_spelling(raw):
     """A raw identifier spelling without `«»` escapes, as `getId` reports it."""
     return '.'.join(part[1:-1] if part.startswith('«') and part.endswith('»') else part
                     for part in APPLY.split_name(raw)) if raw else raw
+
+
+def _spelling_parts(val):
+    """(components, wrapper) of a quotation's `val` when subtrees are already transformed."""
+    head, args = _unwind(val)
+    if head == 'Lean.addMacroScope' and len(args) == 3:
+        parts = _name(args[1])
+        return (None, None) if parts is None else (parts, ['addMacroScope', args[0], args[2]])
+    parts = _name(val)
+    return parts, None
+
+
+def quoted_identifiers_node(e):
+    """Recognize an already-decoded `['app', ...]` syntax identifier quotation node."""
+    if isinstance(e, list) and len(e) == 3 and e[0] == 'app':
+        head, args = _unwind(e)
+        if head == 'Lean.Syntax.ident' and len(args) == 4:
+            items = _list(args[3])
+            decoded = None if items is None else [_preresolved(x) for x in items]
+            if decoded == []:
+                info, raw, val, _ = args
+                raw_head, raw_args = _unwind(raw)
+                raw_text = _lit(raw_args[0]) if raw_head in RAW_SUBSTRING and len(raw_args) == 1 else None
+                parts = _name(val)
+                if raw_text is not None and parts is not None and plain_spelling(raw_text) == '.'.join(parts):
+                    return ['unhygienicIdentifier', '.'.join(parts), raw_text, [raw_head, info]]
+            if decoded and None not in decoded and any(d[0] == 'decl' for d in decoded):
+                info, raw, val, _ = args
+                raw_head, raw_args = _unwind(raw)
+                raw_text = _lit(raw_args[0]) if raw_head in RAW_SUBSTRING and len(raw_args) == 1 else None
+                parts, wrapper = _spelling_parts(val)
+                if raw_text is not None and parts is not None and all('.' not in p for p in parts):
+                    return ['quotedIdentifier', decoded, '.'.join(parts), raw_text, [raw_head, wrapper, info]]
+    return e
 
 
 def quoted_identifiers(e):
@@ -124,36 +256,379 @@ def quoted_identifiers(e):
     `Jaune.U256`) changes what `getId` returns, so it is a difference. Without
     pre-resolved declarations the whole expression is compared literally.
     """
-    if isinstance(e, dict):
-        return {k: quoted_identifiers(v) for k, v in e.items()}
-    if not isinstance(e, list):
+    if not isinstance(e, (list, dict)):
         return e
-    if e and e[0] == 'app':
-        head, args = _unwind(e)
-        if head == 'Lean.Syntax.ident' and len(args) == 4:
-            items = _list(args[3])
-            decoded = None if items is None else [_preresolved(x) for x in items]
-            if decoded == []:
-                # Unhygienic quotation (`local macro` without hygiene): no
-                # pre-resolution and a plain Name value. Resolved by spelling
-                # at the expansion site; rule E compares the spelling.
-                info, raw, val, _ = args
-                raw_head, raw_args = _unwind(raw)
-                raw_text = _lit(raw_args[0]) if raw_head in RAW_SUBSTRING and len(raw_args) == 1 else None
-                parts = _name(val)
-                if raw_text is not None and parts is not None and plain_spelling(raw_text) == '.'.join(parts):
-                    return ['unhygienicIdentifier', '.'.join(parts), raw_text, [raw_head, quoted_identifiers(info)]]
-            if decoded and None not in decoded and any(d[0] == 'decl' for d in decoded):
-                info, raw, val, _ = args
-                raw_head, raw_args = _unwind(raw)
-                raw_text = _lit(raw_args[0]) if raw_head in RAW_SUBSTRING and len(raw_args) == 1 else None
-                parts, wrapper = _spelling(val)
-                if raw_text is not None and parts is not None and all('.' not in p for p in parts):
-                    return ['quotedIdentifier', decoded, '.'.join(parts), raw_text,
-                            [raw_head, wrapper, quoted_identifiers(info)]]
-                # An unrecognized spelling shape keeps the literal expression
-                # (fails closed under any rename of the declaration it names).
-    return [quoted_identifiers(x) for x in e]
+    results = {}
+    stack = [(e, False)]
+    while stack:
+        cur, ready = stack.pop()
+        cid = id(cur)
+        if cid in results:
+            continue
+        if isinstance(cur, dict):
+            if not ready:
+                stack.append((cur, True))
+                for v in cur.values():
+                    if isinstance(v, (list, dict)) and id(v) not in results:
+                        stack.append((v, False))
+            else:
+                out = {k: (results[id(v)] if isinstance(v, (list, dict)) else v) for k, v in cur.items()}
+                results[cid] = cur if all(out[k] is cur[k] for k in cur) else out
+        elif isinstance(cur, list):
+            if not ready:
+                stack.append((cur, True))
+                for x in cur:
+                    if isinstance(x, (list, dict)) and id(x) not in results:
+                        stack.append((x, False))
+            else:
+                changed = False
+                items = []
+                for x in cur:
+                    if isinstance(x, (list, dict)):
+                        nx = results[id(x)]
+                        if nx is not x:
+                            changed = True
+                        items.append(nx)
+                    else:
+                        items.append(x)
+                cand = items if changed else cur
+                converted = quoted_identifiers_node(cand)
+                results[cid] = converted
+    return results[id(e)]
+
+
+def find_special_ids(constants, guards=()):
+    """Collect Python object IDs of quotation nodes and every ancestor container."""
+    special = set()
+    visited = set()
+
+    def scan(root):
+        if not isinstance(root, (list, dict)) or id(root) in visited:
+            return
+        stack = [(root, False)]
+        while stack:
+            cur, ready = stack.pop()
+            cid = id(cur)
+            if ready:
+                if isinstance(cur, list):
+                    if ((len(cur) in (4, 5) and cur[0] in ('unhygienicIdentifier', 'quotedIdentifier')) or
+                            any(isinstance(x, (list, dict)) and id(x) in special for x in cur)):
+                        special.add(cid)
+                elif any(isinstance(v, (list, dict)) and id(v) in special for v in cur.values()):
+                    special.add(cid)
+                continue
+            if cid in visited:
+                continue
+            visited.add(cid)
+            stack.append((cur, True))
+            children = cur if isinstance(cur, list) else cur.values()
+            for ch in children:
+                if isinstance(ch, (list, dict)) and id(ch) not in visited:
+                    stack.append((ch, False))
+
+    for rec in constants.values():
+        scan(rec)
+    for g in guards:
+        scan(g)
+    return special
+
+
+def _clone_special_spine(root, special_ids):
+    """Iteratively clone only containers in `special_ids`, keeping non-special sub-DAGs shared."""
+    if not isinstance(root, (list, dict)) or id(root) not in special_ids:
+        return root
+    clones = {}
+    stack = [(root, False)]
+    while stack:
+        cur, ready = stack.pop()
+        cid = id(cur)
+        if not ready:
+            stack.append((cur, True))
+            children = cur if isinstance(cur, list) else cur.values()
+            for ch in children:
+                if isinstance(ch, (list, dict)) and id(ch) in special_ids and id(ch) not in clones:
+                    stack.append((ch, False))
+        else:
+            if isinstance(cur, list):
+                out = [clones[id(x)] if isinstance(x, (list, dict)) and id(x) in special_ids else x for x in cur]
+            else:
+                out = {k: (clones[id(v)] if isinstance(v, (list, dict)) and id(v) in special_ids else v)
+                       for k, v in cur.items()}
+            special_ids.add(id(out))
+            clones[cid] = out
+    return clones[id(root)]
+
+
+def decode_schema8_data(data, pools_keep, special_ids):
+    """Decode Schema 8 level_pool/expr_pool bottom-up into shared DAG structures."""
+    raw_levels = data.get('level_pool')
+    raw_exprs = data.get('expr_pool')
+    if not isinstance(raw_levels, list) or not isinstance(raw_exprs, list):
+        raise ValueError('schema 8 export requires level_pool and expr_pool')
+    levels = []
+    for idx, node in enumerate(raw_levels):
+        if not isinstance(node, list) or not node:
+            raise ValueError(f'invalid level_pool node at {idx}')
+        tag = node[0]
+        if tag in ('zero', 'param'):
+            levels.append(node)
+        elif tag == 'succ':
+            uid = node[1]
+            if not isinstance(uid, int) or uid < 0 or uid >= idx:
+                raise ValueError(f'invalid level_pool ref {uid} at {idx}')
+            levels.append(['succ', levels[uid]])
+        elif tag in ('max', 'imax'):
+            u1, u2 = node[1], node[2]
+            if not (isinstance(u1, int) and 0 <= u1 < idx and isinstance(u2, int) and 0 <= u2 < idx):
+                raise ValueError(f'invalid level_pool refs {(u1, u2)} at {idx}')
+            levels.append([tag, levels[u1], levels[u2]])
+        else:
+            raise ValueError(f'unknown level_pool tag {tag!r}')
+
+    n_levels = len(levels)
+
+    def ref_level(uid):
+        if not isinstance(uid, int) or uid < 0 or uid >= n_levels:
+            raise ValueError(f'invalid level index {uid}')
+        return levels[uid]
+
+    exprs = []
+    special_pool = []
+    attached_special = set()
+
+    def attach_special(obj):
+        oid = id(obj)
+        if oid not in attached_special:
+            attached_special.add(oid)
+            return obj
+        cloned = _clone_special_spine(obj, special_ids)
+        attached_special.add(id(cloned))
+        return cloned
+
+    def ref_expr_in_pool(eid, limit):
+        if not isinstance(eid, int) or eid < 0 or eid >= limit:
+            raise ValueError(f'invalid expr_pool ref {eid} at {limit}')
+        obj = exprs[eid]
+        if special_pool[eid]:
+            return attach_special(obj)
+        return obj
+
+    for idx, node in enumerate(raw_exprs):
+        if not isinstance(node, list) or not node:
+            raise ValueError(f'invalid expr_pool node at {idx}')
+        tag = node[0]
+        if tag in ('bvar', 'nat', 'str'):
+            obj, is_sp = node, False
+        elif tag == 'sort':
+            obj, is_sp = ['sort', ref_level(node[1])], False
+        elif tag == 'const':
+            obj, is_sp = ['const', node[1], [ref_level(u) for u in node[2]]], False
+        elif tag == 'app':
+            f_obj = ref_expr_in_pool(node[1], idx)
+            a_obj = ref_expr_in_pool(node[2], idx)
+            cand = ['app', f_obj, a_obj]
+            conv = quoted_identifiers_node(cand)
+            if conv is not cand:
+                obj = conv
+                is_sp = True
+                special_ids.add(id(obj))
+            else:
+                obj = cand
+                is_sp = special_pool[node[1]] or special_pool[node[2]]
+                if is_sp:
+                    special_ids.add(id(obj))
+        elif tag in ('lam', 'forall'):
+            t_obj = ref_expr_in_pool(node[2], idx)
+            b_obj = ref_expr_in_pool(node[3], idx)
+            obj = [tag, node[1], t_obj, b_obj]
+            is_sp = special_pool[node[2]] or special_pool[node[3]]
+            if is_sp:
+                special_ids.add(id(obj))
+        elif tag == 'let':
+            t_obj = ref_expr_in_pool(node[2], idx)
+            v_obj = ref_expr_in_pool(node[3], idx)
+            b_obj = ref_expr_in_pool(node[4], idx)
+            obj = ['let', node[1], t_obj, v_obj, b_obj]
+            is_sp = special_pool[node[2]] or special_pool[node[3]] or special_pool[node[4]]
+            if is_sp:
+                special_ids.add(id(obj))
+        elif tag == 'proj':
+            s_obj = ref_expr_in_pool(node[3], idx)
+            obj = ['proj', node[1], node[2], s_obj]
+            is_sp = special_pool[node[3]]
+            if is_sp:
+                special_ids.add(id(obj))
+        else:
+            raise ValueError(f'unknown expr_pool tag {tag!r}')
+        exprs.append(obj)
+        special_pool.append(is_sp)
+
+    n_exprs = len(exprs)
+
+    def attach_id(eid):
+        if not isinstance(eid, int) or eid < 0 or eid >= n_exprs:
+            raise ValueError(f'invalid expr index {eid}')
+        return ref_expr_in_pool(eid, n_exprs), special_pool[eid]
+
+    new_constants = {}
+    for name, c in data['constants'].items():
+        k = c['kernel']
+        type_expr, sp_t = attach_id(k['type'])
+        p = k['payload']
+        sp_p = False
+        if isinstance(p, list) and p:
+            ptag = p[0]
+            if ptag in ('definition', 'opaque'):
+                val_expr, sp_v = attach_id(p[2])
+                new_payload = [ptag, p[1], val_expr]
+                if sp_v:
+                    special_ids.add(id(new_payload))
+                    sp_p = True
+            elif ptag == 'recursor':
+                new_rules = []
+                for rule in p[6]:
+                    rhs_expr, sp_r = attach_id(rule[3])
+                    nr = [rule[0], rule[1], rule[2], rhs_expr]
+                    if sp_r:
+                        special_ids.add(id(nr))
+                        sp_p = True
+                    new_rules.append(nr)
+                if sp_p:
+                    special_ids.add(id(new_rules))
+                new_payload = [p[0], p[1], p[2], p[3], p[4], p[5], new_rules, p[7], p[8]]
+                if sp_p:
+                    special_ids.add(id(new_payload))
+            else:
+                new_payload = p
+        else:
+            new_payload = p
+        new_kernel = {'universes': k['universes'], 'type': type_expr, 'payload': new_payload}
+        new_const = {'kernel': new_kernel, 'attributes': c['attributes']}
+        if 'equation_origin' in c:
+            new_const['equation_origin'] = c['equation_origin']
+        if sp_t or sp_p:
+            special_ids.add(id(new_kernel))
+            special_ids.add(id(new_const))
+        new_constants[name] = new_const
+
+    new_guards = []
+    for g in data['guards']:
+        g_expr, sp_g = attach_id(g[1])
+        ng = [g[0], g_expr]
+        if sp_g:
+            special_ids.add(id(ng))
+        new_guards.append(ng)
+
+    pools_keep.append((levels, exprs))
+    return new_constants, new_guards
+
+
+REALIZED_THM_LEAF = re.compile(r'^(eq_\d+|eq_def|else_eq|splitter|congr_simp|_?proof_\d+(?:_\d+)*|_?simp_\d+(?:_\d+)*)$')
+
+DEFAULT_ATTR_KEYS = {
+    'simp': [], 'simp_unfold': False, 'simp_equations': None,
+    'csimp': False, 'csimp_replacement': None, 'inline': None,
+    'instance': None, 'implemented_by': None, 'match_pattern': False,
+    'default_instance': [], 'eliminator': [], 'ext': [], 'elaborator': [],
+    'elab_as_elim': False, 'elab_without_expected_type': False,
+    'specialize': None, 'nospecialize': False, 'never_extract': False,
+    'export': None, 'protected': False, 'noncomputable': False,
+}
+
+
+def has_nondefault_attributes(attrs):
+    """Return True if a constant has any non-default elaboration/compilation attribute."""
+    if not attrs:
+        return False
+    for k, v in attrs.items():
+        if k == 'reducibility':
+            if v is not None and v != 'Lean.ReducibilityStatus.semireducible':
+                return True
+        elif k in DEFAULT_ATTR_KEYS:
+            if v != DEFAULT_ATTR_KEYS[k]:
+                return True
+        elif v:
+            return True
+    return False
+
+
+def is_realized_theorem_candidate(name, rec, roots):
+    """Whether `name` is an un-annotated generated realized theorem eligible for closure exclusion."""
+    if name in roots:
+        return False
+    leaf = name.rsplit('@', 1)[0].rsplit('.', 1)[-1]
+    if not REALIZED_THM_LEAF.match(leaf):
+        return False
+    kernel = rec.get('kernel')
+    payload = kernel.get('payload') if isinstance(kernel, dict) else kernel
+    if payload != ['theorem']:
+        return False
+    return not has_nondefault_attributes(rec.get('attributes'))
+
+
+def _mkstr_literal(e):
+    """Extract dotted Name literal if `e` is `Lean.Name.mkStrK s1 ... sK` with plain string parts."""
+    if not (isinstance(e, list) and len(e) == 3 and e[0] == 'app'):
+        return None
+    parts = []
+    cur = e
+    for _ in range(9):
+        if isinstance(cur, list) and len(cur) == 3 and cur[0] == 'app':
+            arg = cur[2]
+            if not (isinstance(arg, list) and len(arg) == 2 and arg[0] == 'str' and isinstance(arg[1], str)):
+                return None
+            if not arg[1] or '.' in arg[1] or '«' in arg[1]:
+                return None
+            parts.append(arg[1])
+            cur = cur[1]
+        else:
+            break
+    if (parts and isinstance(cur, list) and len(cur) >= 2 and cur[0] == 'const' and
+            isinstance(cur[1], list) and len(cur[1]) == 2 and cur[1][0] == 'name' and
+            cur[1][1] == f'Lean.Name.mkStr{len(parts)}'):
+        parts.reverse()
+        return '.'.join(parts)
+    return None
+
+
+def collect_const_refs(value, found=None, visited=None):
+    """Iteratively extract all referenced `['name', N]` and `Lean.Name.mkStrK` literals."""
+    if found is None:
+        found = set()
+    if visited is None:
+        visited = set()
+    stack = [value]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, list):
+            cid = id(cur)
+            if cid in visited:
+                continue
+            visited.add(cid)
+            if len(cur) == 2 and cur[0] == 'name' and isinstance(cur[1], str):
+                found.add(cur[1])
+                continue
+            if len(cur) == 4 and cur[0] == 'unhygienicIdentifier' and isinstance(cur[1], str):
+                found.add(cur[1])
+                continue
+            if len(cur) == 5 and cur[0] == 'quotedIdentifier' and isinstance(cur[2], str):
+                found.add(cur[2])
+            if len(cur) == 3 and cur[0] == 'app':
+                lit = _mkstr_literal(cur)
+                if lit is not None:
+                    found.add(lit)
+            for x in cur:
+                if isinstance(x, (list, dict)) and id(x) not in visited:
+                    stack.append(x)
+        elif isinstance(cur, dict):
+            cid = id(cur)
+            if cid in visited:
+                continue
+            visited.add(cid)
+            for v in cur.values():
+                if isinstance(v, (list, dict)) and id(v) not in visited:
+                    stack.append(v)
+    return found
 
 
 def merge_constants(existing, roots, incoming, incoming_roots):
@@ -172,7 +647,7 @@ def merge_constants(existing, roots, incoming, incoming_roots):
         if (name in roots or name in incoming_roots or
                 (origin is None and not realized) or
                 origin != incoming[name].get('equation_origin') or
-                existing[name] != incoming[name]):
+                not dag_equal(existing[name], incoming[name])):
             raise ValueError(f'duplicate constants without identical generated-equation provenance: {name}')
     existing.update(incoming)
     return overlap
@@ -288,11 +763,14 @@ DERIVING_CLASSES = {'Repr': 'Repr', 'Lean.ToJson': 'ToJson', 'Lean.FromJson': 'F
 
 
 def _consts(e, found):
-    if isinstance(e, list):
-        if len(e) == 3 and e[0] == 'const' and isinstance(e[1], list) and e[1][:1] == ['name']:
-            found.append(e[1][1])
-        for x in e:
-            _consts(x, found)
+    stack = [e]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, list):
+            if len(cur) == 3 and cur[0] == 'const' and isinstance(cur[1], list) and cur[1][:1] == ['name']:
+                found.append(cur[1][1])
+            for x in reversed(cur):
+                stack.append(x)
     return found
 
 
@@ -313,9 +791,10 @@ def derived_constants(data, authored_ranges, byte_offsets, positions):
         if name in decls:
             continue
         kernel = constant['kernel']
-        if not (isinstance(kernel, list) and kernel and kernel[0] == 'definition'):
+        payload = kernel['payload'] if isinstance(kernel, dict) else kernel
+        if not (isinstance(payload, list) and len(payload) >= 3 and payload[0] == 'definition'):
             continue
-        names = _consts(kernel[2], [])
+        names = _consts(payload[2], [])
         if len(names) < 2 or not names[0].endswith('.mk') or names[0][:-3] not in DERIVING_CLASSES:
             continue
         cls = DERIVING_CLASSES[names[0][:-3]]
@@ -353,6 +832,7 @@ def read_exports(paths):
     quotation_sites, module_sources, module_decls, module_commands = {}, {}, {}, {}
     item_modules = {key: [] for key in ITEMS}
     coalesced = set()
+    pools_keep, special_ids, ilean_refs, import_modules, from_olean = [], set(), set(), {}, {}
     version = None
     schemas = set()
     for path in paths:
@@ -368,6 +848,9 @@ def read_exports(paths):
         if module in modules:
             raise ValueError(f'duplicate module {module}')
         modules[module] = data['index']['directImports']
+        if 'import_modules' in data:
+            import_modules[module] = data['import_modules']
+        from_olean[module] = bool(data['index'].get('naming_syntax', {}).get('from_olean', False))
         for name, constant in data['constants'].items():
             if data['schema_version'] >= 6:
                 origin = constant['equation_origin']
@@ -382,6 +865,7 @@ def read_exports(paths):
         decl_positions = APPLY.Positions(data['source'])
         names = {name for name, loc in data['index']['decls'].items()
                  if spelled_name(data['source'], *APPLY.span(decl_positions, loc[4:] if len(loc) == 8 else loc), name)}
+        ilean_refs.update(data['index']['decls'].keys())
         failed_names = set()
         locations = defaultdict(set)
         positions = APPLY.Positions(data['source'])
@@ -392,6 +876,7 @@ def read_exports(paths):
             const = json.loads(key).get('c')
             if not const:
                 continue
+            ilean_refs.add(const['n'])
             if info.get('definition') is not None:
                 a, b = APPLY.span(positions, info['definition'])
                 pseudo_example = (const['n'].endswith('._example') and
@@ -409,7 +894,6 @@ def read_exports(paths):
         missing = names - data['constants'].keys()
         if missing:
             raise ValueError(f'{module}: authored definitions missing from kernel export: {sorted(missing)}')
-        derived.update(derived_constants(data, None, byte_offsets, positions))
         char_of = {b: i for i, b in enumerate(byte_offsets)}
         quotation_sites[module] = [(char_of[a], char_of[b], n) for a, b, n in
                                    data['index'].get('naming_syntax', {}).get('quotation_identifiers', [])
@@ -419,8 +903,13 @@ def read_exports(paths):
                                    data['index'].get('naming_syntax', {}).get('commands', [])
                                    if r[0] in char_of and r[1] in char_of]
         module_decls[module] = {n: APPLY.span(positions, loc[:4]) for n, loc in data['index']['decls'].items()}
-        data['constants'] = {n: quoted_identifiers(c) for n, c in data['constants'].items()}
-        data['guards'] = [quoted_identifiers(g) for g in data['guards']]
+        if data['schema_version'] == 8:
+            data['constants'], data['guards'] = decode_schema8_data(data, pools_keep, special_ids)
+        else:
+            data['constants'] = {n: quoted_identifiers(c) for n, c in data['constants'].items()}
+            data['guards'] = [quoted_identifiers(g) for g in data['guards']]
+            special_ids.update(find_special_ids(data['constants'], data['guards']))
+        derived.update(derived_constants(data, None, byte_offsets, positions))
         coalesced |= merge_constants(constants, roots, data['constants'], names)
         roots.update(names)
         for name in data['constants']:
@@ -496,12 +985,54 @@ def read_exports(paths):
                 coalesced_equations=sorted(coalesced), owners=owners, holders=holders,
                 item_modules=item_modules, schemas=schemas, derived=derived,
                 dot_identifiers_resolved=len(dot_resolved), quotation_sites=quotation_sites,
-                module_sources=module_sources, module_decls=module_decls, module_commands=module_commands)
+                module_sources=module_sources, module_decls=module_decls, module_commands=module_commands,
+                _pools=pools_keep, _special_ids=special_ids, ilean_refs=ilean_refs,
+                import_modules=import_modules, from_olean=from_olean)
+
+
+def extract_module_meta(export_path, export_sha256=None):
+    """Extract lightweight verified `.meta.json` sidecar from a single `.export.json`."""
+    export_path = Path(export_path)
+    actual_sha = hashlib.sha256(export_path.read_bytes()).hexdigest()
+    if export_sha256 is not None and actual_sha != export_sha256:
+        raise ValueError(f'{export_path}: export digest changed before metadata extraction')
+    bundle = read_exports([export_path])
+    module = next(iter(bundle['modules']))
+    kernel_refs = set()
+    visited = set()
+    for name, rec in bundle['constants'].items():
+        if not is_realized_theorem_candidate(name, rec, bundle['roots']):
+            collect_const_refs(rec, kernel_refs, visited)
+    for field in ('guards', 'checks', 'attributes'):
+        collect_const_refs(bundle[field], kernel_refs, visited)
+    referenced = sorted(kernel_refs | bundle['ilean_refs'])
+    return dict(
+        schema_version=next(iter(bundle['schemas'])),
+        meta_version=1,
+        export_sha256=actual_sha,
+        module=module,
+        lean_version=bundle['version'],
+        from_olean=bundle['from_olean'][module],
+        source_sha256=bundle['receipts'][0]['source_sha256'],
+        direct_imports=bundle['modules'][module],
+        import_modules=bundle['import_modules'].get(module),
+        authored_roots=sorted(bundle['roots']),
+        all_constants=sorted(bundle['constants'].keys()),
+        referenced_constants=referenced,
+        kernel_referenced_constants=sorted(kernel_refs),
+        guard_count=len(bundle['guards']),
+        check_count=len(bundle['checks']),
+        attr_count=len(bundle['attributes']),
+    )
 
 
 class Comparison:
-    def __init__(self, before, after, mapping, reviewed=None, reviewed_used=None, collect=False, plan_edits=None):
+    def __init__(self, before, after, mapping, reviewed=None, reviewed_used=None, collect=False,
+                 plan_edits=None, global_context=None, external=None):
         self.before, self.after = before, after
+        self._global_context = global_context
+        gc = global_context or {}
+        ext = external or {}
         self.collect, self.problems = collect, []
         self.plan_edits = plan_edits or set()
         self.plan_index = {}
@@ -519,6 +1050,40 @@ class Comparison:
             mapping = MAP.Renamer([dict(old=a, new=b, kind='declaration') for a, b in mapping.items()])
         self.mapping = mapping
         self._aux_modules = self.aux_module_table(mapping)
+
+        self.all_before_roots = gc['before_roots'] if 'before_roots' in gc else before['roots']
+        self.all_after_roots = gc['after_roots'] if 'after_roots' in gc else after['roots']
+        self.all_before_constants = gc['before_constants'] if 'before_constants' in gc else before['constants']
+        self.all_after_constants = gc['after_constants'] if 'after_constants' in gc else after['constants']
+        self.all_before_owners = gc['before_owners'] if 'before_owners' in gc else (before.get('owners') or {})
+        self.all_after_owners = gc['after_owners'] if 'after_owners' in gc else (after.get('owners') or {})
+        self.all_before_holders = gc['before_holders'] if 'before_holders' in gc else (before.get('holders') or {})
+        self.all_after_holders = gc['after_holders'] if 'after_holders' in gc else (after.get('holders') or {})
+        self._has_holders_info = ((before.get('holders') is not None or 'before_holders' in gc) and
+                                  (after.get('holders') is not None or 'after_holders' in gc))
+
+        self.external_gen_pairs = dict(ext.get('gen_pairs') or {})
+        self.external_aux_classes = {k: set(v) for k, v in (ext.get('aux_classes') or {}).items()}
+        self.external_before_aux_rep = dict(ext.get('before_aux_rep') or {})
+        self.external_after_aux_rep = dict(ext.get('after_aux_rep') or {})
+        self.external_after_gen = set(ext.get('after_gen') or set())
+        self.externally_referenced_before = set(ext.get('referenced_before') or set())
+        self.externally_referenced_after = set(ext.get('referenced_after') or set())
+        self.scoped_relocations = ext['scoped_relocations'] if 'scoped_relocations' in ext else self.mapping.relocations
+        self.scoped_public_from = ext['scoped_public_from'] if 'scoped_public_from' in ext else self.mapping.public_from
+
+        self._special_left = (set(before['_special_ids']) if '_special_ids' in before
+                              else find_special_ids(before['constants'], before.get('guards', ())))
+        self._special_right = (set(after['_special_ids']) if '_special_ids' in after
+                               else find_special_ids(after['constants'], after.get('guards', ())))
+        self._undo = []
+        self._expr_eq_cache = {}
+        self._clean_respell_by_mod = {}
+        self._norm_coarse_cache = {}
+        self._gen_right_by_parent = None
+        self.ignored_realized_before = []
+        self.ignored_realized_after = []
+
         self.left = dict(before['constants'])
         self.right = after['constants']
         self.respelled_literals = []
@@ -544,7 +1109,7 @@ class Comparison:
             self.relocated_modules |= {mapping.module(source), target}
             self.join(mapping.module(source), target)
         self._reloc_targets = {self.mapping(k) for k in self.mapping.relocations}
-        owners = before.get('owners') or {}
+        owners = self.all_before_owners
         for private in self.mapping.public_from:
             user = MAP.split_private(private)[2]
             mod = owners.get(private) or MAP.split_private(private)[0]
@@ -557,49 +1122,119 @@ class Comparison:
         resolves a double-backtick literal (``Pres``) to the full name, and
         renaming the constant respells it. It is compared as the new name
         (fewer or more components change N); every respelling is recorded."""
-        mapping, known = self.mapping, self.before['constants']
-
-        def chain(e):
-            args = []
-            while isinstance(e, list) and len(e) == 3 and e[0] == 'app':
-                args.append(e[2])
-                e = e[1]
-            return e, list(reversed(args))
-
-        def walk(e):
-            # Copy on change only: an unchanged subtree is returned as is, so
-            # comparing many environments does not duplicate their graphs.
-            if isinstance(e, dict):
-                out = {k: walk(v) for k, v in e.items()}
-                return e if all(out[k] is e[k] for k in e) else out
-            if not isinstance(e, list):
-                return e
-            if len(e) == 3 and e[0] == 'app':
-                head, args = chain(e)
-                if (isinstance(head, list) and head[:1] == ['const'] and isinstance(head[1], list) and
-                        re.fullmatch(r'Lean\.Name\.mkStr[1-8]', head[1][1]) and
-                        len(args) == int(head[1][1][-1]) and
-                        all(isinstance(a, list) and len(a) == 2 and a[0] == 'str' for a in args) and
-                        # Each argument must be one plain component: a
-                        # component holding a dot (`Name.mkStr1 "A.B"`) is not
-                        # the dotted name `A.B` and stays literal.
-                        all(a[1] and '.' not in a[1] and '«' not in a[1] for a in args)):
-                    full = '.'.join(a[1] for a in args)
-                    new_full = self.name(full) if full in known else full
-                    why = 'name literal'
-                    if new_full == full:
-                        new_full, why = self.namespace_literal(full, name), 'namespace literal'
-                    if new_full != full and '«' not in new_full and not self.data_literal(name, full, new_full):
-                        parts = new_full.split('.')
-                        if len(parts) <= 8:
-                            self.respelled_literals.append([name, full, new_full, why])
-                            out = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], head[2]]
-                            for part in parts:
-                                out = ['app', out, ['str', part]]
-                            return out
-            out = [walk(x) for x in e]
-            return e if all(a is b for a, b in zip(out, e)) else out
-        return walk(value)
+        if not isinstance(value, (list, dict)):
+            return value
+        known = self.all_before_constants
+        module = self.holder_module(name)
+        clean_ids = self._clean_respell_by_mod.setdefault(module, set())
+        if id(value) in clean_ids:
+            return value
+        special = self._special_left
+        memo = {}  # id(node) -> (out_node, lits_added_here)
+        stack = [(value, False)]
+        while stack:
+            cur, ready = stack.pop()
+            cid = id(cur)
+            if cid in memo or cid in clean_ids:
+                continue
+            if isinstance(cur, list):
+                if not ready:
+                    if len(cur) == 3 and cur[0] == 'app':
+                        lit = _mkstr_literal(cur)
+                        if lit is not None:
+                            new_full = self.name(lit) if lit in known else lit
+                            why = 'name literal'
+                            if new_full == lit:
+                                new_full, why = self.namespace_literal(lit, name), 'namespace literal'
+                            if new_full != lit and '«' not in new_full and not self.data_literal(name, lit, new_full):
+                                parts = new_full.split('.')
+                                if len(parts) <= 8:
+                                    # Reach the outermost head node (`const Lean.Name.mkStrK levels`).
+                                    head = cur
+                                    while isinstance(head, list) and len(head) == 3 and head[0] == 'app':
+                                        head = head[1]
+                                    out = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], head[2]]
+                                    for part in parts:
+                                        out = ['app', out, ['str', part]]
+                                    self.respelled_literals.append([name, lit, new_full, why])
+                                    memo[cid] = (out, True)
+                                    continue
+                            # Plain Name.mkStr literal that did not change: never contains sub-literals.
+                            clean_ids.add(cid)
+                            continue
+                    stack.append((cur, True))
+                    for x in reversed(cur):
+                        if isinstance(x, (list, dict)) and id(x) not in memo and id(x) not in clean_ids:
+                            stack.append((x, False))
+                else:
+                    changed = False
+                    any_lits = False
+                    has_sp = False
+                    out = []
+                    for x in cur:
+                        if isinstance(x, (list, dict)):
+                            xid = id(x)
+                            if xid in clean_ids:
+                                nx = x
+                            else:
+                                nx, lit_flag = memo[xid]
+                                if lit_flag:
+                                    any_lits = True
+                                if nx is not x:
+                                    changed = True
+                            if id(nx) in special or xid in special:
+                                has_sp = True
+                            out.append(nx)
+                        else:
+                            out.append(x)
+                    if not changed:
+                        if not any_lits:
+                            clean_ids.add(cid)
+                        else:
+                            memo[cid] = (cur, True)
+                    else:
+                        if has_sp or cid in special:
+                            special.add(id(out))
+                        memo[cid] = (out, True)
+            elif isinstance(cur, dict):
+                if not ready:
+                    stack.append((cur, True))
+                    for v in cur.values():
+                        if isinstance(v, (list, dict)) and id(v) not in memo and id(v) not in clean_ids:
+                            stack.append((v, False))
+                else:
+                    changed = False
+                    any_lits = False
+                    has_sp = False
+                    out = {}
+                    for k, v in cur.items():
+                        if isinstance(v, (list, dict)):
+                            vid = id(v)
+                            if vid in clean_ids:
+                                nv = v
+                            else:
+                                nv, lit_flag = memo[vid]
+                                if lit_flag:
+                                    any_lits = True
+                                if nv is not v:
+                                    changed = True
+                            if id(nv) in special or vid in special:
+                                has_sp = True
+                            out[k] = nv
+                        else:
+                            out[k] = v
+                    if not changed:
+                        if not any_lits:
+                            clean_ids.add(cid)
+                        else:
+                            memo[cid] = (cur, True)
+                    else:
+                        if has_sp or cid in special:
+                            special.add(id(out))
+                        memo[cid] = (out, True)
+        if id(value) in clean_ids:
+            return value
+        return memo[id(value)][0]
 
     def renamed_namespace(self, namespace):
         """The new namespace, when the map renames `namespace` by a namespace
@@ -624,7 +1259,7 @@ class Comparison:
         if namespace not in self._uniform:
             target = self.mapping.derived().get(namespace)
             ok = target is not None
-            for root in self.before['roots'] if ok else ():
+            for root in self.all_before_roots if ok else ():
                 base = root.rsplit('@', 1)[0]
                 private = MAP.split_private(base)
                 user = private[2] if private else base
@@ -641,8 +1276,11 @@ class Comparison:
         return self._uniform[namespace]
 
     def holder_module(self, holder):
-        owners = self.before.get('owners')
-        return None if owners is None or holder is None else owners.get(holder)
+        if holder is None:
+            return None
+        if self.before.get('owners') is None and not (self._global_context and 'before_owners' in self._global_context):
+            return None
+        return (self.before.get('owners') or {}).get(holder) or self.all_before_owners.get(holder)
 
     def data_literal(self, holder, full, new_full):
         """Whether the module holding `holder` spells `full` as a single-backtick
@@ -688,16 +1326,16 @@ class Comparison:
             return full
         if not hasattr(self, '_private_users'):
             self._private_users = {}
-            for key in self.left:
+            for key in self.all_before_constants:
                 split = MAP.split_private(key) if key.startswith('_private.') else None
                 if split:
                     self._private_users.setdefault((split[0], split[2]), []).append(key)
         # A private form counts only in the module that holds the literal:
         # another module's private declaration says nothing about it.
         module = self.holder_module(holder)
-        forms = ([full] if full in self.left else []) + (
+        forms = ([full] if full in self.all_before_constants else []) + (
             self._private_users.get((module, full), []) if module is not None else [])
-        if forms and all(form not in self.before['roots'] for form in forms):
+        if forms and all(form not in self.all_before_roots for form in forms):
             return f'{renamed}.{leaf}'
         return full
 
@@ -708,10 +1346,14 @@ class Comparison:
         exactly the old label of a field of the derived target structure,
         whose field row changes the leaf, becomes the new label. Any other
         literal is compared as written. Each respelling is recorded."""
+        if not isinstance(value, (list, dict)):
+            return value
         mapping = self.mapping
+        known_consts = self.all_before_constants
+        special = self._special_left
 
         def literal(text):
-            if '.' in text and mapping.renames(text) and text in self.before['constants']:
+            if '.' in text and mapping.renames(text) and text in known_consts:
                 return mapping(text), 'qualified name'
             field = f'{target}.{text}'
             # Field labels follow the rename only in derived Repr text; a
@@ -732,36 +1374,110 @@ class Comparison:
                         return old_leaf, new_leaf
             return None
 
-        def walk(e):
-            if isinstance(e, list):
-                # `{ f := v }` in a derived Repr nests v by the label's width
-                # (`f := ` is len(f) + 4): it follows the label's respelling.
-                if (len(e) == 3 and e[0] == 'app' and isinstance(e[1], list) and len(e[1]) == 3 and
-                        e[1][0] == 'app' and e[1][1][:2] == ['const', ['name', 'Std.Format.nest']]):
-                    field = renamed_field(e[2]) if cls == 'Repr' else None
-                    if field is not None:
-                        width_old, width_new = len(field[0]) + 4, len(field[1]) + 4
-                        def width(x):
-                            if x == ['nat', width_old]:
-                                return ['nat', width_new]
-                            return [width(y) for y in x] if isinstance(x, list) else x
-                        indent = width(e[1][2])
-                        if indent != e[1][2]:
-                            self.respelled_literals.append([name, width_old, width_new, 'field label width'])
-                        return ['app', ['app', e[1][1], indent], walk(e[2])]
-                if len(e) == 2 and e[0] == 'str' and isinstance(e[1], str):
-                    new, why = literal(e[1])
-                    if new is not None:
-                        self.respelled_literals.append([name, e[1], new, why])
-                        return ['str', new]
-                    return e
-                out = [walk(x) for x in e]
-                return e if all(a is b for a, b in zip(out, e)) else out
-            if isinstance(e, dict):
-                out = {k: walk(v) for k, v in e.items()}
-                return e if all(out[k] is e[k] for k in e) else out
-            return e
-        return walk(value)
+        def rewrite_width(x, width_old, width_new):
+            w_memo = {}
+            w_stack = [(x, False)]
+            while w_stack:
+                cur, ready = w_stack.pop()
+                if not isinstance(cur, list):
+                    continue
+                cid = id(cur)
+                if cid in w_memo:
+                    continue
+                if cur == ['nat', width_old]:
+                    w_memo[cid] = ['nat', width_new]
+                    continue
+                if not ready:
+                    w_stack.append((cur, True))
+                    for item in reversed(cur):
+                        if isinstance(item, list) and id(item) not in w_memo:
+                            w_stack.append((item, False))
+                else:
+                    out = [w_memo[id(y)] if isinstance(y, list) else y for y in cur]
+                    w_memo[cid] = cur if all(a is b for a, b in zip(out, cur)) else out
+            return w_memo[id(x)] if isinstance(x, list) else x
+
+        memo = {}
+        stack = [(value, False)]
+        while stack:
+            cur, ready = stack.pop()
+            cid = id(cur)
+            if cid in memo:
+                continue
+            if isinstance(cur, list):
+                if not ready:
+                    if (len(cur) == 3 and cur[0] == 'app' and isinstance(cur[1], list) and len(cur[1]) == 3 and
+                            cur[1][0] == 'app' and cur[1][1][:2] == ['const', ['name', 'Std.Format.nest']]):
+                        field = renamed_field(cur[2]) if cls == 'Repr' else None
+                        if field is not None:
+                            stack.append((cur, ('nest', field)))
+                            if isinstance(cur[2], (list, dict)) and id(cur[2]) not in memo:
+                                stack.append((cur[2], False))
+                            continue
+                    if len(cur) == 2 and cur[0] == 'str' and isinstance(cur[1], str):
+                        new, why = literal(cur[1])
+                        if new is not None:
+                            self.respelled_literals.append([name, cur[1], new, why])
+                            memo[cid] = ['str', new]
+                        else:
+                            memo[cid] = cur
+                        continue
+                    stack.append((cur, True))
+                    for item in reversed(cur):
+                        if isinstance(item, (list, dict)) and id(item) not in memo:
+                            stack.append((item, False))
+                elif isinstance(ready, tuple) and ready[0] == 'nest':
+                    field = ready[1]
+                    width_old, width_new = len(field[0]) + 4, len(field[1]) + 4
+                    indent = rewrite_width(cur[1][2], width_old, width_new)
+                    if indent != cur[1][2]:
+                        self.respelled_literals.append([name, width_old, width_new, 'field label width'])
+                    rhs = memo[id(cur[2])] if isinstance(cur[2], (list, dict)) else cur[2]
+                    out = ['app', ['app', cur[1][1], indent], rhs]
+                    if cid in special or (isinstance(rhs, (list, dict)) and id(rhs) in special):
+                        special.add(id(out))
+                    memo[cid] = out
+                else:
+                    changed = False
+                    has_sp = False
+                    out = []
+                    for item in cur:
+                        if isinstance(item, (list, dict)):
+                            nx = memo[id(item)]
+                            if nx is not item:
+                                changed = True
+                            if id(nx) in special or id(item) in special:
+                                has_sp = True
+                            out.append(nx)
+                        else:
+                            out.append(item)
+                    if changed and (has_sp or cid in special):
+                        special.add(id(out))
+                    memo[cid] = out if changed else cur
+            elif isinstance(cur, dict):
+                if not ready:
+                    stack.append((cur, True))
+                    for v in cur.values():
+                        if isinstance(v, (list, dict)) and id(v) not in memo:
+                            stack.append((v, False))
+                else:
+                    changed = False
+                    has_sp = False
+                    out = {}
+                    for k, v in cur.items():
+                        if isinstance(v, (list, dict)):
+                            nv = memo[id(v)]
+                            if nv is not v:
+                                changed = True
+                            if id(nv) in special or id(v) in special:
+                                has_sp = True
+                            out[k] = nv
+                        else:
+                            out[k] = v
+                    if changed and (has_sp or cid in special):
+                        special.add(id(out))
+                    memo[cid] = out if changed else cur
+        return memo[id(value)]
 
     def reviewed_quotation(self, left, right, path):
         """A registered, reviewed capture-qualified quotation (master decision
@@ -783,8 +1499,11 @@ class Comparison:
                 if index in self.reviewed_here:
                     raise Mismatch(f'{path}: reviewed quotation {row["before"]!r} -> {row["after"]!r} of '
                                    f'{row["constant"]} occurs more than once')
+                self._undo.append(('rev_here', index))
                 self.reviewed_here.add(index)
-                self.reviewed_used.add(index)
+                if index not in self.reviewed_used:
+                    self._undo.append(('rev_used', index))
+                    self.reviewed_used.add(index)
                 return True
         return False
 
@@ -804,18 +1523,22 @@ class Comparison:
         if holder in self._unhygienic_bindings:
             return self._unhygienic_bindings[holder]
         nodes = []
-
-        def walk(e):
-            if isinstance(e, list):
-                if len(e) == 4 and e[0] == 'unhygienicIdentifier':
-                    nodes.append(e)
-                    return
-                for x in e:
-                    walk(x)
-            elif isinstance(e, dict):
-                for v in e.values():
-                    walk(v)
-        walk(self.left.get(holder))
+        root_val = self.left.get(holder)
+        if root_val is not None:
+            stack = [root_val]
+            while stack:
+                cur = stack.pop()
+                if isinstance(cur, list):
+                    if len(cur) == 4 and cur[0] == 'unhygienicIdentifier':
+                        nodes.append(cur)
+                    else:
+                        for x in reversed(cur):
+                            if isinstance(x, (list, dict)):
+                                stack.append(x)
+                elif isinstance(cur, dict):
+                    for v in reversed(list(cur.values())):
+                        if isinstance(v, (list, dict)):
+                            stack.append(v)
         module = self.holder_module(holder)
         sites = (self.before.get('quotation_sites') or {}).get(module, [])
         spellings = [n[1] for n in nodes]
@@ -902,8 +1625,8 @@ class Comparison:
             # new name is never renamed again).
             table, pattern = self._aux_modules
             mapped = pattern.sub(lambda m: m.group(1) + '_aux_' + table[m.group(2)] + '___', mapped)
-        if (mapped == name and name in self.left and name not in self.before['roots'] and '.' in name
-                and not name.startswith('_private.')):
+        if (mapped == name and name in self.all_before_constants and name not in self.all_before_roots and
+                '.' in name and not name.startswith('_private.')):
             # A compiler-named constant (a syntax kind `Ns.tacticFoo`) declared
             # inside a namespace the map renames through its members (derived
             # namespace) moves with the namespace syntax, without a row.
@@ -911,7 +1634,7 @@ class Comparison:
             scoped = self.mapping.scope(parent)
             if scoped != parent and parent in self.mapping.derived() and self.uniform_namespace(parent):
                 return f'{scoped}.{leaf}'
-        if mapped == name and name not in self.left:
+        if mapped == name and name not in self.all_before_constants:
             # A constant Lean realizes on demand and no export holds (a matcher
             # `P.match_8` behind a private equation lemma) is named after its
             # parent: it follows the parent's exact row when every further
@@ -921,7 +1644,7 @@ class Comparison:
                 parent = '.'.join(parts[:i])
                 if parent in self.mapping.exact and all(self.GENERATED_SUFFIX.match(x) for x in parts[i:]):
                     renamed = '.'.join([self.mapping(parent)] + parts[i:])
-                    if renamed not in self.right:  # absent from both exports
+                    if renamed not in self.all_after_constants:  # absent from both exports
                         return renamed
         return mapped
 
@@ -991,9 +1714,8 @@ class Comparison:
         attrs = table[name].get('attributes') or {}
         if attrs.get('instance') is not None or attrs.get('csimp'):
             return False
-        snapshot = self.before if side == 'before' else self.after
-        roots = snapshot['roots']
-        owners = snapshot.get('owners') or {}
+        roots = self.all_before_roots if side == 'before' else self.all_after_roots
+        owners = self.all_before_owners if side == 'before' else self.all_after_owners
         private = MAP.split_private(parent) if parent.startswith('_private.') else None
         raw_bases = [parent]
         if private is not None:
@@ -1026,9 +1748,8 @@ class Comparison:
         parent, leaf = name.rsplit('.', 1)
         if not self.MATCHER_LEAF.match(leaf):
             return None
-        snapshot = self.before if side == 'before' else self.after
-        roots = snapshot['roots']
-        owners = snapshot.get('owners') or {}
+        roots = self.all_before_roots if side == 'before' else self.all_after_roots
+        owners = self.all_before_owners if side == 'before' else self.all_after_owners
         if parent not in roots or parent not in owners:
             return None
         owner = owners[parent]
@@ -1054,7 +1775,7 @@ class Comparison:
         attrs = table[name].get('attributes') or {}
         if attrs.get('instance') is not None or attrs.get('csimp'):
             return False
-        holders = (self.before if side == 'before' else self.after).get('holders') or {}
+        holders = self.all_before_holders if side == 'before' else self.all_after_holders
         mods = holders.get(name)
         if not mods:
             return False
@@ -1094,15 +1815,31 @@ class Comparison:
     def pair_realized_matcher(self, a, new_parent):
         if a in self.pairs or a in self.aux_left:
             return True
-        for exported in sorted(self.generated_right):
-            if exported.rsplit('.', 1)[0] == new_parent and self.MATCHER_LEAF.match(exported.rsplit('.', 1)[-1]):
-                saved = self.save()
-                try:
-                    self.pair(a, exported)
-                    return True
-                except Mismatch:
-                    self.restore(saved)
+        by_parent = self._gen_right_by_parent
+        if by_parent is None:
+            by_parent = defaultdict(list)
+            for exported in sorted(self.generated_right):
+                if '.' in exported and self.MATCHER_LEAF.match(exported.rsplit('.', 1)[-1]):
+                    by_parent[exported.rsplit('.', 1)[0]].append(exported)
+            self._gen_right_by_parent = by_parent
+        for exported in by_parent.get(new_parent, ()):
+            saved = self.save()
+            try:
+                self.pair(a, exported)
+                return True
+            except Mismatch:
+                self.restore(saved)
         return False
+
+    @staticmethod
+    def _fmt_path(p):
+        parts = []
+        while isinstance(p, tuple):
+            parts.append(p[1])
+            p = p[0]
+        parts.append(str(p))
+        parts.reverse()
+        return ''.join(parts)
 
     def coarse_record(self, name, side):
         rec = (self.left if side == 'before' else self.right)[name]
@@ -1112,125 +1849,171 @@ class Comparison:
             if attrs.get('reducibility') == 'Lean.ReducibilityStatus.semireducible':
                 attrs['reducibility'] = 'Lean.ReducibilityStatus.instanceReducible'
                 norm = dict(norm, attributes=attrs)
-        return encoded(norm)
+        return dag_digest(norm)
 
     def compare(self, left, right, path):
-        if isinstance(left, list) and len(left) == 4 and left[0] == 'unhygienicIdentifier':
-            if not (isinstance(right, list) and len(right) == 4 and right[0] == 'unhygienicIdentifier'):
-                raise Mismatch(f'{path}: unhygienic quoted identifier changed kind')
-            # What the applied plan did at this identifier's own quoted range
-            # decides (rule E per site): never edited -> unchanged; edited ->
-            # the plan's new text, which must also be the names-only
-            # respelling. A spelling the plan edits nowhere in the holder's
-            # module needs no binding: it stays as written.
-            holder = self.holders[-1] if self.holders else None
-            module = self.holder_module(holder)
-            expected, site = left[1], None
-            if module is not None and self.unhygienic_edited(module, left[1]):
-                site = self.unhygienic_binding(holder).get(id(left))
-                if site is None:
-                    raise Mismatch(f'{path}: unhygienic quoted identifier {left[1]!r} has no bound source range')
-                news = {e[4] for e in self.plan_index.get(site, []) if e[3] == left[1]}
-                if len(news) > 1:
-                    raise Mismatch(f'{path}: plan respells unhygienic {left[1]!r} at {site} ambiguously: {sorted(news)}')
-                if news:
-                    expected = news.pop()
-                    if expected != self.respell_message(left[1], path):
-                        raise Mismatch(f'{path}: plan respelled unhygienic {left[1]!r} to {expected!r}, '
-                                       f'not its names-only respelling')
-            elif module is None and self.plan_edits:
-                raise Mismatch(f'{path}: unhygienic quoted identifier {left[1]!r} outside a known module')
-            if right[1] != expected:
-                raise Mismatch(f'{path}: unhygienic quoted spelling {left[1]!r} became {right[1]!r}, '
-                               f'expected {expected!r} (its own quoted range {site})')
-            if self.raw_marker(right[2], right[1]) != self.raw_marker(left[2], left[1]):
-                raise Mismatch(f'{path}: unhygienic quoted raw text {left[2]!r} became {right[2]!r}')
-            if right[1] != left[1]:
-                self.unhygienic_sites.setdefault((left[1], right[1], site), site)
-            self.compare(left[3], right[3], f'{path}.syntax')
-            return
-        if isinstance(left, list) and len(left) == 5 and left[0] == 'quotedIdentifier':
-            if not (isinstance(right, list) and len(right) == 5 and right[0] == 'quotedIdentifier'):
-                raise Mismatch(f'{path}: quoted identifier changed kind')
-            spelling, raw = self.quoted(left, path)
-            if right[2] != spelling and self.reviewed_quotation(left, right, path):
-                spelling = right[2]
-            if right[2] != spelling:
-                raise Mismatch(f'{path}: quoted spelling {left[2]!r} became {right[2]!r}, '
-                               f'expected {spelling!r} (Syntax.getId observes it)')
-            if self.raw_marker(right[3], right[2]) != raw:
-                raise Mismatch(f'{path}: quoted raw text {left[3]!r} became {right[3]!r}')
-            if right[2] == left[2] and right[3] != left[3]:
-                # An unchanged spelling keeps its raw text, `«»` escapes included.
-                raise Mismatch(f'{path}: quoted raw text {left[3]!r} became {right[3]!r} under an unchanged spelling')
-            self.compare(left[1], right[1], f'{path}.preresolved')
-            self.compare(left[4], right[4], f'{path}.syntax')
-            return
-        if isinstance(left, list) and len(left) == 2 and left[0] == 'name':
-            if not isinstance(right, list) or len(right) != 2 or right[0] != 'name':
-                raise Mismatch(f'{path}: name reference changed kind')
-            a, b = left[1], right[1]
-            if (self.holder_pairs and
-                    self.is_downstream_reloc_eq(self.holder_pairs[-1][0], 'before') and
-                    self.is_downstream_reloc_eq(self.holder_pairs[-1][1], 'after')):
-                ca = self.reloc_matcher_component(a, 'before')
-                cb = self.reloc_matcher_component(b, 'after')
-                if ca is not None and cb is not None and ca == cb:
-                    self.realized_matcher_pairs.add((a, b))
-                    return
-            if a in self.generated_left:
+        downstream_flag = bool(
+            self.holder_pairs and
+            self.is_downstream_reloc_eq(self.holder_pairs[-1][0], 'before') and
+            self.is_downstream_reloc_eq(self.holder_pairs[-1][1], 'after')
+        )
+        reloc_aux_holder_flag = bool(self.holders and self.is_reloc_aux(self.holders[-1], 'before'))
+        ctx_key = (downstream_flag, reloc_aux_holder_flag)
+        special_left, special_right = self._special_left, self._special_right
+        eq_cache = self._expr_eq_cache
+        stack = [('cmp', left, right, path, False)]
+        while stack:
+            frame = stack.pop()
+            if frame[0] == 'cache':
+                _, ck, c_left, c_right = frame
+                if ck not in eq_cache:
+                    self._undo.append(('eq_cache', ck))
+                    eq_cache[ck] = (c_left, c_right)
+                continue
+            _, cur_l, cur_r, cur_p, in_kernel = frame
+            if in_kernel and isinstance(cur_l, (list, dict)) and isinstance(cur_r, (list, dict)):
+                lid, rid = id(cur_l), id(cur_r)
+                if lid not in special_left and rid not in special_right:
+                    if (lid, rid, ctx_key) in eq_cache:
+                        continue
+            if isinstance(cur_l, list) and len(cur_l) == 4 and cur_l[0] == 'unhygienicIdentifier':
+                p_str = self._fmt_path(cur_p)
+                if not (isinstance(cur_r, list) and len(cur_r) == 4 and cur_r[0] == 'unhygienicIdentifier'):
+                    raise Mismatch(f'{p_str}: unhygienic quoted identifier changed kind')
+                # What the applied plan did at this identifier's own quoted range
+                # decides (rule E per site): never edited -> unchanged; edited ->
+                # the plan's new text, which must also be the names-only
+                # respelling. A spelling the plan edits nowhere in the holder's
+                # module needs no binding: it stays as written.
                 holder = self.holders[-1] if self.holders else None
-                if (b not in self.generated_right and holder is not None and
-                        self.is_reloc_aux(holder, 'before') and
-                        self.is_realized_reloc_matcher(b, a) and
-                        self.pair_realized_matcher(a, b.rsplit('.', 1)[0])):
-                    return
-                if b not in self.generated_right:
-                    raise Mismatch(f'{path}: generated reference became named/external')
-                self.pair(a, b)
-            elif self.name(a) != b:
-                raise Mismatch(f'{path}: reference {a} became {b}')
-            return
-        if (path.endswith('.attributes.reducibility') and
-                left == 'Lean.ReducibilityStatus.semireducible' and
-                right == 'Lean.ReducibilityStatus.instanceReducible' and
-                self.holder_pairs and self.is_promoted_matcher(*self.holder_pairs[-1])):
-            return
-        if type(left) is not type(right):
-            raise Mismatch(f'{path}: node kind changed')
-        if isinstance(left, dict):
-            if left.keys() != right.keys():
-                raise Mismatch(f'{path}: object fields changed')
-            for key in left:
-                self.compare(left[key], right[key], f'{path}.{key}')
-        elif isinstance(left, list):
-            if len(left) != len(right):
-                raise Mismatch(f'{path}: array length changed')
-            for i, (a, b) in enumerate(zip(left, right)):
-                self.compare(a, b, f'{path}[{i}]')
-        elif left != right:
-            raise Mismatch(f'{path}: {left!r} became {right!r}')
+                module = self.holder_module(holder)
+                expected, site = cur_l[1], None
+                if module is not None and self.unhygienic_edited(module, cur_l[1]):
+                    site = self.unhygienic_binding(holder).get(id(cur_l))
+                    if site is None:
+                        raise Mismatch(f'{p_str}: unhygienic quoted identifier {cur_l[1]!r} has no bound source range')
+                    news = {e[4] for e in self.plan_index.get(site, []) if e[3] == cur_l[1]}
+                    if len(news) > 1:
+                        raise Mismatch(f'{p_str}: plan respells unhygienic {cur_l[1]!r} at {site} ambiguously: {sorted(news)}')
+                    if news:
+                        expected = news.pop()
+                        if expected != self.respell_message(cur_l[1], p_str):
+                            raise Mismatch(f'{p_str}: plan respelled unhygienic {cur_l[1]!r} to {expected!r}, '
+                                           f'not its names-only respelling')
+                elif module is None and self.plan_edits:
+                    raise Mismatch(f'{p_str}: unhygienic quoted identifier {cur_l[1]!r} outside a known module')
+                if cur_r[1] != expected:
+                    raise Mismatch(f'{p_str}: unhygienic quoted spelling {cur_l[1]!r} became {cur_r[1]!r}, '
+                                   f'expected {expected!r} (its own quoted range {site})')
+                if self.raw_marker(cur_r[2], cur_r[1]) != self.raw_marker(cur_l[2], cur_l[1]):
+                    raise Mismatch(f'{p_str}: unhygienic quoted raw text {cur_l[2]!r} became {cur_r[2]!r}')
+                if cur_r[1] != cur_l[1]:
+                    ukey = (cur_l[1], cur_r[1], site)
+                    if ukey not in self.unhygienic_sites:
+                        self._undo.append(('unhyg', ukey))
+                        self.unhygienic_sites[ukey] = site
+                stack.append(('cmp', cur_l[3], cur_r[3], (cur_p, '.syntax'), in_kernel))
+                continue
+            if isinstance(cur_l, list) and len(cur_l) == 5 and cur_l[0] == 'quotedIdentifier':
+                p_str = self._fmt_path(cur_p)
+                if not (isinstance(cur_r, list) and len(cur_r) == 5 and cur_r[0] == 'quotedIdentifier'):
+                    raise Mismatch(f'{p_str}: quoted identifier changed kind')
+                spelling, raw = self.quoted(cur_l, p_str)
+                if cur_r[2] != spelling and self.reviewed_quotation(cur_l, cur_r, p_str):
+                    spelling = cur_r[2]
+                if cur_r[2] != spelling:
+                    raise Mismatch(f'{p_str}: quoted spelling {cur_l[2]!r} became {cur_r[2]!r}, '
+                                   f'expected {spelling!r} (Syntax.getId observes it)')
+                if self.raw_marker(cur_r[3], cur_r[2]) != raw:
+                    raise Mismatch(f'{p_str}: quoted raw text {cur_l[3]!r} became {cur_r[3]!r}')
+                if cur_r[2] == cur_l[2] and cur_r[3] != cur_l[3]:
+                    # An unchanged spelling keeps its raw text, `«»` escapes included.
+                    raise Mismatch(f'{p_str}: quoted raw text {cur_l[3]!r} became {cur_r[3]!r} under an unchanged spelling')
+                stack.append(('cmp', cur_l[4], cur_r[4], (cur_p, '.syntax'), in_kernel))
+                stack.append(('cmp', cur_l[1], cur_r[1], (cur_p, '.preresolved'), in_kernel))
+                continue
+            if isinstance(cur_l, list) and len(cur_l) == 2 and cur_l[0] == 'name':
+                if not isinstance(cur_r, list) or len(cur_r) != 2 or cur_r[0] != 'name':
+                    raise Mismatch(f'{self._fmt_path(cur_p)}: name reference changed kind')
+                a, b = cur_l[1], cur_r[1]
+                if downstream_flag:
+                    ca = self.reloc_matcher_component(a, 'before')
+                    cb = self.reloc_matcher_component(b, 'after')
+                    if ca is not None and cb is not None and ca == cb:
+                        if (a, b) not in self.realized_matcher_pairs:
+                            self._undo.append(('realized', (a, b)))
+                            self.realized_matcher_pairs.add((a, b))
+                        continue
+                if a in self.generated_left:
+                    holder = self.holders[-1] if self.holders else None
+                    if (b not in self.generated_right and holder is not None and
+                            reloc_aux_holder_flag and
+                            self.is_realized_reloc_matcher(b, a) and
+                            self.pair_realized_matcher(a, b.rsplit('.', 1)[0])):
+                        continue
+                    if b not in self.generated_right:
+                        raise Mismatch(f'{self._fmt_path(cur_p)}: generated reference became named/external')
+                    self.pair(a, b)
+                elif a in self.external_aux_classes:
+                    if b not in self.external_aux_classes[a]:
+                        raise Mismatch(f'{self._fmt_path(cur_p)}: external generated auxiliary {a} became {b}')
+                elif a in self.external_gen_pairs:
+                    if self.external_gen_pairs[a] != b:
+                        raise Mismatch(f'{self._fmt_path(cur_p)}: external generated constant {a} became {b}')
+                elif self.name(a) != b:
+                    raise Mismatch(f'{self._fmt_path(cur_p)}: reference {a} became {b}')
+                continue
+            if (not in_kernel and
+                    cur_l == 'Lean.ReducibilityStatus.semireducible' and
+                    cur_r == 'Lean.ReducibilityStatus.instanceReducible' and
+                    self.holder_pairs and self.is_promoted_matcher(*self.holder_pairs[-1]) and
+                    self._fmt_path(cur_p).endswith('.attributes.reducibility')):
+                continue
+            if type(cur_l) is not type(cur_r):
+                raise Mismatch(f'{self._fmt_path(cur_p)}: node kind changed')
+            if isinstance(cur_l, dict):
+                if cur_l.keys() != cur_r.keys():
+                    raise Mismatch(f'{self._fmt_path(cur_p)}: object fields changed')
+                if in_kernel and id(cur_l) not in special_left and id(cur_r) not in special_right:
+                    stack.append(('cache', (id(cur_l), id(cur_r), ctx_key), cur_l, cur_r))
+                for key in reversed(list(cur_l.keys())):
+                    child_kernel = in_kernel or (key == 'kernel')
+                    stack.append(('cmp', cur_l[key], cur_r[key], (cur_p, f'.{key}'), child_kernel))
+            elif isinstance(cur_l, list):
+                if len(cur_l) != len(cur_r):
+                    raise Mismatch(f'{self._fmt_path(cur_p)}: array length changed')
+                if in_kernel and id(cur_l) not in special_left and id(cur_r) not in special_right:
+                    stack.append(('cache', (id(cur_l), id(cur_r), ctx_key), cur_l, cur_r))
+                for i in range(len(cur_l) - 1, -1, -1):
+                    stack.append(('cmp', cur_l[i], cur_r[i], (cur_p, f'[{i}]'), in_kernel))
+            elif cur_l != cur_r:
+                raise Mismatch(f'{self._fmt_path(cur_p)}: {cur_l!r} became {cur_r!r}')
 
     def pair(self, a, b):
-        left_holders, right_holders = self.before.get('holders'), self.after.get('holders')
+        left_holders, right_holders = self.all_before_holders, self.all_after_holders
         same_reloc_component = (
-            left_holders is not None and right_holders is not None and
+            self._has_holders_info and
             {self.component(m, 'before') for m in left_holders.get(a, ())} ==
             {self.component(m, 'after') for m in right_holders.get(b, ())}
         )
         if self.is_reloc_aux(a, 'before') and self.is_reloc_aux(b, 'after') and same_reloc_component:
             if a in self.pairs or b in self.reverse:
                 raise Mismatch(f'inconsistent generated-constant correspondence: {a}, {b}')
-            self.aux_pairs.add((a, b))
-            self.aux_left.add(a)
-            self.aux_right.add(b)
+            if (a, b) not in self.aux_pairs:
+                self._undo.append(('aux_pair', a, b, a in self.aux_left, b in self.aux_right))
+                self.aux_pairs.add((a, b))
+                self.aux_left.add(a)
+                self.aux_right.add(b)
         else:
             if (self.pairs.get(a, b) != b or self.reverse.get(b, a) != a or
                     a in self.aux_left or b in self.aux_right):
                 raise Mismatch(f'inconsistent generated-constant correspondence: {a}, {b}')
-            self.pairs[a], self.reverse[b] = b, a
+            if a not in self.pairs:
+                self._undo.append(('pair', a, b))
+                self.pairs[a], self.reverse[b] = b, a
         if (a, b) in self.checked:
             return
+        self._undo.append(('checked', (a, b)))
         self.checked.add((a, b))
         self.holders.append(a)
         self.holder_pairs.append((a, b))
@@ -1251,7 +2034,7 @@ class Comparison:
         all of them must give one respelling, or it is ambiguous."""
         if not hasattr(self, '_suffixes'):
             self._suffixes = {}
-            for name in self.left:
+            for name in self.all_before_constants:
                 base = name.rsplit('@', 1)[0]
                 private = MAP.split_private(base)
                 user = private[2] if private else base
@@ -1261,7 +2044,7 @@ class Comparison:
 
         if not hasattr(self, '_after_suffixes'):
             self._after_suffixes = set()
-            for name in self.right:
+            for name in self.all_after_constants:
                 base = name.rsplit('@', 1)[0]
                 private = MAP.split_private(base)
                 parts = APPLY.split_name(private[2] if private else base)
@@ -1303,53 +2086,100 @@ class Comparison:
         return self._aux_rep_cache[0]
 
     def normalize(self, value, side, coarse=False, downstream_eq=False):
-        if isinstance(value, dict):
-            return {k: self.normalize(v, side, coarse, downstream_eq) for k, v in value.items()}
-        if not isinstance(value, list):
+        if not isinstance(value, (list, dict)):
             return value
-        if (side == 'before' and len(value) == 3 and value[:2] == ['syntax', 'Lean.guardMsgsCmd'] and
-                isinstance(value[2], list) and value[2] and isinstance(value[2][0], list)):
-            # The expected messages are compared as the before text respelled
-            # by the map; anything beyond that respelling is a difference.
-            doc = value[2][0]
-            if (len(doc) == 3 and doc[:2] == ['syntax', 'null'] and len(doc[2]) == 1 and
-                    doc[2][0][:2] == ['syntax', 'Lean.Parser.Command.docComment'] and
-                    len(doc[2][0][2]) == 2 and doc[2][0][2][1][0] == 'atom'):
-                text = doc[2][0][2][1][1]
-                respelled = ['syntax', 'null', [['syntax', 'Lean.Parser.Command.docComment',
-                                                 [doc[2][0][2][0], ['atom', self.respell_message(text, 'guard_msgs')]]]]]
-                return ['syntax', 'Lean.guardMsgsCmd',
-                        [respelled] + [self.normalize(item, side, coarse, downstream_eq) for item in value[2][1:]]]
-        if len(value) == 4 and value[0] == 'unhygienicIdentifier':
-            if coarse:  # bucketing only; the exact rule runs in compare()
-                return ['unhygienicIdentifier', self.normalize(value[3], side, coarse, downstream_eq)]
-            # Outside a compared constant (guards, checks) no source range can
-            # bind it: the spelling is compared as written.
-            spelling = value[1]
-            return ['unhygienicIdentifier', spelling, self.raw_marker(value[2], value[1]),
-                    self.normalize(value[3], side, coarse, downstream_eq)]
-        if len(value) == 5 and value[0] == 'quotedIdentifier':
-            spelling, raw = (self.quoted(value, 'normalize') if side == 'before'
-                             else (value[2], self.raw_marker(value[3], value[2])))
-            return ['quotedIdentifier', self.normalize(value[1], side, coarse, downstream_eq), spelling, raw,
-                    self.normalize(value[4], side, coarse, downstream_eq)]
-        if len(value) == 2 and value[0] == 'name':
-            name = value[1]
-            generated = self.generated_left if side == 'before' else self.generated_right
-            if coarse and downstream_eq and self.reloc_matcher_component(name, side) is not None:
-                return ['generated']
-            if coarse and side == 'after' and self.is_realized_reloc_matcher(name):
-                return ['generated']
-            if name in generated and coarse:
-                return ['generated']
-            if not coarse and name in (self.aux_left if side == 'before' else self.aux_right):
-                rep = self.aux_canonical().get(name)
-                if rep is not None:
-                    return ['name', rep]
-            mapped_gen = self.pairs.get(name)
-            return ['name', mapped_gen if side == 'before' and name in generated and mapped_gen is not None
-                    else self.name(name) if side == 'before' else name]
-        return [self.normalize(item, side, coarse, downstream_eq) for item in value]
+        memo = self._norm_coarse_cache.setdefault((side, downstream_eq), {}) if coarse else {}
+        if id(value) in memo:
+            return memo[id(value)]
+        generated = self.generated_left if side == 'before' else self.generated_right
+        aux_side = (self.aux_left if side == 'before' else self.aux_right) if not coarse else ()
+        aux_canon = self.aux_canonical() if (not coarse and aux_side) else {}
+        stack = [(value, False)]
+        while stack:
+            cur, ready = stack.pop()
+            cid = id(cur)
+            if cid in memo:
+                continue
+            if isinstance(cur, dict):
+                if not ready:
+                    stack.append((cur, True))
+                    for v in cur.values():
+                        if isinstance(v, (list, dict)) and id(v) not in memo:
+                            stack.append((v, False))
+                else:
+                    memo[cid] = {k: (memo[id(v)] if isinstance(v, (list, dict)) else v) for k, v in cur.items()}
+            elif isinstance(cur, list):
+                if not ready:
+                    if (side == 'before' and len(cur) == 3 and cur[:2] == ['syntax', 'Lean.guardMsgsCmd'] and
+                            isinstance(cur[2], list) and cur[2] and isinstance(cur[2][0], list)):
+                        doc = cur[2][0]
+                        if (len(doc) == 3 and doc[:2] == ['syntax', 'null'] and len(doc[2]) == 1 and
+                                isinstance(doc[2][0], list) and
+                                doc[2][0][:2] == ['syntax', 'Lean.Parser.Command.docComment'] and
+                                len(doc[2][0][2]) == 2 and doc[2][0][2][1][0] == 'atom'):
+                            text = doc[2][0][2][1][1]
+                            respelled = ['syntax', 'null', [['syntax', 'Lean.Parser.Command.docComment',
+                                                             [doc[2][0][2][0], ['atom', self.respell_message(text, 'guard_msgs')]]]]]
+                            stack.append((cur, ('guardMsgs', respelled)))
+                            for item in reversed(cur[2][1:]):
+                                if isinstance(item, (list, dict)) and id(item) not in memo:
+                                    stack.append((item, False))
+                            continue
+                    if len(cur) == 4 and cur[0] == 'unhygienicIdentifier':
+                        stack.append((cur, 'unhyg'))
+                        if isinstance(cur[3], (list, dict)) and id(cur[3]) not in memo:
+                            stack.append((cur[3], False))
+                        continue
+                    if len(cur) == 5 and cur[0] == 'quotedIdentifier':
+                        stack.append((cur, 'quoted'))
+                        for idx in (4, 1):
+                            if isinstance(cur[idx], (list, dict)) and id(cur[idx]) not in memo:
+                                stack.append((cur[idx], False))
+                        continue
+                    if len(cur) == 2 and cur[0] == 'name':
+                        name = cur[1]
+                        if coarse and downstream_eq and self.reloc_matcher_component(name, side) is not None:
+                            memo[cid] = ['generated']
+                        elif coarse and side == 'after' and self.is_realized_reloc_matcher(name):
+                            memo[cid] = ['generated']
+                        elif name in generated and coarse:
+                            memo[cid] = ['generated']
+                        elif side == 'before' and name in self.external_before_aux_rep:
+                            memo[cid] = ['name', self.external_before_aux_rep[name]]
+                        elif side == 'after' and name in self.external_after_aux_rep:
+                            memo[cid] = ['name', self.external_after_aux_rep[name]]
+                        elif side == 'before' and name in self.external_gen_pairs:
+                            memo[cid] = ['name', self.external_gen_pairs[name]]
+                        elif not coarse and name in aux_side and aux_canon.get(name) is not None:
+                            memo[cid] = ['name', aux_canon[name]]
+                        else:
+                            mapped_gen = self.pairs.get(name)
+                            memo[cid] = ['name', mapped_gen if side == 'before' and name in generated and mapped_gen is not None
+                                         else self.name(name) if side == 'before' else name]
+                        continue
+                    stack.append((cur, True))
+                    for item in reversed(cur):
+                        if isinstance(item, (list, dict)) and id(item) not in memo:
+                            stack.append((item, False))
+                elif isinstance(ready, tuple) and ready[0] == 'guardMsgs':
+                    memo[cid] = ['syntax', 'Lean.guardMsgsCmd',
+                                 [ready[1]] + [memo[id(it)] if isinstance(it, (list, dict)) else it
+                                               for it in cur[2][1:]]]
+                elif ready == 'unhyg':
+                    sub = memo[id(cur[3])] if isinstance(cur[3], (list, dict)) else cur[3]
+                    if coarse:
+                        memo[cid] = ['unhygienicIdentifier', sub]
+                    else:
+                        memo[cid] = ['unhygienicIdentifier', cur[1], self.raw_marker(cur[2], cur[1]), sub]
+                elif ready == 'quoted':
+                    c1 = memo[id(cur[1])] if isinstance(cur[1], (list, dict)) else cur[1]
+                    c4 = memo[id(cur[4])] if isinstance(cur[4], (list, dict)) else cur[4]
+                    spelling, raw = (self.quoted(cur, 'normalize') if side == 'before'
+                                     else (cur[2], self.raw_marker(cur[3], cur[2])))
+                    memo[cid] = ['quotedIdentifier', c1, spelling, raw, c4]
+                else:
+                    memo[cid] = [memo[id(it)] if isinstance(it, (list, dict)) else it for it in cur]
+        return memo[id(value)]
 
     def compare_imports(self):
         """Direct imports of every module that no relocation row touches are
@@ -1392,19 +2222,36 @@ class Comparison:
         return mapped
 
     def save(self):
-        """Every piece of state a speculative `pair()` may change."""
-        return (self.pairs.copy(), self.reverse.copy(), self.checked.copy(), set(self.reviewed_used),
-                set(self.reviewed_here), dict(self.unhygienic_sites), list(self.respelled_literals),
-                set(self.aux_pairs), set(self.aux_left), set(self.aux_right),
-                set(self.realized_matcher_pairs))
+        """Record O(1) journal watermark before a speculative `pair()`."""
+        return len(self._undo), len(self.respelled_literals)
 
     def restore(self, saved):
-        (self.pairs, self.reverse, self.checked, used, here, sites, literals,
-         self.aux_pairs, self.aux_left, self.aux_right, self.realized_matcher_pairs) = saved
-        # reviewed_used is shared with the caller across environments: restore in place.
-        self.reviewed_used.clear()
-        self.reviewed_used.update(used)
-        self.reviewed_here, self.unhygienic_sites, self.respelled_literals = here, sites, literals
+        undo_len, lit_len = saved
+        while len(self._undo) > undo_len:
+            op = self._undo.pop()
+            kind = op[0]
+            if kind == 'pair':
+                self.pairs.pop(op[1], None)
+                self.reverse.pop(op[2], None)
+            elif kind == 'checked':
+                self.checked.discard(op[1])
+            elif kind == 'aux_pair':
+                self.aux_pairs.discard((op[1], op[2]))
+                if not op[3]:
+                    self.aux_left.discard(op[1])
+                if not op[4]:
+                    self.aux_right.discard(op[2])
+            elif kind == 'realized':
+                self.realized_matcher_pairs.discard(op[1])
+            elif kind == 'rev_here':
+                self.reviewed_here.discard(op[1])
+            elif kind == 'rev_used':
+                self.reviewed_used.discard(op[1])
+            elif kind == 'unhyg':
+                self.unhygienic_sites.pop(op[1], None)
+            elif kind == 'eq_cache':
+                self._expr_eq_cache.pop(op[1], None)
+        del self.respelled_literals[lit_len:]
 
     def fail(self, message):
         """Raise at the first mismatch, or with `collect` record every one and
@@ -1413,7 +2260,57 @@ class Comparison:
             raise Mismatch(message)
         self.problems.append(message)
 
+    def _substantive_closure(self, table, roots, guards, attributes, checks, external_refs):
+        """Compute all constants required by N4 matching: roots, non-theorem or
+        attributed constants, outside REALIZED_THM_LEAF, externally referenced names,
+        and anything transitively reachable from them or guards/checks/attributes."""
+        substantive = set(roots) & table.keys()
+        for name, rec in table.items():
+            if not is_realized_theorem_candidate(name, rec, roots):
+                substantive.add(name)
+            elif name in external_refs:
+                substantive.add(name)
+        item_refs = set()
+        item_visited = set()
+        for seq in (guards, attributes, checks):
+            collect_const_refs(seq, item_refs, item_visited)
+        for ref in item_refs:
+            if ref in table:
+                substantive.add(ref)
+        queue = list(substantive)
+        seen_recs = set(queue)
+        visited_nodes = set()
+        while queue:
+            cur = queue.pop()
+            refs = set()
+            collect_const_refs(table[cur], refs, visited_nodes)
+            for ref in refs:
+                if ref in table and ref not in seen_recs:
+                    seen_recs.add(ref)
+                    substantive.add(ref)
+                    queue.append(ref)
+        return substantive
+
     def run(self):
+        substantive_before = self._substantive_closure(
+            self.before['constants'], self.before['roots'],
+            self.before.get('guards', ()), self.before.get('attributes', ()),
+            self.before.get('checks', ()), self.externally_referenced_before)
+        substantive_after = self._substantive_closure(
+            self.after['constants'], self.after['roots'],
+            self.after.get('guards', ()), self.after.get('attributes', ()),
+            self.after.get('checks', ()), self.externally_referenced_after)
+        self.generated_left = (self.left.keys() & substantive_before) - self.before['roots']
+        self.generated_right = (self.right.keys() & substantive_after) - self.after['roots']
+        self.ignored_realized_before = sorted(self.left.keys() - substantive_before)
+        self.ignored_realized_after = sorted(self.right.keys() - substantive_after)
+        self._downstream_reloc_eq_cache = {}
+        self._norm_coarse_cache = {}
+        self._gen_right_by_parent = defaultdict(list)
+        for g in sorted(self.generated_right):
+            if '.' in g and self.MATCHER_LEAF.match(g.rsplit('.', 1)[-1]):
+                self._gen_right_by_parent[g.rsplit('.', 1)[0]].append(g)
+
         expected = {self.name(n) for n in self.before['roots']}
         if len(expected) != len(self.before['roots']) or expected != self.after['roots']:
             self.fail(f'authored constant set changed: missing={sorted(expected - self.after["roots"])}, extra={sorted(self.after["roots"] - expected)}')
@@ -1424,26 +2321,27 @@ class Comparison:
                 self.fail(f'constant {name}: {error}')
         # Moving a declaration is part of the map: every authored constant
         # stays in its (renamed) module unless a relocation row moves it.
-        left_owner, right_owner = self.before.get('owners'), self.after.get('owners')
-        if left_owner is not None and right_owner is not None:
+        left_owner, right_owner = self.all_before_owners, self.all_after_owners
+        if (self.before.get('owners') is not None or (self._global_context and 'before_owners' in self._global_context)) and \
+                (self.after.get('owners') is not None or (self._global_context and 'after_owners' in self._global_context)):
             for name in sorted(self.before['roots']):
                 base = name.rsplit('@', 1)[0]
                 if name in left_owner and self.name(name) in right_owner:
                     expected = self.module_of(base, left_owner[name])
                     if right_owner[self.name(name)] != expected:
                         self.fail(f'{name}: module {left_owner[name]} became '
-                                       f'{right_owner[self.name(name)]}, expected {expected}')
-        for private in self.mapping.public_from:
+                                  f'{right_owner[self.name(name)]}, expected {expected}')
+        for private in self.scoped_public_from:
             if private not in self.before['roots']:
                 self.fail(f'public_from names no authored private declaration in scope: {private}')
-        for row, (source, target) in sorted(self.mapping.relocations.items()):
+        for row in sorted(self.scoped_relocations):
             if not any(MAP.split_private(n)[2] == row if MAP.split_private(n) else n == row
                        for n in self.before['roots']):
                 self.fail(f'relocation row {row} names no authored constant in scope')
         # Generated constants are not compared by name. Match their finite
         # kernel/attribute graphs bijectively (modulo relocation-scoped pattern
         # and equation auxiliaries, which Lean may split across module boundaries).
-        left_holders, right_holders = self.before.get('holders'), self.after.get('holders')
+        left_holders, right_holders = self.all_before_holders, self.all_after_holders
         buckets = defaultdict(list)
         for name in sorted(self.generated_right):
             try:
@@ -1462,19 +2360,12 @@ class Comparison:
             fresh = [n for n in buckets[key] if n not in self.reverse and n not in self.aux_right]
             shared = [n for n in buckets[key] if n in self.aux_right] if is_aux else []
             candidates = fresh + shared
-            if (self.is_downstream_reloc_eq(name, 'before') and left_holders is not None and
-                    right_holders is not None and name in left_holders):
+            if self.is_downstream_reloc_eq(name, 'before') and self._has_holders_info and name in left_holders:
                 wanted_holders = {self.component(m, 'before') for m in left_holders[name]}
                 same_h = [c for c in candidates if c in right_holders and
                           {self.component(m, 'after') for m in right_holders[c]} == wanted_holders]
                 other_h = [c for c in candidates if c not in same_h]
                 candidates = same_h + other_h
-            # Try the same (mapped) name first: for a compiler-named declaration
-            # (an anonymous instance) its comparison explains a failure. A
-            # generated auxiliary (`P.match_5`) is tried first as its renamed
-            # parent's auxiliary with the same suffix: structurally identical
-            # matchers of different modules must not cross (a preference only;
-            # equality and holders are still checked).
             same, same_error = self.preferred_generated(name), None
             if same in self.generated_right and same not in self.reverse and (is_aux or same not in self.aux_right):
                 candidates = [n for n in candidates if n != same]
@@ -1494,7 +2385,7 @@ class Comparison:
                     self.restore(saved)
             else:
                 self.fail(f'no verified generated-constant match for {name}' +
-                               (f'; same-name comparison: {same_error}' if same_error else ''))
+                          (f'; same-name comparison: {same_error}' if same_error else ''))
         left_buckets = None
         for name in sorted(self.generated_right):
             if name in self.reverse or name in self.aux_right:
@@ -1514,11 +2405,11 @@ class Comparison:
                     break
                 except Mismatch:
                     self.restore(saved)
-        if self.right.keys() != (self.reverse.keys() | self.aux_right):
+        if (self.after['roots'] | self.generated_right) != (self.reverse.keys() | self.aux_right):
             self.fail('additional generated constants after renaming')
         # Generated constants (equation lemmas, compiler-named instances) stay
         # in the modules that hold them, up to module and relocation rows.
-        if left_holders is not None and right_holders is not None:
+        if self._has_holders_info:
             for a, b in sorted(self.pairs.items() | self.aux_pairs):
                 if a not in self.generated_left or a not in left_holders or b not in right_holders:
                     continue
@@ -1526,7 +2417,7 @@ class Comparison:
                 now = {self.component(m, 'after') for m in right_holders[b]}
                 if was != now:
                     self.fail(f'generated constant {a} (now {b}): modules {sorted(left_holders[a])} '
-                                   f'became {sorted(right_holders[b])}')
+                              f'became {sorted(right_holders[b])}')
         # Checks, guards and attribute commands stay in their (renamed) module,
         # or move only between the two modules of a relocation row.
         for key in ITEMS:
@@ -1535,12 +2426,10 @@ class Comparison:
                 owners = (snapshot.get('item_modules') or {}).get(key) or [None] * len(items)
                 if len(owners) != len(items):
                     raise ValueError(f'{key}: module record does not match its items')
-                # The after side keeps its names; normalizing it only reduces a
-                # quoted identifier's raw text to its spelling marker.
                 counted = Counter()
                 for index, (m, item) in enumerate(zip(owners, items)):
                     try:
-                        counted[encoded([self.component(m, side), self.normalize(item, side)])] += 1
+                        counted[(self.component(m, side), dag_digest(self.normalize(item, side)))] += 1
                     except Mismatch as error:
                         if not self.collect:
                             raise
@@ -1548,9 +2437,9 @@ class Comparison:
                 return counted
             left, right = tagged(self.before, 'before'), tagged(self.after, 'after')
             if left != right:
-                where = sorted({json.loads(k)[0] or '<module unrecorded>' for k in (left - right) + (right - left)})
+                where = sorted({comp or '<module unrecorded>' for comp, _ in (left - right) + (right - left)})
                 self.fail(f'{key}: expression/command multiset changed (missing {sum((left-right).values())}, '
-                               f'extra {sum((right-left).values())}; modules {where})')
+                          f'extra {sum((right-left).values())}; modules {where})')
         try:
             self.compare_imports()
         except Mismatch as error:
@@ -1562,17 +2451,24 @@ class Comparison:
                     relocated_auxiliary_pairs=len(self.aux_pairs),
                     guards=len(self.before['guards']), attribute_commands=len(self.before['attributes']),
                     checked_commands=len(self.before.get('checks', [])),
-                    derived_literals_respelled=self.respelled_literals)
+                    derived_literals_respelled=self.respelled_literals,
+                    ignored_unreferenced_realized_theorems=dict(
+                        before=self.ignored_realized_before,
+                        after=self.ignored_realized_after))
 
 
-def check(before, after, mapping, reviewed=None, reviewed_used=None, collect=False, plan_edits=None):
+def check(before, after, mapping, reviewed=None, reviewed_used=None, collect=False, plan_edits=None,
+          global_context=None, external=None, state=None):
     MAP.validate_map(mapping)
     if before['version'] != after['version']:
         raise ValueError('Lean versions differ')
     renames = MAP.Renamer(mapping['entries'])
     # Imports are reported, not silently treated as a proof about their contents.
-    comparison = Comparison(before, after, renames, reviewed, reviewed_used, collect, plan_edits)
+    comparison = Comparison(before, after, renames, reviewed, reviewed_used, collect, plan_edits,
+                            global_context=global_context, external=external)
     result = comparison.run()
+    if state is not None:
+        state['comparison'] = comparison
     result['unhygienic_respellings'] = [
         dict(old=old, new=new, module=site[0], range=[site[1], site[2]],
              expansion_declarations=expansion_declarations(before, site[0], old))

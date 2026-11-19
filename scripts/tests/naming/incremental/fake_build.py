@@ -3,6 +3,7 @@
 bytes carry FAKE_EXPORTER_VARIANT); a module target writes an `.olean` and
 `.ir` whose bytes are the module's source digest."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import sys
@@ -21,3 +22,4 @@ for target in sys.argv[1:]:
     olean.parent.mkdir(parents=True, exist_ok=True)
     olean.write_text(digest)
     olean.with_suffix('.ir').write_text('ir ' + digest)
+    olean.with_suffix('.ilean').write_text(json.dumps(dict(module=target, directImports=[], references={}, decls={})))

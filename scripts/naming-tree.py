@@ -142,6 +142,9 @@ def plan_sources(root, candidate, bundles, mapping, consumer=False, extra_names=
     by_path = {row['path']: name for name, row in candidate['modules'].items()}
     renamer = MAP.Renamer(mapping['entries'])
     affected = renamer.words()
+    reloc_plan_mods = ({r['from_module'] for r in mapping['entries'] if r['kind'] == 'relocation'} |
+                       {r['to_module'] for r in mapping['entries'] if r['kind'] == 'relocation'})
+    pub_plan_mods = {MAP.split_private(f)[0] for f in renamer.public_from}
     records, texts = [], {}
     universe = APPLY.Universe(universe_names(bundles) | set(extra_names), renamer, compiler_named(bundles))
     excluded = {}
@@ -179,15 +182,32 @@ def plan_sources(root, candidate, bundles, mapping, consumer=False, extra_names=
         if bundle is not None:
             if bundle['source'] != text or APPLY.module_name(bundle['index']['module']) != module:
                 raise ValueError(f'{relative}: compiler bundle source/module mismatch')
-            stats = {}
-            edits, problems = APPLY.plan_file(text, bundle['index'], mapping['entries'], renamer,
-                                              universe, stats)
-            for key, value in stats.items():
-                if key == 'local_capture_sites':
-                    capture.setdefault('local_capture_qualified', []).extend(
-                        dict(path=relative, **site) for site in value)
-                else:
-                    capture[key] += value
+            ns_meta = bundle['index'].get('naming_syntax') or {}
+            if ns_meta.get('from_olean'):
+                mod_imports = set(candidate['modules'][module]['imports']) if module in candidate['modules'] else set()
+                needs_edit = (
+                    bool(occurrences(text, affected)) or
+                    module in reloc_plan_mods or
+                    module in pub_plan_mods or
+                    module in renamer.modules or
+                    bool(mod_imports & set(renamer.modules))
+                )
+                if needs_edit:
+                    raise ValueError(
+                        f'{module}: captured with --from-olean; recapture with --plan-only or '
+                        f'--full-elab-module {module} before planning edits'
+                    )
+                edits, problems = [], []
+            else:
+                stats = {}
+                edits, problems = APPLY.plan_file(text, bundle['index'], mapping['entries'], renamer,
+                                                  universe, stats)
+                for key, value in stats.items():
+                    if key == 'local_capture_sites':
+                        capture.setdefault('local_capture_qualified', []).extend(
+                            dict(path=relative, **site) for site in value)
+                    else:
+                        capture[key] += value
         else:
             edits = []
             problems = [dict(start=a, end=b, reason=f'affected token {word!r} has no compiler export')
