@@ -8,8 +8,9 @@ import Jaune.Bridge.G2a.Consumers
 The tracer's transaction driver over the staged phases: it prepares the transaction, traces the
 top-level message run and settles the run, and hands the trace summary the `MessageRun` instead of
 a rendered output record. Each traced operation carries a certificate that its value is the public
-operation: `runMessage` is `Message.run`, `runTransaction` is cut B2's `processTransaction`, which
-`Jaune.Bridge.G2a.processTransaction_eq_b2` equates with today's.
+operation: `runMessage` is `Message.run`, `runTransaction` is the state and block output of the
+transaction run `B2.Transaction.run` (the production pipeline), which
+`Jaune.Bridge.G2a.processTransaction_eq_b2` and `B2.Transaction.run_output` equate with today's.
 
 The traced message run enters the prepared frame from its checkpoint exactly once, with the entry
 and settlement events `Trace.runFrame` emits, so a precompile or the interpreter never runs twice;
@@ -68,7 +69,7 @@ def prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (in
 /-- The transaction result and the message run the trace summary reads: none when the
 transaction was rejected before its message ran or the run faulted. -/
 structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat)
-    extends Certified (B2.processTransaction benv bout tx index) where
+    extends Certified ((fun pair => (pair.1.state, pair.2)) <$> B2.Transaction.run benv bout tx index) where
   messageRun : Option MessageRun
   /-- The observed run is the transaction's top-level message run. -/
   observes : messageRun =
@@ -87,6 +88,7 @@ def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
       value := .error error
       messageRun := none
       erases := by
+        rw [B2.Transaction.run_output]
         simp only [prepareTransaction] at hprep
         simp only [B2.processTransaction]
         revert hprep
@@ -109,6 +111,7 @@ def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
       value := value
       messageRun := observed
       erases := by
+        rw [B2.Transaction.run_output]
         simp only [prepareTransaction] at hprep
         simp only [B2.processTransaction, value, message.erases]
         revert hprep
@@ -123,10 +126,11 @@ def runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
         simp only [observed, message.erases, Except.toOption, Option.bind]
         cases Message.run prepared.msg <;> rfl }
 
-/-- The traced transaction's value is cut B2's `processTransaction`. -/
+/-- The traced transaction's value is the transaction run's state and block output. -/
 theorem runTransaction_erasure {benv : Benv} {bout : BlockOutput} {tx : Transaction}
     {index : Nat} (result : TransactionResult benv bout tx index) :
-    result.value = B2.processTransaction benv bout tx index := result.erases
+    result.value = (fun pair => (pair.1.state, pair.2)) <$> B2.Transaction.run benv bout tx index :=
+  result.erases
 
 /-- **Bridge at the traced transaction's value.** For every monad, sink and input, the value the
 staged traced transaction returns is today's `processTransaction` result, and so the value
@@ -135,6 +139,6 @@ theorem runTransaction_value_eq {benv : Benv} {bout : BlockOutput} {tx : Transac
     {index : Nat} (result : TransactionResult benv bout tx index)
     (old : Jaune.TraceTransaction.TransactionResult benv bout tx index) :
     result.value = old.value := by
-  rw [result.erases, old.erases, Bridge.G2a.processTransaction_eq_b2]
+  rw [result.erases, B2.Transaction.run_output, old.erases, Bridge.G2a.processTransaction_eq_b2]
 
 end Jaune.Staging.TraceTransaction
