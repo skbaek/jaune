@@ -87,6 +87,8 @@ import Jaune.Run.BlockFacts
 import Jaune.Bridge.Memory
 import Jaune.MessageCall.CheckedFrame
 import Jaune.Bridge.G2b.CheckedFrame
+import Jaune.MessageCall.FrameRelations
+import Jaune.Bridge.G2b.FrameRelations
 import Jaune.Bridge.G2b.MemoryReachability
 import Jaune.MessageCall.CheckedState
 import Jaune.MessageCall.CheckedPlain
