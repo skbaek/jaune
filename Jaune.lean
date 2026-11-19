@@ -201,6 +201,11 @@ import Jaune.FrameRun.Order
 import Jaune.FrameRun.CheckedOrder
 import Jaune.Bridge.G3.FrameRun
 import Jaune.Bridge.G3.FrameViews
+import Jaune.FrameRun.CheckedFacts
+import Jaune.FrameRun.CheckedMemory
+import Jaune.MessageCall.CheckedAuditedRows
+import Jaune.CheckedSymbolicPush
+import Jaune.CheckedSymbolicArith
 import Jaune.Bridge.G2b.CheckedViews
 
 import Jaune.AccountWriteFacts
