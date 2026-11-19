@@ -26,7 +26,7 @@ The importer now decodes the whole transaction list before the pre-execution sys
 
 namespace Jaune.Bridge.G2a
 
-open Jaune Jaune.Staging
+open Jaune
 
 /-! ### Generic: reordering two independent computations in `Except` -/
 
@@ -50,14 +50,14 @@ theorem Except.bind_comm_or_both_error {ε α β γ : Type} (A : Except ε α) (
 
 theorem processTransaction_receiptKeys {benv : Benv} {bout : BlockOutput} {tx : Transaction}
     {index : Nat} {q : State × BlockOutput}
-    (h : Staging.B2.processTransaction benv bout tx index = .ok q) :
+    (h : Bridge.G2a.Phased.B2.processTransaction benv bout tx index = .ok q) :
     q.2.receiptKeys = bout.receiptKeys ++ [Rlp.Item.toBytes (.bytes index.toBytes)] := by
-  unfold Staging.B2.processTransaction at h
+  unfold Bridge.G2a.Phased.B2.processTransaction at h
   obtain ⟨checked, hc, h⟩ := Except.bind_eq_ok h
   obtain ⟨prepared, hp, h⟩ := Except.bind_eq_ok h
   obtain ⟨run, _, h⟩ := Except.bind_eq_ok h
   have hcb : checked.bout.receiptKeys = bout.receiptKeys := by
-    unfold Staging.Transaction.check at hc
+    unfold Transaction.admit at hc
     obtain ⟨_, hb, hc⟩ := Except.bind_eq_ok hc
     cases hb
     obtain ⟨_, _, hc⟩ := Except.bind_eq_ok hc
@@ -66,12 +66,12 @@ theorem processTransaction_receiptKeys {benv : Benv} {bout : BlockOutput} {tx : 
     cases hc
     rfl
   have hpb : prepared.bout = checked.bout := by
-    unfold Staging.Transaction.prepare at hp
+    unfold Transaction.prepare at hp
     obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
     obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
     cases hp
     rfl
-  unfold Staging.B2.Transaction.settle at h
+  unfold Bridge.G2a.Phased.B2.Transaction.settle at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   cases h
   simp [hpb, hcb, BlockOutput.withGasSettlement]
@@ -90,39 +90,39 @@ theorem processTransaction_receiptKeys {benv : Benv} {bout : BlockOutput} {tx : 
 @[simp] theorem Benv.withState_withState (benv : Benv) (s t : State) :
     (benv.withState s).withState t = benv.withState t := rfl
 
-@[simp] theorem Body.Prefix.state_init (s : State) : (Staging.Body.Prefix.init s).state = s := rfl
+@[simp] theorem Body.Prefix.state_init (s : State) : (Body.Prefix.init s).state = s := rfl
 
-theorem fold_systemCall (benv : Benv) (p : Staging.Body.Prefix) (address : Address)
-    (data : Except TransitionError Bytes) (index : Nat) (rest : List Staging.BodyOp) :
-    Staging.Body.fold benv p (.systemCall address data index :: rest) =
+theorem fold_systemCall (benv : Benv) (p : Body.Prefix) (address : Address)
+    (data : Except TransitionError Bytes) (index : Nat) (rest : List BodyOp) :
+    Body.fold benv p (.systemCall address data index :: rest) =
       (do
         let d ← data
-        let run ← (Staging.processUncheckedSystemTransaction (benv.withState p.state) address d).mapError
+        let run ← (processUncheckedSystemTransaction (benv.withState p.state) address d).mapError
           (fun e => TransitionError.vm e.toEvmError)
-        Staging.Body.fold benv
+        Body.fold benv
           { p with
             state := run.state
-            accessList := p.accessList.incorporateSystem benv.stat.rules index p.state run.state
+            blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules index p.state run.state
               (address :: run.accountReads.toList) run.storageReads.toList
               run.storageWrites.toList }
           rest) := by
-  simp only [Staging.Body.fold, Staging.Body.step]
+  simp only [Body.fold, Body.step]
   cases data with
   | error e => rfl
   | ok d =>
     simp only [bind, Except.bind, pure, Except.pure, Except.mapError]
-    cases Staging.processUncheckedSystemTransaction (benv.withState p.state) address d <;> rfl
+    cases processUncheckedSystemTransaction (benv.withState p.state) address d <;> rfl
 
-theorem fold_preOps (benv : Benv) (rest : List Staging.BodyOp) :
-    Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (Staging.Body.preOps benv ++ rest) =
+theorem fold_preOps (benv : Benv) (rest : List BodyOp) :
+    Body.fold benv (Body.Prefix.init benv.state) (Body.preOps benv ++ rest) =
       (do
-        let ⟨stB, bal⟩ ← beaconRootsCall benv.stat.rules benv
-        let ⟨stH, bal⟩ ← historyStorageCall benv.stat.rules (benv.withState stB) bal
-        Staging.Body.fold benv
-          (Staging.Body.Prefix.ofBlockOutput stH {BlockOutput.init with blockAccessListBuilder := bal})
+        let ⟨stB, bal⟩ ← Bridge.G2a.Old.beaconRootsCall benv.stat.rules benv
+        let ⟨stH, bal⟩ ← Bridge.G2a.Old.historyStorageCall benv.stat.rules (benv.withState stB) bal
+        Body.fold benv
+          (Body.Prefix.ofBlockOutput stH {BlockOutput.init with blockAccessListBuilder := bal})
           rest) := by
   simp only [← beaconRootsCall_eq, ← historyStorageCall_eq]
-  unfold Staging.Body.preOps Staging.beaconRootsCall Staging.historyStorageCall
+  unfold Body.preOps beaconRootsCall historyStorageCall
   cases hb : benv.stat.rules.systemCalls.beaconRoots <;>
     cases hh : benv.stat.rules.systemCalls.historyStorage <;>
     simp only [hb, hh, Bool.false_eq_true, ↓reduceIte, List.nil_append, List.cons_append,
@@ -134,7 +134,7 @@ theorem fold_preOps (benv : Benv) (rest : List Staging.BodyOp) :
       Benv.withState_self]
   all_goals first
     | rfl
-    | (cases Staging.processUncheckedSystemTransaction benv beaconRootsAddress
+    | (cases processUncheckedSystemTransaction benv beaconRootsAddress
           benv.stat.parentBeaconBlockRoot.toBytes with
         | error e => rfl
         | ok run =>
@@ -142,20 +142,20 @@ theorem fold_preOps (benv : Benv) (rest : List Staging.BodyOp) :
             | rfl
             | (dsimp only
                split <;> rfl))
-    | (cases Staging.processUncheckedSystemTransaction benv historyStorageAddress _ <;> rfl)
+    | (cases processUncheckedSystemTransaction benv historyStorageAddress _ <;> rfl)
 
 /-! ### The transactions -/
 
 theorem fold_transactions (benv : Benv) :
-    ∀ (l : List (Nat × Transaction)) (p : Staging.Body.Prefix) (rest : List Staging.BodyOp),
-      Staging.Body.fold benv p (l.map (fun ⟨i, tx⟩ => Staging.BodyOp.transaction tx i) ++ rest) =
-        (applyTransactions l (benv.withState p.state) p.toBlockOutput >>= fun q =>
-          Staging.Body.fold benv (Staging.Body.Prefix.ofBlockOutput q.1.state q.2) rest)
+    ∀ (l : List (Nat × Transaction)) (p : Body.Prefix) (rest : List BodyOp),
+      Body.fold benv p (l.map (fun ⟨i, tx⟩ => BodyOp.transaction tx i) ++ rest) =
+        (Bridge.G2a.Old.applyTransactions l (benv.withState p.state) p.toBlockOutput >>= fun q =>
+          Body.fold benv (Body.Prefix.ofBlockOutput q.1.state q.2) rest)
   | [], p, rest => rfl
   | ⟨i, tx⟩ :: l, p, rest => by
-    simp only [List.map_cons, List.cons_append, Staging.Body.fold, Staging.Body.step, applyTransactions,
-      ← processTransaction_eq_b2, ← Staging.B2.Transaction.run_output]
-    cases h : Staging.B2.Transaction.run (benv.withState p.state) p.toBlockOutput tx i with
+    simp only [List.map_cons, List.cons_append, Body.fold, Body.step, Bridge.G2a.Old.applyTransactions,
+      ← processTransaction_eq_b2, ← Bridge.G2a.Phased.B2.Transaction.run_output]
+    cases h : Transaction.run (benv.withState p.state) p.toBlockOutput tx i with
     | error e => rfl
     | ok q =>
       obtain ⟨run, b⟩ := q
@@ -166,21 +166,21 @@ theorem fold_transactions (benv : Benv) :
 /-- `applyTransactions` keeps the block environment apart from its state. -/
 theorem applyTransactions_benv (benv : Benv) :
     ∀ (l : List (Nat × Transaction)) (s : State) (bout : BlockOutput) {q},
-      applyTransactions l (benv.withState s) bout = .ok q → q.1 = benv.withState q.1.state
+      Bridge.G2a.Old.applyTransactions l (benv.withState s) bout = .ok q → q.1 = benv.withState q.1.state
   | [], s, bout, q, h => by cases h; rfl
   | ⟨i, tx⟩ :: l, s, bout, q, h => by
-    unfold applyTransactions at h
+    unfold Bridge.G2a.Old.applyTransactions at h
     obtain ⟨⟨st, b⟩, _, h⟩ := Except.bind_eq_ok h
     exact applyTransactions_benv benv l st b h
 
 /-- Each transaction `applyTransactions` runs appends one receipt key. -/
 theorem applyTransactions_receiptKeys :
     ∀ (l : List (Nat × Transaction)) (benv : Benv) (bout : BlockOutput) {q},
-      applyTransactions l benv bout = .ok q →
+      Bridge.G2a.Old.applyTransactions l benv bout = .ok q →
         q.2.receiptKeys.length = bout.receiptKeys.length + l.length
   | [], benv, bout, q, h => by cases h; rfl
   | ⟨i, tx⟩ :: l, benv, bout, q, h => by
-    unfold applyTransactions at h
+    unfold Bridge.G2a.Old.applyTransactions at h
     obtain ⟨⟨st, b⟩, hq, h⟩ := Except.bind_eq_ok h
     rw [← processTransaction_eq_b2] at hq
     have hk := processTransaction_receiptKeys hq
@@ -192,146 +192,146 @@ theorem applyTransactions_receiptKeys :
 /-! ### The requests -/
 
 theorem fold_requestCalls (benv : Benv) (idx : Nat) :
-    ∀ (contracts : List (UInt8 × Address)) (p : Staging.Body.Prefix) (rest : List Staging.BodyOp),
-      Staging.Body.fold benv p (contracts.map (fun ⟨type, address⟩ => Staging.BodyOp.requestCall type address idx) ++
+    ∀ (contracts : List (UInt8 × Address)) (p : Body.Prefix) (rest : List BodyOp),
+      Body.fold benv p (contracts.map (fun ⟨type, address⟩ => BodyOp.requestCall type address idx) ++
           rest) =
-        (Staging.runRequestContracts idx contracts (benv.withState p.state) p.requests
-            p.accessList >>= fun ⟨st, acc, bal⟩ =>
-          Staging.Body.fold benv { p with state := st, requests := acc, accessList := bal } rest)
+        (runRequestContracts idx contracts (benv.withState p.state) p.requests
+            p.blockAccessListBuilder >>= fun ⟨st, acc, bal⟩ =>
+          Body.fold benv { p with state := st, requests := acc, blockAccessListBuilder := bal } rest)
   | [], p, rest => rfl
   | ⟨type, address⟩ :: contracts, p, rest => by
-    simp only [List.map_cons, List.cons_append, Staging.Body.fold, Staging.Body.step, Staging.runRequestContracts,
+    simp only [List.map_cons, List.cons_append, Body.fold, Body.step, runRequestContracts,
       Benv.withState_stat, Benv.withState_state, Benv.withState_withState]
-    cases Staging.processCheckedSystemTransaction (benv.withState p.state) address [] with
+    cases processCheckedSystemTransaction (benv.withState p.state) address [] with
     | error e => rfl
     | ok run =>
       simp only [bind, Except.bind, pure, Except.pure]
       exact fold_requestCalls benv idx contracts _ rest
 
-theorem fold_requests (benv : Benv) (idx : Nat) (p : Staging.Body.Prefix) (rest : List Staging.BodyOp) :
-    Staging.Body.fold benv p ((Staging.BodyOp.depositRequests :: benv.stat.rules.requests.map
-        (fun ⟨type, address⟩ => Staging.BodyOp.requestCall type address idx)) ++ rest) =
-      (Staging.processGeneralPurposeRequestsAt idx (benv.withState p.state) p.toBlockOutput >>=
-        fun q => Staging.Body.fold benv (Staging.Body.Prefix.ofBlockOutput q.1 q.2) rest) := by
-  simp only [List.cons_append, Staging.Body.fold, Staging.Body.step, Staging.processGeneralPurposeRequestsAt,
+theorem fold_requests (benv : Benv) (idx : Nat) (p : Body.Prefix) (rest : List BodyOp) :
+    Body.fold benv p ((BodyOp.depositRequests :: benv.stat.rules.requests.map
+        (fun ⟨type, address⟩ => BodyOp.requestCall type address idx)) ++ rest) =
+      (processGeneralPurposeRequestsAt idx (benv.withState p.state) p.toBlockOutput >>=
+        fun q => Body.fold benv (Body.Prefix.ofBlockOutput q.1 q.2) rest) := by
+  simp only [List.cons_append, Body.fold, Body.step, processGeneralPurposeRequestsAt,
     Benv.withState_stat]
   cases parseDepositRequests p.toBlockOutput with
   | error e => rfl
   | ok d =>
     simp only [bind, Except.bind, pure, Except.pure]
     rw [fold_requestCalls]
-    simp only [Staging.Body.Prefix.toBlockOutput]
-    cases Staging.runRequestContracts idx benv.stat.rules.requests (benv.withState p.state)
-      (if d.length > 0 then p.requests ++ [depositRequestType ++ d] else p.requests) p.accessList with
+    simp only [Body.Prefix.toBlockOutput]
+    cases runRequestContracts idx benv.stat.rules.requests (benv.withState p.state)
+      (if d.length > 0 then p.requests ++ [depositRequestType ++ d] else p.requests) p.blockAccessListBuilder with
     | error e => rfl
     | ok r => rfl
 
 /-! ### The post-execution operations -/
 
 theorem withdrawalsPass_receiptKeys (rules : ForkRules) (benv : Benv) (bout : BlockOutput)
-    (wds : List Withdrawal) : (withdrawalsPass rules benv bout wds).2.receiptKeys = bout.receiptKeys := by
-  unfold withdrawalsPass
+    (wds : List Withdrawal) : (Bridge.G2a.Old.withdrawalsPass rules benv bout wds).2.receiptKeys = bout.receiptKeys := by
+  unfold Bridge.G2a.Old.withdrawalsPass
   split <;> rfl
 
-theorem fold_withdrawalsOps (benv : Benv) (p : Staging.Body.Prefix) (n : Nat) (wds : List Withdrawal)
-    (rest : List Staging.BodyOp) (hk : p.receiptKeys.length = n) :
-    Staging.Body.fold benv p
-        ((if benv.stat.rules.header.withdrawalsRoot then [Staging.BodyOp.withdrawals wds (n + 1)] else []) ++
+theorem fold_withdrawalsOps (benv : Benv) (p : Body.Prefix) (n : Nat) (wds : List Withdrawal)
+    (rest : List BodyOp) (hk : p.receiptKeys.length = n) :
+    Body.fold benv p
+        ((if benv.stat.rules.header.withdrawalsRoot then [BodyOp.withdrawals wds (n + 1)] else []) ++
           rest) =
-      Staging.Body.fold benv
-        (Staging.Body.Prefix.ofBlockOutput
-          (withdrawalsPass benv.stat.rules (benv.withState p.state) p.toBlockOutput wds).1
-          (withdrawalsPass benv.stat.rules (benv.withState p.state) p.toBlockOutput wds).2) rest := by
+      Body.fold benv
+        (Body.Prefix.ofBlockOutput
+          (Bridge.G2a.Old.withdrawalsPass benv.stat.rules (benv.withState p.state) p.toBlockOutput wds).1
+          (Bridge.G2a.Old.withdrawalsPass benv.stat.rules (benv.withState p.state) p.toBlockOutput wds).2) rest := by
   subst hk
-  unfold withdrawalsPass
+  unfold Bridge.G2a.Old.withdrawalsPass
   cases benv.stat.rules.header.withdrawalsRoot <;> rfl
 
-theorem fold_requestsOps (benv : Benv) (p : Staging.Body.Prefix) (n : Nat) (rest : List Staging.BodyOp)
+theorem fold_requestsOps (benv : Benv) (p : Body.Prefix) (n : Nat) (rest : List BodyOp)
     (hk : p.receiptKeys.length = n) :
-    Staging.Body.fold benv p
+    Body.fold benv p
         ((if benv.stat.rules.header.requestsHash then
-            Staging.BodyOp.depositRequests :: benv.stat.rules.requests.map
-              (fun ⟨type, address⟩ => Staging.BodyOp.requestCall type address (n + 1))
+            BodyOp.depositRequests :: benv.stat.rules.requests.map
+              (fun ⟨type, address⟩ => BodyOp.requestCall type address (n + 1))
           else []) ++ rest) =
-      (requestsPass benv.stat.rules (benv.withState p.state) p.toBlockOutput >>= fun q =>
-        Staging.Body.fold benv (Staging.Body.Prefix.ofBlockOutput q.1 q.2) rest) := by
+      (Bridge.G2a.Old.requestsPass benv.stat.rules (benv.withState p.state) p.toBlockOutput >>= fun q =>
+        Body.fold benv (Body.Prefix.ofBlockOutput q.1 q.2) rest) := by
   subst hk
-  unfold requestsPass
+  unfold Bridge.G2a.Old.requestsPass
   cases benv.stat.rules.header.requestsHash with
   | false => rfl
   | true =>
     simp only [if_true]
-    rw [fold_requests, processGeneralPurposeRequests, ← processGeneralPurposeRequestsAt_eq]
+    rw [fold_requests, Bridge.G2a.Old.processGeneralPurposeRequests, ← processGeneralPurposeRequestsAt_eq]
     rfl
 
 theorem payRewards_eq (pow : ProofOfWorkRules) (number : Nat) (coinbase : Address)
     (ommers : List Header) (st : State) :
-    payRewards pow number coinbase ommers st =
-      Staging.creditAll (ommers.map fun ommer =>
+    Bridge.G2a.Old.payRewards pow number coinbase ommers st =
+      creditAll (ommers.map fun ommer =>
           (ommer.coinbase, (8 + ommer.number - number) * pow.blockReward / 8))
         (st.addBal coinbase (pow.blockReward + ommers.length * (pow.blockReward / 32)).toU256) := by
-  simp only [payRewards, Staging.creditAll, List.foldl_map]
+  simp only [Bridge.G2a.Old.payRewards, creditAll, List.foldl_map]
 
-theorem fold_tailOps (benv : Benv) (p : Staging.Body.Prefix) (ommers : List Header) :
-    Staging.Body.fold benv p
+theorem fold_tailOps (benv : Benv) (p : Body.Prefix) (ommers : List Header) :
+    Body.fold benv p
         ((match benv.stat.rules.proofOfWork with
           | none => []
           | some pow =>
-            [Staging.BodyOp.rewards benv.stat.coinbase
+            [BodyOp.rewards benv.stat.coinbase
               (pow.blockReward + ommers.length * (pow.blockReward / 32))
               (ommers.map fun ommer =>
                 (ommer.coinbase, (8 + ommer.number - benv.stat.number) * pow.blockReward / 8))]) ++
-          [Staging.BodyOp.buildAccessList, Staging.BodyOp.checkAccessListLimit]) =
+          [BodyOp.buildAccessList, BodyOp.checkAccessListLimit]) =
       (do
         let stRewards := match benv.stat.rules.proofOfWork with
           | none => p.state
-          | some pow => payRewards pow benv.stat.number benv.stat.coinbase ommers p.state
+          | some pow => Bridge.G2a.Old.payRewards pow benv.stat.number benv.stat.coinbase ommers p.state
         let list := match benv.stat.rules.blockAccessListRules with
           | none => []
-          | some _ => p.accessList.build
+          | some _ => p.blockAccessListBuilder.build
         checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit list
-        .ok (Staging.Body.Prefix.ofBlockOutput stRewards {p.toBlockOutput with blockAccessList := list})) := by
+        .ok (Body.Prefix.ofBlockOutput stRewards {p.toBlockOutput with blockAccessList := list})) := by
   cases benv.stat.rules.proofOfWork with
   | none =>
-    simp only [List.nil_append, Staging.Body.fold, Staging.Body.step, bind, Except.bind, pure, Except.pure]
+    simp only [List.nil_append, Body.fold, Body.step, bind, Except.bind, pure, Except.pure]
     cases checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit
       (match benv.stat.rules.blockAccessListRules with
         | none => []
-        | some _ => p.accessList.build) <;> rfl
+        | some _ => p.blockAccessListBuilder.build) <;> rfl
   | some pow =>
-    simp only [List.cons_append, List.nil_append, Staging.Body.fold, Staging.Body.step, payRewards_eq, bind,
+    simp only [List.cons_append, List.nil_append, Body.fold, Body.step, payRewards_eq, bind,
       Except.bind, pure, Except.pure]
     cases checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit
       (match benv.stat.rules.blockAccessListRules with
         | none => []
-        | some _ => p.accessList.build) <;> rfl
+        | some _ => p.blockAccessListBuilder.build) <;> rfl
 
-theorem fold_postOps (benv : Benv) (p : Staging.Body.Prefix) (n : Nat) (ommers : List Header)
+theorem fold_postOps (benv : Benv) (p : Body.Prefix) (n : Nat) (ommers : List Header)
     (wds : List Withdrawal) (hk : p.receiptKeys.length = n) :
-    Staging.Body.fold benv p (Staging.Body.postOps benv n ommers wds) =
+    Body.fold benv p (Body.postOps benv n ommers wds) =
       (do
         let rules := benv.stat.rules
-        let ⟨stWds, boutWds⟩ := withdrawalsPass rules (benv.withState p.state) p.toBlockOutput wds
-        let ⟨stReq, boutReq⟩ ← requestsPass rules ((benv.withState p.state).withState stWds) boutWds
+        let ⟨stWds, boutWds⟩ := Bridge.G2a.Old.withdrawalsPass rules (benv.withState p.state) p.toBlockOutput wds
+        let ⟨stReq, boutReq⟩ ← Bridge.G2a.Old.requestsPass rules ((benv.withState p.state).withState stWds) boutWds
         let stRewards := match rules.proofOfWork with
           | none => stReq
-          | some pow => payRewards pow benv.stat.number benv.stat.coinbase ommers stReq
+          | some pow => Bridge.G2a.Old.payRewards pow benv.stat.number benv.stat.coinbase ommers stReq
         let list := match rules.blockAccessListRules with
           | none => []
           | some _ => boutReq.blockAccessListBuilder.build
         checkBlockAccessListGasLimit rules benv.stat.blockGasLimit list
-        .ok (Staging.Body.Prefix.ofBlockOutput stRewards {boutReq with blockAccessList := list})) := by
-  unfold Staging.Body.postOps
+        .ok (Body.Prefix.ofBlockOutput stRewards {boutReq with blockAccessList := list})) := by
+  unfold Body.postOps
   simp only [List.append_assoc]
   rw [fold_withdrawalsOps benv p n wds _ hk, fold_requestsOps _ _ n _
     (by
-      show (withdrawalsPass _ _ _ _).2.receiptKeys.length = n
+      show (Bridge.G2a.Old.withdrawalsPass _ _ _ _).2.receiptKeys.length = n
       rw [withdrawalsPass_receiptKeys]; exact hk)]
-  simp only [Staging.Body.Prefix.state_ofBlockOutput, Staging.Body.Prefix.toBlockOutput_ofBlockOutput,
+  simp only [Body.Prefix.state_ofBlockOutput, Body.Prefix.toBlockOutput_ofBlockOutput,
     Benv.withState_withState]
-  rcases withdrawalsPass benv.stat.rules (benv.withState p.state) p.toBlockOutput wds with ⟨stW, bW⟩
+  rcases Bridge.G2a.Old.withdrawalsPass benv.stat.rules (benv.withState p.state) p.toBlockOutput wds with ⟨stW, bW⟩
   dsimp only
-  cases requestsPass benv.stat.rules (benv.withState stW) bW with
+  cases Bridge.G2a.Old.requestsPass benv.stat.rules (benv.withState stW) bW with
   | error e => rfl
   | ok a =>
     simp only [bind, Except.bind]
@@ -344,37 +344,37 @@ theorem fold_postOps (benv : Benv) (p : Staging.Body.Prefix) (n : Nat) (ommers :
 /-- The old order over `Body.step`: the pre-execution system calls, then the decode, then the rest.
 Bridge only. -/
 def Body.importerAfter (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
-    (wds : List Withdrawal) : Except TransitionError Staging.Body.Prefix := do
-  let p ← Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (Staging.Body.preOps benv)
+    (wds : List Withdrawal) : Except TransitionError Body.Prefix := do
+  let p ← Body.fold benv (Body.Prefix.init benv.state) (Body.preOps benv)
   let decoded ← txs.mapM (decodeTransaction benv.stat.rules)
-  Staging.Body.fold benv p (Staging.Body.transactionOps decoded ++ Staging.Body.postOps benv decoded.length ommers wds)
+  Body.fold benv p (Body.transactionOps decoded ++ Body.postOps benv decoded.length ommers wds)
 
 /-- **`applyBody` is the old order over the steps**, on every input, through the output map. -/
 theorem applyBody_eq_importerAfter (benv : Benv) (txs : List (Bytes ⊕ Transaction))
     (ommers : List Header) (wds : List Withdrawal) :
-    applyBody benv txs ommers wds = Staging.Body.Prefix.output <$> Body.importerAfter benv txs ommers wds := by
-  unfold Body.importerAfter applyBody
+    Bridge.G2a.Old.applyBody benv txs ommers wds = Body.Prefix.output <$> Body.importerAfter benv txs ommers wds := by
+  unfold Body.importerAfter Bridge.G2a.Old.applyBody
   have hpre := fold_preOps benv []
   simp only [List.append_nil] at hpre
   rw [hpre]
   simp only [bind, Except.bind, pure, Except.pure, Functor.map, Except.map, Benv.withState_stat,
     Benv.withState_withState, Benv.withState_state]
-  cases beaconRootsCall benv.stat.rules benv with
+  cases Bridge.G2a.Old.beaconRootsCall benv.stat.rules benv with
   | error e => rfl
   | ok r1 =>
     obtain ⟨stB, balB⟩ := r1
     simp only []
-    cases historyStorageCall benv.stat.rules (benv.withState stB) balB with
+    cases Bridge.G2a.Old.historyStorageCall benv.stat.rules (benv.withState stB) balB with
     | error e => rfl
     | ok r2 =>
       obtain ⟨stH, balH⟩ := r2
-      simp only [Staging.Body.fold, pure, Except.pure]
+      simp only [Body.fold, pure, Except.pure]
       cases txs.mapM (decodeTransaction benv.stat.rules) with
       | error e => rfl
       | ok decoded =>
-        simp only [Staging.Body.transactionOps, fold_transactions, Staging.Body.Prefix.state_ofBlockOutput,
-          Staging.Body.Prefix.toBlockOutput_ofBlockOutput, bind, Except.bind]
-        cases hq : applyTransactions decoded.putIndex (benv.withState stH)
+        simp only [Body.transactionOps, fold_transactions, Body.Prefix.state_ofBlockOutput,
+          Body.Prefix.toBlockOutput_ofBlockOutput, bind, Except.bind]
+        cases hq : Bridge.G2a.Old.applyTransactions decoded.putIndex (benv.withState stH)
           {BlockOutput.init with blockAccessListBuilder := balH} with
         | error e => rfl
         | ok q =>
@@ -382,14 +382,14 @@ theorem applyBody_eq_importerAfter (benv : Benv) (txs : List (Bytes ⊕ Transact
           have hk := applyTransactions_receiptKeys _ _ _ hq
           obtain ⟨b, o⟩ := q
           simp only at hb hk
-          simp only [BlockOutput.init, List.length_nil, Nat.zero_add, Staging.length_putIndex] at hk
+          simp only [BlockOutput.init, List.length_nil, Nat.zero_add, length_putIndex] at hk
           rw [hb]
-          simp only [Staging.Body.Prefix.state_ofBlockOutput, Benv.withState_state]
+          simp only [Body.Prefix.state_ofBlockOutput, Benv.withState_state]
           rw [fold_postOps benv _ decoded.length ommers wds hk]
-          simp only [Staging.Body.Prefix.state_ofBlockOutput, Staging.Body.Prefix.toBlockOutput_ofBlockOutput]
-          rcases withdrawalsPass benv.stat.rules (benv.withState b.state) o wds with ⟨stW, bW⟩
+          simp only [Body.Prefix.state_ofBlockOutput, Body.Prefix.toBlockOutput_ofBlockOutput]
+          rcases Bridge.G2a.Old.withdrawalsPass benv.stat.rules (benv.withState b.state) o wds with ⟨stW, bW⟩
           simp only [bind, Except.bind, Benv.withState_withState]
-          cases requestsPass benv.stat.rules (benv.withState stW) bW with
+          cases Bridge.G2a.Old.requestsPass benv.stat.rules (benv.withState stW) bW with
           | error e => rfl
           | ok r =>
             cases benv.stat.rules.blockAccessListRules
@@ -404,8 +404,8 @@ theorem applyBody_eq_importerAfter (benv : Benv) (txs : List (Bytes ⊕ Transact
 /-- The old body's pre-execution system calls: the beacon-roots call, then the history-storage
 call, as `applyBody` at `ba15f397` runs them. -/
 def preCalls (benv : Benv) : Except TransitionError (State × BlockAccessListBuilder) := do
-  let ⟨stB, bal⟩ ← beaconRootsCall benv.stat.rules benv
-  historyStorageCall benv.stat.rules (benv.withState stB) bal
+  let ⟨stB, bal⟩ ← Bridge.G2a.Old.beaconRootsCall benv.stat.rules benv
+  Bridge.G2a.Old.historyStorageCall benv.stat.rules (benv.withState stB) bal
 
 /-- The decode of the whole transaction list. -/
 def decodeAll (benv : Benv) (txs : List (Bytes ⊕ Transaction)) :
@@ -420,45 +420,45 @@ def DecodeOrderSplit (benv : Benv) (txs : List (Bytes ⊕ Transaction)) : Prop :
   (∃ e, preCalls benv = .error e) ∧ ∃ e, decodeAll benv txs = .error e
 
 theorem fold_preOps_eq (benv : Benv) :
-    Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (Staging.Body.preOps benv) =
+    Body.fold benv (Body.Prefix.init benv.state) (Body.preOps benv) =
       (fun (r : State × BlockAccessListBuilder) =>
-        Staging.Body.Prefix.ofBlockOutput r.1 {BlockOutput.init with blockAccessListBuilder := r.2}) <$>
+        Body.Prefix.ofBlockOutput r.1 {BlockOutput.init with blockAccessListBuilder := r.2}) <$>
         preCalls benv := by
   have h := fold_preOps benv []
   simp only [List.append_nil] at h
   rw [h]
   unfold preCalls
-  cases beaconRootsCall benv.stat.rules benv with
+  cases Bridge.G2a.Old.beaconRootsCall benv.stat.rules benv with
   | error e => rfl
   | ok r1 =>
     obtain ⟨stB, balB⟩ := r1
     simp only [bind, Except.bind]
-    cases historyStorageCall benv.stat.rules (benv.withState stB) balB <;> rfl
+    cases Bridge.G2a.Old.historyStorageCall benv.stat.rules (benv.withState stB) balB <;> rfl
 
 theorem importer_eq (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
     (wds : List Withdrawal) :
-    Staging.Body.importer benv txs ommers wds =
+    Body.importer benv txs ommers wds =
       (decodeAll benv txs >>= fun d =>
-        Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (Staging.Body.preOps benv) >>= fun p =>
-          Staging.Body.fold benv p (Staging.Body.transactionOps d ++ Staging.Body.postOps benv d.length ommers wds)) := by
-  unfold Staging.Body.importer Staging.Body.ops decodeAll
-  simp only [List.append_assoc, Staging.Body.fold_append]
+        Body.fold benv (Body.Prefix.init benv.state) (Body.preOps benv) >>= fun p =>
+          Body.fold benv p (Body.transactionOps d ++ Body.postOps benv d.length ommers wds)) := by
+  unfold Body.importer Body.ops decodeAll
+  simp only [List.append_assoc, Body.fold_append]
 
 theorem importerAfter_eq (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
     (wds : List Withdrawal) :
     Body.importerAfter benv txs ommers wds =
-      (Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (Staging.Body.preOps benv) >>= fun p =>
+      (Body.fold benv (Body.Prefix.init benv.state) (Body.preOps benv) >>= fun p =>
         decodeAll benv txs >>= fun d =>
-          Staging.Body.fold benv p (Staging.Body.transactionOps d ++ Staging.Body.postOps benv d.length ommers wds)) := rfl
+          Body.fold benv p (Body.transactionOps d ++ Body.postOps benv d.length ommers wds)) := rfl
 
 /-- Off the split, the new importer is the old order over the steps. -/
 theorem importer_eq_importerAfter_of_not_split {benv : Benv} {txs : List (Bytes ⊕ Transaction)}
     (h : ¬ DecodeOrderSplit benv txs) (ommers : List Header) (wds : List Withdrawal) :
-    Staging.Body.importer benv txs ommers wds = Body.importerAfter benv txs ommers wds := by
+    Body.importer benv txs ommers wds = Body.importerAfter benv txs ommers wds := by
   rw [importer_eq, importerAfter_eq]
   rcases Except.bind_comm_or_both_error
-      (Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (Staging.Body.preOps benv)) (decodeAll benv txs)
-      (fun p d => Staging.Body.fold benv p (Staging.Body.transactionOps d ++ Staging.Body.postOps benv d.length ommers wds))
+      (Body.fold benv (Body.Prefix.init benv.state) (Body.preOps benv)) (decodeAll benv txs)
+      (fun p d => Body.fold benv p (Body.transactionOps d ++ Body.postOps benv d.length ommers wds))
     with hc | ⟨ea, eb, ha, hb⟩
   · exact hc.symm
   · refine absurd ⟨?_, eb, hb⟩ h
@@ -472,8 +472,8 @@ calls succeed or the transaction list decodes, the new body is the old body, thr
 map, on the whole result. -/
 theorem applyBody_eq_of_not_split {benv : Benv} {txs : List (Bytes ⊕ Transaction)}
     (h : ¬ DecodeOrderSplit benv txs) (ommers : List Header) (wds : List Withdrawal) :
-    Staging.applyBody benv txs ommers wds = applyBody benv txs ommers wds := by
-  rw [applyBody_eq_importerAfter, Staging.applyBody, importer_eq_importerAfter_of_not_split h]
+    applyBody benv txs ommers wds = Bridge.G2a.Old.applyBody benv txs ommers wds := by
+  rw [applyBody_eq_importerAfter, applyBody, importer_eq_importerAfter_of_not_split h]
 
 /-- **Difference theorem, part 2 (on the split).** When the pre-execution system calls fail with
 `eSys` and the decode fails with `eDec`, the old body reports `eSys` (its system calls ran first)
@@ -481,19 +481,19 @@ and the new body reports `eDec` (its decode ran first). -/
 theorem applyBody_of_split {benv : Benv} {txs : List (Bytes ⊕ Transaction)}
     {eSys eDec : TransitionError} (hs : preCalls benv = .error eSys)
     (hd : decodeAll benv txs = .error eDec) (ommers : List Header) (wds : List Withdrawal) :
-    applyBody benv txs ommers wds = .error eSys ∧
-      Staging.applyBody benv txs ommers wds = .error eDec := by
-  have hA : Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (Staging.Body.preOps benv) = .error eSys := by
+    Bridge.G2a.Old.applyBody benv txs ommers wds = .error eSys ∧
+      applyBody benv txs ommers wds = .error eDec := by
+  have hA : Body.fold benv (Body.Prefix.init benv.state) (Body.preOps benv) = .error eSys := by
     rw [fold_preOps_eq, hs]; rfl
   constructor
   · rw [applyBody_eq_importerAfter, importerAfter_eq, hA]; rfl
-  · rw [Staging.applyBody, importer_eq, hd]; rfl
+  · rw [applyBody, importer_eq, hd]; rfl
 
 /-- **Difference theorem, part 3 (successes agree).** The new body succeeds with `r` exactly when
 the old body does. -/
 theorem applyBody_ok_iff (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
     (wds : List Withdrawal) (r : State × BlockOutput) :
-    Staging.applyBody benv txs ommers wds = .ok r ↔ applyBody benv txs ommers wds = .ok r := by
+    applyBody benv txs ommers wds = .ok r ↔ Bridge.G2a.Old.applyBody benv txs ommers wds = .ok r := by
   by_cases h : DecodeOrderSplit benv txs
   · obtain ⟨⟨eSys, hs⟩, eDec, hd⟩ := h
     obtain ⟨h1, h2⟩ := applyBody_of_split hs hd ommers wds
@@ -505,8 +505,8 @@ theorem applyBody_ok_iff (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (omm
 old body does. -/
 theorem applyBody_error_iff (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
     (wds : List Withdrawal) :
-    (∃ e, Staging.applyBody benv txs ommers wds = .error e) ↔
-      ∃ e, applyBody benv txs ommers wds = .error e := by
+    (∃ e, applyBody benv txs ommers wds = .error e) ↔
+      ∃ e, Bridge.G2a.Old.applyBody benv txs ommers wds = .error e := by
   by_cases h : DecodeOrderSplit benv txs
   · obtain ⟨⟨eSys, hs⟩, eDec, hd⟩ := h
     obtain ⟨h1, h2⟩ := applyBody_of_split hs hd ommers wds
@@ -516,23 +516,23 @@ theorem applyBody_error_iff (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (
 /-- **Difference theorem, part 5 (where they differ).** The two bodies differ only on the split. -/
 theorem split_of_applyBody_ne {benv : Benv} {txs : List (Bytes ⊕ Transaction)}
     {ommers : List Header} {wds : List Withdrawal}
-    (h : Staging.applyBody benv txs ommers wds ≠ applyBody benv txs ommers wds) :
+    (h : applyBody benv txs ommers wds ≠ Bridge.G2a.Old.applyBody benv txs ommers wds) :
     DecodeOrderSplit benv txs :=
   Classical.byContradiction fun hn => h (applyBody_eq_of_not_split hn ommers wds)
 
 /-- The importer's prefix is the old body's result through the output map, for every success. -/
 theorem importer_ok_iff (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
-    (wds : List Withdrawal) (q : Staging.Body.Prefix) :
-    Staging.Body.importer benv txs ommers wds = .ok q ↔ applyBody benv txs ommers wds = .ok q.output := by
-  rw [← applyBody_ok_iff, Staging.applyBody]
-  cases Staging.Body.importer benv txs ommers wds with
+    (wds : List Withdrawal) (q : Body.Prefix) :
+    Body.importer benv txs ommers wds = .ok q ↔ Bridge.G2a.Old.applyBody benv txs ommers wds = .ok q.output := by
+  rw [← applyBody_ok_iff, applyBody]
+  cases Body.importer benv txs ommers wds with
   | error e => constructor <;> intro h <;> cases h
   | ok q' =>
     constructor
     · intro h; cases h; rfl
     · intro h
       have : q'.output = q.output := by injection h
-      rw [Staging.Body.Prefix.output_injective this]
+      rw [Body.Prefix.output_injective this]
 
 /-! ### The difference theorem at the block transition -/
 
@@ -557,13 +557,13 @@ def stateTransitionCoreWith {ε : Type}
 
 theorem stateTransitionCoreE_eq_with {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
-    stateTransitionCoreE embed f ch block checkOmmers =
-      stateTransitionCoreWith applyBody embed f ch block checkOmmers := rfl
+    Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers =
+      stateTransitionCoreWith Bridge.G2a.Old.applyBody embed f ch block checkOmmers := rfl
 
 theorem staged_stateTransitionCoreE_eq_with {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
-    Staging.stateTransitionCoreE embed f ch block checkOmmers =
-      stateTransitionCoreWith Staging.applyBody embed f ch block checkOmmers := rfl
+    Bridge.G2a.Phased.stateTransitionCoreE embed f ch block checkOmmers =
+      stateTransitionCoreWith applyBody embed f ch block checkOmmers := rfl
 
 /-- The block's decode-order split: the header and the ommers pass, and the body's inputs are on
 the split. -/
@@ -577,8 +577,8 @@ is the old one, on the whole result. -/
 theorem stateTransitionCoreE_eq_of_not_split {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit)
     (h : ¬ BlockDecodeOrderSplit f ch block checkOmmers) :
-    Staging.stateTransitionCoreE embed f ch block checkOmmers =
-      stateTransitionCoreE embed f ch block checkOmmers := by
+    Bridge.G2a.Phased.stateTransitionCoreE embed f ch block checkOmmers =
+      Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers := by
   rw [stateTransitionCoreE_eq_with, staged_stateTransitionCoreE_eq_with]
   unfold stateTransitionCoreWith
   cases hv : validateHeader f.ruleSet ch block.header with
@@ -598,8 +598,8 @@ theorem stateTransitionCoreE_of_split {ε : Type} (embed : TransitionError → �
     (hv : validateHeader f.ruleSet ch block.header = .ok ()) (ho : checkOmmers () = .ok ())
     {eSys eDec : TransitionError} (hs : preCalls (initBlockEnvironment f ch block.header) = .error eSys)
     (hd : decodeAll (initBlockEnvironment f ch block.header) block.transactions = .error eDec) :
-    stateTransitionCoreE embed f ch block checkOmmers = .error (embed eSys) ∧
-      Staging.stateTransitionCoreE embed f ch block checkOmmers = .error (embed eDec) := by
+    Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers = .error (embed eSys) ∧
+      Bridge.G2a.Phased.stateTransitionCoreE embed f ch block checkOmmers = .error (embed eDec) := by
   obtain ⟨h1, h2⟩ := applyBody_of_split hs hd block.ommers block.withdrawals
   rw [stateTransitionCoreE_eq_with, staged_stateTransitionCoreE_eq_with]
   unfold stateTransitionCoreWith
@@ -609,8 +609,8 @@ theorem stateTransitionCoreE_of_split {ε : Type} (embed : TransitionError → �
 error is an error, in both orders. -/
 theorem stateTransitionCoreE_ok_iff {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) (r : BlockChain) :
-    Staging.stateTransitionCoreE embed f ch block checkOmmers = .ok r ↔
-      stateTransitionCoreE embed f ch block checkOmmers = .ok r := by
+    Bridge.G2a.Phased.stateTransitionCoreE embed f ch block checkOmmers = .ok r ↔
+      Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers = .ok r := by
   by_cases h : BlockDecodeOrderSplit f ch block checkOmmers
   · obtain ⟨hv, ho, ⟨eSys, hs⟩, eDec, hd⟩ := h
     obtain ⟨h1, h2⟩ := stateTransitionCoreE_of_split embed f ch block checkOmmers hv ho hs hd
@@ -620,8 +620,8 @@ theorem stateTransitionCoreE_ok_iff {ε : Type} (embed : TransitionError → ε)
 
 theorem stateTransitionCoreE_error_iff {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
-    (∃ e, Staging.stateTransitionCoreE embed f ch block checkOmmers = .error e) ↔
-      ∃ e, stateTransitionCoreE embed f ch block checkOmmers = .error e := by
+    (∃ e, Bridge.G2a.Phased.stateTransitionCoreE embed f ch block checkOmmers = .error e) ↔
+      ∃ e, Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers = .error e := by
   by_cases h : BlockDecodeOrderSplit f ch block checkOmmers
   · obtain ⟨hv, ho, ⟨eSys, hs⟩, eDec, hd⟩ := h
     obtain ⟨h1, h2⟩ := stateTransitionCoreE_of_split embed f ch block checkOmmers hv ho hs hd

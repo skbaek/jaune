@@ -660,32 +660,32 @@ theorem TopLevel.resolveCodeDelegation_canonical {msg : Msg} (h : msg.Canonical)
   split <;> exact h
 
 /-- Ordinary top-level authorization follows the active fork's delegation rule. -/
-def processMessageCall.authorize (msg : Msg) : Except EvmError (Msg × Nat) :=
+def TopLevel.applyAuthorizations (msg : Msg) : Except EvmError (Msg × Nat) :=
   if !msg.benv.stat.rules.delegationEnabled || msg.tenv.stat.auths.isEmpty then
     .ok ⟨msg, 0⟩
   else do
     let ⟨delegated, refund⟩ ← setDelegation msg
     .ok ⟨delegated, refund.toNat⟩
 
-theorem processMessageCall.authorize_disabled (msg : Msg)
+theorem TopLevel.applyAuthorizations_disabled (msg : Msg)
     (h : msg.benv.stat.rules.delegationEnabled = false) :
-    authorize msg = .ok ⟨msg, 0⟩ := by
-  simp only [authorize, h, Bool.not_false, Bool.true_or, ↓reduceIte]
+    applyAuthorizations msg = .ok ⟨msg, 0⟩ := by
+  simp only [applyAuthorizations, h, Bool.not_false, Bool.true_or, ↓reduceIte]
 
-theorem processMessageCall.authorize_enabled (msg : Msg)
+theorem TopLevel.applyAuthorizations_enabled (msg : Msg)
     (h : msg.benv.stat.rules.delegationEnabled = true) :
-    authorize msg =
+    applyAuthorizations msg =
       (if msg.tenv.stat.auths.isEmpty then .ok ⟨msg, 0⟩ else do
         let ⟨delegated, refund⟩ ← setDelegation msg
         .ok ⟨delegated, refund.toNat⟩) := by
-  simp only [authorize, h, Bool.not_true, Bool.false_or]
+  simp only [applyAuthorizations, h, Bool.not_true, Bool.false_or]
 
 /-- The ordinary top-level authorization leaves a message with a code address: an
 unchanged message keeps its own, and `setDelegation` fails closed without one. -/
-theorem processMessageCall.authorize_codeAddress {msg : Msg} {q : Msg × Nat}
-    (h : authorize msg = .ok q) (hc : msg.codeAddress ≠ none) :
+theorem TopLevel.applyAuthorizations_codeAddress {msg : Msg} {q : Msg × Nat}
+    (h : applyAuthorizations msg = .ok q) (hc : msg.codeAddress ≠ none) :
     q.1.codeAddress ≠ none := by
-  unfold authorize at h
+  unfold applyAuthorizations at h
   split at h
   · cases h; exact hc
   · obtain ⟨pair, hpair, h⟩ := Except.bind_eq_ok h
@@ -700,47 +700,16 @@ theorem processMessageCall.authorize_codeAddress {msg : Msg} {q : Msg × Nat}
       subst hpair
       simp [hca]
 
-theorem processMessageCall.authorize_canonical {msg : Msg}
-    (h : msg.Canonical) {p} (hp : authorize msg = .ok p) :
+theorem TopLevel.applyAuthorizations_canonical {msg : Msg}
+    (h : msg.Canonical) {p} (hp : applyAuthorizations msg = .ok p) :
     p.1.Canonical := by
-  unfold authorize at hp
+  unfold applyAuthorizations at hp
   split at hp
   · cases hp; exact h
   · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
     cases hp
     exact setDelegation_canonical h hpair
 
-/-- Settle a top-level Amsterdam message call whose preparation failed before
-the interpreter was entered: a halt forfeits the remaining gas and reports the
-pre-call state with the reads preparation had already recorded, while every
-other error propagates unchanged. The machine's world is not read: the reported
-state is the message's. Amsterdam-only, and reached only from
-`processTopLevelAmsterdam`'s error branch. -/
-def settleTopLevelPreparationFailure (msg : Msg) (error : EvmError)
-    (devm : Devm) : Except EvmError (State × MsgCallOutput) :=
-  match error with
-  | .halt reason =>
-    let devm := (devm.restoreStateGasToEntry msg.stateGasGrant).forfeitRemainingGas
-    -- The reads the preparation recorded before it halted -- the authorities
-    -- of every processed tuple, the recipient once dispatch loaded it -- stay
-    -- in the block-level access list: `incorporate_tx_into_block` runs for a
-    -- halted transaction too, and a read survives the rollback (EIP-7928).
-    .ok ⟨msg.benv.state, {
-      accountReads := devm.meta.accountReads
-      storageReads := devm.meta.storageReads
-      storageWrites := msg.benv.storageWrites
-      gasLeft := devm.gasLeft
-      refundCounter := 0
-      logs := []
-      accountsToDelete := .emptyWithCapacity
-      error := some (.halt reason)
-      returnData := []
-      stateGasLeft := devm.stateGasLeft
-      stateGasUsed := 0
-    }⟩
-  | .revert => .error .revert
-  | .crypto reason => .error (.crypto reason)
-  | .internal reason => .error (.internal reason)
 
 def Transaction.isEip4844 (tx : Transaction) : Bool :=
   match tx.type with

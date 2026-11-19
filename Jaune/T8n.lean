@@ -928,14 +928,14 @@ still reported under their position in the input. This is the target's rule
 since ethereum/execution-specs#3849 (rejected transactions are numbered out)
 and #3361 (the body lists only accepted transactions). -/
 def foldTransactions (benv : Benv) :
-    List (Nat × TransactionParse Transaction) → Staging.Body.Prefix → List Rejection →
+    List (Nat × TransactionParse Transaction) → Body.Prefix → List Rejection →
       List Transaction →
-      Except TransitionError (Staging.Body.Prefix × List Rejection × List Transaction)
+      Except TransitionError (Body.Prefix × List Rejection × List Transaction)
   | [], p, rej, inc => .ok ⟨p, rej, inc⟩
   | ⟨i, .error e⟩ :: rest, p, rej, inc =>
     foldTransactions benv rest p (rej ++ [⟨i, .parse e⟩]) inc
   | ⟨i, .ok tx⟩ :: rest, p, rej, inc =>
-    match Staging.Body.step benv p (.transaction tx inc.length) with
+    match Body.step benv p (.transaction tx inc.length) with
     | .ok ⟨_, q⟩ => foldTransactions benv rest q rej (inc ++ [tx])
     | .error err =>
       if operational err then .error err
@@ -946,7 +946,7 @@ operations, no withdrawals, no requests. -/
 def runStateTest (benv : Benv) (txs : List (TransactionParse Transaction)) :
     Except TransitionError Outcome := do
   let selected := match txs with | [] => [] | t :: _ => [⟨0, t⟩]
-  let ⟨p, rej, inc⟩ ← foldTransactions benv selected (Staging.Body.Prefix.init benv.state) [] []
+  let ⟨p, rej, inc⟩ ← foldTransactions benv selected (Body.Prefix.init benv.state) [] []
   .ok ⟨p.state, p.toBlockOutput, rej, none, inc⟩
 
 /-- The reward `--state.reward` asks for, as the target resolves it
@@ -990,7 +990,7 @@ def ommerAgesOk (ommers : List T8nOmmer) : Bool :=
 
 /-- t8n's pre-execution system calls, in its order: history storage (with the last window hash,
 or zero for an empty window), then beacon roots. -/
-def preOps (benv : Benv) : List Staging.BodyOp :=
+def preOps (benv : Benv) : List BodyOp :=
   (if benv.stat.rules.systemCalls.historyStorage then
     [.systemCall historyStorageAddress (.ok (benv.stat.blockHashes.getLast?.getD 0).toBytes) 0]
   else []) ++
@@ -1001,7 +1001,7 @@ def preOps (benv : Benv) : List Staging.BodyOp :=
 /-- The rewards (when resolved, `payT8nRewards`' amounts), then the withdrawals at the accepted
 count plus one. -/
 def postOps (benv : Benv) (accepted : Nat) (wds : List Withdrawal) (reward : Option Nat)
-    (ommers : List T8nOmmer) : List Staging.BodyOp :=
+    (ommers : List T8nOmmer) : List BodyOp :=
   (match reward with
     | none => []
     | some r =>
@@ -1010,7 +1010,7 @@ def postOps (benv : Benv) (accepted : Nat) (wds : List Withdrawal) (reward : Opt
   (if benv.stat.rules.header.withdrawalsRoot then [.withdrawals wds (accepted + 1)] else [])
 
 /-- The request group at the accepted count plus one. -/
-def requestOps (benv : Benv) (accepted : Nat) : List Staging.BodyOp :=
+def requestOps (benv : Benv) (accepted : Nat) : List BodyOp :=
   .depositRequests :: benv.stat.rules.requests.map fun ⟨type, address⟩ =>
     .requestCall type address (accepted + 1)
 
@@ -1037,16 +1037,16 @@ assigns `block_output.block_access_list` before validating it. -/
 def runBlockchain (benv : Benv) (txs : List (TransactionParse Transaction))
     (wds : List Withdrawal) (reward : Option Nat := none) (ommers : List T8nOmmer := []) :
     Except TransitionError Outcome := do
-  let p ← Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (preOps benv)
+  let p ← Body.fold benv (Body.Prefix.init benv.state) (preOps benv)
   let ⟨p, rej, inc⟩ ← foldTransactions benv txs.putIndex p [] []
-  let p ← Staging.Body.fold benv p (postOps benv inc.length wds reward ommers)
+  let p ← Body.fold benv p (postOps benv inc.length wds reward ommers)
   let requests :=
-    if benv.stat.rules.header.requestsHash then Staging.Body.fold benv p (requestOps benv inc.length)
+    if benv.stat.rules.header.requestsHash then Body.fold benv p (requestOps benv inc.length)
     else .ok p
   match requests with
   | .ok q => do
-    let ⟨_, q⟩ ← Staging.Body.step benv q .buildAccessList
-    match Staging.Body.step benv q .checkAccessListLimit with
+    let ⟨_, q⟩ ← Body.step benv q .buildAccessList
+    match Body.step benv q .checkAccessListLimit with
     | .ok _ => .ok ⟨q.state, q.toBlockOutput, rej, none, inc⟩
     | .error (.block reason) => .ok ⟨q.state, q.toBlockOutput, rej, some reason, inc⟩
     | .error err => .error err
@@ -1154,13 +1154,13 @@ private def blockAccessListPipelineBalances (list : BlockAccessList) (address : 
   | none => false
 
 private def blockAccessListPipelineRequestNetApplyBody : Bool :=
-  match Staging.applyBody (balPipelineBenv blockAccessListPipelineToggleState) [] [] [] with
+  match applyBody (balPipelineBenv blockAccessListPipelineToggleState) [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineHelper).storage.get 0 == 0 && blockAccessListPipelineHelperNoNet bout.blockAccessList
   | .error _ => false
 
 private def blockAccessListPipelineRequestOneWriteApplyBody : Bool :=
-  match Staging.applyBody (balPipelineBenv blockAccessListPipelineOneCallState) [] [] [] with
+  match applyBody (balPipelineBenv blockAccessListPipelineOneCallState) [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineHelper).storage.get 0 == 1 && blockAccessListPipelineHelperOneWrite bout.blockAccessList
   | .error _ => false
@@ -1183,7 +1183,7 @@ private def blockAccessListPipelineForwardApplyBody (half : Bool) : Bool :=
   let forwarded := if half then amount / 2 else amount
   let wds : List Withdrawal :=
     [{ index := 0, validatorIndex := 0, address := blockAccessListPipelineWithdrawalRequestsAddress, amount := 2 }]
-  match Staging.applyBody (balPipelineBenv (blockAccessListPipelineForwardState half)) [] [] wds with
+  match applyBody (balPipelineBenv (blockAccessListPipelineForwardState half)) [] [] wds with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineWithdrawalRequestsAddress).balance == retained &&
       (state.get blockAccessListPipelineBeneficiary).balance == forwarded &&

@@ -12,12 +12,12 @@ about the adapter's own driver.
 
 namespace Jaune.T8n
 
-open Jaune Jaune.Staging
+open Jaune
 
 /-- The tolerant loop keeps the receipts so far, one receipt per accepted transaction. -/
 theorem foldTransactions_receipts (benv : Benv) :
-    ∀ (l : List (Nat × TransactionParse Transaction)) (p : Staging.Body.Prefix) (rej : List Rejection)
-      (inc : List Transaction) (rcpts : List (Fin 5 × Receipt)) (q : Staging.Body.Prefix)
+    ∀ (l : List (Nat × TransactionParse Transaction)) (p : Body.Prefix) (rej : List Rejection)
+      (inc : List Transaction) (rcpts : List (Fin 5 × Receipt)) (q : Body.Prefix)
       (rej' : List Rejection) (inc' : List Transaction),
       p.Receipts inc.length rcpts → foldTransactions benv l p rej inc = .ok ⟨q, rej', inc'⟩ →
       ∃ rs, q.Receipts inc'.length (rcpts ++ rs)

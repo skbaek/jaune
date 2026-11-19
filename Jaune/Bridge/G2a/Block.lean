@@ -28,19 +28,19 @@ open Jaune Jaune.Staging
 /-- **`Block.check` is today's two checks.** Over a body prefix's commitments, `Block.check` is
 `stateTransitionChecks` with the transition's computed values, then `blockAccessListCheck`: the
 whole result, so the first failing comparison and its text are today's. -/
-theorem Block.check_ofPrefix (rules : ForkRules) (q : Staging.Body.Prefix) (header : Header) :
-    Staging.Block.check header (Staging.Block.Commitments.ofPrefix rules q) =
+theorem Block.check_ofPrefix (rules : ForkRules) (q : Body.Prefix) (header : Header) :
+    Block.check header (Block.Commitments.ofPrefix rules q) =
       (stateTransitionChecks q.toBlockOutput header (getTransactionsRoot q.toBlockOutput)
           q.state.root (getReceiptRoot q.toBlockOutput) (logsBloom q.toBlockOutput.blockLogs)
           (getWithdrawalsRoot q.toBlockOutput)
           (if rules.header.requestsHash then some (computeRequestsHash q.toBlockOutput.requests)
             else none) >>= fun _ =>
         blockAccessListCheck rules q.toBlockOutput header) := by
-  unfold Staging.Block.check
+  unfold Block.check
   refine congrArg₂ (fun a k => Bind.bind a k) ?_ ?_
   · rfl
   funext _
-  unfold Staging.Block.checkAccessListHash blockAccessListCheck Staging.Block.Commitments.ofPrefix
+  unfold Block.checkAccessListHash blockAccessListCheck Block.Commitments.ofPrefix
   cases rules.blockAccessListRules <;> rfl
 
 /-! ### The bridge -/
@@ -50,22 +50,22 @@ header failure, the same ommer failure, the same body failure, the same first fa
 check with the same text, and the same chain. -/
 theorem E.stateTransitionCoreE_eq {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
-    Staging.E.stateTransitionCoreE embed f ch block checkOmmers =
-      Staging.stateTransitionCoreE embed f ch block checkOmmers := by
+    stateTransitionCoreE embed f ch block checkOmmers =
+      Bridge.G2a.Phased.stateTransitionCoreE embed f ch block checkOmmers := by
   rw [staged_stateTransitionCoreE_eq_with]
-  unfold Staging.E.stateTransitionCoreE stateTransitionCoreWith Staging.applyBody
+  unfold stateTransitionCoreE stateTransitionCoreWith applyBody
   cases hv : validateHeader f.ruleSet ch block.header with
   | error e => rfl
   | ok u =>
     cases ho : checkOmmers () with
     | error e => simp only [bind, Except.bind, Except.mapError]
     | ok u' =>
-      cases hq : Staging.Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers
+      cases hq : Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers
           block.withdrawals with
       | error e => simp only [bind, Except.bind, Except.mapError, Functor.map, Except.map]
       | ok q =>
         simp only [bind, Except.bind, Except.mapError, Functor.map, Except.map,
-          Staging.Body.Prefix.output]
+          Body.Prefix.output]
         rw [Block.check_ofPrefix]
         cases stateTransitionChecks q.toBlockOutput block.header _ _ _ _ _ _ <;>
           simp only [bind, Except.bind]
@@ -74,8 +74,8 @@ theorem E.stateTransitionCoreE_eq {ε : Type} (embed : TransitionError → ε) (
 theorem E.stateTransitionCoreE_eq_of_not_split {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit)
     (h : ¬ BlockDecodeOrderSplit f ch block checkOmmers) :
-    Staging.E.stateTransitionCoreE embed f ch block checkOmmers =
-      stateTransitionCoreE embed f ch block checkOmmers := by
+    stateTransitionCoreE embed f ch block checkOmmers =
+      Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers := by
   rw [E.stateTransitionCoreE_eq,
     Jaune.Bridge.G2a.stateTransitionCoreE_eq_of_not_split embed f ch block checkOmmers h]
 
@@ -85,9 +85,9 @@ theorem E.stateTransitionCoreE_eq_of_not_split {ε : Type} (embed : TransitionEr
 def Body.importerDecoding
     (decode : ForkRules → Bytes ⊕ Transaction → Except TransitionError Transaction)
     (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
-    (wds : List Withdrawal) : Except TransitionError Staging.Body.Prefix := do
+    (wds : List Withdrawal) : Except TransitionError Body.Prefix := do
   let decoded ← txs.mapM (decode benv.stat.rules)
-  Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (Staging.Body.ops benv decoded ommers wds)
+  Body.fold benv (Body.Prefix.init benv.state) (Body.ops benv decoded ommers wds)
 
 /-- The staged block transition with the slot decoder as a parameter (bridge only). At
 `decodeTransaction` it is `E.stateTransitionCoreE`; at `Staging.decodeTransaction` it is the
@@ -103,12 +103,12 @@ def E.stateTransitionCoreEDecoding
     (Body.importerDecoding decode (initBlockEnvironment f ch block.header) block.transactions block.ommers
       block.withdrawals)
   Except.mapError (embed ∘ TransitionError.block) <|
-    Staging.Block.check block.header (Staging.Block.Commitments.ofPrefix f.ruleSet q)
+    Block.check block.header (Block.Commitments.ofPrefix f.ruleSet q)
   .ok ⟨appendBlock ch.blocks block, q.state, ch.chainId⟩
 
 theorem E.stateTransitionCoreE_eq_decoding {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
-    Staging.E.stateTransitionCoreE embed f ch block checkOmmers =
+    stateTransitionCoreE embed f ch block checkOmmers =
       E.stateTransitionCoreEDecoding decodeTransaction embed f ch block checkOmmers := rfl
 
 /-- **The composed difference theorem.** The block transition after cuts D, E and W2-T (decode the
@@ -126,18 +126,18 @@ of:
 theorem E.stateTransitionCoreE_difference {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
     (E.stateTransitionCoreEDecoding Staging.decodeTransaction embed f ch block checkOmmers =
-          stateTransitionCoreE embed f ch block checkOmmers ∧
+          Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers ∧
         ¬ BlockDecodeOrderSplit f ch block checkOmmers ∧
         ∀ x, ¬ TransitionDiffers f ch block checkOmmers x) ∨
       (BlockDecodeOrderSplit f ch block checkOmmers ∧
         ∃ eSys eNew, preCalls (initBlockEnvironment f ch block.header) = .error eSys ∧
           block.transactions.mapM
               (Staging.decodeTransaction (initBlockEnvironment f ch block.header).stat.rules) = .error eNew ∧
-          stateTransitionCoreE embed f ch block checkOmmers = .error (embed eSys) ∧
+          Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers = .error (embed eSys) ∧
           E.stateTransitionCoreEDecoding Staging.decodeTransaction embed f ch block checkOmmers =
             .error (embed eNew)) ∨
       (∃ x, TransitionDiffers f ch block checkOmmers x ∧
-        stateTransitionCoreE embed f ch block checkOmmers = .error (embed (oldUnknownTypeError x)) ∧
+        Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers = .error (embed (oldUnknownTypeError x)) ∧
         E.stateTransitionCoreEDecoding Staging.decodeTransaction embed f ch block checkOmmers =
           .error (embed (Staging.transactionTypeNotSupported x))) := by
   have hrules : (initBlockEnvironment f ch block.header).stat.rules = f.ruleSet := rfl
@@ -146,7 +146,7 @@ theorem E.stateTransitionCoreE_difference {ε : Type} (embed : TransitionError �
   · -- The staged decoder agrees: cut E's bridge and cut D's difference theorem.
     have hE :
         E.stateTransitionCoreEDecoding Staging.decodeTransaction embed f ch block checkOmmers =
-        Staging.stateTransitionCoreE embed f ch block checkOmmers := by
+        Bridge.G2a.Phased.stateTransitionCoreE embed f ch block checkOmmers := by
       rw [← E.stateTransitionCoreE_eq, E.stateTransitionCoreE_eq_decoding]
       unfold E.stateTransitionCoreEDecoding Body.importerDecoding
       rw [hm]
@@ -205,13 +205,13 @@ theorem E.stateTransitionCoreE_difference {ε : Type} (embed : TransitionError �
           exact .inr (.inl ⟨⟨hv, ho, ⟨eSys, hp⟩, _, hd⟩, eSys, _, rfl, hnew, h1, hE⟩)
         | ok sb =>
           revert hp; unfold preCalls
-          cases hb : beaconRootsCall (initBlockEnvironment f ch block.header).stat.rules
+          cases hb : Bridge.G2a.Old.beaconRootsCall (initBlockEnvironment f ch block.header).stat.rules
               (initBlockEnvironment f ch block.header) with
           | error e => intro hp; cases hp
           | ok pb =>
             obtain ⟨stB, bal⟩ := pb
             simp only [bind, Except.bind]
-            cases hh : historyStorageCall (initBlockEnvironment f ch block.header).stat.rules
+            cases hh : Bridge.G2a.Old.historyStorageCall (initBlockEnvironment f ch block.header).stat.rules
                 ((initBlockEnvironment f ch block.header).withState stB) bal with
             | error e => intro hp; cases hp
             | ok ph =>

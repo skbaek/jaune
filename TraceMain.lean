@@ -165,7 +165,7 @@ def run (inputPath outputPath : String) : IO Unit := do
         let current ← state.get
         if current.started then throw (IO.userError "authorization refund arrived after frame entry")
         state.set { current with rootRefund := amount }
-      let result ← Staging.TraceTransaction.runTransaction
+      let result ← TraceTransaction.runTransaction
         (TraceJson.sink transactionCfg state trace frames) refund initial .init tx 0 runId
       let current ← state.get
       if current.started && !current.closed then throw (IO.userError "transaction frame did not close")

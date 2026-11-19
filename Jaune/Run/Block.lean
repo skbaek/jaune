@@ -30,7 +30,7 @@ open Jaune
 /-! ### Commitments -/
 
 /-- Every header value the body determines, in the order the transition compares them. -/
-structure Staging.Block.Commitments : Type where
+structure Block.Commitments : Type where
   /-- The block's gas used: the larger of execution gas and (Amsterdam) state gas. -/
   gasUsed : Nat
   transactionsRoot : U256
@@ -45,7 +45,7 @@ structure Staging.Block.Commitments : Type where
   blockAccessListHash : Option U256
 
 /-- The commitments of a body's final prefix, under `rules`. -/
-def Staging.Block.Commitments.ofPrefix (rules : ForkRules) (q : Staging.Body.Prefix) : Staging.Block.Commitments :=
+def Block.Commitments.ofPrefix (rules : ForkRules) (q : Body.Prefix) : Block.Commitments :=
   { gasUsed := max q.executionGasUsed q.stateGasUsed
     transactionsRoot := getTransactionsRoot q.toBlockOutput
     stateRoot := q.state.root
@@ -55,14 +55,14 @@ def Staging.Block.Commitments.ofPrefix (rules : ForkRules) (q : Staging.Body.Pre
     blobGasUsed := q.blobGasUsed
     requestsHash :=
       if rules.header.requestsHash then some (computeRequestsHash q.requests) else none
-    blockAccessListHash := rules.blockAccessListRules.map fun _ => q.builtAccessList.hash }
+    blockAccessListHash := rules.blockAccessListRules.map fun _ => q.blockAccessList.hash }
 
 /-! ### The check -/
 
 /-- The header against the commitments of `execute_block`'s comparisons, in order; the first
 mismatch rejects the block. The withdrawals root and the blob gas used are compared only where the
 header carries the field (`validateHeader` has tied its presence to the rules). -/
-def Staging.Block.checkCommitments (header : Header) (c : Staging.Block.Commitments) :
+def Block.checkCommitments (header : Header) (c : Block.Commitments) :
     Except BlockValidationError Unit := do
   if c.gasUsed ≠ header.gasUsed then
     .error <| .gasUsedMismatch <| .text
@@ -97,7 +97,7 @@ def Staging.Block.checkCommitments (header : Header) (c : Staging.Block.Commitme
          header requests hash = {header.requestsHash}"
 
 /-- EIP-7928: the header's access-list hash against the computed one, under rules that have one. -/
-def Staging.Block.checkAccessListHash (header : Header) (c : Staging.Block.Commitments) :
+def Block.checkAccessListHash (header : Header) (c : Block.Commitments) :
     Except BlockValidationError Unit :=
   match c.blockAccessListHash with
   | none => .ok ()
@@ -110,52 +110,52 @@ def Staging.Block.checkAccessListHash (header : Header) (c : Staging.Block.Commi
 
 /-- **The block check**: the header against the commitments, in order (`execute_block`'s
 comparisons, then the access-list hash); the first mismatch rejects the block with its reason. -/
-def Staging.Block.check (header : Header) (c : Staging.Block.Commitments) : Except BlockValidationError Unit := do
-  Staging.Block.checkCommitments header c
-  Staging.Block.checkAccessListHash header c
+def Block.check (header : Header) (c : Block.Commitments) : Except BlockValidationError Unit := do
+  Block.checkCommitments header c
+  Block.checkAccessListHash header c
 
 /-! ### The block run -/
 
 /-- A block's run: the fork, the parent chain, the block, its decoded transactions, each body
 operation's record, and the body's final prefix. -/
-structure Staging.BlockRun : Type where
+structure BlockRun : Type where
   fork : Fork
   parent : BlockChain
   block : Block
   transactions : List Transaction
-  ops : List Staging.OpRun
-  final : Staging.Body.Prefix
+  ops : List OpRun
+  final : Body.Prefix
 
 /-- The block environment of a block over its parent (`initBlockEnvironment`). -/
-def Staging.BlockRun.benv (r : Staging.BlockRun) : Benv := initBlockEnvironment r.fork r.parent r.block.header
+def BlockRun.benv (r : BlockRun) : Benv := initBlockEnvironment r.fork r.parent r.block.header
 
 /-- A run's commitments: its final prefix's, under its fork's rules. -/
-def Staging.BlockRun.commitments (r : Staging.BlockRun) : Staging.Block.Commitments :=
-  Staging.Block.Commitments.ofPrefix r.fork.ruleSet r.final
+def BlockRun.commitments (r : BlockRun) : Block.Commitments :=
+  Block.Commitments.ofPrefix r.fork.ruleSet r.final
 
 /-- The block's run: decode the transactions, then run the importer's operations from the empty
 prefix over the parent's state, keeping each operation's record. -/
-def Staging.BlockRun.run (f : Fork) (ch : BlockChain) (block : Block) :
-    Except TransitionError Staging.BlockRun := do
+def BlockRun.run (f : Fork) (ch : BlockChain) (block : Block) :
+    Except TransitionError BlockRun := do
   let benv := initBlockEnvironment f ch block.header
   let txs ← block.transactions.mapM (decodeTransaction benv.stat.rules)
-  let ⟨ops, final⟩ ← Staging.Body.run benv (Staging.Body.Prefix.init benv.state)
-    (Staging.Body.ops benv txs block.ommers block.withdrawals)
+  let ⟨ops, final⟩ ← Body.run benv (Body.Prefix.init benv.state)
+    (Body.ops benv txs block.ommers block.withdrawals)
   pure { fork := f, parent := ch, block := block, transactions := txs, ops := ops, final := final }
 
 /-! ### The block transition -/
 
 /-- **The typed block transition** (`stateTransitionCoreE`): validate the header, check the
 ommers, run the body, check the header's commitments, and append the block. -/
-def Staging.E.stateTransitionCoreE {ε : Type} (embed : TransitionError → ε)
+def stateTransitionCoreE {ε : Type} (embed : TransitionError → ε)
     (f : Fork) (ch : BlockChain) (block : Block)
     (checkOmmers : Unit → Except ε Unit) : Except ε BlockChain := do
   Except.mapError embed (validateHeader f.ruleSet ch block.header)
   checkOmmers ()
   let q ← Except.mapError embed
-    (Staging.Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers block.withdrawals)
+    (Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers block.withdrawals)
   Except.mapError (embed ∘ TransitionError.block) <|
-    Staging.Block.check block.header (Staging.Block.Commitments.ofPrefix f.ruleSet q)
+    Block.check block.header (Block.Commitments.ofPrefix f.ruleSet q)
   .ok ⟨appendBlock ch.blocks block, q.state, ch.chainId⟩
 
 end Jaune

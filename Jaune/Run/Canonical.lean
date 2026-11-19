@@ -36,7 +36,7 @@ open Jaune
 
 /-! ### The Amsterdam preparation -/
 
-theorem Staging.chargeNewAuthorityAmsterdam_canonical {state : StateGasRules}
+theorem chargeNewAuthorityAmsterdam_canonical {state : StateGasRules}
     {authority : Address} {devm : Devm} (h : devm.Canonical) :
     (chargeNewAuthorityAmsterdam state authority devm).Canonical := by
   unfold chargeNewAuthorityAmsterdam
@@ -44,7 +44,7 @@ theorem Staging.chargeNewAuthorityAmsterdam_canonical {state : StateGasRules}
   · exact liftMachExecution_canonical h
   · exact h
 
-theorem Staging.chargePaidAccountWriteAmsterdam_canonical
+theorem chargePaidAccountWriteAmsterdam_canonical
     {state : StateGasRules} {authority : Address} {devm : Devm}
     {paidWrites : AdrSet} (h : devm.Canonical) :
     (chargePaidAccountWriteAmsterdam state authority devm paidWrites).CanonicalOn
@@ -54,7 +54,7 @@ theorem Staging.chargePaidAccountWriteAmsterdam_canonical
   · exact h
   · exact Except.CanonicalOn.bind (chargeGas_canonical h) (fun _ hd => hd)
 
-theorem Staging.chargeAuthBaseAmsterdam_canonical {state : StateGasRules}
+theorem chargeAuthBaseAmsterdam_canonical {state : StateGasRules}
     {msg : Msg} {authority target : Address} {devm : Devm}
     {delegationSetFor : AdrSet} (h : devm.Canonical) :
     (chargeAuthBaseAmsterdam state msg authority target devm
@@ -68,25 +68,25 @@ theorem Staging.chargeAuthBaseAmsterdam_canonical {state : StateGasRules}
         (fun _ hd => hd)
     · exact h
 
-theorem Staging.applyValidatedDelegationAmsterdam_canonical
+theorem applyValidatedDelegationAmsterdam_canonical
     {state : StateGasRules} {msg : Msg} {authority target : Address}
     {devm : Devm} {paidWrites delegationSetFor : AdrSet}
     (h : devm.Canonical) :
     (applyValidatedDelegationAmsterdam state msg authority target devm
       paidWrites delegationSetFor).CanonicalOn (fun r => r.1.Canonical) := by
   unfold applyValidatedDelegationAmsterdam
-  refine Except.CanonicalOn.bind (Staging.chargeNewAuthorityAmsterdam_canonical h)
+  refine Except.CanonicalOn.bind (chargeNewAuthorityAmsterdam_canonical h)
     fun devm hdevm => ?_
   refine Except.CanonicalOn.bind
-    (Staging.chargePaidAccountWriteAmsterdam_canonical hdevm) fun r hr => ?_
+    (chargePaidAccountWriteAmsterdam_canonical hdevm) fun r hr => ?_
   obtain ⟨devm, paidWrites⟩ := r
   refine Except.CanonicalOn.bind
-    (Staging.chargeAuthBaseAmsterdam_canonical hr) fun r hr => ?_
+    (chargeAuthBaseAmsterdam_canonical hr) fun r hr => ?_
   obtain ⟨devm, delegationSetFor, codeToSet⟩ := r
   exact Devm.Canonical.incrNonce (Devm.Canonical.setCode hr authority codeToSet)
     authority
 
-theorem Staging.setDelegationAmsterdamStep_canonical
+theorem setDelegationAmsterdamStep_canonical
     {state : StateGasRules} {msg : Msg} {auth : Authorization} {devm : Devm}
     {paidWrites delegationSetFor : AdrSet} (h : devm.Canonical) :
     (setDelegationAmsterdamStep state msg auth devm paidWrites
@@ -106,9 +106,9 @@ theorem Staging.setDelegationAmsterdamStep_canonical
         · exact ha
         · split
           · exact ha
-          · exact Staging.applyValidatedDelegationAmsterdam_canonical ha
+          · exact applyValidatedDelegationAmsterdam_canonical ha
 
-theorem Staging.setDelegationAmsterdamLoop_canonical
+theorem setDelegationAmsterdamLoop_canonical
     {state : StateGasRules} {msg : Msg} {auths : List Authorization} {devm : Devm}
     {paidWrites delegationSetFor : AdrSet} (h : devm.Canonical) :
     (setDelegationAmsterdamLoop state msg auths devm paidWrites
@@ -117,22 +117,22 @@ theorem Staging.setDelegationAmsterdamLoop_canonical
   | nil => exact h
   | cons auth auths ih =>
     unfold setDelegationAmsterdamLoop
-    exact Except.CanonicalOn.bind (Staging.setDelegationAmsterdamStep_canonical h)
+    exact Except.CanonicalOn.bind (setDelegationAmsterdamStep_canonical h)
       (fun r hr => ih hr)
 
-theorem Staging.setDelegationAmsterdam_canonical {state : StateGasRules}
+theorem setDelegationAmsterdam_canonical {state : StateGasRules}
     {msg : Msg} {devm : Devm} (h : devm.Canonical) :
     (setDelegationAmsterdam state msg devm).Canonical := by
   unfold setDelegationAmsterdam
-  exact Except.CanonicalOn.bind (Staging.setDelegationAmsterdamLoop_canonical h)
+  exact Except.CanonicalOn.bind (setDelegationAmsterdamLoop_canonical h)
     (fun _ hr => hr)
 
-theorem Staging.preparedTopLevelMessage_canonical {msg : Msg} {devm : Devm}
+theorem preparedTopLevelMessage_canonical {msg : Msg} {devm : Devm}
     (hm : msg.Canonical) (hd : devm.Canonical) :
     (preparedTopLevelMessage msg devm).Canonical := by
   exact ⟨⟨hd.1, hm.1.2⟩, hd.2⟩
 
-theorem Staging.resolveTopLevelCallAmsterdam_canonical {msg : Msg}
+theorem resolveTopLevelCallAmsterdam_canonical {msg : Msg}
     {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
     (resolveTopLevelCallAmsterdam msg devm).CanonicalOn
       (fun r => r.1.Canonical ∧ r.2.Canonical) := by
@@ -142,9 +142,9 @@ theorem Staging.resolveTopLevelCallAmsterdam_canonical {msg : Msg}
   refine Except.CanonicalOn.bind (chargeGas_canonical hd)
     fun charged hcharged => ?_
   have hfinished := completeDelegationAccess_canonical hcharged delegated codeAddress
-  exact ⟨Staging.preparedTopLevelMessage_canonical hm hfinished, hfinished⟩
+  exact ⟨preparedTopLevelMessage_canonical hm hfinished, hfinished⟩
 
-theorem Staging.dispatchTopLevelAmsterdam_canonical {state : StateGasRules}
+theorem dispatchTopLevelAmsterdam_canonical {state : StateGasRules}
     {msg : Msg} {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
     (dispatchTopLevelAmsterdam state msg devm).CanonicalOn
       (fun r => r.1.Canonical ∧ r.2.Canonical) := by
@@ -156,25 +156,25 @@ theorem Staging.dispatchTopLevelAmsterdam_canonical {state : StateGasRules}
     · split
       · exact Except.CanonicalOn.bind (liftMachExecution_canonical hd)
           (fun charged hcharged =>
-            ⟨Staging.preparedTopLevelMessage_canonical hm hcharged, hcharged⟩)
-      · exact ⟨Staging.preparedTopLevelMessage_canonical hm hd, hd⟩
+            ⟨preparedTopLevelMessage_canonical hm hcharged, hcharged⟩)
+      · exact ⟨preparedTopLevelMessage_canonical hm hd, hd⟩
   · dsimp only
     split
     · exact Except.CanonicalOn.bind (liftMachExecution_canonical hd)
-        (fun _ hcharged => Staging.resolveTopLevelCallAmsterdam_canonical hm hcharged)
-    · exact Staging.resolveTopLevelCallAmsterdam_canonical hm hd
+        (fun _ hcharged => resolveTopLevelCallAmsterdam_canonical hm hcharged)
+    · exact resolveTopLevelCallAmsterdam_canonical hm hd
 
-theorem Staging.finishTopLevelAmsterdam_canonical {state : StateGasRules}
+theorem finishTopLevelAmsterdam_canonical {state : StateGasRules}
     {msg : Msg} {devm : Devm} (hm : msg.Canonical) (hd : devm.Canonical) :
     (finishTopLevelAmsterdam state msg devm).CanonicalOn
       (fun r => r.1.Canonical ∧ r.2.Canonical) := by
   unfold finishTopLevelAmsterdam
   split
-  · exact Staging.dispatchTopLevelAmsterdam_canonical hm hd
-  · exact Staging.dispatchTopLevelAmsterdam_canonical hm
+  · exact dispatchTopLevelAmsterdam_canonical hm hd
+  · exact dispatchTopLevelAmsterdam_canonical hm
       (Devm.Canonical.of_world_eq hd rfl)
 
-theorem Staging.prepareTopLevelAmsterdam_canonical {state : StateGasRules}
+theorem prepareTopLevelAmsterdam_canonical {state : StateGasRules}
     {msg : Msg} (hm : msg.Canonical) :
     (prepareTopLevelAmsterdam state msg).CanonicalOn
       (fun r => r.1.Canonical ∧ r.2.Canonical) := by
@@ -182,62 +182,62 @@ theorem Staging.prepareTopLevelAmsterdam_canonical {state : StateGasRules}
   have hi := initDevm_canonical hm
   dsimp only
   split
-  · exact Staging.finishTopLevelAmsterdam_canonical hm hi
-  · exact Except.CanonicalOn.bind (Staging.setDelegationAmsterdam_canonical hi)
-      (fun _ hd => Staging.finishTopLevelAmsterdam_canonical hm hd)
+  · exact finishTopLevelAmsterdam_canonical hm hi
+  · exact Except.CanonicalOn.bind (setDelegationAmsterdam_canonical hi)
+      (fun _ hd => finishTopLevelAmsterdam_canonical hm hd)
 
 /-! ### The top-level message run -/
 
 /-- A frame a canonical top-level message is prepared into is canonical. -/
-theorem Staging.TopLevel.prepare_canonical {msg : Msg} (h : msg.Canonical) {f : Frame} {a : Nat}
-    (hp : Staging.TopLevel.prepare msg = .ok (.frame f a)) : f.Canonical := by
+theorem TopLevel.prepare_canonical {msg : Msg} (h : msg.Canonical) {f : Frame} {a : Nat}
+    (hp : TopLevel.prepare msg = .ok (.frame f a)) : f.Canonical := by
   have amsterdam : ∀ (state : StateGasRules) (isCreate : Bool),
-      Staging.TopLevel.prepare.amsterdam state msg isCreate = .ok (.frame f a) → f.Canonical := by
+      TopLevel.prepare.amsterdam state msg isCreate = .ok (.frame f a) → f.Canonical := by
     intro state isCreate hp
-    have hprep := Staging.prepareTopLevelAmsterdam_canonical (state := state) h
-    unfold Staging.TopLevel.prepare.amsterdam at hp
+    have hprep := prepareTopLevelAmsterdam_canonical (state := state) h
+    unfold TopLevel.prepare.amsterdam at hp
     split at hp
     · cases hp
     · rename_i devm he
-      exact absurd he (Staging.prepareTopLevelAmsterdam_error_ne_revert state msg devm)
+      exact absurd he (prepareTopLevelAmsterdam_error_ne_revert state msg devm)
     · cases hp
     · cases hp
     · rename_i prepared devm he
       rw [he] at hprep
       cases hp
       exact Frame.prepared_canonical hprep.2 hprep.1 isCreate
-  unfold Staging.TopLevel.prepare at hp
+  unfold TopLevel.prepare at hp
   split at hp
-  · unfold Staging.TopLevel.prepare.create at hp
+  · unfold TopLevel.prepare.create at hp
     split at hp
     · split at hp
       · cases hp
       · cases hp
         exact Frame.ofTop_canonical h true
     · exact amsterdam _ _ hp
-  · unfold Staging.TopLevel.prepare.call at hp
+  · unfold TopLevel.prepare.call at hp
     split at hp
     · split at hp
       · cases hp
       · rename_i delegated refund hauth
         cases hp
         exact Frame.ofTop_canonical
-          (TopLevel.resolveCodeDelegation_canonical (processMessageCall.authorize_canonical h hauth))
+          (TopLevel.resolveCodeDelegation_canonical (TopLevel.applyAuthorizations_canonical h hauth))
           false
     · exact amsterdam _ _ hp
 
 /-- **A successful top-level message run leaves a canonical state**, for a frame and for a
 refusal. -/
-theorem Staging.Message.run_canonical {msg : Msg} (h : msg.Canonical) {run : Staging.MessageRun}
-    (hp : Staging.Message.run msg = .ok run) : run.state.Canonical := by
-  unfold Staging.Message.run at hp
+theorem TopLevel.run_canonical {msg : Msg} (h : msg.Canonical) {run : TopLevelRun}
+    (hp : TopLevel.run msg = .ok run) : run.state.Canonical := by
+  unfold TopLevel.run at hp
   obtain ⟨prep, hprep, hp⟩ := Except.bind_eq_ok hp
   cases prep with
   | refused reason halted =>
     cases hp
     exact h.1.1
   | frame f a =>
-    have hf := Staging.TopLevel.prepare_canonical h hprep
+    have hf := TopLevel.prepare_canonical h hprep
     dsimp only at hp
     split at hp
     · rename_i result he
@@ -260,11 +260,11 @@ theorem Staging.Message.run_canonical {msg : Msg} (h : msg.Canonical) {run : Sta
 /-! ### The transaction -/
 
 /-- What the admission checks hand on is the block environment with the transaction begun. -/
-theorem Staging.Transaction.check_benv {benv : Benv} {bout : BlockOutput} {tx : Transaction}
-    {index : Nat} {checked : Staging.Transaction.Checked}
-    (h : Staging.Transaction.check benv bout tx index = .ok checked) :
+theorem Transaction.check_benv {benv : Benv} {bout : BlockOutput} {tx : Transaction}
+    {index : Nat} {checked : Transaction.Admitted}
+    (h : Transaction.admit benv bout tx index = .ok checked) :
     checked.benv = benv.beginTransaction := by
-  unfold Staging.Transaction.check at h
+  unfold Transaction.admit at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
@@ -273,10 +273,10 @@ theorem Staging.Transaction.check_benv {benv : Benv} {bout : BlockOutput} {tx : 
   rfl
 
 /-- A prepared transaction's top-level message is canonical when the checked environment is. -/
-theorem Staging.Transaction.prepare_canonical {checked : Staging.Transaction.Checked} {tx : Transaction}
-    {index : Nat} (h : checked.benv.Canonical) {prepared : Staging.Transaction.Prepared}
-    (hp : Staging.Transaction.prepare checked tx index = .ok prepared) : prepared.msg.Canonical := by
-  unfold Staging.Transaction.prepare at hp
+theorem Transaction.prepare_canonical {checked : Transaction.Admitted} {tx : Transaction}
+    {index : Nat} (h : checked.benv.Canonical) {prepared : Transaction.Prepared}
+    (hp : Transaction.prepare checked tx index = .ok prepared) : prepared.msg.Canonical := by
+  unfold Transaction.prepare at hp
   obtain ⟨st, hst, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨msg, hmsg, hp⟩ := Except.bind_eq_ok hp
   cases hp
@@ -287,12 +287,12 @@ theorem Staging.Transaction.prepare_canonical {checked : Staging.Transaction.Che
 
 /-- Settlement into a transaction run keeps the message run's state canonical: the fee
 movements are balance credits, then the self-destructs and the sweep only erase accounts. -/
-theorem Staging.B2.Transaction.settleRun_canonical {checked : Staging.Transaction.Checked}
-    {prepared : Staging.Transaction.Prepared} {tx : Transaction} {index : Nat} {run : Staging.MessageRun}
+theorem Transaction.settleRun_canonical {checked : Transaction.Admitted}
+    {prepared : Transaction.Prepared} {tx : Transaction} {index : Nat} {run : TopLevelRun}
     (h : run.state.Canonical) {p}
-    (hp : Staging.B2.Transaction.settleRun checked prepared tx index run = .ok p) :
+    (hp : Transaction.settleRun checked prepared tx index run = .ok p) :
     State.Canonical p.1.state := by
-  unfold Staging.B2.Transaction.settleRun at hp
+  unfold Transaction.settleRun at hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
@@ -303,46 +303,46 @@ theorem Staging.B2.Transaction.settleRun_canonical {checked : Staging.Transactio
 /-- **A successful transaction run leaves a canonical state**: the fee movements go through
 `incrNonce`/`subBal`/`addBal`, the call itself through `Message.run`, and settlement follows the
 fork's SELFDESTRUCT rule. -/
-theorem Staging.B2.Transaction.run_canonical {benv : Benv} (h : benv.Canonical)
+theorem Transaction.run_canonical {benv : Benv} (h : benv.Canonical)
     {bout : BlockOutput} {tx : Transaction} {index : Nat} {p}
-    (hp : Staging.B2.Transaction.run benv bout tx index = .ok p) :
+    (hp : Transaction.run benv bout tx index = .ok p) :
     State.Canonical p.1.state := by
-  unfold Staging.B2.Transaction.run at hp
+  unfold Transaction.run at hp
   obtain ⟨checked, hchecked, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨prepared, hprepared, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨run, hrun, hp⟩ := Except.bind_eq_ok hp
   have hb : checked.benv.Canonical := by
-    rw [Staging.Transaction.check_benv hchecked]
+    rw [Transaction.check_benv hchecked]
     exact ⟨h.1, h.1⟩
-  have hm := Staging.Transaction.prepare_canonical hb hprepared
-  exact Staging.B2.Transaction.settleRun_canonical
-    (Staging.Message.run_canonical hm (Except.mapError_eq_ok_iff.mp hrun)) hp
+  have hm := Transaction.prepare_canonical hb hprepared
+  exact Transaction.settleRun_canonical
+    (TopLevel.run_canonical hm (Except.mapError_eq_ok_iff.mp hrun)) hp
 
 /-! ### The system calls -/
 
 /-- The single boundary all four system transactions share. -/
-theorem Staging.processSystemTransaction_canonical {benv : Benv} (h : benv.Canonical)
-    {target : Address} {code : ByteArray} {data : Bytes} {run : Staging.MessageRun}
-    (hp : Staging.processSystemTransaction benv target code data = .ok run) :
+theorem processSystemTransaction_canonical {benv : Benv} (h : benv.Canonical)
+    {target : Address} {code : ByteArray} {data : Bytes} {run : TopLevelRun}
+    (hp : processSystemTransaction benv target code data = .ok run) :
     run.state.Canonical := by
-  unfold Staging.processSystemTransaction at hp
+  unfold processSystemTransaction at hp
   obtain ⟨run', hrun, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   cases hp
-  exact Staging.Message.run_canonical
+  exact TopLevel.run_canonical
     (by exact ⟨⟨h.1, h.1⟩, TransientStorage.canonical_empty⟩) hrun
 
-theorem Staging.processUncheckedSystemTransaction_canonical {benv : Benv}
-    (h : benv.Canonical) {target : Address} {data : Bytes} {run : Staging.MessageRun}
-    (hp : Staging.processUncheckedSystemTransaction benv target data = .ok run) :
+theorem processUncheckedSystemTransaction_canonical {benv : Benv}
+    (h : benv.Canonical) {target : Address} {data : Bytes} {run : TopLevelRun}
+    (hp : processUncheckedSystemTransaction benv target data = .ok run) :
     run.state.Canonical :=
-  Staging.processSystemTransaction_canonical h hp
+  processSystemTransaction_canonical h hp
 
-theorem Staging.processCheckedSystemTransaction_canonical {benv : Benv}
-    (h : benv.Canonical) {target : Address} {data : Bytes} {run : Staging.MessageRun}
-    (hp : Staging.processCheckedSystemTransaction benv target data = .ok run) :
+theorem processCheckedSystemTransaction_canonical {benv : Benv}
+    (h : benv.Canonical) {target : Address} {data : Bytes} {run : TopLevelRun}
+    (hp : processCheckedSystemTransaction benv target data = .ok run) :
     run.state.Canonical := by
-  unfold Staging.processCheckedSystemTransaction at hp
+  unfold processCheckedSystemTransaction at hp
   dsimp only at hp
   split at hp
   · obtain ⟨u, hu, hp⟩ := Except.bind_eq_ok hp
@@ -351,66 +351,66 @@ theorem Staging.processCheckedSystemTransaction_canonical {benv : Benv}
     split at hp
     · nomatch hp
     · cases hp
-      exact Staging.processSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
+      exact processSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
 
 /-- Every prefix of the request fold leaves a canonical state.
 
 An induction on the contract list, so the proof does not grow when the list does. -/
-theorem Staging.runRequestContracts_canonical (idx : Nat) :
+theorem runRequestContracts_canonical (idx : Nat) :
     ∀ (rs : List (UInt8 × Address)) {benv : Benv}, benv.Canonical →
       ∀ {acc : List Bytes} {bal : BlockAccessListBuilder} {p},
-        Staging.runRequestContracts idx rs benv acc bal = .ok p → State.Canonical p.1
+        runRequestContracts idx rs benv acc bal = .ok p → State.Canonical p.1
   | [], _, h, _, _, _, hp => by cases hp; exact h.1
   | _ :: rs, benv, h, acc, bal, p, hp => by
-    unfold Staging.runRequestContracts at hp
+    unfold runRequestContracts at hp
     obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-    exact Staging.runRequestContracts_canonical idx rs
-      (by exact ⟨Staging.processCheckedSystemTransaction_canonical h hq, h.2⟩) hp
+    exact Jaune.runRequestContracts_canonical idx rs
+      (by exact ⟨processCheckedSystemTransaction_canonical h hq, h.2⟩) hp
 
-theorem Staging.processGeneralPurposeRequestsAt_canonical {balIndex : Nat} {benv : Benv}
+theorem processGeneralPurposeRequestsAt_canonical {balIndex : Nat} {benv : Benv}
     (h : benv.Canonical) {bout : BlockOutput} {p}
-    (hp : Staging.processGeneralPurposeRequestsAt balIndex benv bout = .ok p) :
+    (hp : processGeneralPurposeRequestsAt balIndex benv bout = .ok p) :
     State.Canonical p.1 := by
-  unfold Staging.processGeneralPurposeRequestsAt at hp
+  unfold processGeneralPurposeRequestsAt at hp
   obtain ⟨dr, _, hp⟩ := Except.bind_eq_ok hp
   dsimp only at hp
   obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
   cases hp
-  exact Staging.runRequestContracts_canonical _ _ h hq
+  exact runRequestContracts_canonical _ _ h hq
 
-theorem Staging.processGeneralPurposeRequests_canonical {benv : Benv}
+theorem processGeneralPurposeRequests_canonical {benv : Benv}
     (h : benv.Canonical) {bout : BlockOutput} {p}
-    (hp : Staging.processGeneralPurposeRequests benv bout = .ok p) :
+    (hp : processGeneralPurposeRequests benv bout = .ok p) :
     State.Canonical p.1 :=
-  Staging.processGeneralPurposeRequestsAt_canonical h hp
+  processGeneralPurposeRequestsAt_canonical h hp
 
-theorem Staging.beaconRootsCall_canonical {rules : ForkRules} {benv : Benv}
-    (h : benv.Canonical) {p} (hp : Staging.beaconRootsCall rules benv = .ok p) :
+theorem beaconRootsCall_canonical {rules : ForkRules} {benv : Benv}
+    (h : benv.Canonical) {p} (hp : beaconRootsCall rules benv = .ok p) :
     State.Canonical p.1 := by
-  unfold Staging.beaconRootsCall at hp
+  unfold beaconRootsCall at hp
   split at hp
   · obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
     cases hp
-    exact Staging.processUncheckedSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
+    exact processUncheckedSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
   · cases hp; exact h.1
 
-theorem Staging.historyStorageCall_canonical {rules : ForkRules} {benv : Benv}
+theorem historyStorageCall_canonical {rules : ForkRules} {benv : Benv}
     (h : benv.Canonical) {bal : BlockAccessListBuilder} {p}
-    (hp : Staging.historyStorageCall rules benv bal = .ok p) : State.Canonical p.1 := by
-  unfold Staging.historyStorageCall at hp
+    (hp : historyStorageCall rules benv bal = .ok p) : State.Canonical p.1 := by
+  unfold historyStorageCall at hp
   split at hp
   · obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
     obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
     cases hp
-    exact Staging.processUncheckedSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
+    exact processUncheckedSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
   · cases hp; exact h.1
 
 /-! ### The body -/
 
 /-- Crediting balances in turn keeps a state canonical. -/
-theorem Staging.State.Canonical.creditAll {state : State} (h : state.Canonical)
-    (credits : List (Address × Nat)) : (Staging.creditAll credits state).Canonical := by
-  unfold Jaune.Staging.creditAll
+theorem State.Canonical.creditAll {state : State} (h : state.Canonical)
+    (credits : List (Address × Nat)) : (Jaune.creditAll credits state).Canonical := by
+  unfold Jaune.creditAll
   induction credits generalizing state with
   | nil => exact h
   | cons c cs ih => exact ih (State.Canonical.addBal h _ _)
@@ -419,110 +419,110 @@ theorem Staging.State.Canonical.creditAll {state : State} (h : state.Canonical)
 in place of the block environment's, so of the environment only its original state is asked:
 system calls, transactions, withdrawals, request calls and rewards preserve the invariant, and the
 other operations leave the state alone. -/
-theorem Staging.Body.step_canonical {benv : Benv} (hb : benv.stat.Canonical) {p : Staging.Body.Prefix}
-    (hp : p.state.Canonical) {op : Staging.BodyOp} {r : Staging.OpRun} {q : Staging.Body.Prefix}
-    (hs : Staging.Body.step benv p op = .ok (r, q)) : q.state.Canonical := by
+theorem Body.step_canonical {benv : Benv} (hb : benv.stat.Canonical) {p : Body.Prefix}
+    (hp : p.state.Canonical) {op : BodyOp} {r : OpRun} {q : Body.Prefix}
+    (hs : Body.step benv p op = .ok (r, q)) : q.state.Canonical := by
   have he : (benv.withState p.state).Canonical := ⟨hp, hb⟩
   cases op with
   | systemCall address data index =>
-    simp only [Staging.Body.step] at hs
+    simp only [Body.step] at hs
     obtain ⟨d, _, hs⟩ := Except.bind_eq_ok hs
     obtain ⟨run, hrun, hs⟩ := Except.bind_eq_ok hs
     cases hs
-    exact Staging.processUncheckedSystemTransaction_canonical he (Except.mapError_eq_ok_iff.mp hrun)
+    exact processUncheckedSystemTransaction_canonical he (Except.mapError_eq_ok_iff.mp hrun)
   | transaction tx index =>
-    simp only [Staging.Body.step] at hs
+    simp only [Body.step] at hs
     obtain ⟨⟨run, bout⟩, ht, hs⟩ := Except.bind_eq_ok hs
     cases hs
-    exact Staging.B2.Transaction.run_canonical he ht
+    exact Transaction.run_canonical he ht
   | withdrawals ws index =>
-    simp only [Staging.Body.step] at hs
+    simp only [Body.step] at hs
     cases hs
     exact processWithdrawalsState_canonical hp ws
   | depositRequests =>
-    simp only [Staging.Body.step] at hs
+    simp only [Body.step] at hs
     obtain ⟨_, _, hs⟩ := Except.bind_eq_ok hs
     cases hs
     exact hp
   | requestCall type address index =>
-    simp only [Staging.Body.step] at hs
+    simp only [Body.step] at hs
     obtain ⟨run, hrun, hs⟩ := Except.bind_eq_ok hs
     cases hs
-    exact Staging.processCheckedSystemTransaction_canonical he hrun
+    exact processCheckedSystemTransaction_canonical he hrun
   | rewards coinbase minerReward credits =>
-    simp only [Staging.Body.step] at hs
+    simp only [Body.step] at hs
     cases hs
-    exact Staging.State.Canonical.creditAll (State.Canonical.addBal hp _ _) credits
+    exact State.Canonical.creditAll (State.Canonical.addBal hp _ _) credits
   | buildAccessList =>
-    simp only [Staging.Body.step] at hs
+    simp only [Body.step] at hs
     cases hs
     exact hp
   | checkAccessListLimit =>
-    simp only [Staging.Body.step] at hs
+    simp only [Body.step] at hs
     obtain ⟨_, _, hs⟩ := Except.bind_eq_ok hs
     cases hs
     exact hp
 
 /-- A run of operations keeps the prefix's state canonical. -/
-theorem Staging.Body.run_canonical {benv : Benv} (hb : benv.stat.Canonical) :
-    ∀ (ops : List Staging.BodyOp) {p : Staging.Body.Prefix}, p.state.Canonical →
-      ∀ {rs : List Staging.OpRun} {q : Staging.Body.Prefix}, Staging.Body.run benv p ops = .ok (rs, q) →
+theorem Body.run_canonical {benv : Benv} (hb : benv.stat.Canonical) :
+    ∀ (ops : List BodyOp) {p : Body.Prefix}, p.state.Canonical →
+      ∀ {rs : List OpRun} {q : Body.Prefix}, Body.run benv p ops = .ok (rs, q) →
         q.state.Canonical
   | [], _, hp, _, _, hr => by cases hr; exact hp
   | op :: ops, p, hp, rs, q, hr => by
-    simp only [Staging.Body.run] at hr
+    simp only [Body.run] at hr
     obtain ⟨⟨r, p'⟩, hs, hr⟩ := Except.bind_eq_ok hr
     obtain ⟨⟨rs', q'⟩, hr', hr⟩ := Except.bind_eq_ok hr
     cases hr
-    exact Staging.Body.run_canonical hb ops (Staging.Body.step_canonical hb hp hs) hr'
+    exact Body.run_canonical hb ops (Body.step_canonical hb hp hs) hr'
 
 /-- A fold of operations keeps the prefix's state canonical. -/
-theorem Staging.Body.fold_canonical {benv : Benv} (hb : benv.stat.Canonical) :
-    ∀ (ops : List Staging.BodyOp) {p : Staging.Body.Prefix}, p.state.Canonical →
-      ∀ {q : Staging.Body.Prefix}, Staging.Body.fold benv p ops = .ok q → q.state.Canonical
+theorem Body.fold_canonical {benv : Benv} (hb : benv.stat.Canonical) :
+    ∀ (ops : List BodyOp) {p : Body.Prefix}, p.state.Canonical →
+      ∀ {q : Body.Prefix}, Body.fold benv p ops = .ok q → q.state.Canonical
   | [], _, hp, _, hf => by cases hf; exact hp
   | op :: ops, p, hp, q, hf => by
-    simp only [Staging.Body.fold] at hf
+    simp only [Body.fold] at hf
     obtain ⟨⟨r, p'⟩, hs, hf⟩ := Except.bind_eq_ok hf
-    exact Staging.Body.fold_canonical hb ops (Staging.Body.step_canonical hb hp hs) hf
+    exact Body.fold_canonical hb ops (Body.step_canonical hb hp hs) hf
 
 /-- The importer's body leaves a canonical state. -/
-theorem Staging.Body.importer_canonical {benv : Benv} (h : benv.Canonical)
+theorem Body.importer_canonical {benv : Benv} (h : benv.Canonical)
     {txs : List (Bytes ⊕ Transaction)} {ommers : List Header} {wds : List Withdrawal}
-    {q : Staging.Body.Prefix} (hp : Staging.Body.importer benv txs ommers wds = .ok q) : q.state.Canonical := by
-  unfold Staging.Body.importer at hp
+    {q : Body.Prefix} (hp : Body.importer benv txs ommers wds = .ok q) : q.state.Canonical := by
+  unfold Body.importer at hp
   obtain ⟨decoded, _, hp⟩ := Except.bind_eq_ok hp
-  exact Staging.Body.fold_canonical h.2 _ (by exact h.1) hp
+  exact Body.fold_canonical h.2 _ (by exact h.1) hp
 
 /-- **A successful block body leaves a canonical state**: system calls, transactions,
 withdrawals, general-purpose requests and the proof-of-work rewards all preserve the invariant,
 whether each is run or gated off. -/
-theorem Staging.applyBody_canonical {benv : Benv} (h : benv.Canonical)
+theorem applyBody_canonical {benv : Benv} (h : benv.Canonical)
     {txs : List (Bytes ⊕ Transaction)} {ommers : List Header} {wds : List Withdrawal} {p}
-    (hp : Staging.applyBody benv txs ommers wds = .ok p) : State.Canonical p.1 := by
-  unfold Staging.applyBody at hp
-  cases hq : Staging.Body.importer benv txs ommers wds with
+    (hp : applyBody benv txs ommers wds = .ok p) : State.Canonical p.1 := by
+  unfold applyBody at hp
+  cases hq : Body.importer benv txs ommers wds with
   | error e => rw [hq] at hp; cases hp
   | ok q =>
     rw [hq] at hp
     cases hp
-    exact Staging.Body.importer_canonical h hq
+    exact Body.importer_canonical h hq
 
 /-! ### The block transition -/
 
 /-- **Canonicality depends on the common execution body**, not on the resolver or the error
 carrier. -/
-theorem Staging.E.stateTransitionCoreE_canonical {ε : Type} {embed : TransitionError → ε}
+theorem stateTransitionCoreE_canonical {ε : Type} {embed : TransitionError → ε}
     {f : Fork} {ch : BlockChain} (h : ch.Canonical) {block : Block} {ch'}
     {checkOmmers : Unit → Except ε Unit}
-    (hp : Staging.E.stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
+    (hp : stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
     ch'.Canonical := by
-  unfold Staging.E.stateTransitionCoreE at hp
+  unfold stateTransitionCoreE at hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
   cases hp
-  exact Staging.Body.importer_canonical (by exact ⟨h, h⟩) (Except.mapError_eq_ok_iff.mp hq)
+  exact Body.importer_canonical (by exact ⟨h, h⟩) (Except.mapError_eq_ok_iff.mp hq)
 
 end Jaune

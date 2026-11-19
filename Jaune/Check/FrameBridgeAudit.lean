@@ -21,7 +21,7 @@ import Jaune.Bridge.G2b.KeptHistory
 #expect_axioms Jaune.Staging.exists_preRoots [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Staging.exists_requestRoots [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Staging.exists_bodyRoots [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Staging.BlockRun.exists_bodyRoots [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.BlockRun.exists_bodyRoots [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Staging.KeptHistory.of_fold [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Staging.BodyRoots.ran [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Staging.BodyRoots.applied [Classical.choice, Quot.sound, propext]

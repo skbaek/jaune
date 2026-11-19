@@ -39,20 +39,20 @@ theorem Frame.runTop_square (f : Frame) : Frame.runTop f = Jaune.Frame.runTop f.
 
 /-- A top-level preparation always supplies the evidence to convert its checkpoint exactly. -/
 theorem Frame.runTop_prepared {msg : Msg} {f : Jaune.Frame} {refund : Nat}
-    (hp : Staging.TopLevel.prepare msg = .ok (.frame f refund)) :
+    (hp : TopLevel.prepare msg = .ok (.frame f refund)) :
     Frame.runTop (Frame.ofLegacy f (Staging.TopLevel.prepare_frame_memory_wf hp)) = Jaune.Frame.runTop f := by
   rw [Frame.runTop_square, Frame.toLegacy_ofLegacy]
 
 /-- Raw execution from a prepared frame keeps every reached current machine well formed. -/
 theorem prepared_reached_memory_wf {msg : Msg} {f : Jaune.Frame} {refund : Nat} {root evm : Evm}
-    (hp : Staging.TopLevel.prepare msg = .ok (.frame f refund))
+    (hp : TopLevel.prepare msg = .ok (.frame f refund))
     (he : Jaune.enterWith f f.checkpoint.toDevm = .run root) (hr : root.Reaches evm) : evm.dyna.memory.Wf :=
   hr.memory_wf (MemoryReachability.enterWith_run (start := f.checkpoint.toDevm)
     (Staging.TopLevel.prepare_frame_memory_wf hp) he)
 
 /-- Every caller checkpoint saved by that execution has well-formed memory. -/
 theorem prepared_checkpoint_memory_wf {msg : Msg} {f : Jaune.Frame} {refund : Nat} {root evm : Evm}
-    (hp : Staging.TopLevel.prepare msg = .ok (.frame f refund))
+    (hp : TopLevel.prepare msg = .ok (.frame f refund))
     (he : Jaune.enterWith f f.checkpoint.toDevm = .run root) (hr : root.Reaches evm)
     {child : Jaune.Frame} {p : Pending} {pc : Nat} (hs : evm.step = .spawn child p pc) :
     child.checkpoint.machine.memory.Wf :=
@@ -62,8 +62,8 @@ theorem prepared_checkpoint_memory_wf {msg : Msg} {f : Jaune.Frame} {refund : Na
 /-- What checked execution of a top-level message records: the preparation and, for a frame, the
 checked frame's result, run from the proven preparation. -/
 def preparedMessageResult (msg : Msg) :
-    Except Fault (Staging.TopLevel.Preparation × Option Jaune.Frame.Result) :=
-  match hp : Staging.TopLevel.prepare msg with
+    Except Fault (TopLevel.Preparation × Option Jaune.Frame.Result) :=
+  match hp : TopLevel.prepare msg with
   | .error fault => .error fault
   | .ok (.refused h d) => .ok (.refused h d, none)
   | .ok (.frame f refund) => do
@@ -74,8 +74,8 @@ def preparedMessageResult (msg : Msg) :
 top-level message, including preparation faults. -/
 theorem preparedMessageResult_square (msg : Msg) :
     preparedMessageResult msg =
-      (fun run => (run.preparation, run.result)) <$> Staging.Message.run msg := by
-  unfold preparedMessageResult Staging.Message.run
+      (fun run => (run.preparation, run.result)) <$> TopLevel.run msg := by
+  unfold preparedMessageResult TopLevel.run
   split
   · rename_i fault hp
     rw [hp]

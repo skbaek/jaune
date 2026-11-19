@@ -24,7 +24,7 @@ private def firstSpawn : Nat → Frame.Running → Option (Frame × Staging.Pend
 /-- What the transaction reads of the native top-level frame: the world after it and the logs it
 keeps (a failed frame keeps none). Both pilot preparations are frames. -/
 private def rendered (msg : Msg) : Option (State × List Log) := do
-  let .ok (.frame f _) := Staging.TopLevel.prepare msg | none
+  let .ok (.frame f _) := TopLevel.prepare msg | none
   let .ok result := Staging.Frame.runTop f | none
   let logs := match result with
     | .success _ _ _ _ substate _ => substate.logs

@@ -7,31 +7,31 @@ namespace Jaune
 
 /-- Read the entered code frame from the recorded message. Refusal and immediate completion
 produce no root. This conversion disappears when the message record stores a native machine. -/
-def Staging.MessageRun.enteredRoot (message : Staging.MessageRun) : Option Root :=
+def TopLevelRun.enteredRoot (message : TopLevelRun) : Option Staging.Root :=
   match message.preparation, message.root with
   | .frame frame _, some evm => some (Staging.Root.ofEntry frame (.ofEvm evm))
   | _, _ => none
 
-def Staging.MessageRun.frames (message : Staging.MessageRun) : List Exec.Frame :=
+def TopLevelRun.frames (message : TopLevelRun) : List Staging.Exec.Frame :=
   message.enteredRoot.toList.flatMap Staging.Root.frames
 
-def Staging.B2.TransactionRun.frames (transaction : Staging.B2.TransactionRun) : List Exec.Frame :=
+def TransactionRun.frames (transaction : TransactionRun) : List Staging.Exec.Frame :=
   transaction.message.frames
 
-def Staging.OpRun.messageRoot : Staging.OpRun → Option Staging.Root
+def OpRun.messageRoot : OpRun → Option Staging.Root
   | .systemCall _ _ message | .requestCall _ _ _ message => message.enteredRoot
   | .transaction tx => tx.message.enteredRoot
   | .withdrawals .. | .depositRequests .. | .rewards .. | .buildAccessList .. | .checkAccessListLimit => none
 
-def Staging.BlockRun.roots (block : Staging.BlockRun) : List Root := block.ops.filterMap Staging.OpRun.messageRoot
+def BlockRun.roots (block : BlockRun) : List Staging.Root := block.ops.filterMap OpRun.messageRoot
 
-def Staging.BlockRun.frames (block : Staging.BlockRun) : List Exec.Frame := block.roots.flatMap Staging.Root.frames
+def BlockRun.frames (block : BlockRun) : List Staging.Exec.Frame := block.roots.flatMap Staging.Root.frames
 
 /-- The recorded root, when present, settles to precisely the result the message recorded. -/
-theorem Staging.Message.run_root_settled {msg : Msg} {message : Staging.MessageRun} {root : Root}
-    (run : Staging.Message.run msg = .ok message) (entry : message.enteredRoot = some root) :
+theorem Staging.Message.run_root_settled {msg : Msg} {message : TopLevelRun} {root : Root}
+    (run : TopLevel.run msg = .ok message) (entry : message.enteredRoot = some root) :
     ∃ result, message.result = some result ∧ root.settled = .ok result := by
-  unfold Staging.Message.run at run
+  unfold TopLevel.run at run
   obtain ⟨preparation, _, run⟩ := Except.bind_eq_ok run
   cases preparation with
   | refused reason halted =>
@@ -58,9 +58,9 @@ theorem Staging.Message.run_root_settled {msg : Msg} {message : Staging.MessageR
 /-- Every successful body transition has a run with exactly its final world. -/
 theorem Staging.E.exists_blockRun {ε : Type} {embed : TransitionError → ε} {fork : Fork}
     {parent post : BlockChain} {block : Block} {ommers : Unit → Except ε Unit}
-    (h : Staging.E.stateTransitionCoreE embed fork parent block ommers = .ok post) :
-    ∃ run, Staging.BlockRun.run fork parent block = .ok run ∧ run.final.state = post.state := by
-  rw [Staging.E.stateTransitionCoreE_eq_run] at h
+    (h : stateTransitionCoreE embed fork parent block ommers = .ok post) :
+    ∃ run, BlockRun.run fork parent block = .ok run ∧ run.final.state = post.state := by
+  rw [stateTransitionCoreE_eq_run] at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
   obtain ⟨run, hr, h⟩ := Except.bind_eq_ok h

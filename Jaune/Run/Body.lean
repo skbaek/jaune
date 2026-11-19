@@ -37,7 +37,7 @@ open Jaune
 /-! ### The prefix -/
 
 /-- What a block body has produced so far: the state and `BlockOutput`'s carrier. -/
-structure Staging.Body.Prefix : Type where
+structure Body.Prefix : Type where
   state : State
   /-- Execution gas used by the block (`BlockOutput.blockGasUsed`). -/
   executionGasUsed : Nat
@@ -54,13 +54,13 @@ structure Staging.Body.Prefix : Type where
   withdrawalsTrie : Std.TreeMap Bytes Withdrawal compare
   requests : List Bytes
   /-- EIP-7928: the block-level access-list builder (`BlockOutput.blockAccessListBuilder`). -/
-  accessList : BlockAccessListBuilder
+  blockAccessListBuilder : BlockAccessListBuilder
   /-- EIP-7928: the built list (`BlockOutput.blockAccessList`). -/
-  builtAccessList : BlockAccessList
+  blockAccessList : BlockAccessList
 
 
 /-- The block output a prefix carries. -/
-def Staging.Body.Prefix.toBlockOutput (p : Staging.Body.Prefix) : BlockOutput :=
+def Body.Prefix.toBlockOutput (p : Body.Prefix) : BlockOutput :=
   { blockGasUsed := p.executionGasUsed
     blockStateGasUsed := p.stateGasUsed
     cumulativeGasUsed := p.cumulativeGasUsed
@@ -71,11 +71,11 @@ def Staging.Body.Prefix.toBlockOutput (p : Staging.Body.Prefix) : BlockOutput :=
     withdrawalsTrie := p.withdrawalsTrie
     blobGasUsed := p.blobGasUsed
     requests := p.requests
-    blockAccessListBuilder := p.accessList
-    blockAccessList := p.builtAccessList }
+    blockAccessListBuilder := p.blockAccessListBuilder
+    blockAccessList := p.blockAccessList }
 
 /-- The prefix of a state and a block output. -/
-def Staging.Body.Prefix.ofBlockOutput (state : State) (bout : BlockOutput) : Staging.Body.Prefix :=
+def Body.Prefix.ofBlockOutput (state : State) (bout : BlockOutput) : Body.Prefix :=
   { state := state
     executionGasUsed := bout.blockGasUsed
     stateGasUsed := bout.blockStateGasUsed
@@ -87,35 +87,35 @@ def Staging.Body.Prefix.ofBlockOutput (state : State) (bout : BlockOutput) : Sta
     logs := bout.blockLogs
     withdrawalsTrie := bout.withdrawalsTrie
     requests := bout.requests
-    accessList := bout.blockAccessListBuilder
-    builtAccessList := bout.blockAccessList }
+    blockAccessListBuilder := bout.blockAccessListBuilder
+    blockAccessList := bout.blockAccessList }
 
 /-- The empty prefix over a state. -/
-def Staging.Body.Prefix.init (state : State) : Staging.Body.Prefix := Staging.Body.Prefix.ofBlockOutput state BlockOutput.init
+def Body.Prefix.init (state : State) : Body.Prefix := Body.Prefix.ofBlockOutput state BlockOutput.init
 
 /-- The body's result as the importer returned it: the state and the block output. -/
-def Staging.Body.Prefix.output (p : Staging.Body.Prefix) : State × BlockOutput := (p.state, p.toBlockOutput)
+def Body.Prefix.output (p : Body.Prefix) : State × BlockOutput := (p.state, p.toBlockOutput)
 
-@[simp] theorem Staging.Body.Prefix.toBlockOutput_ofBlockOutput (state : State) (bout : BlockOutput) :
-    (Staging.Body.Prefix.ofBlockOutput state bout).toBlockOutput = bout := rfl
+@[simp] theorem Body.Prefix.toBlockOutput_ofBlockOutput (state : State) (bout : BlockOutput) :
+    (Body.Prefix.ofBlockOutput state bout).toBlockOutput = bout := rfl
 
-@[simp] theorem Staging.Body.Prefix.state_ofBlockOutput (state : State) (bout : BlockOutput) :
-    (Staging.Body.Prefix.ofBlockOutput state bout).state = state := rfl
+@[simp] theorem Body.Prefix.state_ofBlockOutput (state : State) (bout : BlockOutput) :
+    (Body.Prefix.ofBlockOutput state bout).state = state := rfl
 
-@[simp] theorem Staging.Body.Prefix.ofBlockOutput_toBlockOutput (p : Staging.Body.Prefix) :
-    Staging.Body.Prefix.ofBlockOutput p.state p.toBlockOutput = p := rfl
+@[simp] theorem Body.Prefix.ofBlockOutput_toBlockOutput (p : Body.Prefix) :
+    Body.Prefix.ofBlockOutput p.state p.toBlockOutput = p := rfl
 
-theorem Staging.Body.Prefix.output_injective : Function.Injective output := by
+theorem Body.Prefix.output_injective : Function.Injective output := by
   intro p q h
   have h1 : p.state = q.state := congrArg Prod.fst h
   have h2 : p.toBlockOutput = q.toBlockOutput := congrArg Prod.snd h
-  rw [← Staging.Body.Prefix.ofBlockOutput_toBlockOutput p, ← Staging.Body.Prefix.ofBlockOutput_toBlockOutput q, h1, h2]
+  rw [← Body.Prefix.ofBlockOutput_toBlockOutput p, ← Body.Prefix.ofBlockOutput_toBlockOutput q, h1, h2]
 
 
 /-! ### Operations -/
 
 /-- One operation of a block body. -/
-inductive Staging.BodyOp : Type where
+inductive BodyOp : Type where
   /-- An unchecked system call to `address` with `data` (whose failure fails the body before the
   call), incorporated into the block access list at `index`. -/
   | systemCall (address : Address) (data : Except TransitionError Bytes) (index : Nat)
@@ -135,42 +135,42 @@ inductive Staging.BodyOp : Type where
   | checkAccessListLimit
 
 /-- What one operation produced, beside the next prefix. -/
-inductive Staging.OpRun : Type where
-  | systemCall (index : Nat) (address : Address) (run : Staging.MessageRun)
-  | transaction (run : Staging.B2.TransactionRun)
+inductive OpRun : Type where
+  | systemCall (index : Nat) (address : Address) (run : TopLevelRun)
+  | transaction (run : TransactionRun)
   | withdrawals (index : Nat) (ws : List Withdrawal)
   | depositRequests (requests : Bytes)
-  | requestCall (index : Nat) (type : UInt8) (address : Address) (run : Staging.MessageRun)
+  | requestCall (index : Nat) (type : UInt8) (address : Address) (run : TopLevelRun)
   | rewards (coinbase : Address) (minerReward : Nat) (credits : List (Address × Nat))
   | buildAccessList (list : BlockAccessList)
   | checkAccessListLimit
 
 /-- Credit each `(address, amount)` in turn (`create_ether`). -/
-def Staging.creditAll (credits : List (Address × Nat)) (state : State) : State :=
+def creditAll (credits : List (Address × Nat)) (state : State) : State :=
   credits.foldl (fun acc c => acc.addBal c.1 c.2.toU256) state
 
 /-- One operation from a prefix, against the block environment `benv` (whose own state the step
 does not read: the prefix's state stands in for it). -/
-def Staging.Body.step (benv : Benv) (p : Staging.Body.Prefix) : Staging.BodyOp → Except TransitionError (Staging.OpRun × Staging.Body.Prefix)
+def Body.step (benv : Benv) (p : Body.Prefix) : BodyOp → Except TransitionError (OpRun × Body.Prefix)
   | .systemCall address data index => do
     let data ← data
-    let run ← (Staging.processUncheckedSystemTransaction (benv.withState p.state) address data).mapError
+    let run ← (processUncheckedSystemTransaction (benv.withState p.state) address data).mapError
       (fun e => TransitionError.vm e.toEvmError)
     pure (.systemCall index address run,
       { p with
         state := run.state
-        accessList := p.accessList.incorporateSystem benv.stat.rules index p.state run.state
+        blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules index p.state run.state
           (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList })
   | .transaction tx index => do
-    let ⟨run, bout⟩ ← Staging.B2.Transaction.run (benv.withState p.state) p.toBlockOutput tx index
-    pure (.transaction run, Staging.Body.Prefix.ofBlockOutput run.state bout)
+    let ⟨run, bout⟩ ← Transaction.run (benv.withState p.state) p.toBlockOutput tx index
+    pure (.transaction run, Body.Prefix.ofBlockOutput run.state bout)
   | .withdrawals ws index =>
     let state := processWithdrawalsState p.state ws
     pure (.withdrawals index ws,
       { p with
         state := state
         withdrawalsTrie := processWithdrawalsTrie p.withdrawalsTrie ws
-        accessList := p.accessList.incorporateSystem benv.stat.rules index p.state state
+        blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules index p.state state
           (ws.map Withdrawal.address) [] [] })
   | .depositRequests => do
     let deposits ← parseDepositRequests p.toBlockOutput
@@ -180,52 +180,52 @@ def Staging.Body.step (benv : Benv) (p : Staging.Body.Prefix) : Staging.BodyOp �
           if deposits.length > 0 then p.requests ++ [depositRequestType ++ deposits]
           else p.requests })
   | .requestCall type address index => do
-    let run ← Staging.processCheckedSystemTransaction (benv.withState p.state) address []
+    let run ← processCheckedSystemTransaction (benv.withState p.state) address []
     pure (.requestCall index type address run,
       { p with
         state := run.state
         requests :=
           if run.returnData.length > 0 then p.requests ++ [[type] ++ run.returnData]
           else p.requests
-        accessList := match benv.stat.rules.blockAccessListRules with
-          | none => p.accessList
-          | some _ => p.accessList.incorporate index p.state run.state
+        blockAccessListBuilder := match benv.stat.rules.blockAccessListRules with
+          | none => p.blockAccessListBuilder
+          | some _ => p.blockAccessListBuilder.incorporate index p.state run.state
               (address :: run.accountReads.toList) run.storageReads.toList
               run.storageWrites.toList })
   | .rewards coinbase minerReward credits =>
     pure (.rewards coinbase minerReward credits,
-      { p with state := Staging.creditAll credits (p.state.addBal coinbase minerReward.toU256) })
+      { p with state := creditAll credits (p.state.addBal coinbase minerReward.toU256) })
   | .buildAccessList =>
     let list := match benv.stat.rules.blockAccessListRules with
       | none => []
-      | some _ => p.accessList.build
-    pure (.buildAccessList list, { p with builtAccessList := list })
+      | some _ => p.blockAccessListBuilder.build
+    pure (.buildAccessList list, { p with blockAccessList := list })
   | .checkAccessListLimit => do
-    checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit p.builtAccessList
+    checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit p.blockAccessList
     pure (.checkAccessListLimit, p)
 
 /-- A list of operations, keeping each operation's record. -/
-def Staging.Body.run (benv : Benv) : Staging.Body.Prefix → List Staging.BodyOp →
-    Except TransitionError (List Staging.OpRun × Staging.Body.Prefix)
+def Body.run (benv : Benv) : Body.Prefix → List BodyOp →
+    Except TransitionError (List OpRun × Body.Prefix)
   | p, [] => pure ([], p)
   | p, op :: ops => do
-    let ⟨r, q⟩ ← Staging.Body.step benv p op
-    let ⟨rs, q'⟩ ← Staging.Body.run benv q ops
+    let ⟨r, q⟩ ← Body.step benv p op
+    let ⟨rs, q'⟩ ← Body.run benv q ops
     pure (r :: rs, q')
 
 /-- A list of operations, keeping only the prefix: the runner. -/
-def Staging.Body.fold (benv : Benv) : Staging.Body.Prefix → List Staging.BodyOp → Except TransitionError Staging.Body.Prefix
+def Body.fold (benv : Benv) : Body.Prefix → List BodyOp → Except TransitionError Body.Prefix
   | p, [] => pure p
   | p, op :: ops => do
-    let ⟨_, q⟩ ← Staging.Body.step benv p op
-    Staging.Body.fold benv q ops
+    let ⟨_, q⟩ ← Body.step benv p op
+    Body.fold benv q ops
 
 /-! ### The importer's operations -/
 
 /-- The importer's pre-execution system calls at index 0: the beacon-roots call (EIP-4788) when
 `sys.beaconRoots`, then the history-storage call (EIP-2935) when `sys.historyStorage`, whose data
 is the parent hash (an empty window is an internal fault). -/
-def Staging.Body.preOps (benv : Benv) : List Staging.BodyOp :=
+def Body.preOps (benv : Benv) : List BodyOp :=
   let rules := benv.stat.rules
   (if rules.systemCalls.beaconRoots then
     [.systemCall beaconRootsAddress (.ok benv.stat.parentBeaconBlockRoot.toBytes) 0]
@@ -238,15 +238,15 @@ def Staging.Body.preOps (benv : Benv) : List Staging.BodyOp :=
   else [])
 
 /-- The transactions, each at its position. -/
-def Staging.Body.transactionOps (txs : List Transaction) : List Staging.BodyOp :=
+def Body.transactionOps (txs : List Transaction) : List BodyOp :=
   txs.putIndex.map fun ⟨i, tx⟩ => .transaction tx i
 
 /-- The importer's post-execution operations, for `n` transactions: the withdrawals at `n + 1`
 when `header.withdrawalsRoot`; the deposit requests and each request call at `n + 1` when
 `header.requestsHash`; the rewards under proof of work (`payRewards`' amounts); then the
 access-list build and its item limit. -/
-def Staging.Body.postOps (benv : Benv) (n : Nat) (ommers : List Header) (wds : List Withdrawal) :
-    List Staging.BodyOp :=
+def Body.postOps (benv : Benv) (n : Nat) (ommers : List Header) (wds : List Withdrawal) :
+    List BodyOp :=
   let rules := benv.stat.rules
   (if rules.header.withdrawalsRoot then [.withdrawals wds (n + 1)] else []) ++
   (if rules.header.requestsHash then
@@ -261,49 +261,23 @@ def Staging.Body.postOps (benv : Benv) (n : Nat) (ommers : List Header) (wds : L
   [.buildAccessList, .checkAccessListLimit]
 
 /-- The importer's operations for the decoded transactions. -/
-def Staging.Body.ops (benv : Benv) (txs : List Transaction) (ommers : List Header)
-    (wds : List Withdrawal) : List Staging.BodyOp :=
-  Staging.Body.preOps benv ++ Staging.Body.transactionOps txs ++ Staging.Body.postOps benv txs.length ommers wds
+def Body.ops (benv : Benv) (txs : List Transaction) (ommers : List Header)
+    (wds : List Withdrawal) : List BodyOp :=
+  Body.preOps benv ++ Body.transactionOps txs ++ Body.postOps benv txs.length ommers wds
 
 /-- **The importer's body** (`apply_body`): decode the whole transaction list, then run the
 operations from the empty prefix over the block's pre-state. -/
-def Staging.Body.importer (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
-    (wds : List Withdrawal) : Except TransitionError Staging.Body.Prefix := do
+def Body.importer (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
+    (wds : List Withdrawal) : Except TransitionError Body.Prefix := do
   let decoded ← txs.mapM (decodeTransaction benv.stat.rules)
-  Staging.Body.fold benv (Staging.Body.Prefix.init benv.state) (Staging.Body.ops benv decoded ommers wds)
+  Body.fold benv (Body.Prefix.init benv.state) (Body.ops benv decoded ommers wds)
 
 /-- The importer's body with `applyBody`'s result type: the prefix through `Body.Prefix.output`. -/
-def Staging.applyBody (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
+def applyBody (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
     (wds : List Withdrawal) : Except TransitionError (State × BlockOutput) :=
-  Staging.Body.Prefix.output <$> Staging.Body.importer benv txs ommers wds
+  Body.Prefix.output <$> Body.importer benv txs ommers wds
 
 /-! ### The block transition over the new body -/
 
-/-- `stateTransitionCoreE` with the importer's body in place of `applyBody`: header validation,
-the ommer check, the body, then the commitment checks and the access-list check, as before. Cut E
-restructures this into the block run; here only the body changed. -/
-def Staging.stateTransitionCoreE {ε : Type} (embed : TransitionError → ε)
-    (f : Fork) (ch : BlockChain) (block : Block)
-    (checkOmmers : Unit → Except ε Unit) : Except ε BlockChain := do
-  let rules := f.ruleSet
-  Except.mapError embed (validateHeader rules ch block.header)
-  checkOmmers ()
-  let benv : Benv := initBlockEnvironment f ch block.header
-  let ⟨st, bout⟩ ← Except.mapError embed
-    (Staging.applyBody benv block.transactions block.ommers block.withdrawals)
-  let blockStateRoot : U256 := st.root
-  let transactionsRoot : U256 := getTransactionsRoot bout
-  let receiptRoot : U256 := getReceiptRoot bout
-  let blockLogsBloom : Bytes := logsBloom bout.blockLogs
-  let withdrawalsRoot : U256 := getWithdrawalsRoot bout
-  let requestsHash :=
-    if rules.header.requestsHash then some (computeRequestsHash bout.requests) else none
-  Except.mapError (embed ∘ TransitionError.block) <|
-    stateTransitionChecks bout block.header
-      transactionsRoot blockStateRoot receiptRoot
-      blockLogsBloom withdrawalsRoot requestsHash
-  Except.mapError (embed ∘ TransitionError.block) <|
-    blockAccessListCheck rules bout block.header
-  .ok ⟨appendBlock ch.blocks block, st, ch.chainId⟩
 
 end Jaune

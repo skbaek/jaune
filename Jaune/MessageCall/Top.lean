@@ -40,50 +40,7 @@ def Frame.runTop (f : Frame) : Except Fault Frame.Result :=
   | .done result => result
   | .run evm => settle f (exec evm)
 
-/-- The refund counter a top-level result reports: a success's substate refund (an internal fault
-if negative), a failure's zero. -/
-def Frame.Result.refundCounter : Frame.Result → Except EvmError Nat
-  | .success _ _ _ _ substate _ =>
-    (Int.toNat? substate.refund).toExcept
-      (EvmError.internal (.invariant (.text "refund counter is negative")))
-  | _ => .ok 0
 
-/-- What a top-level frame hands the transaction under rules without state gas. A call adds its
-authorization refund; a failed frame keeps no log, deletion or touch. -/
-def Frame.output (f : Frame) (authorizationRefund : Nat) (r : Frame.Result) :
-    Except EvmError (Jaune.State × MsgCallOutput) := do
-  let refund ← Frame.Result.refundCounter r
-  let (logs, accountsToDelete, touchedAccounts) := match r with
-    | .success _ _ _ _ substate _ =>
-      (substate.logs, substate.selfDestructs, substate.touchedAccounts)
-    | _ => ([], .emptyWithCapacity, .emptyWithCapacity)
-  .ok ⟨(f.worldAfter r).state, {
-    gasLeft := r.gasLeft, refundCounter := authorizationRefund + refund,
-    logs, accountsToDelete, error := r.error?, returnData := r.output, touchedAccounts }⟩
 
-/-- What a top-level frame hands the transaction under rules with state gas: the read sets and the
-explicit writes in every outcome, the state-gas meter, and no touched accounts. -/
-def Frame.outputAmsterdam (f : Frame) (r : Frame.Result) :
-    Except EvmError (Jaune.State × MsgCallOutput) := do
-  let refundCounter ← Frame.Result.refundCounter r
-  let (logs, accountsToDelete) := match r with
-    | .success _ _ _ _ substate _ => (substate.logs, substate.selfDestructs)
-    | _ => ([], .emptyWithCapacity)
-  let stateGasUsed :=
-    Int.ofNat f.message.stateGasGrant - Int.ofNat r.stateGas.left +
-      Int.ofNat r.stateGas.spilled + Int.ofNat r.stateGas.committedSpill
-  .ok ⟨(f.worldAfter r).state, {
-    accountReads := r.trail.accountReads
-    storageReads := r.trail.storageReads
-    storageWrites := (f.worldAfter r).storageWrites
-    gasLeft := r.gasLeft
-    refundCounter := refundCounter
-    logs := logs
-    accountsToDelete := accountsToDelete
-    error := r.error?
-    returnData := r.output
-    stateGasLeft := r.stateGas.left
-    stateGasUsed := stateGasUsed
-  }⟩
 
 end Jaune

@@ -5,25 +5,25 @@ namespace Jaune.Staging
 /-- The five phase certificates compose to the exact recorded body, including its final prefix. -/
 theorem BodyRoots.ran {benv txs ommers wds state output run}
     (h : BodyRoots benv txs ommers wds state output run) :
-    Staging.Body.run benv (.init benv.state) (Staging.Body.ops benv run.decoded ommers wds) =
+    Body.run benv (.init benv.state) (Body.ops benv run.decoded ommers wds) =
       .ok (run.records, run.finish.final) := by
   obtain ⟨_, pre, tx, withdrawals, requests, finish, _⟩ := h
   unfold PreRoots BodyPhase.Ran at pre
   unfold RequestRoots BodyPhase.Ran at requests
   unfold BodyPhase.Ran at tx withdrawals finish
-  rw [Staging.Body.ops, Body.postOps_phases, List.append_assoc]
-  simp only [Staging.Body.run_append, pre, tx, withdrawals, requests, finish, bind, Except.bind,
+  rw [Body.ops, Body.postOps_phases, List.append_assoc]
+  simp only [Body.run_append, pre, tx, withdrawals, requests, finish, bind, Except.bind,
     pure, Except.pure, BodyRun.records, List.append_assoc]
 
 theorem BodyRoots.applied {benv txs ommers wds state output run}
     (h : BodyRoots benv txs ommers wds state output run) :
-    Staging.applyBody benv txs ommers wds = .ok (state, output) := by
-  simp [Staging.applyBody, Staging.Body.importer, h.decoded, Staging.Body.fold_eq_run, h.ran, h.output_eq,
+    applyBody benv txs ommers wds = .ok (state, output) := by
+  simp [applyBody, Body.importer, h.decoded, Body.fold_eq_run, h.ran, h.output_eq,
     bind, Except.bind, Functor.map, Except.map]
 
 theorem bodyRoots_iff {benv txs ommers wds state output} :
     (∃ run, BodyRoots benv txs ommers wds state output run) ↔
-      Staging.applyBody benv txs ommers wds = .ok (state, output) :=
+      applyBody benv txs ommers wds = .ok (state, output) :=
   ⟨fun ⟨_, h⟩ => h.applied, exists_bodyRoots⟩
 
 theorem BodyPhase.Ran.unique {benv start ops a b}

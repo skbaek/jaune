@@ -32,24 +32,24 @@ open Jaune
 
 
 /-- The state-gas rules the message ran under: none before Amsterdam. -/
-def Staging.MessageRun.stateGasRules (run : Staging.MessageRun) : Option StateGasRules :=
+def TopLevelRun.stateGasRules (run : TopLevelRun) : Option StateGasRules :=
   run.entry.benv.stat.rules.stateGas
 
 /-- The machine a refusal with state gas reports: the halted machine with its state gas restored
 to the message's grant and its remaining gas forfeit. -/
-def Staging.MessageRun.refusalMachine (run : Staging.MessageRun) (halted : Devm) : Devm :=
+def TopLevelRun.refusalMachine (run : TopLevelRun) (halted : Devm) : Devm :=
   (halted.restoreStateGasToEntry run.entry.stateGasGrant).forfeitRemainingGas
 
 /-- The state after the message: the world after the frame, or the message's state for a
 refusal. -/
-def Staging.MessageRun.state (run : Staging.MessageRun) : State :=
+def TopLevelRun.state (run : TopLevelRun) : State :=
   match run.preparation, run.result with
   | .frame f _, some r => (f.worldAfter r).state
   | _, _ => run.entry.benv.state
 
 /-- The execution gas left: the frame's, or a refusal's (none without state gas, the refusal
 machine's with it). -/
-def Staging.MessageRun.gasLeft (run : Staging.MessageRun) : Nat :=
+def TopLevelRun.gasLeft (run : TopLevelRun) : Nat :=
   match run.preparation, run.result with
   | .frame _ _, some r => r.gasLeft
   | .frame _ _, none => 0
@@ -60,7 +60,7 @@ def Staging.MessageRun.gasLeft (run : Staging.MessageRun) : Nat :=
 
 /-- The refund counter: a successful frame's substate refund (an internal fault if negative), a
 failed frame's zero, plus without state gas the call's authorization refund; a refusal's zero. -/
-def Staging.MessageRun.refundCounter (run : Staging.MessageRun) : Except Fault Nat :=
+def TopLevelRun.refundCounter (run : TopLevelRun) : Except Fault Nat :=
   match run.preparation, run.result with
   | .frame _ authorizationRefund, some r =>
     let refund : Except Fault Nat := match r with
@@ -77,32 +77,32 @@ def Staging.MessageRun.refundCounter (run : Staging.MessageRun) : Except Fault N
   | .refused .., _ => .ok 0
 
 /-- The logs: a successful frame's. -/
-def Staging.MessageRun.logs (run : Staging.MessageRun) : List Log :=
+def TopLevelRun.logs (run : TopLevelRun) : List Log :=
   match run.preparation, run.result with
   | .frame _ _, some (.success _ _ _ _ substate _) => substate.logs
   | _, _ => []
 
 /-- The accounts to delete: a successful frame's self-destructs. -/
-def Staging.MessageRun.accountsToDelete (run : Staging.MessageRun) : AdrSet :=
+def TopLevelRun.accountsToDelete (run : TopLevelRun) : AdrSet :=
   match run.preparation, run.result with
   | .frame _ _, some (.success _ _ _ _ substate _) => substate.selfDestructs
   | _, _ => .emptyWithCapacity
 
 /-- The settled halt: the frame's, or a refusal's halt; none for a success. -/
-def Staging.MessageRun.error (run : Staging.MessageRun) : Option SettledHalt :=
+def TopLevelRun.error (run : TopLevelRun) : Option SettledHalt :=
   match run.preparation, run.result with
   | .frame _ _, some r => r.error?
   | .frame _ _, none => none
   | .refused reason _, _ => some (.halt reason)
 
 /-- The return data: the frame's output. -/
-def Staging.MessageRun.returnData (run : Staging.MessageRun) : Bytes :=
+def TopLevelRun.returnData (run : TopLevelRun) : Bytes :=
   match run.preparation, run.result with
   | .frame _ _, some r => r.output
   | _, _ => []
 
 /-- EIP-161: the accounts a successful frame touched, without state gas. -/
-def Staging.MessageRun.touchedAccounts (run : Staging.MessageRun) : AdrSet :=
+def TopLevelRun.touchedAccounts (run : TopLevelRun) : AdrSet :=
   match run.preparation, run.result with
   | .frame _ _, some (.success _ _ _ _ substate _) =>
     match run.stateGasRules with
@@ -111,7 +111,7 @@ def Staging.MessageRun.touchedAccounts (run : Staging.MessageRun) : AdrSet :=
   | _, _ => .emptyWithCapacity
 
 /-- The state-gas reservoir left, with state gas: the frame's meter, or the refusal machine's. -/
-def Staging.MessageRun.stateGasLeft (run : Staging.MessageRun) : Nat :=
+def TopLevelRun.stateGasLeft (run : TopLevelRun) : Nat :=
   match run.stateGasRules with
   | none => 0
   | some _ =>
@@ -122,7 +122,7 @@ def Staging.MessageRun.stateGasLeft (run : Staging.MessageRun) : Nat :=
 
 /-- The net state gas used, with state gas, by a frame: its grant less what it left, plus what
 spilled and the committed spill. -/
-def Staging.MessageRun.stateGasUsed (run : Staging.MessageRun) : Int :=
+def TopLevelRun.stateGasUsed (run : TopLevelRun) : Int :=
   match run.stateGasRules with
   | none => 0
   | some _ =>
@@ -133,7 +133,7 @@ def Staging.MessageRun.stateGasUsed (run : Staging.MessageRun) : Int :=
     | _, _ => 0
 
 /-- EIP-7928, with state gas: the accounts read, from the frame's trail or the refusal machine. -/
-def Staging.MessageRun.accountReads (run : Staging.MessageRun) : AdrSet :=
+def TopLevelRun.accountReads (run : TopLevelRun) : AdrSet :=
   match run.stateGasRules with
   | none => .emptyWithCapacity
   | some _ =>
@@ -144,7 +144,7 @@ def Staging.MessageRun.accountReads (run : Staging.MessageRun) : AdrSet :=
 
 /-- EIP-7928, with state gas: the storage slots read, from the frame's trail or the refusal
 machine. -/
-def Staging.MessageRun.storageReads (run : Staging.MessageRun) : KeySet :=
+def TopLevelRun.storageReads (run : TopLevelRun) : KeySet :=
   match run.stateGasRules with
   | none => .emptyWithCapacity
   | some _ =>
@@ -155,7 +155,7 @@ def Staging.MessageRun.storageReads (run : Staging.MessageRun) : KeySet :=
 
 /-- With state gas, the explicit storage writes that survive: the world's after the frame, or the
 message's for a refusal. -/
-def Staging.MessageRun.storageWrites (run : Staging.MessageRun) : KeySet :=
+def TopLevelRun.storageWrites (run : TopLevelRun) : KeySet :=
   match run.stateGasRules with
   | none => .emptyWithCapacity
   | some _ =>

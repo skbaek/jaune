@@ -314,30 +314,30 @@ frame over the message (`processMessageCall.create`, past the collision test), o
 over the authorized, delegation-resolved message (`processMessageCall.call`). With state gas: the
 frame over the prepared message and state, created exactly when the message has no target
 (`processTopLevelAmsterdam`, whose creation flag `processMessageCall` sets from the target). -/
-inductive processMessageCall.TopFrame (msg : Msg) : Frame → Prop
+inductive TopLevel.TopFrame (msg : Msg) : Frame → Prop
   | create (ht : msg.target = none) (hs : msg.benv.stat.rules.stateGas = none) :
-      processMessageCall.TopFrame msg (Frame.ofTop msg true)
+      TopLevel.TopFrame msg (Frame.ofTop msg true)
   | call (ht : msg.target ≠ none) (hs : msg.benv.stat.rules.stateGas = none) {q : Msg × Nat}
-      (ha : processMessageCall.authorize msg = .ok q) :
-      processMessageCall.TopFrame msg (Frame.ofTop (TopLevel.resolveCodeDelegation q.1) false)
+      (ha : TopLevel.applyAuthorizations msg = .ok q) :
+      TopLevel.TopFrame msg (Frame.ofTop (TopLevel.resolveCodeDelegation q.1) false)
   | amsterdam {state : StateGasRules} (hs : msg.benv.stat.rules.stateGas = some state)
       {p : Msg × Devm} (hp : prepareTopLevelAmsterdam state msg = .ok p) :
-      processMessageCall.TopFrame msg
+      TopLevel.TopFrame msg
         ⟨Message.ofTop p.1 msg.target.isNone, Frame.State.ofDevm p.2⟩
 
 /-- **Every top-level frame is kind-coherent.** For a message a transaction prepares, the top
 frame `processMessageCall` runs has kind `.create` exactly when it has no code address: the
 authorization step and Amsterdam's preparation keep the code address a creation lacks and a call
 carries. -/
-theorem processMessageCall.topFrame_kindCoherent {benv : Benv} {tenv : Tenv} {tx : Transaction}
+theorem TopLevel.topFrame_kindCoherent {benv : Benv} {tenv : Tenv} {tx : Transaction}
     {msg : Msg} (hm : prepareMessage benv tenv tx = .ok msg) {f : Frame}
-    (hf : processMessageCall.TopFrame msg f) : f.message.KindCoherent := by
+    (hf : TopLevel.TopFrame msg f) : f.message.KindCoherent := by
   have hca := prepareMessage_codeAddress_eq_none_iff hm
   cases hf with
   | create ht _ => exact prepareMessage_create_kindCoherent hm ht
   | call ht _ ha =>
     exact resolveCodeDelegation_call_kindCoherent
-      (processMessageCall.authorize_codeAddress ha (fun e => ht (hca.mp e)))
+      (TopLevel.applyAuthorizations_codeAddress ha (fun e => ht (hca.mp e)))
   | amsterdam _ hp =>
     obtain ⟨htarget, hcreate, hcall⟩ := prepareTopLevelAmsterdam_message hp
     refine (Message.ofTop_kindCoherent_iff _ _).mpr ?_
@@ -356,15 +356,15 @@ namespace Jaune
 This closes the gap left at W1 (u36). It is stated over the staged run, whose frame is the one
 `TopLevel.prepare` returns; its Amsterdam case is the public preparation itself. -/
 
-theorem Staging.TopLevel.prepare.amsterdam_topFrame {state : StateGasRules} {msg : Msg}
+theorem TopLevel.prepare.amsterdam_topFrame {state : StateGasRules} {msg : Msg}
     (hs : msg.benv.stat.rules.stateGas = some state) {f : Frame} {a : Nat}
-    (h : Staging.TopLevel.prepare.amsterdam state msg msg.target.isNone = .ok (.frame f a)) :
-    processMessageCall.TopFrame msg f := by
-  unfold Staging.TopLevel.prepare.amsterdam at h
+    (h : TopLevel.prepare.amsterdam state msg msg.target.isNone = .ok (.frame f a)) :
+    TopLevel.TopFrame msg f := by
+  unfold TopLevel.prepare.amsterdam at h
   split at h
   · cases h
   · rename_i devm hp
-    exact absurd hp (Staging.prepareTopLevelAmsterdam_error_ne_revert state msg devm)
+    exact absurd hp (prepareTopLevelAmsterdam_error_ne_revert state msg devm)
   · cases h
   · cases h
   · rename_i prepared devm hp
@@ -372,12 +372,12 @@ theorem Staging.TopLevel.prepare.amsterdam_topFrame {state : StateGasRules} {msg
     exact .amsterdam hs (p := (prepared, devm)) hp
 
 /-- **Every frame the top-level preparation returns is a `processMessageCall.TopFrame`.** -/
-theorem Staging.TopLevel.prepare_topFrame {msg : Msg} {f : Frame} {a : Nat}
-    (h : Staging.TopLevel.prepare msg = .ok (.frame f a)) : processMessageCall.TopFrame msg f := by
-  unfold Staging.TopLevel.prepare at h
+theorem TopLevel.prepare_topFrame {msg : Msg} {f : Frame} {a : Nat}
+    (h : TopLevel.prepare msg = .ok (.frame f a)) : TopLevel.TopFrame msg f := by
+  unfold TopLevel.prepare at h
   by_cases ht : msg.target.isNone
   · simp only [ht, ↓reduceIte] at h
-    unfold Staging.TopLevel.prepare.create at h
+    unfold TopLevel.prepare.create at h
     cases hs : msg.benv.stat.rules.stateGas with
     | none =>
       rw [hs] at h
@@ -390,9 +390,9 @@ theorem Staging.TopLevel.prepare_topFrame {msg : Msg} {f : Frame} {a : Nat}
       rw [hs] at h
       dsimp only at h
       rw [← ht] at h
-      exact Staging.TopLevel.prepare.amsterdam_topFrame hs h
+      exact TopLevel.prepare.amsterdam_topFrame hs h
   · simp only [ht, Bool.false_eq_true, ↓reduceIte] at h
-    unfold Staging.TopLevel.prepare.call at h
+    unfold TopLevel.prepare.call at h
     have ht' : msg.target ≠ none := fun e => ht (by simp [e])
     cases hs : msg.benv.stat.rules.stateGas with
     | none =>
@@ -408,14 +408,14 @@ theorem Staging.TopLevel.prepare_topFrame {msg : Msg} {f : Frame} {a : Nat}
       dsimp only at h
       have hf : msg.target.isNone = false := by cases hmt : msg.target <;> simp_all
       rw [← hf] at h
-      exact Staging.TopLevel.prepare.amsterdam_topFrame hs h
+      exact TopLevel.prepare.amsterdam_topFrame hs h
 
 /-- **Every frame a top-level message run runs is a `processMessageCall.TopFrame`.** This closes
 the gap left at W1 (u36): `processMessageCall` runs only frames the relation names. -/
-theorem Staging.Message.run_topFrame {msg : Msg} {run : Staging.MessageRun} (h : Staging.Message.run msg = .ok run)
+theorem TopLevel.run_topFrame {msg : Msg} {run : TopLevelRun} (h : TopLevel.run msg = .ok run)
     {f : Frame} {a : Nat} (hf : run.preparation = .frame f a) :
-    processMessageCall.TopFrame msg f := by
-  unfold Staging.Message.run at h
+    TopLevel.TopFrame msg f := by
+  unfold TopLevel.run at h
   obtain ⟨p, hp, h⟩ := Except.bind_eq_ok h
   have : p = .frame f a := by
     cases p with
@@ -428,6 +428,6 @@ theorem Staging.Message.run_topFrame {msg : Msg} {run : Staging.MessageRun} (h :
       · obtain ⟨r, -, h⟩ := Except.bind_eq_ok h
         cases h; exact hf
   subst this
-  exact Staging.TopLevel.prepare_topFrame hp
+  exact TopLevel.prepare_topFrame hp
 
 end Jaune
