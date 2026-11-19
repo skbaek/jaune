@@ -1154,13 +1154,13 @@ private def blockAccessListPipelineBalances (list : BlockAccessList) (address : 
   | none => false
 
 private def blockAccessListPipelineRequestNetApplyBody : Bool :=
-  match applyBody (balPipelineBenv blockAccessListPipelineToggleState) [] [] [] with
+  match Staging.applyBody (balPipelineBenv blockAccessListPipelineToggleState) [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineHelper).storage.get 0 == 0 && blockAccessListPipelineHelperNoNet bout.blockAccessList
   | .error _ => false
 
 private def blockAccessListPipelineRequestOneWriteApplyBody : Bool :=
-  match applyBody (balPipelineBenv blockAccessListPipelineOneCallState) [] [] [] with
+  match Staging.applyBody (balPipelineBenv blockAccessListPipelineOneCallState) [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineHelper).storage.get 0 == 1 && blockAccessListPipelineHelperOneWrite bout.blockAccessList
   | .error _ => false
@@ -1183,7 +1183,7 @@ private def blockAccessListPipelineForwardApplyBody (half : Bool) : Bool :=
   let forwarded := if half then amount / 2 else amount
   let wds : List Withdrawal :=
     [{ index := 0, validatorIndex := 0, address := blockAccessListPipelineWithdrawalRequestsAddress, amount := 2 }]
-  match applyBody (balPipelineBenv (blockAccessListPipelineForwardState half)) [] [] wds with
+  match Staging.applyBody (balPipelineBenv (blockAccessListPipelineForwardState half)) [] [] wds with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineWithdrawalRequestsAddress).balance == retained &&
       (state.get blockAccessListPipelineBeneficiary).balance == forwarded &&
