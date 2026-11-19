@@ -1,5 +1,5 @@
 import Jaune.MessageCall.TraceJson
-import Jaune.TraceTransaction
+import Jaune.Run.Trace
 import Jaune.Adapter.IO
 import Jaune.MessageCall.Top
 
@@ -165,7 +165,7 @@ def run (inputPath outputPath : String) : IO Unit := do
         let current ← state.get
         if current.started then throw (IO.userError "authorization refund arrived after frame entry")
         state.set { current with rootRefund := amount }
-      let result ← TraceTransaction.runTransaction
+      let result ← Staging.TraceTransaction.runTransaction
         (TraceJson.sink transactionCfg state trace frames) refund initial .init tx 0 runId
       let current ← state.get
       if current.started && !current.closed then throw (IO.userError "transaction frame did not close")
@@ -179,14 +179,14 @@ def run (inputPath outputPath : String) : IO Unit := do
         pure (identity ++ [("outcome", Json.str "rejected"), ("traceComplete", Json.bool false),
           ("error", Json.str error.render)])
       | .ok ⟨postState, bout⟩ =>
-        let output ← result.messageOutput.toIO "accepted transaction has no message output"
-        if output.returnData.length > cfg.maxDataBytes then
+        let run ← result.messageRun.toIO "accepted transaction has no message output"
+        if run.returnData.length > cfg.maxDataBytes then
           throw (IO.userError "trace: output exceeds maxDataBytes")
         writeRow cfg trace (Json.mkObj [
           ("stateRoot", Json.str (T8n.hexU256 postState.root)),
-          ("output", Json.str (T8n.hexBytes output.returnData)),
+          ("output", Json.str (T8n.hexBytes run.returnData)),
           ("gasUsed", Json.str (T8n.hexQuantity bout.cumulativeGasUsed)),
-          ("pass", Json.bool output.error.isNone)])
+          ("pass", Json.bool run.error.isNone)])
         pure (identity ++ [("outcome", Json.str "executed"), ("traceComplete", Json.bool true)])
   let final ← state.get
   let metadata := Json.mkObj ([("runId", .str runId), ("fork", .str forkName),
