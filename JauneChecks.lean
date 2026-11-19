@@ -11,6 +11,7 @@ import Jaune.Check.Blake2Spec
 import Jaune.Check.EC
 import Jaune.Check.Execution
 import Jaune.Check.Fork
+import Jaune.Check.CheckedPortAuditB
 import Jaune.Check.FrameBridgeAudit
 import Jaune.Check.Hash
 import Jaune.Check.KeccakSpec

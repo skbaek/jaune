@@ -123,6 +123,7 @@ import Jaune.MessageCall.CheckedPlainMemory
 import Jaune.MessageCall.FinalMessageMemory
 import Jaune.MessageCall.CheckedMessageMemory
 import Jaune.MessageCall.FinalMemoryAccounting
+import Jaune.MessageCall.CheckedMemoryAccounting
 import Jaune.MessageCall.FinalStepGasBound
 import Jaune.MessageCall.FinalPartsGas
 import Jaune.MessageCall.FinalTotality
@@ -131,7 +132,9 @@ import Jaune.MessageCall.CheckedDerivation
 import Jaune.MessageCall.FinalChronology
 import Jaune.MessageCall.CheckedChronology
 import Jaune.MessageCall.FinalAdequacy
+import Jaune.MessageCall.CheckedAdequacy
 import Jaune.MessageCall.FinalDerivationMemory
+import Jaune.MessageCall.CheckedDerivationMemory
 import Jaune.MessageCall.FinalSpawnFacts
 import Jaune.MessageCall.FinalResumeFacts
 import Jaune.MessageCall.FinalDerivOrder
@@ -164,8 +167,11 @@ import Jaune.Bridge.G2b.BodyResults
 import Jaune.FrameRun.Basic
 import Jaune.FrameRun.CheckedBasic
 import Jaune.FrameRun.Adequacy
+import Jaune.FrameRun.CheckedAdequacy
 import Jaune.FrameRun.Prefix
+import Jaune.FrameRun.CheckedPrefix
 import Jaune.FrameRun.Unique
+import Jaune.FrameRun.CheckedUnique
 import Jaune.FrameRun.Views
 import Jaune.FrameRun.CheckedViews
 import Jaune.FrameRun.Decompose
