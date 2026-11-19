@@ -273,193 +273,6 @@ theorem Frame.State.liftRead_keeps (rules : ForkRules)
     obtain ⟨-, h⟩ := Frame.State.applyReadTouch_keeps rules t (s.withMachine m)
     exact h
 
-/-- Unfold the frame-state helpers into structure literals, so both sides of a bridge meet on
-the machine. -/
-local macro "read_norm" : tactic => `(tactic| try dsimp only [Frame.State.chargeGas, Frame.State.push, Frame.State.pushItem, Frame.State.liftMachine,
-    Frame.State.withMachine, Frame.State.withSubstate, Frame.State.withTrail,
-    Frame.State.accessedAddresses, Frame.State.accessedStorageKeys, Frame.State.addAccessedAddress,
-    Frame.State.addAccessedStorageKey, Frame.State.recordAccountRead, Frame.State.recordStorageRead,
-    Frame.State.balance, Frame.State.account, Frame.State.state, Frame.State.code,
-    Frame.State.storageValue, Frame.State.transientValue, Frame.State.transientStorage,
-    Frame.State.memWrite, Frame.State.liftMachinePure, Frame.State.extCost, Frame.State.popToNat,
-    Frame.State.pop, Frame.State.liftMachineValue, Machine.pushItem] at *)
-
-/-- The charge and the push of a Read row against its `runCore` arm. -/
-local macro "read_tail " m:term:max cost:term:max : tactic => `(tactic| (
-  cases hc : Machine.chargeGas $cost $m with
-  | error e => rcases e with ⟨e, m'⟩; rfl
-  | ok m₂ =>
-    read_norm
-    by_cases hlen : m₂.stack.length < 1024 <;>
-      simp only [Machine.push, hlen, ↓reduceIte, bind, Except.bind] <;> rfl))
-
-/-- The charge and the write of `EXTCODECOPY` against its `runCore` arm. -/
-local macro "copy_tail " m:term:max cost:term:max : tactic => `(tactic| (
-  cases hc : Machine.chargeGas $cost $m with
-  | error e => rcases e with ⟨e, m'⟩; rfl
-  | ok m₂ => rfl))
-
-/-- The Read table's bridge: every Read row, lifted through `Frame.State.liftRead` over the
-frame's read view, equals `Checked.PlainOp.runCore`, for every `pc`, call context and frame state
-(hence every `Fork`), on both channels with their touches. -/
-theorem PlainOp.readRow?_runCore_eq {op : Jaune.PlainOp} {row : ReadRow}
-    (hrow : PlainOp.readRow? op = some row) (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftRead ctx.block.rules (row.step ctx.block.rules ctx s.readView) =
-      PlainOp.runCore pc ctx s op := by
-  cases op <;> simp only [PlainOp.readRow?, Option.some.injEq, reduceCtorEq] at hrow <;>
-    subst hrow <;> dsimp only [PlainOp.runCore]
-  case balance =>
-    simp only [Frame.State.liftRead, ReadRow.step, ReadTarget.pop, Frame.State.popToAddress,
-      Frame.State.liftMachineValue, bind, Except.bind, Bool.not_true, Bool.false_eq_true,
-      ↓reduceIte]
-    cases hp : s.machine.popToAddress with
-    | error e => rcases e with ⟨e, m'⟩; rfl
-    | ok p =>
-      obtain ⟨a, m₁⟩ := p
-      try dsimp only [ReadPrice.quote, ReadResult.finish, Frame.State.readView]
-      read_norm
-      cases hacc : ctx.block.rules.access with
-      | flat g =>
-        read_norm
-        read_tail m₁ g.balance
-      | eip2929 =>
-        read_norm
-        by_cases hw : a ∈ s.substate.accessedAddresses
-        · simp only [hw, ↓reduceIte]
-          read_tail m₁ Gas.warmStorageReadCost
-        · simp only [hw, ↓reduceIte]
-          read_tail m₁ ctx.block.rules.gas.coldAccountAccess
-  case extcodesize =>
-    simp only [Frame.State.liftRead, ReadRow.step, ReadTarget.pop, Frame.State.popToAddress,
-      Frame.State.liftMachineValue, bind, Except.bind, Bool.not_true, Bool.false_eq_true,
-      ↓reduceIte]
-    cases hp : s.machine.popToAddress with
-    | error e => rcases e with ⟨e, m'⟩; rfl
-    | ok p =>
-      obtain ⟨a, m₁⟩ := p
-      try dsimp only [ReadPrice.quote, ReadResult.finish, Frame.State.readView]
-      read_norm
-      cases hacc : ctx.block.rules.access with
-      | flat g =>
-        read_norm
-        read_tail m₁ (g.extCode + ctx.block.rules.gas.codeReadSurcharge)
-      | eip2929 =>
-        read_norm
-        by_cases hw : a ∈ s.substate.accessedAddresses
-        · simp only [hw, ↓reduceIte]
-          read_tail m₁ (Gas.warmStorageReadCost + ctx.block.rules.gas.codeReadSurcharge)
-        · simp only [hw, ↓reduceIte]
-          read_tail m₁ (ctx.block.rules.gas.coldAccountAccess + ctx.block.rules.gas.codeReadSurcharge)
-  case extcodehash =>
-    by_cases hav : ctx.block.rules.opcodes.extCodeHash
-    · simp only [Frame.State.liftRead, ReadRow.step, hav, ↓reduceIte, Bool.not_true,
-        Bool.false_eq_true]
-      try simp only [ReadTarget.pop, Frame.State.popToAddress, Frame.State.liftMachineValue, bind,
-        Except.bind]
-      cases hp : s.machine.popToAddress with
-      | error e => rcases e with ⟨e, m'⟩; rfl
-      | ok p =>
-        obtain ⟨a, m₁⟩ := p
-        try dsimp only [ReadPrice.quote, ReadResult.finish, Frame.State.readView]
-        read_norm
-        cases hacc : ctx.block.rules.access with
-        | flat g =>
-          read_norm
-          read_tail m₁ (g.extCodeHash)
-        | eip2929 =>
-          read_norm
-          by_cases hw : a ∈ s.substate.accessedAddresses
-          · simp only [hw, ↓reduceIte]
-            read_tail m₁ (Gas.warmStorageReadCost)
-          · simp only [hw, ↓reduceIte]
-            read_tail m₁ (ctx.block.rules.gas.coldAccountAccess)
-    · simp only [hav, Bool.false_eq_true, ↓reduceIte, Bool.not_false, Frame.State.liftRead,
-        ReadRow.step]
-      try rfl
-  case selfbalance =>
-    by_cases hav : ctx.block.rules.opcodes.selfBalance
-    · simp only [Frame.State.liftRead, ReadRow.step, hav, ↓reduceIte, Bool.not_true,
-        Bool.false_eq_true, ReadTarget.pop, ReadPrice.quote, ReadResult.finish, Frame.State.readView]
-      read_norm
-      read_tail s.machine Gas.low
-    · simp only [hav, Bool.false_eq_true, ↓reduceIte, Bool.not_false, Frame.State.liftRead,
-        ReadRow.step]
-      try rfl
-  case sload =>
-    simp only [Frame.State.liftRead, ReadRow.step, ReadTarget.pop, bind, Except.bind,
-      Bool.not_true, Bool.false_eq_true, ↓reduceIte]
-    read_norm
-    cases hp : s.machine.pop with
-    | error e => rcases e with ⟨e, m'⟩; rfl
-    | ok p =>
-      obtain ⟨k, m₁⟩ := p
-      try dsimp only [ReadPrice.quote, ReadResult.finish, Frame.State.readView]
-      read_norm
-      cases hacc : ctx.block.rules.access with
-      | flat g =>
-        read_norm
-        read_tail m₁ g.sload
-      | eip2929 =>
-        read_norm
-        by_cases hw : ((ctx.recipient, k) : Address × U256) ∈ s.substate.accessedStorageKeys
-        · simp only [hw, ↓reduceIte]
-          read_tail m₁ Gas.warmStorageReadCost
-        · simp only [hw, ↓reduceIte]
-          read_tail m₁ Gas.coldSloadCost
-  case tload =>
-    by_cases hav : ctx.block.rules.opcodes.transient
-    · simp only [Frame.State.liftRead, ReadRow.step, hav, ↓reduceIte, Bool.not_true,
-        Bool.false_eq_true, ReadTarget.pop, bind, Except.bind]
-      read_norm
-      cases hp : s.machine.pop with
-      | error e => rcases e with ⟨e, m'⟩; rfl
-      | ok p =>
-        obtain ⟨k, m₁⟩ := p
-        simp only [ReadPrice.quote, ReadResult.finish, Frame.State.readView]
-        read_tail m₁ Gas.warmStorageReadCost
-    · simp only [hav, Bool.false_eq_true, ↓reduceIte, Bool.not_false, Frame.State.liftRead,
-        ReadRow.step]
-      try rfl
-  case extcodecopy =>
-    simp only [Frame.State.liftRead, ReadRow.step, ReadTarget.pop, Frame.State.popToAddress,
-      Frame.State.liftMachineValue, bind, Except.bind, Bool.not_true, Bool.false_eq_true,
-      ↓reduceIte]
-    cases hp : s.machine.popToAddress with
-    | error e => rcases e with ⟨e, m'⟩; rfl
-    | ok p =>
-      obtain ⟨a, m₁⟩ := p
-      try dsimp only [ReadPrice.quote, ReadResult.finish, Frame.State.readView]
-      read_norm
-      cases h1 : m₁.popToNat with
-      | error e => rcases e with ⟨e, m'⟩; rfl
-      | ok p =>
-        obtain ⟨d, m₂⟩ := p
-        read_norm
-        cases h2 : m₂.popToNat with
-        | error e => rcases e with ⟨e, m'⟩; rfl
-        | ok p =>
-          obtain ⟨o, m₃⟩ := p
-          read_norm
-          cases h3 : m₃.popToNat with
-          | error e => rcases e with ⟨e, m'⟩; rfl
-          | ok p =>
-            obtain ⟨n, m₄⟩ := p
-            read_norm
-            cases hacc : ctx.block.rules.access with
-            | flat g =>
-              read_norm
-              copy_tail m₄ (g.extCode + ctx.block.rules.gas.codeReadSurcharge + Gas.copy * ceilDiv n 32 +
-                m₄.extCost [(d, n)])
-            | eip2929 =>
-              read_norm
-              by_cases hw : a ∈ s.substate.accessedAddresses
-              · simp only [hw, ↓reduceIte]
-                copy_tail m₄ (Gas.warmStorageReadCost + ctx.block.rules.gas.codeReadSurcharge +
-                  Gas.copy * ceilDiv n 32 + m₄.extCost [(d, n)])
-              · simp only [hw, ↓reduceIte]
-                copy_tail m₄ (ctx.block.rules.gas.coldAccountAccess +
-                  ctx.block.rules.gas.codeReadSurcharge + Gas.copy * ceilDiv n 32 + m₄.extCost [(d, n)])
-
 /-! ### The table -/
 
 /-- The seven Read opcodes. -/
@@ -472,12 +285,12 @@ theorem PlainOp.readList_nodup : PlainOp.readList.Nodup := by decide
 
 theorem PlainOp.readRow?_isSome_iff (op : Jaune.PlainOp) :
     (PlainOp.readRow? op).isSome = true ↔ op ∈ PlainOp.readList := by
-  cases op <;> simp [PlainOp.readRow?, PlainOp.readList]
+  cases op <;> simp [PlainOp.readRow?, PlainOp.family, PlainOp.readList]
 
 /-- Only `TLOAD` reads transient storage, and it neither warms nor records. -/
 theorem PlainOp.readRow?_transient {op : Jaune.PlainOp} {row : ReadRow}
     (h : PlainOp.readRow? op = some row) (ht : row.target = .transient) : op = .tload := by
-  cases op <;> simp only [PlainOp.readRow?, Option.some.injEq, reduceCtorEq] at h <;> subst h <;>
+  cases op <;> simp only [PlainOp.readRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at h <;> subst h <;>
     first | rfl | cases ht
 
 /-- The rule fields a Read row reads: its availability flag, the access schedule, the gas
@@ -489,11 +302,18 @@ def PlainOp.readRuleReads (op : Jaune.PlainOp) (rules : ForkRules) :
   | some row =>
     (row.available rules.opcodes, rules.access, rules.gas, rules.blockAccessListRules.isSome)
 
+theorem PlainOp.readRow?_eq_some {op : Jaune.PlainOp} {row : ReadRow} :
+    PlainOp.readRow? op = some row ↔ PlainOp.family op = .read row := by
+  unfold PlainOp.readRow?
+  cases PlainOp.family op <;> simp
+
+/-- **Table lemma (Read):** every Read row, lifted through `Frame.State.liftRead` over the frame's
+read view, is `PlainOp.run`, on both channels with their touches. -/
 theorem PlainOp.readRow?_run_eq {op : Jaune.PlainOp} {row : ReadRow}
     (hrow : PlainOp.readRow? op = some row) (r : Frame.Running) :
     r.state.liftRead r.context.block.rules
-        (row.step r.context.block.rules r.context r.state.readView) = PlainOp.run r op :=
-  PlainOp.readRow?_runCore_eq hrow r.pc r.context r.state
+        (row.step r.context.block.rules r.context r.state.readView) = PlainOp.run r op := by
+  simp only [PlainOp.run, PlainOp.runCore, PlainOp.readRow?_eq_some.1 hrow, Family.run]
 
 theorem PlainOp.readRow?_run_fork_eq (f : Fork) {op : Jaune.PlainOp} {row : ReadRow}
     (hrow : PlainOp.readRow? op = some row) (r : Frame.Running)
@@ -534,7 +354,7 @@ theorem PlainOp.read_run_congr_fork {op : Jaune.PlainOp} (hread : (PlainOp.readR
     rw [← PlainOp.readRow?_run_eq hrow, ← PlainOp.readRow?_run_eq hrow]
     simp only [PlainOp.readRuleReads, hrow, Prod.mk.injEq] at h
     obtain ⟨h1, h2, h3, h4⟩ := h
-    cases op <;> simp only [PlainOp.readRow?, Option.some.injEq, reduceCtorEq] at hrow <;>
+    cases op <;> simp only [PlainOp.readRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at hrow <;>
       subst hrow
     all_goals
       simp only [Frame.State.liftRead, ReadRow.step, ReadPrice.quote, BenvStat.rules,

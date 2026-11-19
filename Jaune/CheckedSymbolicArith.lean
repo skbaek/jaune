@@ -1,4 +1,5 @@
 import Jaune.CheckedSymbolicPush
+import Jaune.Instructions.WordFacts
 
 /-!
 # Symbolic arithmetic rules over the checked interpreter (goal `jaune-shape-and-names-v1`, G2b, F1f)
@@ -50,7 +51,11 @@ def popped (rest : List U256) (pre : Frame.State) : Frame.State :=
 theorem step_eq (r : Frame.Running) (op : Op) :
     NextOp.step r (.plain op.rinst) =
       Step.ofHalt (r.pc + 1) (r.state.applyBinary op.eval op.cost) := by
-  cases op <;> rfl
+  -- The table gives each a binary Word row; the Word family's step on a binary row is
+  -- `applyBinary` (`WordRow.binary_step`).
+  cases op <;>
+    exact congrArg (Step.ofHalt (r.pc + 1))
+      (Frame.State.liftMachine_congr r.state (WordRow.binary_step _ _ _ _ _))
 
 /-- Success pops `x` (top) and `y`, pushes `op.eval x y`, and charges `op.cost`. -/
 theorem step_success (r : Frame.Running) (op : Op) (x y : U256) (rest : List U256)

@@ -35,11 +35,11 @@ def post (bytes : Bytes) (pre : Frame.State) : Frame.State :=
       stack := bytes.toU256 :: pre.machine.stack
       gasLeft := pre.machine.gasLeft - cost bytes } }
 
-private theorem pushGate_false (r : Frame.Running) (bytes : Bytes)
+private theorem pushAvail (r : Frame.Running) (bytes : Bytes)
     (hgate : bytes ≠ [] ∨ r.context.block.rules.opcodes.push0) :
-    (decide (bytes = []) && !r.context.block.rules.opcodes.push0) = false := by
+    (!bytes.isEmpty || r.context.block.rules.opcodes.push0) = true := by
   rcases hgate with hne | hon
-  · simp [hne]
+  · simp [List.isEmpty_iff, hne]
   · simp [hon]
 
 /-- Success charges the selected PUSH cost and prepends the operand word. -/
@@ -49,8 +49,10 @@ theorem step_success (r : Frame.Running) (bytes : Bytes) (width : bytes.length �
     (hgate : bytes ≠ [] ∨ r.context.block.rules.opcodes.push0) :
     NextOp.step r (.push bytes width) = .next (r.pc + bytes.length + 1) (post bytes r.state) := by
   dsimp [cost] at gas
-  simp only [NextOp.step, pushGate_false r bytes hgate, Bool.false_eq_true, ite_false]
-  simp [Frame.State.chargeGas, Frame.State.push, Frame.State.liftMachine, Machine.chargeGas,
+  simp only [NextOp.step, Family.run]
+  unfold WordRow.step
+  simp only [NextOp.pushRow, pushAvail r bytes hgate, ↓reduceIte, Machine.popWords]
+  simp [List.isEmpty_iff, pure, Except.pure, Frame.State.chargeGas, Frame.State.push, Frame.State.liftMachine, Machine.chargeGas,
     Machine.push, safeSub, gas, room, bind, Except.bind, Step.ofHalt, post, cost, NextOp.size,
     Frame.State.withMachine, Nat.add_assoc]
 
@@ -60,8 +62,10 @@ theorem step_outOfGas (r : Frame.Running) (bytes : Bytes) (width : bytes.length 
     (hgate : bytes ≠ [] ∨ r.context.block.rules.opcodes.push0) :
     NextOp.step r (.push bytes width) = .exit (.halted (.outOfGas .none) r.state) := by
   dsimp [cost] at gas
-  simp only [NextOp.step, pushGate_false r bytes hgate, Bool.false_eq_true, ite_false]
-  simp [Frame.State.chargeGas, Frame.State.liftMachine, Machine.chargeGas, safeSub,
+  simp only [NextOp.step, Family.run]
+  unfold WordRow.step
+  simp only [NextOp.pushRow, pushAvail r bytes hgate, ↓reduceIte, Machine.popWords]
+  simp [List.isEmpty_iff, pure, Except.pure, Frame.State.chargeGas, Frame.State.liftMachine, Machine.chargeGas, safeSub,
     Nat.not_le_of_lt gas, bind, Except.bind, Step.ofHalt, Frame.State.withMachine]
 
 /-- With gas available, stack overflow retains the gas charge in the halted state. -/
@@ -72,8 +76,10 @@ theorem step_stackOverflow (r : Frame.Running) (bytes : Bytes) (width : bytes.le
     NextOp.step r (.push bytes width) =
       .exit (.halted (.stackOverflow .none) (afterCharge bytes r.state)) := by
   dsimp [cost] at gas
-  simp only [NextOp.step, pushGate_false r bytes hgate, Bool.false_eq_true, ite_false]
-  simp [Frame.State.chargeGas, Frame.State.push, Frame.State.liftMachine, Machine.chargeGas,
+  simp only [NextOp.step, Family.run]
+  unfold WordRow.step
+  simp only [NextOp.pushRow, pushAvail r bytes hgate, ↓reduceIte, Machine.popWords]
+  simp [List.isEmpty_iff, pure, Except.pure, Frame.State.chargeGas, Frame.State.push, Frame.State.liftMachine, Machine.chargeGas,
     Machine.push, safeSub, gas, Nat.not_lt_of_ge full, bind, Except.bind, Step.ofHalt, afterCharge,
     cost, Frame.State.withMachine]
 

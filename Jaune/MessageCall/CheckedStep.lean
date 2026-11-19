@@ -32,61 +32,19 @@ def MessageOp.Outcome.toStep (pc : Nat) : MessageOp.Outcome → Step
   | .done r => Step.ofHalt pc r
   | .spawn child pending => .spawn child pending pc
 
-/-- The operations that go on to the next instruction. -/
+/-- The operations that go on to the next instruction. A push and EIP-8024's `DUPN`, `SWAPN` and
+`EXCHANGE` run their family's step on their row (`NextOp.family?`), a plain instruction its
+table row (`PlainOp.run`). A message operation opens a frame, which S4 leaves out: it keeps its
+explicit equations (`MessageOp.step`). -/
 def NextOp.step (r : Frame.Running) (n : NextOp) : Step :=
   let pc := r.pc + n.size
-  let rules := r.context.block.rules
   match n with
-  -- S8 (EIP-3855): `PUSH0` is the empty push; without the fork the byte is an undefined
-  -- instruction whatever the stack and gas hold.
-  | .push xs _ =>
-    if xs = [] && !rules.opcodes.push0 then
-      Step.ofHalt pc (.error (.invalidOpcode .none, r.state))
-    else
-      let cost := if xs = [] then Gas.base else Gas.veryLow
-      Step.ofHalt pc do
-        let s ← r.state.chargeGas cost
-        s.push xs.toU256
+  | .push xs _ => Step.ofHalt pc ((Family.word (NextOp.pushRow xs)).run r)
   | .plain op => Step.ofHalt pc (PlainOp.run r op)
   | .message x => (MessageOp.step r.context r.state x).toStep pc
-  -- EIP-8024: the availability check first, then the charge before the immediate is decoded,
-  -- then the decode (a forbidden immediate is an invalid instruction), then the stack.
-  | .dupn imm =>
-    Step.ofHalt pc <| do
-      if rules.opcodes.stackAccess then
-        let s ← r.state.chargeGas Gas.veryLow
-        match decodeSingle imm with
-        | none => .error (.invalidOpcode .none, s)
-        | some n =>
-          match s.stack[n - 1]? with
-          | none => .error (.stackUnderflow .none, s)
-          | some word => s.push word
-      else
-        .error (.invalidOpcode .none, r.state)
-  | .swapn imm =>
-    Step.ofHalt pc <| do
-      if rules.opcodes.stackAccess then
-        let s ← r.state.chargeGas Gas.veryLow
-        match decodeSingle imm with
-        | none => .error (.invalidOpcode .none, s)
-        | some n =>
-          match List.swap s.stack (n - 1) with
-          | none => .error (.stackUnderflow .none, s)
-          | some stack => .ok (s.withStack stack)
-      else
-        .error (.invalidOpcode .none, r.state)
-  | .exchange imm =>
-    Step.ofHalt pc <| do
-      if rules.opcodes.stackAccess then
-        let s ← r.state.chargeGas Gas.veryLow
-        match decodePair imm with
-        | none => .error (.invalidOpcode .none, s)
-        | some (n, m) =>
-          match List.exchange s.stack n m with
-          | none => .error (.stackUnderflow .none, s)
-          | some stack => .ok (s.withStack stack)
-      else
-        .error (.invalidOpcode .none, r.state)
+  | .dupn imm => Step.ofHalt pc ((Family.shuffle (NextOp.dupnRow imm)).run r)
+  | .swapn imm => Step.ofHalt pc ((Family.shuffle (NextOp.swapnRow imm)).run r)
+  | .exchange imm => Step.ofHalt pc ((Family.shuffle (NextOp.exchangeRow imm)).run r)
 
 /-- One step of a running frame: decode the operation at the program counter and run it. An
 undecodable byte is an invalid instruction; only a halt can fault. -/

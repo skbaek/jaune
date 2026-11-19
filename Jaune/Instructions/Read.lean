@@ -177,44 +177,4 @@ def Frame.State.liftRead (rules : ForkRules)
   | .error (e, m, t) => .error (e, (s.withMachine m).applyReadTouch rules t)
   | .ok (m, t) => .ok ((s.withMachine m).applyReadTouch rules t)
 
-/-- The Read table. -/
-def PlainOp.readRow? : Jaune.PlainOp → Option ReadRow
-  | .balance => some {
-      target := .account,
-      price := .account (fun _ => Gas.warmStorageReadCost) (fun r => r.gas.coldAccountAccess)
-        (fun _ g => g.balance),
-      result := .push fun _ w a => (Jaune.State.get w.state a).balance }
-  | .extcodesize => some {
-      target := .account,
-      price := .account (fun r => Gas.warmStorageReadCost + r.gas.codeReadSurcharge)
-        (fun r => r.gas.coldAccountAccess + r.gas.codeReadSurcharge)
-        (fun r g => g.extCode + r.gas.codeReadSurcharge),
-      result := .push fun _ w a => (Jaune.State.get w.state a).code.size.toU256 }
-  | .extcodecopy => some {
-      target := .account,
-      price := .account (fun r => Gas.warmStorageReadCost + r.gas.codeReadSurcharge)
-        (fun r => r.gas.coldAccountAccess + r.gas.codeReadSurcharge)
-        (fun r g => g.extCode + r.gas.codeReadSurcharge),
-      result := .copyCode Gas.copy }
-  | .extcodehash => some {
-      available := OpcodeRules.extCodeHash, target := .account,
-      price := .account (fun _ => Gas.warmStorageReadCost) (fun r => r.gas.coldAccountAccess)
-        (fun _ g => g.extCodeHash),
-      result := .push fun _ w a =>
-        let account := Jaune.State.get w.state a
-        if account.isEmpty then 0 else ByteArray.keccak 0 account.code.size account.code }
-  | .selfbalance => some {
-      available := OpcodeRules.selfBalance, target := .recipient, price := .fixed Gas.low,
-      result := .push fun ctx w _ => (Jaune.State.get w.state ctx.recipient).balance }
-  | .sload => some {
-      target := .slot,
-      price := .slot (fun _ => Gas.warmStorageReadCost) (fun _ => Gas.coldSloadCost)
-        (fun _ g => g.sload),
-      result := .push fun ctx w k => (Jaune.State.get w.state ctx.recipient).storage.get k }
-  | .tload => some {
-      available := OpcodeRules.transient, target := .transient,
-      price := .fixed Gas.warmStorageReadCost,
-      result := .push fun ctx w k => (w.transientStorage.getD ctx.recipient .empty).get k }
-  | _ => none
-
 end Jaune.Checked

@@ -58,6 +58,13 @@ theorem mono {P' : α → Prop} {x : Except (ε × Machine) α} (hx : MWalk H P 
   | error e => exact hx
   | ok a => exact h a hx
 
+/-- A walk read at a known outcome: the halt's machine satisfies `H`, the value `P`. -/
+theorem cases {x : Except (ε × Machine) α} (h : MWalk H P x) :
+    (∀ e m, x = .error (e, m) → H m) ∧ (∀ a, x = .ok a → P a) := by
+  constructor
+  · intro e m he; subst he; exact h
+  · intro a ha; subst ha; exact h
+
 end MWalk
 
 namespace Walk

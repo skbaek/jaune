@@ -9,10 +9,6 @@ namespace Jaune.Checked
 
 open Jaune
 
-private theorem liftMachine_congr {ε : Type} {f g : Machine → Except (ε × Machine) Machine}
-    (s : Frame.State) (h : f s.machine = g s.machine) : s.liftMachine f = s.liftMachine g := by
-  unfold Frame.State.liftMachine
-  rw [h]
 
 /-! ### Machine inversions shared by the Memory and Read laws -/
 
@@ -321,12 +317,12 @@ theorem PlainOp.memoryList_nodup : PlainOp.memoryList.Nodup := by decide
 
 theorem PlainOp.memoryRow?_isSome_iff (op : Jaune.PlainOp) :
     (PlainOp.memoryRow? op).isSome = true ↔ op ∈ PlainOp.memoryList := by
-  cases op <;> simp [PlainOp.memoryRow?, PlainOp.memoryList]
+  cases op <;> simp [PlainOp.memoryRow?, PlainOp.family, PlainOp.memoryList]
 
 /-- Every Memory row's base price is positive, so every successful step lowers the gas left. -/
 theorem PlainOp.memoryRow?_base_pos {op : Jaune.PlainOp} {row : MemoryRow}
     (h : PlainOp.memoryRow? op = some row) (args : Words row.arity) : 0 < row.base args := by
-  cases op <;> simp only [PlainOp.memoryRow?, Option.some.injEq, reduceCtorEq] at h <;> subst h
+  cases op <;> simp only [PlainOp.memoryRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at h <;> subst h
   all_goals
     obtain ⟨_, _, _⟩ := args
     dsimp only
@@ -338,7 +334,7 @@ theorem PlainOp.memoryRow?_apply_isSome {op : Jaune.PlainOp} {row : MemoryRow}
     (h : PlainOp.memoryRow? op = some row) (hne : op ≠ .returndatacopy) (calldata : Bytes)
     (code : ByteArray) (returnData : Bytes) (args : Words row.arity) (mem : Memory) :
     (row.effect.apply calldata code returnData args mem).isSome = true := by
-  cases op <;> simp only [PlainOp.memoryRow?, Option.some.injEq, reduceCtorEq] at h
+  cases op <;> simp only [PlainOp.memoryRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at h
   case returndatacopy => exact absurd rfl hne
   all_goals
     subst h
@@ -351,162 +347,17 @@ def PlainOp.memoryRuleReads (op : Jaune.PlainOp) (rules : ForkRules) : Bool :=
   | none => false
   | some row => row.available rules.opcodes
 
-/-- The Memory table's bridge: every Memory row, lifted through `Frame.State.liftMachine`,
-equals `Checked.PlainOp.runCore`, for every `pc`, call context and frame state (hence every
-`Fork`). -/
-theorem PlainOp.memoryRow?_runCore_eq {op : Jaune.PlainOp} {row : MemoryRow}
-    (hrow : PlainOp.memoryRow? op = some row) (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftMachine (row.step ctx.block.rules.opcodes ctx) = PlainOp.runCore pc ctx s op := by
-  cases op <;> simp only [PlainOp.memoryRow?, Option.some.injEq, reduceCtorEq] at hrow <;>
-    subst hrow <;> dsimp only [PlainOp.runCore] <;> refine liftMachine_congr s ?_
-  case mload =>
-    simp only [MemoryRow.step, Machine.popWords, Machine.popToNat, bind, Except.bind, pure,
-      Except.pure, ↓reduceIte]
-    cases hp : s.machine.pop with
-    | error e => rfl
-    | ok p =>
-      obtain ⟨x, m₁⟩ := p
-      dsimp only [MemoryEffect.ranges, MemoryEffect.apply]
-      cases hc : m₁.chargeGas (Gas.veryLow + m₁.extCost [(x.toNat, 32)]) with
-      | error e => rfl
-      | ok m₂ => rfl
-  case mstore =>
-    simp only [MemoryRow.step, Machine.popWords, Machine.popToNat, bind, Except.bind, pure,
-      Except.pure, ↓reduceIte]
-    cases hp : s.machine.pop with
-    | error e => rfl
-    | ok p =>
-      obtain ⟨x, m₁⟩ := p
-      dsimp only
-      cases hq : m₁.pop with
-      | error e => rfl
-      | ok q =>
-        obtain ⟨y, m₂⟩ := q
-        dsimp only [MemoryEffect.ranges, MemoryEffect.apply]
-        cases hc : m₂.chargeGas (Gas.veryLow + m₂.extCost [(x.toNat, 32)]) with
-        | error e => rfl
-        | ok m₃ => rfl
-  case mstore8 =>
-    simp only [MemoryRow.step, Machine.popWords, Machine.popToNat, bind, Except.bind, pure,
-      Except.pure, ↓reduceIte]
-    cases hp : s.machine.pop with
-    | error e => rfl
-    | ok p =>
-      obtain ⟨x, m₁⟩ := p
-      dsimp only
-      cases hq : m₁.pop with
-      | error e => rfl
-      | ok q =>
-        obtain ⟨y, m₂⟩ := q
-        dsimp only [MemoryEffect.ranges, MemoryEffect.apply]
-        cases hc : m₂.chargeGas (Gas.veryLow + m₂.extCost [(x.toNat, 1)]) with
-        | error e => rfl
-        | ok m₃ => rfl
-  case keccak256 =>
-    simp only [MemoryRow.step, Machine.popWords, Machine.popToNat, bind, Except.bind, pure,
-      Except.pure, ↓reduceIte]
-    cases hp : s.machine.pop with
-    | error e => rfl
-    | ok p =>
-      obtain ⟨x, m₁⟩ := p
-      dsimp only
-      cases hq : m₁.pop with
-      | error e => rfl
-      | ok q =>
-        obtain ⟨y, m₂⟩ := q
-        dsimp only [MemoryEffect.ranges, MemoryEffect.apply]
-  case calldatacopy =>
-    simp only [MemoryRow.step, Machine.popWords, Machine.popToNat, bind, Except.bind, pure,
-      Except.pure, ↓reduceIte]
-    cases hp : s.machine.pop with
-    | error e => rfl
-    | ok p =>
-      obtain ⟨x, m₁⟩ := p
-      dsimp only
-      cases hq : m₁.pop with
-      | error e => rfl
-      | ok q =>
-        obtain ⟨y, m₂⟩ := q
-        dsimp only
-        cases hr : m₂.pop with
-        | error e => rfl
-        | ok r =>
-          obtain ⟨z, m₃⟩ := r
-          dsimp only [MemoryEffect.ranges, MemoryEffect.apply]
-          cases hc : m₃.chargeGas (Gas.veryLow + Gas.copy * ceilDiv z.toNat 32 + m₃.extCost [(x.toNat, z.toNat)]) with
-          | error e => rfl
-          | ok m₄ => rfl
-  case codecopy =>
-    simp only [MemoryRow.step, Machine.popWords, Machine.popToNat, bind, Except.bind, pure,
-      Except.pure, ↓reduceIte]
-    cases hp : s.machine.pop with
-    | error e => rfl
-    | ok p =>
-      obtain ⟨x, m₁⟩ := p
-      dsimp only
-      cases hq : m₁.pop with
-      | error e => rfl
-      | ok q =>
-        obtain ⟨y, m₂⟩ := q
-        dsimp only
-        cases hr : m₂.pop with
-        | error e => rfl
-        | ok r =>
-          obtain ⟨z, m₃⟩ := r
-          dsimp only [MemoryEffect.ranges, MemoryEffect.apply]
-          cases hc : m₃.chargeGas (Gas.veryLow + Gas.copy * ceilDiv z.toNat 32 + m₃.extCost [(x.toNat, z.toNat)]) with
-          | error e => rfl
-          | ok m₄ => rfl
-  case returndatacopy =>
-    simp only [MemoryRow.step, Machine.popWords, Machine.popToNat, bind, Except.bind, pure,
-      Except.pure, ↓reduceIte]
-    cases hp : s.machine.pop with
-    | error e => rfl
-    | ok p =>
-      obtain ⟨x, m₁⟩ := p
-      dsimp only
-      cases hq : m₁.pop with
-      | error e => rfl
-      | ok q =>
-        obtain ⟨y, m₂⟩ := q
-        dsimp only
-        cases hr : m₂.pop with
-        | error e => rfl
-        | ok r =>
-          obtain ⟨z, m₃⟩ := r
-          dsimp only [MemoryEffect.ranges, MemoryEffect.apply]
-          cases hc : m₃.chargeGas (Gas.veryLow + Gas.returnDataCopy * ceilDiv z.toNat 32 + m₃.extCost [(x.toNat, z.toNat)]) with
-          | error e => rfl
-          | ok m₄ => by_cases hb : m₄.returnData.length < y.toNat + z.toNat <;> simp [hb, throw, throwThe, MonadExceptOf.throw, Machine.memWrite]
-  case mcopy =>
-    by_cases ha : ctx.block.rules.opcodes.mcopy
-    · simp only [ha, MemoryRow.step, Machine.popWords, Machine.popToNat, bind, Except.bind, pure,
-        Except.pure, ↓reduceIte]
-      cases hp : s.machine.pop with
-      | error e => rfl
-      | ok p =>
-        obtain ⟨x, m₁⟩ := p
-        dsimp only
-        cases hq : m₁.pop with
-        | error e => rfl
-        | ok q =>
-          obtain ⟨y, m₂⟩ := q
-          dsimp only
-          cases hr : m₂.pop with
-          | error e => rfl
-          | ok r =>
-            obtain ⟨z, m₃⟩ := r
-            dsimp only [MemoryEffect.ranges, MemoryEffect.apply]
-            cases hc : m₃.chargeGas (Gas.veryLow + Gas.copy * ceilDiv z.toNat 32 + m₃.extCost [(y.toNat, z.toNat), (x.toNat, z.toNat)]) with
-            | error e => rfl
-            | ok m₄ => rfl
-    · simp only [ha, Bool.false_eq_true, ↓reduceIte, MemoryRow.step, PlainOp.unavailable]
-      simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+theorem PlainOp.memoryRow?_eq_some {op : Jaune.PlainOp} {row : MemoryRow} :
+    PlainOp.memoryRow? op = some row ↔ PlainOp.family op = .memory row := by
+  unfold PlainOp.memoryRow?
+  cases PlainOp.family op <;> simp
 
+/-- **Table lemma (Memory):** every Memory row, lifted through `Frame.State.liftMachine`, is
+`PlainOp.run`. -/
 theorem PlainOp.memoryRow?_run_eq {op : Jaune.PlainOp} {row : MemoryRow}
     (hrow : PlainOp.memoryRow? op = some row) (r : Frame.Running) :
-    r.state.liftMachine (row.step r.context.block.rules.opcodes r.context) = PlainOp.run r op :=
-  PlainOp.memoryRow?_runCore_eq hrow r.pc r.context r.state
+    r.state.liftMachine (row.step r.context.block.rules.opcodes r.context) = PlainOp.run r op := by
+  simp only [PlainOp.run, PlainOp.runCore, PlainOp.memoryRow?_eq_some.1 hrow, Family.run]
 
 theorem PlainOp.memoryRow?_run_fork_eq (f : Fork) {op : Jaune.PlainOp} {row : MemoryRow}
     (hrow : PlainOp.memoryRow? op = some row) (r : Frame.Running)
@@ -529,7 +380,7 @@ theorem PlainOp.memory_run_congr_fork {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.memoryRow?_run_eq hrow, ← PlainOp.memoryRow?_run_eq hrow]
     simp only [PlainOp.memoryRuleReads, hrow] at h
-    refine liftMachine_congr r.state ?_
+    refine Frame.State.liftMachine_congr r.state ?_
     simp only [MemoryRow.step, BenvStat.rules] at h ⊢
     simp only [h]
     rfl

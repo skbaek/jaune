@@ -227,7 +227,6 @@ theorem step_spawn_message {r : Frame.Running} {child : Frame} {p : Staging.Pend
       cases hs : MessageOp.step r.context r.state x with
       | done result => rw [hs] at ho; exact absurd ho (ofHalt_ne_spawn _ _ _ _ _)
       | spawn f pend => rw [hs] at ho; cases ho; rfl
-    | push xs b => simp only [NextOp.step] at ho; split at ho <;> exact absurd ho (ofHalt_ne_spawn _ _ _ _ _)
     | _ => exact absurd ho (ofHalt_ne_spawn _ _ _ _ _)
   · simp only [Step.ofJump] at h; split at h <;> cases h
   · rename_i op _
