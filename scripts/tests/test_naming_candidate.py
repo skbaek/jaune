@@ -1040,6 +1040,95 @@ class ComponentCompareTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'export mode mismatch'):
                 CHECK.compare_components(bp, ap, mapping)
 
+    def test_downstream_splitter_dedup_and_collect_all_no_cascade(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # 1) Two relocated declarations M1/M2 -> M3 merge their identical match_1 helpers
+            # and downstream consumer C deduplicates their identical .splitter helpers.
+            b_pool = [
+                ['nat', 1],                                  # 0
+                ['const', ['name', 'Nat'], []],              # 1
+                ['const', ['name', 'A.f.match_1'], []],      # 2
+                ['const', ['name', 'B.g.match_1'], []],      # 3
+                ['const', ['name', '_private.C.0.A.f.match_1.splitter'], []],  # 4
+                ['const', ['name', '_private.C.0.B.g.match_1.splitter'], []],  # 5
+                ['nat', 99],                                 # 6
+            ]
+            a_pool = [
+                ['nat', 1],                                  # 0
+                ['const', ['name', 'Nat'], []],              # 1
+                ['const', ['name', 'M3.f.match_1'], []],     # 2
+                ['const', ['name', '_private.C.0.M3.f.match_1.splitter'], []],  # 3
+            ]
+            spec_b = {
+                'M1': dict(source='def f := 1\n', roots=['A.f'], expr_pool=b_pool,
+                           constants={'A.f': self._defn(1, 2), 'A.f.match_1': self._defn(1, 0)}),
+                'M2': dict(source='def g := 1\n', roots=['B.g'], expr_pool=b_pool,
+                           constants={'B.g': self._defn(1, 3), 'B.g.match_1': self._defn(1, 0)}),
+                'M3': dict(source='-- target\n', roots=[], expr_pool=b_pool, constants={}),
+                'C': dict(source='def h := 1\ndef k := 1\n', imports=['M1', 'M2'], roots=['C.h', 'C.k'], expr_pool=b_pool,
+                          constants={
+                              'C.h': self._defn(1, 4),
+                              'C.k': self._defn(1, 5),
+                              '_private.C.0.A.f.match_1.splitter': self._defn(1, 2),
+                              '_private.C.0.B.g.match_1.splitter': self._defn(1, 3),
+                          }),
+            }
+            spec_a = {
+                'M1': dict(source='-- moved\n', roots=[], expr_pool=a_pool, constants={}),
+                'M2': dict(source='-- moved\n', roots=[], expr_pool=a_pool, constants={}),
+                'M3': dict(source='def f := 1\ndef g := 1\n', roots=['M3.f', 'M3.g'], expr_pool=a_pool,
+                           constants={'M3.f': self._defn(1, 2), 'M3.g': self._defn(1, 2), 'M3.f.match_1': self._defn(1, 0)}),
+                'C': dict(source='def h := 1\ndef k := 1 -- changed\n', imports=['M3'], roots=['C.h', 'C.k'], expr_pool=a_pool,
+                          constants={
+                              'C.h': self._defn(1, 3),
+                              'C.k': self._defn(1, 3),
+                              '_private.C.0.M3.f.match_1.splitter': self._defn(1, 2),
+                          }),
+            }
+            mapping = dict(EMPTY, entries=[
+                dict(old='A.f', new='M3.f', kind='relocation', from_module='M1', to_module='M3', layer='execution', rule='4', source='t'),
+                dict(old='B.g', new='M3.g', kind='relocation', from_module='M2', to_module='M3', layer='execution', rule='4', source='t'),
+            ])
+            bp = self._build_snapshot(root / 'spl_b', spec_b)
+            ap = self._build_snapshot(root / 'spl_a', spec_a)
+            self.assertEqual(CHECK.compare_components(bp, ap, mapping)['status'], 'OK')
+
+            # Negative control: mutating one of C's before-side splitters MUST fail.
+            spec_bad_spl = copy.deepcopy(spec_b)
+            spec_bad_spl['C']['constants']['_private.C.0.B.g.match_1.splitter'] = self._defn(1, 6)
+            bp_bad = self._build_snapshot(root / 'spl_b_bad', spec_bad_spl)
+            with self.assertRaises(CHECK.FIDELITY.Mismatch):
+                CHECK.compare_components(bp_bad, ap, mapping)
+
+            # 2) --collect-all harvest control: an upstream mismatch in M1 must not
+            # starve downstream C of paired valid generated helpers from M1.
+            c_pool_b = [['nat', 1], ['nat', 2], ['const', ['name', 'Nat'], []], ['const', ['name', 'U.ok.aux'], []]]
+            c_pool_a = [['nat', 1], ['nat', 2], ['const', ['name', 'Nat'], []], ['const', ['name', 'U.ok2.aux'], []]]
+            cb = {
+                'U': dict(source='def bad := 1\ndef ok := 1\n', roots=['U.bad', 'U.ok'], expr_pool=c_pool_b,
+                          constants={'U.bad': self._defn(2, 0), 'U.ok': self._defn(2, 3), 'U.ok.aux': self._defn(2, 0)}),
+                'D': dict(source='def use := 1\n', imports=['U'], roots=['D.use'], expr_pool=c_pool_b,
+                          constants={'D.use': self._defn(2, 3)}),
+            }
+            ca = {
+                'U': dict(source='def bad := 2\ndef ok2 := 1\n', roots=['U.bad', 'U.ok2'], expr_pool=c_pool_a,
+                          constants={'U.bad': self._defn(2, 1), 'U.ok2': self._defn(2, 3), 'U.ok2.aux': self._defn(2, 0)}),
+                'D': dict(source='def use2 := 1\n', imports=['U'], roots=['D.use2'], expr_pool=c_pool_a,
+                          constants={'D.use2': self._defn(2, 3)}),
+            }
+            cmap = dict(EMPTY, entries=[
+                dict(old='U.ok', new='U.ok2', kind='declaration', layer='execution', rule='4', source='t'),
+                dict(old='D.use', new='D.use2', kind='declaration', layer='execution', rule='4', source='t'),
+            ])
+            cbp = self._build_snapshot(root / 'col_b', cb)
+            cap = self._build_snapshot(root / 'col_a', ca)
+            with self.assertRaises(CHECK.FIDELITY.Mismatch) as ctx:
+                CHECK.compare_components(cbp, cap, cmap, collect=True)
+            msg = str(ctx.exception)
+            self.assertIn('[U]', msg)
+            self.assertNotIn('[D]', msg)
+
 
 if __name__ == '__main__':
     unittest.main()

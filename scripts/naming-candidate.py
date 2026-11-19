@@ -1463,12 +1463,6 @@ def compare_components(before, after, mapping, inventory=None, reviewed=None, co
                 before_env, after_env, mapping, records, used, collect, plan_edits,
                 global_context=global_context, external=external, state=comp_state,
             )
-            comp_obj = comp_state['comparison']
-            for a, b in comp_obj.pairs.items():
-                if a in comp_obj.generated_left:
-                    global_gen_pairs[a] = b
-                    global_after_gen.add(b)
-            update_aux_tables(comp_obj.aux_pairs)
             ign = verdict['ignored_unreferenced_realized_theorems']
             ignored_before_all.update(ign['before'])
             ignored_after_all.update(ign['after'])
@@ -1487,6 +1481,14 @@ def compare_components(before, after, mapping, inventory=None, reviewed=None, co
                 raise
             label = ','.join(sorted(b_mods | a_mods))
             failures.append(f'[{label}] {error}')
+        finally:
+            comp_obj = comp_state.get('comparison')
+            if comp_obj is not None:
+                for a, b in comp_obj.pairs.items():
+                    if a in comp_obj.generated_left:
+                        global_gen_pairs[a] = b
+                        global_after_gen.add(b)
+                update_aux_tables(comp_obj.aux_pairs)
         del before_bundles, after_bundles, before_env, after_env, comp_state
         gc.collect()
 

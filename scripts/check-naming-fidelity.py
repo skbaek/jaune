@@ -1609,7 +1609,7 @@ class Comparison:
         # The raw text is the spelling up to `«»` escapes, or else literal.
         return ['rawSpelling'] if raw and plain_spelling(raw) == spelling else ['raw', raw]
 
-    GENERATED_SUFFIX = re.compile(r'^(match_\d+|eq_\d+|eq_def|splitter|proof_\d+|injEq|inj|sizeOf_spec|'
+    GENERATED_SUFFIX = re.compile(r'^(match_\d+(?:_\d+)*|eq_\d+|eq_def|splitter|_?proof_\d+(?:_\d+)*|_?simp_\d+(?:_\d+)*|injEq|inj|sizeOf_spec|'
                                   r'noConfusion|noConfusionType|casesOn|recOn|rec|brecOn|below|ibelow|'
                                   r'binductionOn|ctorIdx|congr_simp|_unfold|_sunfold)$')
 
@@ -1678,9 +1678,9 @@ class Comparison:
         return self.mapping.module(module)
 
     RELOC_AUX_LEAF = re.compile(
-        r'^(match_\d+|_sparseCasesOn_\d+|eq_\d+|eq_def|else_eq|splitter|congr_simp|_sunfold|_unsafe_rec|_f)$'
+        r'^(match_\d+(?:_\d+)*|_sparseCasesOn_\d+|eq_\d+|eq_def|else_eq|splitter|congr_simp|_sunfold|_unsafe_rec|_f)$'
     )
-    MATCHER_LEAF = re.compile(r'^match_\d+$')
+    MATCHER_LEAF = re.compile(r'^match_\d+(?:_\d+)*$')
     DOWNSTREAM_EQ_LEAF = re.compile(r'^(eq_\d+|eq_def|else_eq|splitter|congr_simp)$')
 
     def is_downstream_reloc_eq(self, name, side):
@@ -1781,6 +1781,13 @@ class Comparison:
             return False
         mapped = {self.mapping.module(m) if side == 'before' else m for m in mods}
         return bool(mapped <= self.relocated_modules)
+
+    def is_dedup_aux(self, name, side):
+        """A compiler-generated matcher, equation, or splitter auxiliary that
+        Lean's per-module deduplication cache may merge or split across
+        relocated module boundaries (either inside a relocation component or
+        as a downstream realized eq/splitter of a relocated declaration)."""
+        return self.is_reloc_aux(name, side) or self.is_downstream_reloc_eq(name, side)
 
     def is_promoted_matcher(self, a, b=None):
         """A `match_N` helper of a `private` declaration promoted via
@@ -1996,7 +2003,7 @@ class Comparison:
             {self.component(m, 'before') for m in left_holders.get(a, ())} ==
             {self.component(m, 'after') for m in right_holders.get(b, ())}
         )
-        if self.is_reloc_aux(a, 'before') and self.is_reloc_aux(b, 'after') and same_reloc_component:
+        if self.is_dedup_aux(a, 'before') and self.is_dedup_aux(b, 'after') and same_reloc_component:
             if a in self.pairs or b in self.reverse:
                 raise Mismatch(f'inconsistent generated-constant correspondence: {a}, {b}')
             if (a, b) not in self.aux_pairs:
@@ -2356,7 +2363,7 @@ class Comparison:
             except Mismatch as error:
                 self.fail(f'constant {name}: {error}')
                 continue
-            is_aux = self.is_reloc_aux(name, 'before')
+            is_aux = self.is_dedup_aux(name, 'before')
             fresh = [n for n in buckets[key] if n not in self.reverse and n not in self.aux_right]
             shared = [n for n in buckets[key] if n in self.aux_right] if is_aux else []
             candidates = fresh + shared
@@ -2390,12 +2397,12 @@ class Comparison:
         for name in sorted(self.generated_right):
             if name in self.reverse or name in self.aux_right:
                 continue
-            if not self.is_reloc_aux(name, 'after'):
+            if not self.is_dedup_aux(name, 'after'):
                 continue
             if left_buckets is None:
                 left_buckets = defaultdict(list)
                 for lname in sorted(self.generated_left):
-                    if self.is_reloc_aux(lname, 'before'):
+                    if self.is_dedup_aux(lname, 'before'):
                         left_buckets[self.coarse_record(lname, 'before')].append(lname)
             key = self.coarse_record(name, 'after')
             for candidate in left_buckets[key]:
@@ -2466,9 +2473,9 @@ def check(before, after, mapping, reviewed=None, reviewed_used=None, collect=Fal
     # Imports are reported, not silently treated as a proof about their contents.
     comparison = Comparison(before, after, renames, reviewed, reviewed_used, collect, plan_edits,
                             global_context=global_context, external=external)
-    result = comparison.run()
     if state is not None:
         state['comparison'] = comparison
+    result = comparison.run()
     result['unhygienic_respellings'] = [
         dict(old=old, new=new, module=site[0], range=[site[1], site[2]],
              expansion_declarations=expansion_declarations(before, site[0], old))

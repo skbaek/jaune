@@ -1305,6 +1305,57 @@ class NamingFidelityTests(unittest.TestCase):
             with self.assertRaisesRegex(CHECK.Mismatch, 'occurs more than once'):
                 CHECK.Comparison(CHECK.read_exports([b2]), CHECK.read_exports([a2]), mapping, [rec], set()).run()
 
+    def test_multi_index_match_suffix_and_holder_preference_under_swap(self):
+        # Alphabetical order places Old.f < N.f; GENERATED_SUFFIX must handle
+        # multi-index match_1_1 and holder preference must prevent cross-pairing
+        # when Staging.f (in A, renamed to N.f) and N.f (in B, relocated to C
+        # as Old.f) share identical match_1_1 helper bodies.
+        self.renames = self.entries(
+            ('Staging.f', 'N.f', 'declaration', {}),
+            ('N.f', 'Old.f', 'relocation', dict(from_module='B', to_module='C')),
+        )
+        self.before = snapshot(
+            {
+                'Staging.f': constant(ref('Staging.f.match_1_1')),
+                'Staging.f.match_1_1': constant(['nat', 5]),
+                'N.f': constant(ref('N.f.match_1_1')),
+                'N.f.match_1_1': constant(['nat', 5]),
+            },
+            ['Staging.f', 'N.f'],
+        )
+        self.after = snapshot(
+            {
+                'N.f': constant(ref('N.f.match_1_1')),
+                'N.f.match_1_1': constant(['nat', 5]),
+                'Old.f': constant(ref('Old.f.match_1_1')),
+                'Old.f.match_1_1': constant(['nat', 5]),
+            },
+            ['N.f', 'Old.f'],
+        )
+        self.before['owners'] = {
+            'Staging.f': 'A', 'Staging.f.match_1_1': 'A',
+            'N.f': 'B', 'N.f.match_1_1': 'B',
+        }
+        self.after['owners'] = {
+            'N.f': 'A', 'N.f.match_1_1': 'A',
+            'Old.f': 'C', 'Old.f.match_1_1': 'C',
+        }
+        self.before['holders'] = {
+            'Staging.f': {'A'}, 'Staging.f.match_1_1': {'A'},
+            'N.f': {'B'}, 'N.f.match_1_1': {'B'},
+        }
+        self.after['holders'] = {
+            'N.f': {'A'}, 'N.f.match_1_1': {'A'},
+            'Old.f': {'C'}, 'Old.f.match_1_1': {'C'},
+        }
+        verdict = self.run_check()
+        self.assertEqual(verdict['status'], 'OK')
+
+        # Negative control: mutating Old.f.match_1_1 MUST fail even with Staging.f.match_1_1 identical.
+        self.after['constants']['Old.f.match_1_1'] = constant(['nat', 6])
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
 
 if __name__ == '__main__':
     unittest.main()
