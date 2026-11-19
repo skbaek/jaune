@@ -7,7 +7,7 @@ import Jaune.MessageCall.DriverInvariants
 
 The pilot of goal `jaune-shape-and-names-v1` (WP) ran two programs on a prototype that never
 landed (`Examples/ShapePilot/` on `wsl/jsn-pilot`). Here they run on the landed definitions:
-`enter`, `exec`, `Frame.runTop` and `processMessageCall`, with the pilot's expected values.
+`enter`, `exec`, `Frame.runTop` and `Message.run`, with the pilot's expected values.
 
 * A Prague caller CALLs a child that writes storage and a log, then reverts with the byte
   `0xAA`. The caller pushes 42 and goes on; it receives the byte in its output window and its
@@ -126,7 +126,7 @@ def observeCall : Option CallObservation := do
   let .ok result := settle child raw | none
   let callerRaw := exec start
   let .ok (.success _ _ _ world substate _) := Frame.runTop f | none
-  let .ok (state, output) := processMessageCall callMessage | none
+  let .ok run := Staging.Message.run callMessage | none
   pure {
     isCall := child.message.kind == .call
     codeAddress := child.message.codeAddress.map Address.toNat
@@ -141,8 +141,8 @@ def observeCall : Option CallObservation := do
     callerReturnData := (rawMachine callerRaw).returnData
     settledSlot := ((world.state.get childAddress).storage.get 0).toNat
     settledLogs := substate.logs.length
-    topLevelSlot := ((state.get childAddress).storage.get 0).toNat
-    topLevelLogs := output.logs.length }
+    topLevelSlot := ((run.state.get childAddress).storage.get 0).toNat
+    topLevelLogs := run.logs.length }
 
 structure CreateObservation where
   isCreate : Bool
@@ -170,7 +170,8 @@ def observeCreate : Option CreateObservation := do
   let .ok result := settle child raw | none
   let callerRaw := exec start
   let .ok (.success _ _ meter world substate _) := Frame.runTop f | none
-  let .ok (state, _) := processMessageCall createMessage | none
+  let .ok run := Staging.Message.run createMessage | none
+  let state := run.state
   pure {
     isCreate := child.message.kind == .create
     codeAddress := child.message.codeAddress.map Address.toNat
