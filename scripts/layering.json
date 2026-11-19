@@ -211,6 +211,7 @@
   "Jaune.MessageCall.CheckedParts": "specification",
   "Jaune.MessageCall.CheckedStep": "specification",
   "Jaune.MessageCall.CheckedDriver": "specification",
+  "Jaune.MessageCall.CheckedExec": "specification",
   "Jaune.Implementation.CheckedCachedDriver": "implementation",
   "Jaune.Bridge.G2b.CheckedIngress": "bridge",
   "Jaune.Bridge.G2b.CheckedSimulation": "bridge",

@@ -97,6 +97,7 @@ import Jaune.MessageCall.CheckedMessageOps
 import Jaune.MessageCall.CheckedParts
 import Jaune.MessageCall.CheckedStep
 import Jaune.MessageCall.CheckedDriver
+import Jaune.MessageCall.CheckedExec
 import Jaune.Bridge.G2b.CheckedIngress
 import Jaune.Bridge.G2b.CheckedSimulation
 import Jaune.Bridge.G2b.CheckedWalk

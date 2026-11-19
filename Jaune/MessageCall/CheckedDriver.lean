@@ -29,15 +29,4 @@ def execFueled : Frame.Running → Nat → Fueled Fault Frame.Exit
         | .ok (.error (reason, s)) => Fueled.ofExcept (.ok (.halted reason s))
         | .ok (.ok s) => execFueled ⟨pc, r.context, s⟩ fuel
 
-/-- The total interpreter over the driver `Checked.execFueled`. -/
-def exec (r : Frame.Running) : Except Fault Frame.Exit :=
-  match (execFueled r (sufficientFuel r.state.machine.gasMeasure)).run with
-  | some x => x
-  | none => .error (.internal (.invariant .none))
-
-/-- Run a top-level frame: enter it from its checkpoint, run the code, settle. -/
-def Frame.runTop (f : Frame) : Except Fault Frame.Result :=
-  match enterWith f f.checkpoint with
-  | .done result => result
-  | .run r => exec r >>= settle f
 end Jaune.Checked
