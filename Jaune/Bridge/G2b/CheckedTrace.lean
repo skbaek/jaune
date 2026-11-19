@@ -1087,4 +1087,30 @@ theorem runFrame_json_top (cfg : TraceJson.Config) (state : IO.Ref TraceJson.Sta
         Trace.runFrame (TraceJson.sink cfg state trace frames) (Frame.ofTop msg isCreate) runId := by
   rw [runFrame_json, frame_topFrame]
 
+/-- The traced top-level message result and its connection to the pure Checked run. -/
+structure MessageResult (msg : Msg) where
+  run : Except Fault Checked.TopLevel.Run
+  erases : run = Checked.TopLevel.run msg
+
+/-- Trace a prepared transaction message. Legacy calls notify the tracer of the
+authorization refund before entering the frame. Preparation faults and refusals
+produce no frame events. -/
+def runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
+    (authorizationRefund : Nat → m Unit) (msg : Msg) (runId : String) : m (MessageResult msg) := do
+  match hp : Checked.TopLevel.prepare msg with
+  | .error fault => pure ⟨.error fault, by rw [Checked.TopLevel.run, hp]; rfl⟩
+  | .ok preparation =>
+    let reportRefund := if msg.benv.stat.rules.stateGas.isNone && msg.target.isSome
+      then authorizationRefund else fun _ => pure ()
+    let result ← Checked.Trace.runPrepared sink reportRefund preparation runId
+    pure ⟨result.run, by rw [result.erases, Checked.TopLevel.run, hp]; rfl⟩
+
+/-- The tracer's transaction-visible observation agrees with the original
+message call, including pre-frame failure. -/
+theorem MessageResult.output_eq {msg : Msg} (result : MessageResult msg) :
+    (result.run.mapError Fault.toEvmError >>= Checked.TopLevel.Run.output msg) =
+      processMessageCall msg := by
+  rw [result.erases]
+  exact Checked.preparedMessageOutput_square msg
+
 end Jaune.Bridge.G2b.CheckedTrace

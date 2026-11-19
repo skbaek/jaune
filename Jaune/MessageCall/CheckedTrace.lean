@@ -270,9 +270,18 @@ theorem exec_erasure {r : Frame.Running} (result : ExecutionResult r) :
     result.value = Checked.exec r := result.erases
 
 structure FrameResult (f : Frame) where
-  value : Except Fault Jaune.Frame.Result
+  run : Except Fault Frame.TopRun
   nextFrame : Nat
-  erases : value = Checked.Frame.runTop f
+  run_erases : run = f.runTopWithRoot
+
+/-- The settled result delivered to a caller that does not need the entered root. -/
+def FrameResult.value {f : Frame} (result : FrameResult f) : Except Fault Jaune.Frame.Result :=
+  result.run.map Frame.TopRun.result
+
+theorem FrameResult.erases {f : Frame} (result : FrameResult f) :
+    result.value = f.runTop := by
+  unfold FrameResult.value Frame.runTop
+  rw [result.run_erases]
 
 /-- The top-level frame boundary. A root precompile or failed transfer has no instruction
 events, but still has entry and settlement events. One invocation represents one identified
@@ -284,17 +293,36 @@ def runFrame {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m) (f : Fram
   | .done settled =>
     sink (.entered context (frame f) (.done settled))
     sink (.settled context (frame f) settled)
-    pure ⟨settled, 1, by simp only [Checked.Frame.runTop_eq, hentry]⟩
+    pure ⟨settled.map (fun value => ⟨none, value⟩), 1, by
+      simp only [Checked.Frame.runTopWithRoot, hentry]⟩
   | .run r =>
     sink (.entered context (frame f) (.run (evm f.message r)))
     let result ← exec sink f.message r context 1
     let settled := result.value >>= settle f
     sink (.settled context (frame f) settled)
-    pure ⟨settled, result.nextFrame, by
-      simp only [Checked.Frame.runTop_eq, hentry, settled, result.erases]⟩
+    pure ⟨settled.map (fun value => ⟨some r, value⟩), result.nextFrame, by
+      simp only [Checked.Frame.runTopWithRoot, hentry, settled, result.erases]⟩
 
 /-- Exact connection to the checked top-level frame's settled result. -/
 theorem runFrame_erasure {f : Frame} (result : FrameResult f) :
     result.value = Checked.Frame.runTop f := result.erases
+
+structure PreparedResult (preparation : TopLevel.Preparation) where
+  run : Except Fault TopLevel.Run
+  erases : run = preparation.run
+
+/-- Trace the same prepared run as the interpreter. A refusal emits no frame
+event. On entry the caller's refund hook precedes the first frame event. -/
+def runPrepared {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m)
+    (reportRefund : Nat → m Unit) (preparation : TopLevel.Preparation) (runId : String) :
+    m (PreparedResult preparation) := do
+  match hprep : preparation with
+  | .refused reason => pure ⟨.ok (.refused reason), by rw [hprep]; rfl⟩
+  | .frame f refund =>
+    reportRefund refund
+    let result ← runFrame sink f runId
+    pure ⟨result.run.map (.frame f refund), by
+      rw [result.run_erases, hprep]
+      rfl⟩
 
 end Jaune.Checked.Trace

@@ -70,4 +70,29 @@ theorem Frame.runTop_eq (f : Frame) : f.runTop =
     change Except.map Frame.TopRun.result (Except.map _ (exec r >>= settle f)) = (exec r >>= settle f)
     cases (exec r >>= settle f) <;> rfl
 
+namespace TopLevel
+
+/-- A refusal before any frame was entered. State-gas forks keep the reads from
+preparation and restore the reservoir to its message grant. -/
+inductive Refusal where
+  | collision (reason : ExceptionalHalt)
+  | stateGas (reason : ExceptionalHalt) (stateGasLeft : Nat)
+      (accountReads : AdrSet) (storageReads : KeySet)
+
+inductive Preparation where
+  | refused (reason : Refusal)
+  | frame (frame : Frame) (authorizationRefund : Nat)
+
+/-- A refusal has no frame. An executed frame always has a settled result, and
+has a running root exactly when it entered the interpreter. -/
+inductive Run where
+  | refused (reason : Refusal)
+  | frame (frame : Frame) (authorizationRefund : Nat) (run : Frame.TopRun)
+
+def Preparation.run : Preparation → Except Fault Run
+  | .refused reason => .ok (.refused reason)
+  | .frame f refund => f.runTopWithRoot.map (.frame f refund)
+
+end TopLevel
+
 end Jaune.Checked
