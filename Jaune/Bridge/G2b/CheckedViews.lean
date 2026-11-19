@@ -320,6 +320,8 @@ def legacyResume : Except (Except Fault Frame.Exit) Frame.State →
   | .error out => .error (out.map Frame.Exit.toLegacy)
   | .ok s => .ok s.toLegacy
 
+variable [LegacyTransaction]
+
 theorem resumeCaller_toLegacy (rules : ForkRules) (child : Frame) (p : Staging.Pending)
     (res : Except Fault Frame.Result) :
     Staging.resumeCaller rules child.toLegacy p res = legacyResume (resumeCaller rules child p res) := by
@@ -345,6 +347,7 @@ theorem Frame.settlementCommits_toLegacy (child : Frame) (raw : Except Fault Fra
   · rfl
   · cases res <;> rfl
 
+omit [LegacyTransaction] in
 theorem Exec.finished_toLegacy (out : Except Fault Frame.Exit) :
     Staging.Exec.finished (out.map Frame.Exit.toLegacy) = Exec.finished out := by
   rcases out with f | ⟨o, s⟩ | ⟨o, s⟩ | ⟨r, s⟩ <;> rfl
@@ -543,6 +546,8 @@ end Jaune.Staging.Exec.Deriv
 
 namespace Jaune.Checked.Frame.Run
 
+variable [LegacyTransaction]
+
 /-- A checked node, seen with its memory forgotten. -/
 def Node.legacyObservation (n : Node) : Jaune.Frame.Running × Except Fault Jaune.Frame.Exit :=
   (n.start.toLegacy, n.exit.map Frame.Exit.toLegacy)
@@ -637,13 +642,16 @@ theorem _root_.Jaune.Checked.Root.ofEntry_frames_toLegacy
 /-- The staged node of a checked one. -/
 def Node.toLegacy (n : Node) : Staging.Frame.Run.Node := ⟨_, _, Checked.Frame.Run.toLegacy n.run⟩
 
+omit [LegacyTransaction] in
 theorem Node.ofDeriv_surjective (n : Node) : ∃ d, Node.ofDeriv d = n :=
   ⟨⟨_, _, toExec n.run⟩, by rcases n with ⟨s, o, t⟩; simp [Node.ofDeriv]⟩
 
+omit [LegacyTransaction] in
 private theorem staging_ofDeriv_surjective (n : Staging.Frame.Run.Node) :
     ∃ d, Staging.Frame.Run.Node.ofDeriv d = n :=
   ⟨⟨_, _, Staging.Frame.Run.toExec n.run⟩, by rcases n with ⟨s, o, t⟩; simp [Staging.Frame.Run.Node.ofDeriv]⟩
 
+omit [LegacyTransaction] in
 private theorem staging_ofDeriv_injective {a b : Staging.Exec.Deriv}
     (h : Staging.Frame.Run.Node.ofDeriv a = Staging.Frame.Run.Node.ofDeriv b) : a = b := by
   have eq := congrArg (fun n : Staging.Frame.Run.Node =>

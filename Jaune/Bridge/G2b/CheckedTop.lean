@@ -2,6 +2,7 @@ import Jaune.Bridge.G2b.CheckedDriver
 import Jaune.Bridge.G2b.CheckedIngress
 import Jaune.Bridge.G2b.CheckedReached
 import Jaune.Bridge.G2b.CheckedContext
+import Jaune.Bridge.G2b.CheckedViews
 import Jaune.Bridge.G2b.KeptHistory
 import Jaune.FrameRun.CheckedFacts
 import Jaune.Implementation.CheckedCachedDriver
@@ -1368,6 +1369,134 @@ theorem stateTransitionCoreE_observe {ε : Type} (embed : TransitionError → ε
       Jaune.stateTransitionCoreE embed f ch block checkOmmers := by
   unfold stateTransitionCoreE Jaune.stateTransitionCoreE
   simp only [Body.importer_observe]
+
+private theorem TopLevel.runNative_frames_of_prepare (msg : Msg) {prepared : Jaune.TopLevel.Preparation}
+    (hp : Jaune.TopLevel.prepare msg = .ok prepared) :
+    letI : LegacyTransaction := ⟨match prepared with
+      | .refused .. => msg.tenv.stat
+      | .frame frame _ => frame.message.context.tx⟩
+    (runNative (Input.ofLegacy msg)).map (fun run => run.frames.map Frame.Run.Kept.legacyObservation) =
+      (Jaune.TopLevel.run msg).map (fun run => run.frames.map Staging.Exec.Frame.observation) := by
+  rw [runNative_observe, run_of_prepare_ok hp]
+  conv_rhs => rw [Jaune.TopLevel.run, hp]
+  cases prepared with
+  | refused => rfl
+  | frame frame refund =>
+    letI : LegacyTransaction := ⟨frame.message.context.tx⟩
+    let checked := Frame.ofLegacy frame (Staging.TopLevel.prepare_frame_memory_wf hp)
+    have erase : checked.toLegacy = frame := Frame.toLegacy_ofLegacy ..
+    have entered := checked.enterWith_square
+    have observed := checked.runTopWithRoot_observes
+    rw [erase] at entered observed
+    simp only [ofPreparation, Preparation.run, bind, Except.bind]
+    change ((checked.runTopWithRoot.map (Run.frame checked refund)).map _) = _
+    cases waiting : Jaune.enterWith frame frame.checkpoint.toDevm with
+    | done result =>
+      cases native : checked.runTopWithRoot with
+      | error fault =>
+        cases result <;> simp only [waiting, native, Except.map] at observed ⊢
+        · cases observed; rfl
+        · cases observed
+      | ok top =>
+        cases result <;> simp only [waiting, native, Except.map] at observed ⊢
+        · cases observed
+        · have noRoot : top.root = none := by
+            have roots := congrArg Prod.fst (Except.ok.inj observed)
+            cases entry : top.root with
+            | none => rfl
+            | some => rw [entry] at roots; cases roots
+          simp only [Run.frames, Run.enteredRoot, noRoot, TopLevelRun.frames, TopLevelRun.enteredRoot,
+            Option.map_none, Option.toList, List.flatMap_nil, List.map_nil, pure, Except.pure]
+    | run evm =>
+      cases actual : enterWith checked checked.checkpoint with
+      | done => simp [waiting, actual, Jaune.Frame.Entry.observe, Frame.Entry.toLegacy] at entered
+      | run root =>
+        have same : root.toLegacy = Jaune.Frame.Running.ofEvm evm := by
+          simpa only [waiting, actual, Jaune.Frame.Entry.observe, Frame.Entry.toLegacy,
+            Staging.Frame.Entry.run.injEq] using entered.symm
+        cases native : checked.runTopWithRoot with
+        | error fault =>
+          cases settled : Jaune.settle frame (Jaune.exec evm) <;>
+            simp only [waiting, native, settled, Except.map] at observed ⊢
+          · cases observed; rfl
+          · cases observed
+        | ok top =>
+          have rootEq : top.root = some root := by
+            simpa only [actual] using Frame.runTopWithRoot_root native
+          cases settled : Jaune.settle frame (Jaune.exec evm) <;>
+            simp only [waiting, native, settled, Except.map] at observed ⊢
+          · cases observed
+          · simp only [Run.frames, Run.enteredRoot, rootEq, TopLevelRun.frames, TopLevelRun.enteredRoot,
+              Option.map_some, Option.toList, List.flatMap_cons, List.flatMap_nil, List.append_nil,
+              pure, Except.pure, Except.ok.injEq]
+            rw [Root.ofEntry_frames_toLegacy, erase, same]
+
+/-- The native message run preserves every kept frame's start, output and post-state in
+execution order, using the legacy fields of the actual preparation for comparison. -/
+theorem TopLevel.runNative_frames_observe (msg : Msg) :
+    letI : LegacyTransaction := ⟨match Jaune.TopLevel.prepare msg with
+      | .ok (.frame frame _) => frame.message.context.tx
+      | _ => msg.tenv.stat⟩
+    (runNative (Input.ofLegacy msg)).map (fun run => run.frames.map Frame.Run.Kept.legacyObservation) =
+      (Jaune.TopLevel.run msg).map (fun run => run.frames.map Staging.Exec.Frame.observation) := by
+  cases prepared : Jaune.TopLevel.prepare msg with
+  | error => rw [runNative_observe, run_of_prepare_error prepared, Jaune.TopLevel.run, prepared]; rfl
+  | ok result =>
+    cases result <;> exact runNative_frames_of_prepare msg prepared
+
+/-- A successful signed run and its waiting counterpart retain the same frames. The
+receipt and block output come from the very message whose frame list is observed. -/
+theorem Transaction.run_frames_observe {benv : Benv} {bout : BlockOutput} {tx : Jaune.Transaction}
+    {index : Nat} {result : TransactionRun} {output : BlockOutput}
+    (accepted : run benv bout tx index = .ok (result, output)) :
+    ∃ waiting, Jaune.Transaction.run benv bout tx index = .ok (waiting, output) ∧
+      letI : LegacyTransaction := ⟨match waiting.message.preparation with
+        | .refused .. => waiting.message.entry.tenv.stat
+        | .frame frame _ => frame.message.context.tx⟩
+      result.frames.map Frame.Run.Kept.legacyObservation =
+        waiting.frames.map Staging.Exec.Frame.observation := by
+  unfold run at accepted
+  obtain ⟨admitted, ha, accepted⟩ := Except.bind_eq_ok accepted
+  obtain ⟨prepared, hp, accepted⟩ := Except.bind_eq_ok accepted
+  rw [Transaction.prepare_observe admitted tx index] at hp
+  cases legacyPrep : Jaune.Transaction.prepare admitted tx index with
+  | error fault => rw [legacyPrep] at hp; cases hp
+  | ok legacy =>
+    rw [legacyPrep] at hp
+    cases hp
+    obtain ⟨checked, executed, settled⟩ := Except.bind_eq_ok accepted
+    have native := Except.mapError_eq_ok_iff.mp executed
+    change TopLevel.runNative (.ofLegacy legacy.msg) = .ok checked at native
+    have waitingPrep : ∃ preparation, Jaune.TopLevel.prepare legacy.msg = .ok preparation := by
+      cases preparedTop : Jaune.TopLevel.prepare legacy.msg with
+      | error fault =>
+        rw [TopLevel.runNative_observe, TopLevel.run_of_prepare_error preparedTop] at native
+        cases native
+      | ok preparation => exact ⟨preparation, rfl⟩
+    obtain ⟨preparation, hm⟩ := waitingPrep
+    have hr : (TopLevel.ofPreparation legacy.msg preparation hm).run = .ok checked := by
+      rwa [TopLevel.runNative_observe, TopLevel.run_of_prepare_ok hm] at native
+    let message := TopLevel.observe legacy.msg preparation checked
+    have ran : Jaune.TopLevel.run legacy.msg = .ok message := by
+      rw [← TopLevel.run_observe _ _ hm, hr]
+      rfl
+    refine ⟨result.toLegacy message, ?_, ?_⟩
+    · unfold Jaune.Transaction.run
+      rw [ha]
+      simp only [bind, Except.bind, legacyPrep]
+      rw [ran]
+      simp only [Except.mapError]
+      rw [← Transaction.settleRun_observe legacyPrep hm hr, settled]
+      rfl
+    · have frames := TopLevel.runNative_frames_of_prepare legacy.msg hm
+      rw [native, ran] at frames
+      have actual : result.message = checked := by
+        unfold settleRun at settled
+        obtain ⟨_, _, settled⟩ := Except.bind_eq_ok settled
+        cases settled
+        rfl
+      rw [TransactionRun.frames, actual]
+      cases checked <;> cases preparation <;> exact Except.ok.inj frames
 
 /-- The configured importer witnesses a Checked step, including each scheduled ommer lookup. -/
 theorem KeptStep.of_transition {cfg : ChainConfig} {parent post : BlockChain} {block : Block}
