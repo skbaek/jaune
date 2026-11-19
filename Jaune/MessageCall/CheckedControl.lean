@@ -1,5 +1,6 @@
 import Jaune.MessageCall.CheckedState
 import Jaune.MessageCall.Control
+import Jaune.PrecompileInput
 
 /-! Control and native precompile instructions on checked frame memory. -/
 namespace Jaune.Checked
@@ -138,14 +139,9 @@ def HaltOp.run (ctx : CallContext) (s : Frame.State) : HaltOp → Except Fault F
         else return .ok (.finished [] s)
 
 
-def Frame.Running.precompileEvm (r : Frame.Running) : Evm :=
-  ⟨r.pc,
-    { caller := r.context.caller, target := none, currentTarget := r.context.recipient, gas := 0
-      value := r.context.value, data := r.context.calldata, codeAddress := none
-      code := r.context.code, depth := r.context.depthLeft, shouldTransferValue := false
-      isStatic := r.context.isStatic, disablePrecompiles := false, benvStat := r.context.block
-      tenvStat := r.context.tx },
-    (default : Devm).withGasLeft r.state.gasLeft⟩
+/-- What a precompile reads of a running frame: its input, its gas left and its block's fork. -/
+def Frame.Running.precompileInput (r : Frame.Running) : PrecompileInput :=
+  { calldata := r.context.calldata, gasLeft := r.state.gasLeft, fork := r.context.block.fork }
 
 /-- A precompile's result as an exit: the cost is charged on every channel, the output is the
 frame's output, and a fault leaves on the fault channel. -/
@@ -161,7 +157,7 @@ def Frame.Exit.ofPrecompileResult (s : Frame.State) : PrecompileResult → Excep
 
 /-- Run the precompile at `address` on a running frame. -/
 def runPrecompile (r : Frame.Running) (address : Address) : Except Fault Frame.Exit :=
-  Frame.Exit.ofPrecompileResult r.state (precompileRun r.precompileEvm address)
+  Frame.Exit.ofPrecompileResult r.state (Precompile.run r.precompileInput address)
 
 
 end Jaune.Checked

@@ -28,6 +28,9 @@ import Jaune.MessageCall.Top
 import Jaune.MessageCall.Canonical
 import Jaune.DevmProjections
 import Jaune.Precompiles
+import Jaune.PrecompileInput
+import Jaune.PrecompileInputFacts
+import Jaune.Bridge.G2b.PrecompileInput
 import Jaune.Execution
 import Jaune.NativePrecompile
 import Jaune.Sufficiency

@@ -13,6 +13,7 @@ import Jaune.Check.Execution
 import Jaune.Check.Fork
 import Jaune.Check.CheckedPortAuditA
 import Jaune.Check.CheckedPortAuditB
+import Jaune.Check.CheckedSpecAudit
 import Jaune.Check.FrameBridgeAudit
 import Jaune.Check.InstructionFamiliesAudit
 import Jaune.Check.Hash
