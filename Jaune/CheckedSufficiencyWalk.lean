@@ -279,10 +279,6 @@ theorem chargeStateGas_gas (a : Nat) {m : Machine} (h : m.gasMeasure ≤ n) :
     · simp only [MWalk.ok_iff, Machine.gasMeasure]; omega
     · simp [h]
 
-@[simp] theorem creditStateGasRefund_gasMeasure (a : Nat) (m : Machine) :
-    (m.creditStateGasRefund a).gasMeasure = m.gasMeasure := by
-  simp only [Machine.creditStateGasRefund, Machine.gasMeasure]; omega
-
 @[simp] theorem repayStateGasSpill_gasMeasure (m : Machine) :
     m.repayStateGasSpill.gasMeasure = m.gasMeasure := by
   simp only [Machine.repayStateGasSpill, Machine.gasMeasure]; omega

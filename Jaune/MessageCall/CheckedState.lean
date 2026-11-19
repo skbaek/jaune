@@ -347,6 +347,10 @@ def Machine.creditStateGasRefund (amount : Nat) (m : Machine) : Machine :=
     stateGas :=
       { g with left := g.left + (amount - fromGasLeft), spilled := g.spilled - fromGasLeft } }
 
+@[simp] theorem Machine.creditStateGasRefund_gasMeasure (amount : Nat) (m : Machine) :
+    (m.creditStateGasRefund amount).gasMeasure = m.gasMeasure := by
+  simp only [Machine.creditStateGasRefund, Machine.gasMeasure]; omega
+
 /-- `repay_state_gas_spill` on a lifetime-grouped machine: `Mach.repayStateGasSpill`'s
 counterpart. -/
 def Machine.repayStateGasSpill (m : Machine) : Machine :=

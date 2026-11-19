@@ -56,12 +56,6 @@ private theorem charged_error {cost : Nat} {m out : Machine} {e : ExceptionalHal
   rcases m with ⟨stk, mem, gl, sg, rd⟩
   simp only [Machine.creditStateGasRefund, Nat.zero_min, Nat.add_zero, Nat.sub_zero]
 
-@[simp] theorem Machine.creditStateGasRefund_gasMeasure (amount : Nat) (m : Machine) :
-    (m.creditStateGasRefund amount).gasMeasure = m.gasMeasure := by
-  simp only [Machine.creditStateGasRefund, Machine.gasMeasure]
-  have hle : min amount m.stateGas.spilled ≤ m.stateGas.spilled := Nat.min_le_right _ _
-  omega
-
 @[simp] theorem Machine.creditStateGasRefund_memory (amount : Nat) (m : Machine) :
     (m.creditStateGasRefund amount).memory = m.memory := rfl
 
