@@ -19,6 +19,33 @@ def Frame.State.writeDelegation (s : Frame.State) (authority target : Address) :
 
 namespace TopLevel
 
+/-- Open a system call on its own transaction-start state and with an empty write ledger. -/
+def systemInput (block : BlockContext) (state : State) (createdAccounts : AdrSet)
+    (recipient : Address) (code : ByteArray) (calldata : Bytes) : Input :=
+  let rules := block.rules
+  let (stateGasGrant, accessedAddresses) : Nat × AdrSet := match rules.stateGas with
+    | none => (0, .emptyWithCapacity)
+    | some stateGas => (stateGas.systemReservoir,
+      (.emptyWithCapacity : AdrSet).insertMany (rules.precompiles ++ [systemAddress, recipient]))
+  let message : Message := {
+    context := {
+      caller := systemAddress, recipient, value := 0, calldata, code, depthLeft := 1024
+      isStatic := false, block
+      tx := {
+        origin := systemAddress
+        gasPrice := block.baseFeePerGas
+        blobVersionedHashes := []
+        originalState := state } }
+    kind := .call
+    codeAddress := some recipient
+    gas := systemTransactionGas
+    stateGasGrant
+    transfersValue := false
+    disablePrecompiles := false }
+  let checkpoint := message.initialCheckpoint ⟨state, .empty, .emptyWithCapacity⟩
+    accessedAddresses .emptyWithCapacity createdAccounts .emptyWithCapacity
+  ⟨message, checkpoint, []⟩
+
 /-- A prepared native message with its rollback checkpoint, or a refusal at preparation. -/
 inductive Prepared where
   | refused (reason : Refusal)

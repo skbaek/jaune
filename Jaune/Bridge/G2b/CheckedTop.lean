@@ -954,6 +954,23 @@ theorem prepareNative_observe (msg : Msg) :
     exact prepareWithoutStateGas_observe msg hgas
   | some rules => exact prepareNative_amsterdam_observe msg rules hgas
 
+/-- The shared system-call entry preserves its own start world, gas grant, and access sets. -/
+theorem systemInput_observe (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :
+    systemInput benv.stat.toBlockContext benv.state benv.createdAccounts target code data =
+      Input.ofLegacy (systemCallMessage benv target code data) := by
+  have rules : benv.stat.toBlockContext.rules = benv.stat.rules := rfl
+  cases h : benv.stat.fork.ruleSet.stateGas <;>
+    simp only [systemInput, systemCallMessage, systemTransactionEnvironment, systemTransactionMessage,
+      Benv.beginTransaction, Input.ofLegacy, legacyInput, Message.ofLegacy, Jaune.Message.ofTop,
+      Option.isNone, Bool.false_eq_true, ↓reduceIte, rules, BenvStat.rules, h] <;> rfl
+
+/-- Every protocol system call prepares through the same Checked entry and Amsterdam rules. -/
+theorem prepareSystem_observe (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :
+    prepareNative (systemInput benv.stat.toBlockContext benv.state benv.createdAccounts target code data) =
+      (prepare (systemCallMessage benv target code data)).map Prepared.ofWaiting := by
+  rw [systemInput_observe]
+  exact prepareNative_observe _
+
 end TopLevel
 
 /-- Project the current prepared transaction onto the Checked settlement inputs. -/
