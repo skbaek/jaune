@@ -17,13 +17,13 @@ namespace Jaune.Bridge.G2a
 /-! ### B1: the message run at `processMessageCall` -/
 
 theorem processMessageCall_of_frame {msg : Msg} {f : Frame} {a : Nat}
-    (hp : Staging.TopLevel.prepare msg = .ok (.frame f a)) :
-    Staging.processMessageCall msg = (do
+    (hp : TopLevel.prepare msg = .ok (.frame f a)) :
+    Bridge.G2a.Phased.processMessageCall msg = (do
       let r ← (Frame.runTop f).mapError Fault.toEvmError
       match msg.benv.stat.rules.stateGas with
-      | none => Frame.output f a r
-      | some _ => Frame.outputAmsterdam f r) := by
-  unfold Staging.processMessageCall Staging.Message.run Frame.runTop
+      | none => Bridge.G2a.Old.Frame.output f a r
+      | some _ => Bridge.G2a.Old.Frame.outputAmsterdam f r) := by
+  unfold Bridge.G2a.Phased.processMessageCall TopLevel.run Frame.runTop
   rw [hp]
   simp only [bind, Except.bind]
   cases enterWith f f.checkpoint.toDevm with
@@ -33,37 +33,37 @@ theorem processMessageCall_of_frame {msg : Msg} {f : Frame} {a : Nat}
   | done result => cases result <;> rfl
 
 theorem processMessageCall_of_refused {msg : Msg} {reason : ExceptionalHalt} {halted : Devm}
-    (hp : Staging.TopLevel.prepare msg = .ok (.refused reason halted)) :
-    Staging.processMessageCall msg = (match msg.benv.stat.rules.stateGas with
+    (hp : TopLevel.prepare msg = .ok (.refused reason halted)) :
+    Bridge.G2a.Phased.processMessageCall msg = (match msg.benv.stat.rules.stateGas with
       | none =>
         .ok ⟨msg.benv.state,
           { gasLeft := 0, refundCounter := 0, logs := [],
             accountsToDelete := .emptyWithCapacity,
             error := .some (.halt reason), returnData := [] }⟩
-      | some _ => settleTopLevelPreparationFailure msg (.halt reason) halted) := by
-  unfold Staging.processMessageCall Staging.Message.run
+      | some _ => Bridge.G2a.Old.settleTopLevelPreparationFailure msg (.halt reason) halted) := by
+  unfold Bridge.G2a.Phased.processMessageCall TopLevel.run
   rw [hp]
   rfl
 
 theorem processMessageCall_of_fault {msg : Msg} {e : Fault}
-    (hp : Staging.TopLevel.prepare msg = .error e) :
-    Staging.processMessageCall msg = .error e.toEvmError := by
-  unfold Staging.processMessageCall Staging.Message.run
+    (hp : TopLevel.prepare msg = .error e) :
+    Bridge.G2a.Phased.processMessageCall msg = .error e.toEvmError := by
+  unfold Bridge.G2a.Phased.processMessageCall TopLevel.run
   rw [hp]
   rfl
 
 theorem processMessageCall_amsterdam {msg : Msg} {state : StateGasRules} {isCreate : Bool}
     (hs : msg.benv.stat.rules.stateGas = some state)
-    (hp : Staging.TopLevel.prepare msg = Staging.TopLevel.prepare.amsterdam state msg isCreate) :
-    Staging.processMessageCall msg = processTopLevelAmsterdam state msg isCreate := by
-  unfold Staging.TopLevel.prepare.amsterdam at hp
-  unfold processTopLevelAmsterdam
+    (hp : TopLevel.prepare msg = TopLevel.prepare.amsterdam state msg isCreate) :
+    Bridge.G2a.Phased.processMessageCall msg = Bridge.G2a.Old.processTopLevelAmsterdam state msg isCreate := by
+  unfold TopLevel.prepare.amsterdam at hp
+  unfold Bridge.G2a.Old.processTopLevelAmsterdam
   split at hp
   · rename_i reason devm h
     rw [processMessageCall_of_refused hp, hs]
     rw [h]
   · rename_i devm h
-    exact absurd h (Staging.prepareTopLevelAmsterdam_error_ne_revert state msg devm)
+    exact absurd h (prepareTopLevelAmsterdam_error_ne_revert state msg devm)
   · rename_i reason devm h
     rw [processMessageCall_of_fault hp, h]
     rfl
@@ -76,34 +76,34 @@ theorem processMessageCall_amsterdam {msg : Msg} {state : StateGasRules} {isCrea
 /-- **Bridge B1.** For every message, under every fork, the staged message run renders exactly
 today's `processMessageCall` result, faults included. -/
 theorem processMessageCall_eq (msg : Msg) :
-    Staging.processMessageCall msg = processMessageCall msg := by
-  unfold processMessageCall
+    Bridge.G2a.Phased.processMessageCall msg = Bridge.G2a.Old.processMessageCall msg := by
+  unfold Bridge.G2a.Old.processMessageCall
   by_cases ht : msg.target.isNone
   · simp only [ht, ↓reduceIte]
-    unfold processMessageCall.create
+    unfold Bridge.G2a.Old.processMessageCall.create
     cases hs : msg.benv.stat.rules.stateGas with
     | none =>
       by_cases hc : accountHasCodeOrNonce msg.benv.state msg.currentTarget
       · rw [processMessageCall_of_refused (reason := .addressCollision .none)
           (halted := initDevm msg) (by
-            simp [Staging.TopLevel.prepare, Staging.TopLevel.prepare.create, ht, hs, hc])]
+            simp [TopLevel.prepare, TopLevel.prepare.create, ht, hs, hc])]
         simp [hs, hc]
         rfl
       · rw [processMessageCall_of_frame (f := Frame.ofTop msg true) (a := 0) (by
-            simp [Staging.TopLevel.prepare, Staging.TopLevel.prepare.create, ht, hs, hc])]
+            simp [TopLevel.prepare, TopLevel.prepare.create, ht, hs, hc])]
         simp [hs, hc]
     | some state =>
       exact processMessageCall_amsterdam hs (by
-        simp [Staging.TopLevel.prepare, Staging.TopLevel.prepare.create, ht, hs])
+        simp [TopLevel.prepare, TopLevel.prepare.create, ht, hs])
   · simp only [ht, Bool.false_eq_true, ↓reduceIte]
-    unfold processMessageCall.call
+    unfold Bridge.G2a.Old.processMessageCall.call
     cases hs : msg.benv.stat.rules.stateGas with
     | none =>
-      cases ha : processMessageCall.authorize msg with
+      cases ha : TopLevel.applyAuthorizations msg with
       | error e =>
-        rw [processMessageCall_of_fault (e := Staging.EvmError.toFault e
-          (Staging.processMessageCall.authorize_error_isFault ha)) (by
-            simp only [Staging.TopLevel.prepare, Staging.TopLevel.prepare.call, ht, hs,
+        rw [processMessageCall_of_fault (e := EvmError.toFault e
+          (TopLevel.applyAuthorizations_error_isFault ha)) (by
+            simp only [TopLevel.prepare, TopLevel.prepare.call, ht, hs,
               Bool.false_eq_true, ↓reduceIte]
             split
             · rename_i e' h
@@ -116,13 +116,13 @@ theorem processMessageCall_eq (msg : Msg) :
         obtain ⟨delegated, refund⟩ := q
         rw [processMessageCall_of_frame (f := Frame.ofTop (TopLevel.resolveCodeDelegation delegated) false)
           (a := refund) (by
-            simp only [Staging.TopLevel.prepare, Staging.TopLevel.prepare.call, ht, hs,
+            simp only [TopLevel.prepare, TopLevel.prepare.call, ht, hs,
               Bool.false_eq_true, ↓reduceIte]
             split <;> simp_all)]
         simp [hs, bind, Except.bind]
     | some state =>
       exact processMessageCall_amsterdam hs (by
-        simp [Staging.TopLevel.prepare, Staging.TopLevel.prepare.call, ht, hs])
+        simp [TopLevel.prepare, TopLevel.prepare.call, ht, hs])
 
 /-! ### A: the transaction in phases at `processTransaction` -/
 
@@ -130,10 +130,10 @@ theorem processMessageCall_eq (msg : Msg) :
 phases compute exactly today's `processTransaction` result, rejection text included. -/
 theorem processTransaction_eq (benv : Benv) (bout : BlockOutput) (tx : Transaction)
     (index : Nat) :
-    Staging.processTransaction benv bout tx index = processTransaction benv bout tx index := by
-  have hm : Staging.processMessageCall = processMessageCall := funext processMessageCall_eq
-  simp only [Staging.processTransaction, hm, Staging.Transaction.check,
-    Staging.Transaction.prepare, Staging.Transaction.settle, processTransaction, bind_assoc,
+    Bridge.G2a.Phased.processTransaction benv bout tx index = Bridge.G2a.Old.processTransaction benv bout tx index := by
+  have hm : Bridge.G2a.Phased.processMessageCall = Bridge.G2a.Old.processMessageCall := funext processMessageCall_eq
+  simp only [Bridge.G2a.Phased.processTransaction, hm, Transaction.admit,
+    Transaction.prepare, Bridge.G2a.Phased.Transaction.settle, Bridge.G2a.Old.processTransaction, bind_assoc,
     pure_bind]
   rfl
 

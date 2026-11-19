@@ -23,20 +23,20 @@ closure.
 
 namespace Jaune
 
-open Jaune Jaune.Staging
+open Jaune
 open Jaune.TraceTransaction (Certified)
 
 /-- Trace a top-level message run. A preparation fault or a refusal returns without a frame. A
 frame is entered from its checkpoint and traced as `Trace.runFrame` traces it; without state gas a
 call first reports its authorization refund. -/
-def Staging.TraceTransaction.runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
+def TraceTransaction.runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (msg : Msg) (runId : String) :
-    m (Certified (Staging.Message.run msg)) := do
-  match hprep : Staging.TopLevel.prepare msg with
+    m (Certified (TopLevel.run msg)) := do
+  match hprep : TopLevel.prepare msg with
   | .error e =>
-    pure ⟨.error e, by simp only [Staging.Message.run, hprep]; rfl⟩
+    pure ⟨.error e, by simp only [TopLevel.run, hprep]; rfl⟩
   | .ok (.refused reason halted) =>
-    pure ⟨.ok ⟨msg, .refused reason halted, none, none⟩, by simp only [Staging.Message.run, hprep]; rfl⟩
+    pure ⟨.ok ⟨msg, .refused reason halted, none, none⟩, by simp only [TopLevel.run, hprep]; rfl⟩
   | .ok (.frame f a) =>
     if msg.benv.stat.rules.stateGas.isNone && msg.target.isSome then
       authorizationRefund a
@@ -46,62 +46,62 @@ def Staging.TraceTransaction.runMessage {m : Type → Type} [Monad m] (sink : Tr
       sink (.entered context f (.done settled))
       sink (.settled context f settled)
       pure ⟨(do let r ← settled; pure ⟨msg, .frame f a, none, some r⟩), by
-        simp only [Staging.Message.run, hprep, bind, Except.bind, hentry]⟩
+        simp only [TopLevel.run, hprep, bind, Except.bind, hentry]⟩
     | .run evm =>
       sink (.entered context f (.run evm))
       let result ← Trace.exec sink evm context 1
       let settled := settle f result.value
       sink (.settled context f settled)
       pure ⟨(do let r ← settled; pure ⟨msg, .frame f a, some evm, some r⟩), by
-        simp only [Staging.Message.run, hprep, bind, Except.bind, hentry, settled, result.erases]⟩
+        simp only [TopLevel.run, hprep, bind, Except.bind, hentry, settled, result.erases]⟩
 
 /-- The traced message run's value is `Message.run`. -/
-theorem Staging.TraceTransaction.runMessage_erasure {msg : Msg} (result : Certified (Staging.Message.run msg)) :
-    result.value = Staging.Message.run msg := result.erases
+theorem TraceTransaction.runMessage_erasure {msg : Msg} (result : Certified (TopLevel.run msg)) :
+    result.value = TopLevel.run msg := result.erases
 
 /-- A transaction's check and preparation. -/
-def Staging.TraceTransaction.prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
-    Except TransitionError Staging.Transaction.Prepared := do
-  let checked ← Staging.Transaction.check benv bout tx index
-  Staging.Transaction.prepare checked tx index
+def TraceTransaction.prepareTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+    Except TransitionError Transaction.Prepared := do
+  let checked ← Transaction.admit benv bout tx index
+  Transaction.prepare checked tx index
 
 /-- The transaction result and the message run the trace summary reads: none when the
 transaction was rejected before its message ran or the run faulted. -/
-structure Staging.TraceTransaction.TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat)
-    extends Certified ((fun pair => (pair.1.state, pair.2)) <$> Staging.B2.Transaction.run benv bout tx index) where
-  messageRun : Option Staging.MessageRun
+structure TraceTransaction.TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat)
+    extends Certified ((fun pair => (pair.1.state, pair.2)) <$> Transaction.run benv bout tx index) where
+  messageRun : Option TopLevelRun
   /-- The observed run is the transaction's top-level message run. -/
   observes : messageRun =
-    ((Staging.TraceTransaction.prepareTransaction benv bout tx index).toOption.bind
-      fun prepared => (Staging.Message.run prepared.msg).toOption)
+    ((TraceTransaction.prepareTransaction benv bout tx index).toOption.bind
+      fun prepared => (TopLevel.run prepared.msg).toOption)
 
 /-- Execute one transaction with synchronous instruction observations: check and prepare it,
 trace its message run, settle the run as `B2.Transaction.run` settles it. The certificate connects
 the value to the public pipeline; the message run is never run a second time. -/
-def Staging.TraceTransaction.runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
+def TraceTransaction.runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction)
-    (index : Nat) (runId : String) : m (Staging.TraceTransaction.TransactionResult benv bout tx index) := do
-  match hcheck : Staging.Transaction.check benv bout tx index with
+    (index : Nat) (runId : String) : m (TraceTransaction.TransactionResult benv bout tx index) := do
+  match hcheck : Transaction.admit benv bout tx index with
   | .error error =>
     pure {
       value := .error error
       messageRun := none
-      erases := by simp only [Staging.B2.Transaction.run, hcheck, bind, Except.bind]; rfl
-      observes := by simp only [Staging.TraceTransaction.prepareTransaction, hcheck, bind, Except.bind]; rfl }
+      erases := by simp only [Transaction.run, hcheck, bind, Except.bind]; rfl
+      observes := by simp only [TraceTransaction.prepareTransaction, hcheck, bind, Except.bind]; rfl }
   | .ok checked =>
-    match hprep : Staging.Transaction.prepare checked tx index with
+    match hprep : Transaction.prepare checked tx index with
     | .error error =>
       pure {
         value := .error error
         messageRun := none
-        erases := by simp only [Staging.B2.Transaction.run, hcheck, hprep, bind, Except.bind]; rfl
-        observes := by simp only [Staging.TraceTransaction.prepareTransaction, hcheck, hprep, bind, Except.bind]; rfl }
+        erases := by simp only [Transaction.run, hcheck, hprep, bind, Except.bind]; rfl
+        observes := by simp only [TraceTransaction.prepareTransaction, hcheck, hprep, bind, Except.bind]; rfl }
     | .ok prepared =>
-      let message ← Staging.TraceTransaction.runMessage sink authorizationRefund prepared.msg runId
+      let message ← TraceTransaction.runMessage sink authorizationRefund prepared.msg runId
       let value : Except TransitionError (State × BlockOutput) := do
         let run ← message.value.mapError (fun e => TransitionError.vm e.toEvmError)
         (fun pair => (pair.1.state, pair.2)) <$>
-          Staging.B2.Transaction.settleRun checked prepared tx index run
+          Transaction.settleRun checked prepared tx index run
       let observed := match message.value with
         | .error _ => none
         | .ok run => some run
@@ -109,18 +109,18 @@ def Staging.TraceTransaction.runTransaction {m : Type → Type} [Monad m] (sink 
         value := value
         messageRun := observed
         erases := by
-          simp only [value, message.erases, Staging.B2.Transaction.run, hcheck, hprep, bind, Except.bind]
-          cases Except.mapError (fun e => TransitionError.vm e.toEvmError) (Staging.Message.run prepared.msg) <;>
+          simp only [value, message.erases, Transaction.run, hcheck, hprep, bind, Except.bind]
+          cases Except.mapError (fun e => TransitionError.vm e.toEvmError) (TopLevel.run prepared.msg) <;>
             rfl
         observes := by
-          simp only [Staging.TraceTransaction.prepareTransaction, hcheck, hprep, bind, Except.bind, observed, message.erases,
+          simp only [TraceTransaction.prepareTransaction, hcheck, hprep, bind, Except.bind, observed, message.erases,
             Except.toOption, Option.bind]
-          cases Staging.Message.run prepared.msg <;> rfl }
+          cases TopLevel.run prepared.msg <;> rfl }
 
 /-- The traced transaction's value is the transaction run's state and block output. -/
-theorem Staging.TraceTransaction.runTransaction_erasure {benv : Benv} {bout : BlockOutput} {tx : Transaction}
-    {index : Nat} (result : Staging.TraceTransaction.TransactionResult benv bout tx index) :
-    result.value = (fun pair => (pair.1.state, pair.2)) <$> Staging.B2.Transaction.run benv bout tx index :=
+theorem TraceTransaction.runTransaction_erasure {benv : Benv} {bout : BlockOutput} {tx : Transaction}
+    {index : Nat} (result : TraceTransaction.TransactionResult benv bout tx index) :
+    result.value = (fun pair => (pair.1.state, pair.2)) <$> Transaction.run benv bout tx index :=
   result.erases
 
 end Jaune

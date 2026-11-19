@@ -178,7 +178,7 @@ def engineVerdictGloas (cfg : ChainConfig) (exec : BlockChain) (req : Gloas.NewP
   (checkBlockRlpSize f.ruleSet.block blk.toRlpItem.toBytes.length).mapError
     (fun e => .engine (.blockSize e))
   let post ← (transitionVerdict (stateTransitionScheduledE cfg f exec blk)).mapError .engine
-  let out ← (Staging.applyBody (initBlockEnvironment f exec blk.header) blk.transactions blk.ommers blk.withdrawals).mapError
+  let out ← (applyBody (initBlockEnvironment f exec blk.header) blk.transactions blk.ommers blk.withdrawals).mapError
     (fun e => .engine (.body e))
   guardExcept (decide (out.2.requests = Gloas.getExecutionRequestsList req.execution_requests))
     (.engine .requestsMismatch)

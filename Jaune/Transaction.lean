@@ -28,486 +28,33 @@ authorization and delegation resolution for a call, and under Amsterdam the prep
 its failure settlement. The frame then runs by `Frame.runTop` and its `Frame.Result` is rendered
 by `Frame.output` or `Frame.outputAmsterdam`. -/
 
-/-- Run one top-level Amsterdam message call: prepare the machine, settle a
-preparation failure, or run the top frame whose checkpoint is the prepared state
-and render its result. Amsterdam-only. -/
-def processTopLevelAmsterdam (state : StateGasRules) (msg : Msg) (isCreate : Bool) :
-    Except EvmError (State × MsgCallOutput) :=
-  match prepareTopLevelAmsterdam state msg with
-  | .error ⟨error, devm⟩ => settleTopLevelPreparationFailure msg error devm
-  | .ok ⟨msg, devm⟩ => do
-    let f : Frame := ⟨Message.ofTop msg isCreate, Frame.State.ofDevm devm⟩
-    let r ← (Frame.runTop f).mapError Fault.toEvmError
-    Frame.outputAmsterdam f r
 
-def processMessageCall.create (msg : Msg) :
-    Except EvmError (State × MsgCallOutput) := do
-  match msg.benv.stat.rules.stateGas with
-  | none =>
-    if accountHasCodeOrNonce msg.benv.state msg.currentTarget then
-      return ⟨msg.benv.state,
-        { gasLeft := 0, refundCounter := 0, logs := [],
-          accountsToDelete := .emptyWithCapacity,
-          error := .some (.halt (.addressCollision .none)), returnData := [] }⟩
-    else
-      let f := Frame.ofTop msg true
-      let r ← (Frame.runTop f).mapError Fault.toEvmError
-      Frame.output f 0 r
-  | some state => processTopLevelAmsterdam state msg true
 
-def processMessageCall.call (msg : Msg) :
-    Except EvmError (State × MsgCallOutput) := do
-  match msg.benv.stat.rules.stateGas with
-  | none =>
-    let ⟨delegated, authorizationRefund⟩ ← processMessageCall.authorize msg
-    let f := Frame.ofTop (TopLevel.resolveCodeDelegation delegated) false
-    let r ← (Frame.runTop f).mapError Fault.toEvmError
-    Frame.output f authorizationRefund r
-  | some state => processTopLevelAmsterdam state msg false
 
-def processMessageCall (msg : Msg) :
-    Except EvmError (State × MsgCallOutput) := do
-  if msg.target.isNone then
-    processMessageCall.create msg
-  else
-    processMessageCall.call msg
 
-def processTransaction
-  (benv: Benv) (bout : BlockOutput)
-  (tx: Transaction) (index : Nat) : Except TransitionError (State × BlockOutput) := do
-  -- NOTE: linearized into a straight `let ← .ok (…)` / `let := …` chain
-  -- (no `mut`/`for`) so the block inverts cleanly with `of_bind_eq_ok` and the
-  -- `bout` bookkeeping stays opaque.  Definitionally equal to the previous
-  -- `mut`/`for` form except that the final account-deletion `for` is expressed
-  -- as `foldl`, which agrees because `destroyAccount` commutes over the
-  -- distinct addresses of the `accountsToDelete` set.
-  let benv := benv.beginTransaction
-  let bout ← .ok {bout with
-    transactionsTrie := bout.transactionsTrie.insert (Rlp.Item.bytes index.toBytes).toBytes tx}
-  let validationSender : Address ← recoverValidationSender benv tx
-  let ⟨intrinsicGas, calldataFloorGasCost⟩ ←
-    Except.mapError TransitionError.transaction
-      (validateTransaction benv.stat.rules tx validationSender)
-  let ⟨
-    sender,
-    effectiveGasPrice,
-    blobVersionedHashes,
-    txBlobGasUsed
-  ⟩ ← checkTransaction benv bout tx
-  let blobGasFee :=
-    if tx.isEip4844
-    then calculateDataFee benv.stat.rules.blob benv.stat.excessBlobGas tx
-    else 0
-  let effectiveGasFee := tx.gasLimit * effectiveGasPrice
-  let allocation := allocateEvmGas benv.stat.rules tx.gasLimit intrinsicGas
-  let state : State := benv.state.incrNonce sender
-  let state ← (state.subBal sender (effectiveGasFee + blobGasFee).toU256).toExcept
-    (TransitionError.internal (.invariant (.text "balance underflow")))
-  -- EIP-3651 (Shanghai) warms the coinbase; before it only the access list is
-  -- pre-warmed.
-  let preaccessedAddresses : AdrSet :=
-    if benv.stat.rules.transactionRules.warmCoinbase then
-    .ofList (benv.stat.coinbase :: tx.accessList.map Prod.fst)
-    else .ofList (tx.accessList.map Prod.fst)
-  let preaccessedStorageKeys : KeySet :=
-    .ofList (tx.accessList.map <| λ ⟨adr, keys⟩ => keys.map (⟨adr, ·⟩)).flatten
-  let tenv : Tenv := {
-    transientStorage := .empty
-    stat := {
-      origin := sender
-      gasPrice := effectiveGasPrice
-      gas := allocation.executionGas
-      stateGasReservoir := allocation.stateGasReservoir
-      accessListAddresses := preaccessedAddresses
-      accessListStorageKeys := preaccessedStorageKeys
-      blobVersionedHashes := blobVersionedHashes
-      auths := tx.authorizationList
-      indexInBlock := index
-      txHash := transactionHash tx
-    }
-  }
-  let msg ← prepareMessage {benv with state := state} tenv tx
-  let ⟨state, txOutput⟩ ← Except.mapError TransitionError.vm (processMessageCall msg)
-  let refundCounter : Nat ←
-    (Int.toNat? txOutput.refundCounter).toExcept
-      (TransitionError.internal (.invariant (.text "refund counter is negative")))
-  let settlement :=
-    settleTransactionGas benv.stat.rules tx.gasLimit calldataFloorGasCost
-      txOutput.gasLeft txOutput.stateGasLeft refundCounter txOutput.stateGasUsed
-  let gasRefundAmount : Nat :=
-    settlement.gasLeft * effectiveGasPrice
-  let priorityFeePerGas := effectiveGasPrice - benv.stat.baseFeePerGas
-  let transactionFee := settlement.gasUsed * priorityFeePerGas
-  let state := state.addBal sender gasRefundAmount.toU256
-  let storageWrites :=
-    txOutput.storageWrites.clearIfEmpty state sender
-  let state := state.addBal benv.stat.coinbase transactionFee.toU256
-  let storageWrites :=
-    storageWrites.clearIfEmpty state benv.stat.coinbase
-  let storageWrites := txOutput.accountsToDelete.toList.foldl
-    (fun writes a => writes.eraseAddress a) storageWrites
-  let state := settleSelfdestructs benv.stat.rules
-    txOutput.accountsToDelete.toList state
-  -- EIP-161: `destroy_touched_empty_accounts` (Spurious Dragon to Gray Glacier).
-  let state := sweepTouchedAccounts benv.stat.rules
-    txOutput.touchedAccounts.toList state
-  let bout ← .ok (bout.withGasSettlement settlement txBlobGasUsed)
-  let receipt :=
-    makeReceipt tx txOutput.error bout.cumulativeGasUsed txOutput.logs
-  let receiptKey : Bytes := Rlp.Item.toBytes <| .bytes index.toBytes
-  let bout ← .ok {bout with
-    receiptKeys := bout.receiptKeys ++ [receiptKey]
-    receiptsTrie := bout.receiptsTrie.insert receiptKey receipt
-    blockLogs := bout.blockLogs ++ txOutput.logs}
-  -- EIP-7928: `incorporate_tx_into_block` at `index + 1`, after the
-  -- self-destruct settlement: surviving explicit storage writes and account
-  -- changes, plus reads and the transaction-level ones --
-  -- the sender (`check_transaction`, `update_sender_state`, the refund) and
-  -- the coinbase (`disburse_gas_fees` credits it even a zero fee).
-  let bal := match benv.stat.rules.blockAccessListRules with
-    | none => bout.blockAccessListBuilder
-    | some _ => bout.blockAccessListBuilder.incorporate (index + 1) benv.state state
-        (sender :: benv.stat.coinbase :: txOutput.accountReads.toList)
-        txOutput.storageReads.toList storageWrites.toList
-  .ok ⟨state, {bout with blockAccessListBuilder := bal}⟩
 
-/-- Under a legacy schedule, the real transaction producer preserves the
-legacy block-counter relation through its settlement and receipt updates. -/
-theorem processTransaction_legacyGasAccounting {benv : Benv}
-    (hnone : benv.stat.rules.stateGas = none) {bout : BlockOutput}
-    (hb : bout.LegacyGasAccounting) {tx : Transaction} {index : Nat} {p}
-    (hp : processTransaction benv bout tx index = .ok p) :
-    p.2.LegacyGasAccounting := by
-  unfold processTransaction at hp
-  obtain ⟨b1, hb1, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨validationSender, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨ig, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨ck, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨st1, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨msg, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨q, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨b2, hb2, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨b3, hb3, hp⟩ := Except.bind_eq_ok hp
-  simp only [Except.ok.injEq] at hb1 hb2 hb3
-  have hb1' : b1.LegacyGasAccounting := by
-    rw [← hb1]
-    exact hb
-  have hb2' : b2.LegacyGasAccounting := by
-    rw [← hb2]
-    exact BlockOutput.LegacyGasAccounting.withGasSettlement hb1'
-      (settleTransactionGas_none_invariants hnone _ _ _ _ _ _) _
-  have hb3' : b3.LegacyGasAccounting := by
-    rw [← hb3]
-    exact hb2'
-  cases hp
-  exact hb3'
 
 -- The single boundary shared by all four system transactions (beacon roots,
 -- history storage, withdrawal requests, consolidation requests), so each takes
 -- its own input state as the original state.
-def processSystemTransaction (benv : Benv)
-  (target : Address) (code : ByteArray) (data : Bytes) :
-  Except EvmError (State × MsgCallOutput) := do
-  let benv := benv.beginTransaction
-  let txEnv : Tenv := systemTransactionEnvironment benv
-  let systemTxMsg : Msg :=
-    systemTransactionMessage benv txEnv target data code
-  processMessageCall systemTxMsg
 
-def processUncheckedSystemTransaction
-  (benv : Benv) (target : Address) (data : Bytes) :
-  Except EvmError (State × MsgCallOutput) := do
-  let systemContractCode : ByteArray := benv.state.getCode target
-  processSystemTransaction benv target systemContractCode data
 
-def processCheckedSystemTransaction
-  (benv : Benv) (target : Address) (data : Bytes) :
-  Except TransitionError (State × MsgCallOutput) := do
-  let systemContractCode : ByteArray := benv.state.getCode target
-  -- A mis-provisioned chain: the mandatory system contract holds no code. The
-  -- pinned `process_checked_system_transaction` raises `InvalidBlock` here,
-  -- before attempting the call, and the corpus names the reason
-  -- `BlockException.SYSTEM_CONTRACT_EMPTY`; it is a block rejection with its
-  -- own typed reason and its own fixture identity. (Until goal D this arm was
-  -- a fail-closed *internal* invariant, with the note that the identity was
-  -- "outside this build's reviewed vocabulary" and "unobserved in every
-  -- corpus"; the Glamsterdam devnet transition corpus observes it in the four
-  -- `deploy_after_fork` cases of `eip8282_…/test_contract_deployment.py`, so
-  -- the reason is rewritten to the block channel -- goal D, packet DP-2,
-  -- owner-approved.)
-  if systemContractCode.isEmpty then
-    .error <| .block <| .systemContractEmpty <| .text
-      s!"system contract address {target.toHex} holds no code"
-  let ⟨state, systemTxOutput⟩ ←
-    Except.mapError TransitionError.vm
-      (processSystemTransaction benv target systemContractCode data)
-  -- P0.6 item 3: the halt is extracted by the total match, never by a partial
-  -- projection out of the optional error field. The rejection carries the
-  -- halt itself; `BlockValidationError.detail` writes its text (3.2).
-  match systemTxOutput.error with
-  | some halt => .error <| .block <| .systemContractCallFailed target halt
-  | none => .ok ⟨state, systemTxOutput⟩
 
-/-- Call each request-producing system contract in turn, threading the state.
 
-Structural recursion on the contract list rather than a loop, so that the
-invariant proofs are an induction on that list instead of a fixed number of
-nested case splits -- which is what makes adding Amsterdam's two contracts a
-change to data and to nothing else. Each contract's non-empty return data is
-appended prefixed with its own type byte, and the state each call produces is
-what the next call runs against. -/
-def runRequestContracts (idx : Nat) :
-    List (UInt8 × Address) → Benv → List Bytes → BlockAccessListBuilder →
-      Except TransitionError (State × List Bytes × BlockAccessListBuilder)
-  | [], benv, acc, bal => .ok ⟨benv.state, acc, bal⟩
-  | ⟨requestType, address⟩ :: rest, benv, acc, bal => do
-    let ⟨state, output⟩ ← processCheckedSystemTransaction benv address []
-    let acc :=
-      if output.returnData.length > 0 then
-        acc ++ [[requestType] ++ output.returnData]
-      else
-        acc
-    -- EIP-7928: each checked call incorporates its own writes and reads at
-    -- the post-execution index; `create_evm` read the contract's account.
-    let bal := match benv.stat.rules.blockAccessListRules with
-      | none => bal
-      | some _ => bal.incorporate idx benv.state state
-          (address :: output.accountReads.toList) output.storageReads.toList output.storageWrites.toList
-    runRequestContracts idx rest (benv.withState state) acc bal
 
-/-- Run the block's request-producing system contracts and collect their output.
 
-The contracts come from `rules.requests` -- an ordered list of
-`(type byte, address)` pairs -- and this is a fold over it rather than a
-sequence of named calls. The order is the rule: the request bytes are
-concatenated in call order and hashed into `requestsHash`, so calling the same
-contracts in a different order is a different block. Amsterdam appends two more
-entries (EIP-8282's builder deposit and exit), and appending to a list is the
-whole change; nothing here learns their names.
 
-The receipt-derived deposit request stays where it is, ahead of the fold and
-outside the list. It is parsed out of the block's logs rather than produced by
-a system call, so it is not one of these contracts -- which is also why the
-rule data does not carry a type-0 entry.
 
-`pragueRules.requests` reproduces exactly the two calls, in the order, this
-function made before the list existed: `pragueRules_requests` in
-`Jaune/Machine.lean` states that by `rfl`; a `Jaune/Check/Fork.lean` `#guard` runs it. -/
-def processGeneralPurposeRequestsAt (balIndex : Nat)
-  (benv : Benv) (bout : BlockOutput) :
-  Except TransitionError (State × BlockOutput) := do
-  let depositRequests ← parseDepositRequests bout
-  let seeded : List Bytes :=
-    if depositRequests.length > 0 then
-      bout.requests ++ [depositRequestType ++ depositRequests]
-    else
-      bout.requests
-  let ⟨state, allRequests, bal⟩ ←
-    runRequestContracts balIndex benv.stat.rules.requests benv seeded bout.blockAccessListBuilder
-  .ok ⟨state, {bout with requests := allRequests, blockAccessListBuilder := bal}⟩
 
-/-- The block pipeline's request pass. EIP-7928: post-execution operations use
-index `n + 1`, `n` the number of transactions -- one receipt key each, since a
-block whose transaction is rejected is itself rejected. The transition tool,
-whose driver counts the transactions it was handed, calls
-`processGeneralPurposeRequestsAt` with its own count. -/
-def processGeneralPurposeRequests (benv : Benv) (bout : BlockOutput) :
-    Except TransitionError (State × BlockOutput) :=
-  processGeneralPurposeRequestsAt (bout.receiptKeys.length + 1) benv bout
 
-theorem processGeneralPurposeRequests_legacyGasAccounting {benv : Benv}
-    {bout : BlockOutput} (hb : bout.LegacyGasAccounting) {p}
-    (hp : processGeneralPurposeRequests benv bout = .ok p) :
-    p.2.LegacyGasAccounting := by
-  unfold processGeneralPurposeRequests processGeneralPurposeRequestsAt at hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  cases hp
-  exact hb
 
-def applyTransactions :
-    List (Nat × Transaction) → Benv → BlockOutput → Except TransitionError (Benv × BlockOutput)
-  | [], benv, bout => .ok (benv, bout)
-  | ⟨i, tx⟩ :: txis, benv , bout => do
-    let ⟨st, bout'⟩ ← processTransaction benv bout tx i
-    applyTransactions txis (benv.withState st) bout'
 
-/-- The actual transaction-list fold preserves the legacy block counters at
-every successful iteration. -/
-theorem applyTransactions_legacyGasAccounting :
-    ∀ (txis : List (Nat × Transaction)) {benv : Benv},
-      benv.stat.rules.stateGas = none →
-      ∀ {bout : BlockOutput} {p}, bout.LegacyGasAccounting →
-        applyTransactions txis benv bout = .ok p → p.2.LegacyGasAccounting
-  | [], _, _, _, _, hb, hp => by cases hp; exact hb
-  | txi :: txis, benv, hnone, bout, p, hb, hp => by
-    unfold applyTransactions at hp
-    obtain ⟨⟨st, bout'⟩, hq, hp⟩ := Except.bind_eq_ok hp
-    exact applyTransactions_legacyGasAccounting txis
-      (benv := benv.withState st) hnone
-      (processTransaction_legacyGasAccounting hnone hb hq) hp
 
-/-- Starting from the producer's real initializer discharges the initial
-legacy relation required by the iteration theorem. -/
-theorem applyTransactions_init_legacyGasAccounting
-    (txis : List (Nat × Transaction)) {benv : Benv}
-    (hnone : benv.stat.rules.stateGas = none) {p}
-    (hp : applyTransactions txis benv .init = .ok p) :
-    p.2.LegacyGasAccounting :=
-  applyTransactions_legacyGasAccounting txis hnone
-    BlockOutput.init_legacyGasAccounting hp
 
-/-- EIP-4788's pre-execution beacon-roots call (Cancun on), with its
-block-level access-list incorporation at index 0; under rules without
-`sys.beaconRoots` the identity: the state as given and an empty builder. -/
-def beaconRootsCall (rules : ForkRules) (benv : Benv) :
-    Except TransitionError (State × BlockAccessListBuilder) :=
-  if rules.systemCalls.beaconRoots then do
-    let ⟨st, out⟩ ←
-      Except.mapError TransitionError.vm <|
-        processUncheckedSystemTransaction benv
-          beaconRootsAddress
-          benv.stat.parentBeaconBlockRoot.toBytes
-    .ok ⟨st, BlockAccessListBuilder.incorporateSystem {} rules 0 benv.state st
-      (beaconRootsAddress :: out.accountReads.toList) out.storageReads.toList
-      out.storageWrites.toList⟩
-  else .ok ⟨benv.state, {}⟩
 
-/-- EIP-2935's pre-execution history-storage call (Prague on), incorporated at
-index 0; under rules without `sys.historyStorage` the identity. -/
-def historyStorageCall (rules : ForkRules) (benv : Benv) (bal : BlockAccessListBuilder) :
-    Except TransitionError (State × BlockAccessListBuilder) :=
-  if rules.systemCalls.historyStorage then do
-    let lastHash ←
-       benv.stat.blockHashes.getLast?.toExcept
-         (TransitionError.internal (.invariant (.text "block hashes is empty")))
-    let ⟨st, out⟩ ←
-      Except.mapError TransitionError.vm <|
-        processUncheckedSystemTransaction benv
-          historyStorageAddress
-          lastHash.toBytes
-    .ok ⟨st, bal.incorporateSystem rules 0 benv.state st
-      (historyStorageAddress :: out.accountReads.toList) out.storageReads.toList
-      out.storageWrites.toList⟩
-  else .ok ⟨benv.state, bal⟩
 
-/-- EIP-4895's withdrawals (Shanghai on), gated by `header.withdrawalsRoot`:
-the credits, the withdrawals trie, and -- EIP-7928 -- one incorporation at
-`n + 1`, every recipient read by `create_ether` whatever the amount. Under
-rules without the field the identity. -/
-def withdrawalsPass (rules : ForkRules) (benv : Benv) (bout : BlockOutput)
-    (wds : List Withdrawal) : State × BlockOutput :=
-  if rules.header.withdrawalsRoot then
-    let ⟨stWds, boutWds⟩ := processWithdrawals benv bout wds
-    let balWds := boutWds.blockAccessListBuilder.incorporateSystem rules
-      (bout.receiptKeys.length + 1) benv.state stWds (wds.map Withdrawal.address) [] []
-    ⟨stWds, {boutWds with blockAccessListBuilder := balWds}⟩
-  else ⟨benv.state, bout⟩
 
-/-- EIP-7685's request pass (Prague on), deposit-log parsing included, gated by
-`header.requestsHash`; under rules without the field the identity. -/
-def requestsPass (rules : ForkRules) (benv : Benv) (bout : BlockOutput) :
-    Except TransitionError (State × BlockOutput) :=
-  if rules.header.requestsHash then processGeneralPurposeRequests benv bout
-  else .ok ⟨benv.state, bout⟩
 
-/-- `pay_rewards`, Byzantium through Gray Glacier: the block reward plus
-`reward / 32` per ommer to the block's coinbase, then to each ommer's coinbase
-`(8 - age) * reward / 8`, where `age = number - ommer.number`. Written
-`(8 + ommer.number - number)`, which is the same number for every age
-`validateOmmers` admits (1 to 6). Each credit is `create_ether`, which is
-`State.addBal`. The reward is minted: no account is debited. -/
-def payRewards (pow : ProofOfWorkRules) (number : Nat) (coinbase : Address)
-    (ommers : List Header) (st : State) : State :=
-  let minerReward := pow.blockReward + ommers.length * (pow.blockReward / 32)
-  ommers.foldl
-    (fun acc ommer =>
-      acc.addBal ommer.coinbase ((8 + ommer.number - number) * pow.blockReward / 8).toU256)
-    (st.addBal coinbase minerReward.toU256)
-
-/-- `apply_body`, every fork from Byzantium on, with each fork-dependent step
-gated by rule data and the identity where its rule is off: the beacon-roots
-call (`sys.beaconRoots`), the history-storage call (`sys.historyStorage`), the
-withdrawals (`header.withdrawalsRoot`), the request pass with its deposit-log
-parsing (`header.requestsHash`), and the proof-of-work rewards
-(`pow = some _`), paid last. `ommers` is the block's ommer list, the EELS
-pre-merge signature; after Paris `checkBlockOmmers` has already required it
-empty and nothing reads it.
-
-The rewards are not incorporated into a block-level access list: no fork
-carries both `pow = some _` and `bal = some _`. -/
-def applyBody
-  (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (ommers : List Header)
-  (wds : List Withdrawal) :
-  Except TransitionError (State × BlockOutput) := do
-  let rules := benv.stat.rules
-  -- EIP-7928: the two pre-execution system calls incorporate at index 0.
-  let ⟨stBeacon, bal⟩ ← beaconRootsCall rules benv
-  let benvBeacon : Benv := benv.withState stBeacon
-  let ⟨stHistory, bal⟩ ← historyStorageCall rules benvBeacon bal
-  let benvHistory := benvBeacon.withState stHistory
-  let ⟨benvTxs, boutTxs⟩ ←
-    applyTransactions (← txs.mapM (decodeTransaction benvHistory.stat.rules)).putIndex benvHistory {BlockOutput.init with blockAccessListBuilder := bal}
-  let ⟨stWds, boutWds⟩ := withdrawalsPass rules benvTxs boutTxs wds
-  let ⟨stReq, boutReq⟩ ← requestsPass rules (benvTxs.withState stWds) boutWds
-  let stRewards := match rules.proofOfWork with
-    | none => stReq
-    | some pow => payRewards pow benv.stat.number benv.stat.coinbase ommers stReq
-  -- `build_block_access_list`, then the item rule -- before any header check.
-  let list := match rules.blockAccessListRules with
-    | none => []
-    | some _ => boutReq.blockAccessListBuilder.build
-  checkBlockAccessListGasLimit rules benv.stat.blockGasLimit list
-  .ok ⟨stRewards, {boutReq with blockAccessList := list}⟩
-
-theorem withdrawalsPass_legacyGasAccounting {rules : ForkRules} {benv : Benv}
-    {bout : BlockOutput} (hb : bout.LegacyGasAccounting) (wds : List Withdrawal) :
-    (withdrawalsPass rules benv bout wds).2.LegacyGasAccounting := by
-  unfold withdrawalsPass
-  split
-  · exact processWithdrawals_legacyGasAccounting (benv := benv) hb wds
-  · exact hb
-
-theorem requestsPass_legacyGasAccounting {rules : ForkRules} {benv : Benv}
-    {bout : BlockOutput} (hb : bout.LegacyGasAccounting) {p}
-    (hp : requestsPass rules benv bout = .ok p) : p.2.LegacyGasAccounting := by
-  unfold requestsPass at hp
-  split at hp
-  · exact processGeneralPurposeRequests_legacyGasAccounting hb hp
-  · cases hp; exact hb
-
-/-- A successful legacy block body starts from `BlockOutput.init`, preserves
-the relation through every transaction, and keeps it through withdrawals,
-the request pass and the rewards, each of which is the identity on the gas
-counters whether its rule is on or off. -/
-theorem applyBody_legacyGasAccounting {benv : Benv}
-    (hnone : benv.stat.rules.stateGas = none)
-    {txs : List (Bytes ⊕ Transaction)} {ommers : List Header} {wds : List Withdrawal} {p}
-    (hp : applyBody benv txs ommers wds = .ok p) : p.2.LegacyGasAccounting := by
-  unfold applyBody at hp
-  obtain ⟨q1, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨q2, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨txsD, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-  -- The initial output is `.init` with the two system calls' access-list
-  -- incorporation; the relation reads none of that.
-  have hqLegacy : q.2.LegacyGasAccounting :=
-    applyTransactions_legacyGasAccounting txsD.putIndex
-      (benv := (benv.withState q1.1).withState q2.1) hnone
-      (by simp [BlockOutput.LegacyGasAccounting, BlockOutput.init]) hq
-  obtain ⟨benvTxs, boutTxs⟩ := q
-  dsimp only at hp hqLegacy
-  have hwLegacy := withdrawalsPass_legacyGasAccounting
-    (rules := benv.stat.rules) (benv := benvTxs) hqLegacy wds
-  rcases hw : withdrawalsPass benv.stat.rules benvTxs boutTxs wds with ⟨stWds, boutWds⟩
-  simp only [hw] at hp hwLegacy
-  -- The request pass, the rewards, the item rule and the built list touch no
-  -- gas counter.
-  obtain ⟨q', hq', hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  cases hp
-  exact requestsPass_legacyGasAccounting (p := q') hwLegacy hq'
 
 --------------- RETAINED HISTORY ---------------
 
@@ -955,44 +502,17 @@ theorem BlockChain.retainedHistoryValid_appendBlock {chain chain' : BlockChain}
         List.length_cons, List.length_nil]
       omega
 
-/-- Shared typed transition algorithm. The caller supplies only the ommer
-check and a typed embedding for transition failures; header validation and
-execution remain common to static and scheduled callers. The ommer action is
-suspended until after the containing header has passed. -/
-def stateTransitionCoreE {ε : Type} (embed : TransitionError → ε)
-    (f : Fork) (ch : BlockChain) (block : Block)
-    (checkOmmers : Unit → Except ε Unit) : Except ε BlockChain := do
-  let rules := f.ruleSet
-  Except.mapError embed (validateHeader rules ch block.header)
-  checkOmmers ()
-  let benv : Benv := initBlockEnvironment f ch block.header
-  let ⟨st, bout⟩ ← Except.mapError embed
-    (applyBody benv block.transactions block.ommers block.withdrawals)
-  let blockStateRoot : U256 := st.root
-  let transactionsRoot : U256 := getTransactionsRoot bout
-  let receiptRoot : U256 := getReceiptRoot bout
-  let blockLogsBloom : Bytes := logsBloom bout.blockLogs
-  let withdrawalsRoot : U256 := getWithdrawalsRoot bout
-  let requestsHash :=
-    if rules.header.requestsHash then some (computeRequestsHash bout.requests) else none
-  Except.mapError (embed ∘ TransitionError.block) <|
-    stateTransitionChecks bout block.header
-      transactionsRoot blockStateRoot receiptRoot
-      blockLogsBloom withdrawalsRoot requestsHash
-  Except.mapError (embed ∘ TransitionError.block) <|
-    blockAccessListCheck rules bout block.header
-  .ok ⟨appendBlock ch.blocks block, st, ch.chainId⟩
 
-private theorem transition_mapError_id {α : Type} (r : Except TransitionError α) :
+theorem transition_mapError_id {α : Type} (r : Except TransitionError α) :
     r.mapError id = r := by
   cases r <;> rfl
 
-private theorem transition_mapError_bind {ε ε' α β : Type}
+theorem transition_mapError_bind {ε ε' α β : Type}
     (g : ε → ε') (r : Except ε α) (k : α → Except ε β) :
     (r.bind k).mapError g = (r.mapError g).bind (fun a => (k a).mapError g) := by
   cases r <;> rfl
 
-private theorem transition_mapError_comp {ε ε' ε'' α : Type}
+theorem transition_mapError_comp {ε ε' ε'' α : Type}
     (g : ε → ε') (g' : ε' → ε'') (r : Except ε α) :
     (r.mapError g).mapError g' = r.mapError (g' ∘ g) := by
   cases r <;> rfl
@@ -1016,24 +536,12 @@ private theorem validateOmmersWith_mapError {ε : Type}
   split <;> simp only [bind, transition_mapError_bind, transition_mapError_id,
     validateOmmerHeadersE_mapError]
 
-/-- Embedding the static transition's error type commutes with the whole
-algorithm, including failures. This is the constant-action specialization used
-by a single-fork schedule. -/
-theorem stateTransitionCoreE_mapError {ε : Type} (embed : TransitionError → ε)
-    (f : Fork) (ch : BlockChain) (block : Block)
-    (checkOmmers : Unit → Except TransitionError Unit) :
-    stateTransitionCoreE embed f ch block
-      (fun u => (checkOmmers u).mapError embed) =
-      (stateTransitionCoreE id f ch block checkOmmers).mapError embed := by
-  simp only [stateTransitionCoreE, transition_mapError_id, Function.id_comp, bind,
-    transition_mapError_bind, transition_mapError_comp]
-  rfl
 
 /-- The static transition uses one explicitly named fork for both the block
 and every ommer. It does not consult an activation schedule. -/
 def stateTransitionE (f : Fork) (ch : BlockChain) (block : Block) :
   Except TransitionError BlockChain :=
-  Staging.E.stateTransitionCoreE id f ch block
+  stateTransitionCoreE id f ch block
     (fun _ => checkBlockOmmers f.ruleSet ch block.header block.ommers)
 
 /-- Scheduled ommer validation uses the ommer's own number and timestamp,
@@ -1071,7 +579,7 @@ stays on the outer typed channel. -/
 def stateTransitionScheduledE (cfg : ChainConfig) (f : Fork)
     (ch : BlockChain) (block : Block) :
     Except RulesLookupError (Except TransitionError BlockChain) :=
-  splitScheduled <| Staging.E.stateTransitionCoreE Sum.inr f ch block
+  splitScheduled <| stateTransitionCoreE Sum.inr f ch block
     (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers)
 
 private theorem validateOmmerHeaderScheduledE_single (chainId : UInt64) (f : Fork)
@@ -1106,8 +614,8 @@ theorem stateTransitionScheduledE_single (chainId : UInt64) (f : Fork)
       .ok (stateTransitionE f ch block) := by
   unfold stateTransitionScheduledE stateTransitionE
   simp only [checkBlockOmmersScheduledE_single]
-  rw [Staging.E.stateTransitionCoreE_mapError]
-  cases Staging.E.stateTransitionCoreE id f ch block
+  rw [stateTransitionCoreE_mapError]
+  cases stateTransitionCoreE id f ch block
     (fun _ => checkBlockOmmers f.ruleSet ch block.header block.ommers) <;> rfl
 
 /-- With no proof-of-work ommers, configured and static cores agree on all
@@ -1120,47 +628,23 @@ theorem stateTransitionScheduledE_of_pow_none (cfg : ChainConfig) (f : Fork)
       (checkBlockOmmers f.ruleSet ch block.header block.ommers).mapError Sum.inr := by
     simp only [checkBlockOmmersScheduledE, checkBlockOmmers, hp, transition_mapError_comp]
   simp only [ho]
-  rw [Staging.E.stateTransitionCoreE_mapError]
-  cases Staging.E.stateTransitionCoreE id f ch block
+  rw [stateTransitionCoreE_mapError]
+  cases stateTransitionCoreE id f ch block
     (fun _ => checkBlockOmmers f.ruleSet ch block.header block.ommers) <;> rfl
 
 theorem stateTransitionScheduledE_eq_ok_iff {cfg : ChainConfig} {f : Fork}
     {ch ch' : BlockChain} {block : Block} :
     stateTransitionScheduledE cfg f ch block = .ok (.ok ch') ↔
-      Staging.E.stateTransitionCoreE Sum.inr f ch block
+      stateTransitionCoreE Sum.inr f ch block
         (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers)
         = .ok ch' := by
   unfold stateTransitionScheduledE
-  cases Staging.E.stateTransitionCoreE Sum.inr f ch block
+  cases stateTransitionCoreE Sum.inr f ch block
       (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers) with
   | error e => cases e <;> simp [splitScheduled]
   | ok a => simp [splitScheduled]
 
-theorem stateTransitionCoreE_header {ε : Type} {embed : TransitionError → ε}
-    {f : Fork} {ch ch' : BlockChain} {block : Block}
-    {checkOmmers : Unit → Except ε Unit}
-    (h : stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
-    validateHeader f.ruleSet ch block.header = .ok () := by
-  unfold stateTransitionCoreE at h
-  obtain ⟨u, hu, _⟩ := Except.bind_eq_ok h
-  cases u
-  exact Except.mapError_eq_ok_iff.mp hu
 
-/-- Error embeddings and ommer resolution cannot change the chain identity
-copied by any successful execution of the common algorithm. -/
-theorem stateTransitionCoreE_preserves_chainId {ε : Type} {embed : TransitionError → ε}
-    {f : Fork} {ch ch' : BlockChain} {block : Block}
-    {checkOmmers : Unit → Except ε Unit}
-    (h : stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
-    ch'.chainId = ch.chainId := by
-  unfold stateTransitionCoreE at h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨⟨st, bout⟩, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  cases h
-  rfl
 
 /-- Legacy renderer adapter over `stateTransitionE`, byte-identical on every
 input, and the entry point for static fixture suites, which state their fork
@@ -2273,14 +1757,14 @@ theorem stateTransitionAt_preserves_chainId
     ch'.chainId = ch.chainId := by
   rw [stateTransitionAt_eq_ok_iff] at h
   unfold stateTransitionE at h
-  exact Staging.E.stateTransitionCoreE_preserves_chainId h
+  exact stateTransitionCoreE_preserves_chainId h
 
 theorem stateTransitionUsing_preserves_chainId
     {cfg : ChainConfig} {ch : BlockChain} {block : Block} {ch' : BlockChain}
     (h : stateTransitionUsing cfg ch block = .ok ch') :
     ch'.chainId = ch.chainId := by
   obtain ⟨f, _, hs⟩ := stateTransitionUsing_run h
-  exact Staging.E.stateTransitionCoreE_preserves_chainId (stateTransitionScheduledE_eq_ok_iff.mp hs)
+  exact stateTransitionCoreE_preserves_chainId (stateTransitionScheduledE_eq_ok_iff.mp hs)
 
 /-- A same-ID configured transition is exactly the rule-selected core: the
 identity check Step 2 adds is a no-op whenever the caller's IDs already agree,
@@ -2336,7 +1820,7 @@ theorem addBlockToChainUsing_preserves_chainId
       · simp at hE
       · obtain ⟨rules, _, hE⟩ := Except.bind_eq_ok hE
         obtain ⟨_, hst⟩ := addBlockToChainScheduledCanonicalE_eq_ok_inl hE
-        exact Staging.E.stateTransitionCoreE_preserves_chainId
+        exact stateTransitionCoreE_preserves_chainId
           (stateTransitionScheduledE_eq_ok_iff.mp hst)
 
 --------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
@@ -2581,286 +2065,26 @@ theorem prepareTopLevelAmsterdam_message {state : StateGasRules} {msg : Msg} {p 
   dsimp only at h
   split at h <;> obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h <;> exact key _ h
 
-private theorem frameOutput_canonical {f : Frame} {a : Nat} {r : Frame.Result}
-    (hw : (f.worldAfter r).Canonical) {p} (hp : Frame.output f a r = .ok p) : State.Canonical p.1 := by
-  unfold Frame.output at hp
-  obtain ⟨refund, _, hp⟩ := Except.bind_eq_ok hp
-  cases hp
-  exact hw.1
 
-private theorem frameOutputAmsterdam_canonical {f : Frame} {r : Frame.Result}
-    (hw : (f.worldAfter r).Canonical) {p} (hp : Frame.outputAmsterdam f r = .ok p) :
-    State.Canonical p.1 := by
-  unfold Frame.outputAmsterdam at hp
-  obtain ⟨refund, _, hp⟩ := Except.bind_eq_ok hp
-  cases hp
-  exact hw.1
 
-private theorem runTopOutput_canonical {f : Frame} (hf : f.Canonical)
-    {k : Frame.Result → Except EvmError (State × MsgCallOutput)}
-    (hk : ∀ r, (f.worldAfter r).Canonical → ∀ p, k r = .ok p → State.Canonical p.1) {p}
-    (hp : ((Frame.runTop f).mapError Fault.toEvmError >>= k) = .ok p) :
-    State.Canonical p.1 := by
-  obtain ⟨r, hr, hp⟩ := Except.bind_eq_ok hp
-  cases hrun : Frame.runTop f with
-  | error e => rw [hrun] at hr; cases hr
-  | ok r' =>
-    rw [hrun] at hr
-    cases hr
-    exact hk r (Frame.runTop_canonical hf hrun) p hp
 
-private theorem processTopLevelAmsterdam_canonical {state : StateGasRules}
-    {msg : Msg} (hm : msg.Canonical) (isCreate : Bool) {p}
-    (hp : processTopLevelAmsterdam state msg isCreate = .ok p) :
-    State.Canonical p.1 := by
-  unfold processTopLevelAmsterdam at hp
-  have hprepare := Staging.prepareTopLevelAmsterdam_canonical (state := state) hm
-  cases hprep : prepareTopLevelAmsterdam state msg with
-  | error failure =>
-    rw [hprep] at hp
-    obtain ⟨error, devm⟩ := failure
-    cases error <;> simp only [settleTopLevelPreparationFailure] at hp <;> cases hp
-    exact hm.1.1
-  | ok prepared =>
-    rw [hprep] at hp hprepare
-    obtain ⟨preparedMsg, preparedDevm⟩ := prepared
-    exact runTopOutput_canonical
-      (Frame.prepared_canonical hprepare.2 hprepare.1 isCreate)
-      (fun _ hw _ hk => frameOutputAmsterdam_canonical hw hk) hp
 
-theorem processMessageCall.create_canonical {msg : Msg} (h : msg.Canonical)
-    {p} (hp : processMessageCall.create msg = .ok p) :
-    State.Canonical p.1 := by
-  unfold processMessageCall.create at hp
-  dsimp only at hp
-  split at hp
-  · split at hp
-    · cases hp; exact h.1.1
-    · exact runTopOutput_canonical (Frame.ofTop_canonical h true)
-        (fun _ hw _ hk => frameOutput_canonical hw hk) hp
-  · exact processTopLevelAmsterdam_canonical h true hp
 
-theorem processMessageCall.call_canonical {msg : Msg} (h : msg.Canonical)
-    {p} (hp : processMessageCall.call msg = .ok p) :
-    State.Canonical p.1 := by
-  unfold processMessageCall.call at hp
-  dsimp only at hp
-  split at hp
-  · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
-    obtain ⟨delegated, refund⟩ := pair
-    have hm := processMessageCall.authorize_canonical h hpair
-    exact runTopOutput_canonical
-      (Frame.ofTop_canonical (TopLevel.resolveCodeDelegation_canonical hm) false)
-      (fun _ hw _ hk => frameOutput_canonical hw hk) hp
-  · exact processTopLevelAmsterdam_canonical h false hp
 
-/-- A successful message call leaves a canonical state, for both the create
-and the call route. -/
-theorem processMessageCall_canonical {msg : Msg} (h : msg.Canonical)
-    {p} (hp : processMessageCall msg = .ok p) : State.Canonical p.1 := by
-  unfold processMessageCall at hp
-  split at hp
-  · exact processMessageCall.create_canonical h hp
-  · exact processMessageCall.call_canonical h hp
 
-/-- A successful transaction leaves a canonical state: the fee movements go
-through `incrNonce`/`subBal`/`addBal`, the call itself through
-`processMessageCall`, and settlement follows the fork's SELFDESTRUCT rule. -/
-theorem processTransaction_canonical {benv : Benv} (h : benv.Canonical)
-    {bout : BlockOutput} {tx : Transaction} {index : Nat} {p}
-    (hp : processTransaction benv bout tx index = .ok p) :
-    State.Canonical p.1 := by
-  unfold processTransaction at hp
-  obtain ⟨b1, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨validationSender, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨ig, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨ck, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨st1, hst1, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨msg, hmsg, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨rc, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨b2, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨b3, _, hp⟩ := Except.bind_eq_ok hp
-  cases hp
-  have hst1c : st1.Canonical :=
-    State.Canonical.subBal
-      (by exact State.Canonical.incrNonce (by exact h.1) _)
-      (Option.toExcept_eq_ok hst1)
-  have hmsgc : msg.Canonical :=
-    prepareMessage_canonical (by exact ⟨hst1c, h.1⟩)
-      (by exact TransientStorage.canonical_empty) hmsg
-  have hqc := processMessageCall_canonical hmsgc (Except.mapError_eq_ok_iff.mp hq)
-  exact State.Canonical.sweepTouchedAccounts (State.Canonical.settleSelfdestructs
-    (State.Canonical.addBal (State.Canonical.addBal hqc _ _) _ _) _ _) _ _
 
-/-- The single boundary all four system transactions share. -/
-theorem processSystemTransaction_canonical {benv : Benv} (h : benv.Canonical)
-    {target : Address} {code : ByteArray} {data : Bytes} {p}
-    (hp : processSystemTransaction benv target code data = .ok p) :
-    State.Canonical p.1 := by
-  unfold processSystemTransaction at hp
-  exact processMessageCall_canonical
-    (by exact ⟨⟨h.1, h.1⟩, TransientStorage.canonical_empty⟩) hp
 
-theorem processUncheckedSystemTransaction_canonical {benv : Benv}
-    (h : benv.Canonical) {target : Address} {data : Bytes} {p}
-    (hp : processUncheckedSystemTransaction benv target data = .ok p) :
-    State.Canonical p.1 :=
-  processSystemTransaction_canonical h hp
 
-theorem processCheckedSystemTransaction_canonical {benv : Benv}
-    (h : benv.Canonical) {target : Address} {data : Bytes} {p}
-    (hp : processCheckedSystemTransaction benv target data = .ok p) :
-    State.Canonical p.1 := by
-  unfold processCheckedSystemTransaction at hp
-  dsimp only at hp
-  split at hp
-  · obtain ⟨u, hu, hp⟩ := Except.bind_eq_ok hp
-    nomatch hu
-  · obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-    obtain ⟨qs, qo⟩ := q
-    dsimp only at hp
-    split at hp
-    · nomatch hp
-    · cases hp
-      exact processSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
 
-/-- Every prefix of the request fold leaves a canonical state.
 
-An induction on the contract list, so the proof does not grow when the list
-does: Amsterdam's two extra contracts are covered by the same argument. -/
-theorem runRequestContracts_canonical (idx : Nat) :
-    ∀ (rs : List (UInt8 × Address)) {benv : Benv}, benv.Canonical →
-      ∀ {acc : List Bytes} {bal : BlockAccessListBuilder} {p},
-        runRequestContracts idx rs benv acc bal = .ok p → State.Canonical p.1
-  | [], _, h, _, _, _, hp => by cases hp; exact h.1
-  | _ :: rs, benv, h, acc, bal, p, hp => by
-    unfold runRequestContracts at hp
-    obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-    exact runRequestContracts_canonical idx rs
-      (by exact ⟨processCheckedSystemTransaction_canonical h hq, h.2⟩) hp
 
-theorem processGeneralPurposeRequests_canonical {benv : Benv}
-    (h : benv.Canonical) {bout : BlockOutput} {p}
-    (hp : processGeneralPurposeRequests benv bout = .ok p) :
-    State.Canonical p.1 := by
-  unfold processGeneralPurposeRequests processGeneralPurposeRequestsAt at hp
-  obtain ⟨dr, _, hp⟩ := Except.bind_eq_ok hp
-  dsimp only at hp
-  obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-  cases hp
-  exact runRequestContracts_canonical _ _ h hq
 
-theorem applyTransactions_canonical :
-    ∀ (txis : List (Nat × Transaction)) {benv : Benv}, benv.Canonical →
-      ∀ {bout : BlockOutput} {p},
-        applyTransactions txis benv bout = .ok p → p.1.Canonical
-  | [], _, h, _, _, hp => by cases hp; exact h
-  | txi :: txis, benv, h, bout, p, hp => by
-    unfold applyTransactions at hp
-    obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-    exact applyTransactions_canonical txis
-      (by exact ⟨processTransaction_canonical h hq, h.2⟩) hp
 
-theorem beaconRootsCall_canonical {rules : ForkRules} {benv : Benv}
-    (h : benv.Canonical) {p} (hp : beaconRootsCall rules benv = .ok p) :
-    State.Canonical p.1 := by
-  unfold beaconRootsCall at hp
-  split at hp
-  · obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-    cases hp
-    exact processUncheckedSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
-  · cases hp; exact h.1
 
-theorem historyStorageCall_canonical {rules : ForkRules} {benv : Benv}
-    (h : benv.Canonical) {bal : BlockAccessListBuilder} {p}
-    (hp : historyStorageCall rules benv bal = .ok p) : State.Canonical p.1 := by
-  unfold historyStorageCall at hp
-  split at hp
-  · obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-    obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-    cases hp
-    exact processUncheckedSystemTransaction_canonical h (Except.mapError_eq_ok_iff.mp hq)
-  · cases hp; exact h.1
 
-theorem withdrawalsPass_canonical {rules : ForkRules} {benv : Benv}
-    (h : benv.state.Canonical) {bout : BlockOutput} (wds : List Withdrawal) :
-    (withdrawalsPass rules benv bout wds).1.Canonical := by
-  unfold withdrawalsPass
-  split
-  · exact processWithdrawalsState_canonical h wds
-  · exact h
 
-theorem requestsPass_canonical {rules : ForkRules} {benv : Benv}
-    (h : benv.Canonical) {bout : BlockOutput} {p}
-    (hp : requestsPass rules benv bout = .ok p) : State.Canonical p.1 := by
-  unfold requestsPass at hp
-  split at hp
-  · exact processGeneralPurposeRequests_canonical h hp
-  · cases hp; exact h.1
 
-/-- The rewards are balance credits, so they preserve canonicality. -/
-theorem payRewards_canonical {st : State} (h : st.Canonical) (pow : ProofOfWorkRules)
-    (number : Nat) (coinbase : Address) (ommers : List Header) :
-    (payRewards pow number coinbase ommers st).Canonical := by
-  unfold payRewards
-  dsimp only
-  generalize hs : st.addBal coinbase _ = st'
-  have h' : st'.Canonical := hs ▸ State.Canonical.addBal h _ _
-  clear hs h
-  induction ommers generalizing st' with
-  | nil => exact h'
-  | cons o os ih => exact ih _ (State.Canonical.addBal h' _ _)
 
-/-- A successful block body leaves a canonical state: system transactions,
-ordinary transactions, withdrawals, general-purpose requests and the
-proof-of-work rewards all preserve the invariant, whether each is run or
-gated off. -/
-theorem applyBody_canonical {benv : Benv} (h : benv.Canonical)
-    {txs : List (Bytes ⊕ Transaction)} {ommers : List Header} {wds : List Withdrawal} {p}
-    (hp : applyBody benv txs ommers wds = .ok p) : State.Canonical p.1 := by
-  unfold applyBody at hp
-  obtain ⟨q1, hq1, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨q2, hq2, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨txsD, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨q3, hq3, hp⟩ := Except.bind_eq_ok hp
-  have hb1 : q1.1.Canonical := beaconRootsCall_canonical h hq1
-  have hb2 : q2.1.Canonical :=
-    historyStorageCall_canonical (benv := benv.withState q1.1) (by exact ⟨hb1, h.2⟩) hq2
-  have hb3 : q3.1.Canonical :=
-    applyTransactions_canonical _ (by exact ⟨hb2, h.2⟩) hq3
-  obtain ⟨benvTxs, boutTxs⟩ := q3
-  dsimp only at hp hb3
-  have hw := withdrawalsPass_canonical (rules := benv.stat.rules) (bout := boutTxs) hb3.1 wds
-  rcases hwp : withdrawalsPass benv.stat.rules benvTxs boutTxs wds with ⟨stWds, boutWds⟩
-  simp only [hwp] at hp hw
-  -- The access-list incorporation, the item rule and the built list carry no
-  -- state.
-  obtain ⟨q4, hq4, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  cases hp
-  have hc := requestsPass_canonical
-    (benv := benvTxs.withState stWds) ⟨hw, hb3.2⟩ hq4
-  dsimp only
-  split
-  · exact hc
-  · exact payRewards_canonical hc _ _ _ _
-
-/-- Canonicality depends on the common execution body, not the resolver or
-its error carrier. -/
-theorem stateTransitionCoreE_canonical {ε : Type} {embed : TransitionError → ε}
-    {f : Fork} {ch : BlockChain} (h : ch.Canonical) {block : Block} {ch'}
-    {checkOmmers : Unit → Except ε Unit}
-    (hp : stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
-    ch'.Canonical := by
-  unfold stateTransitionCoreE at hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨q, hq, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  cases hp
-  exact applyBody_canonical (by exact ⟨h, h⟩) (Except.mapError_eq_ok_iff.mp hq)
 
 /-- **Raw successful block transition preserves canonicality.** The output
 chain's execution state is the body's final state, and its original state is
@@ -2870,7 +2094,7 @@ theorem stateTransitionAt_canonical {f : Fork} {ch : BlockChain}
     (hp : stateTransitionAt f ch block = .ok ch') : ch'.Canonical := by
   rw [stateTransitionAt_eq_ok_iff] at hp
   unfold stateTransitionE at hp
-  exact Staging.E.stateTransitionCoreE_canonical h hp
+  exact stateTransitionCoreE_canonical h hp
 
 theorem stateTransition_canonical {ch : BlockChain} (h : ch.Canonical)
     {block : Block} {ch'} (hp : stateTransition ch block = .ok ch') :
@@ -2882,7 +2106,7 @@ theorem stateTransitionUsing_canonical {cfg : ChainConfig} {ch : BlockChain}
     (h : ch.Canonical) {block : Block} {ch'}
     (hp : stateTransitionUsing cfg ch block = .ok ch') : ch'.Canonical := by
   obtain ⟨f, _, hs⟩ := stateTransitionUsing_run hp
-  exact Staging.E.stateTransitionCoreE_canonical h (stateTransitionScheduledE_eq_ok_iff.mp hs)
+  exact stateTransitionCoreE_canonical h (stateTransitionScheduledE_eq_ok_iff.mp hs)
 
 --------------- THE CHECKED TRANSITION (P0.2, STEP 6) ---------------
 
@@ -3005,25 +2229,6 @@ theorem stateTransitionChecks_stateRoot {bout : BlockOutput} {header : Header}
     exact absurd hb (by simp)
   · simpa using h3
 
-/-- Success inversion shared by static and scheduled transitions. -/
-theorem stateTransitionCoreE_eq_ok {ε : Type} {embed : TransitionError → ε}
-    {f : Fork} {ch ch' : BlockChain} {block : Block}
-    {checkOmmers : Unit → Except ε Unit}
-    (h : stateTransitionCoreE embed f ch block checkOmmers = .ok ch') :
-    validateHeader f.ruleSet ch block.header = .ok () ∧
-      ch'.blocks = appendBlock ch.blocks block ∧
-      ch'.state.root = block.header.stateRoot := by
-  unfold stateTransitionCoreE at h
-  obtain ⟨u1, hvh, h⟩ := Except.bind_eq_ok h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨q, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨u3, hchk, h⟩ := Except.bind_eq_ok h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  cases u1
-  cases u3
-  cases h
-  exact ⟨Except.mapError_eq_ok_iff.mp hvh, rfl,
-    stateTransitionChecks_stateRoot (Except.mapError_eq_ok_iff.mp hchk)⟩
 
 /-- The checked output witness is derived from checks already performed by
 the common algorithm, with no second root computation. -/
@@ -3033,9 +2238,9 @@ theorem BlockChain.validContext_of_scheduled {cfg : ChainConfig} {f : Fork}
     ch'.blocks.getLast? = some cb.block ∧ ch'.RetainedHistoryValid ∧
       ch'.state.Canonical ∧ ch'.state.root = cb.block.header.stateRoot := by
   have hc := stateTransitionScheduledE_eq_ok_iff.mp h
-  obtain ⟨hvh, hblocks, hroot⟩ := Staging.E.stateTransitionCoreE_eq_ok hc
+  obtain ⟨hvh, hblocks, hroot⟩ := stateTransitionCoreE_eq_ok hc
   obtain ⟨hph, hnum⟩ := validateHeader_links cc.tip_is_last hvh
-  refine ⟨?_, ?_, Staging.E.stateTransitionCoreE_canonical cc.canonicalState hc, hroot⟩
+  refine ⟨?_, ?_, stateTransitionCoreE_canonical cc.canonicalState hc, hroot⟩
   · rw [hblocks]; exact appendBlock_getLast? _ _
   · exact BlockChain.retainedHistoryValid_appendBlock cc.retainedHistory
       cc.tip_is_last ⟨hnum, hph⟩ cb.rlpCanonical.1 hblocks
@@ -3050,7 +2255,7 @@ theorem stateTransitionAt_eq_ok {f : Fork} {ch ch' : BlockChain}
       ch'.state.root = block.header.stateRoot := by
   rw [stateTransitionAt_eq_ok_iff] at h
   unfold stateTransitionE at h
-  exact Staging.E.stateTransitionCoreE_eq_ok h
+  exact stateTransitionCoreE_eq_ok h
 
 /-- The whole output witness of a successful transition from a checked
 snapshot, assembled from what the transition already established: `Step 4`'s
@@ -3367,11 +2572,11 @@ theorem stateTransitionUsing_shapeCoherent {cfg : ChainConfig} {ch ch' : BlockCh
   obtain ⟨f, hf, hrun⟩ := stateTransitionUsing_run h
   intro b hb
   have hc := stateTransitionScheduledE_eq_ok_iff.mp hrun
-  have hblocks := (Staging.E.stateTransitionCoreE_eq_ok hc).2.1
+  have hblocks := (stateTransitionCoreE_eq_ok hc).2.1
   rw [hblocks, appendBlock_getLast?] at hb
   cases hb
   refine ⟨f, hf, ?_⟩
-  have hv := Staging.E.stateTransitionCoreE_header hc
+  have hv := stateTransitionCoreE_header hc
   unfold validateHeader at hv
   obtain ⟨u, hshape, _⟩ := Except.bind_eq_ok hv
   cases u
@@ -3428,7 +2633,7 @@ theorem stateTransitionE_header_succ {f : Fork} {ch ch' : BlockChain} {block : B
     ∃ parent, ch.blocks.getLast? = some parent ∧
       block.header.number = parent.header.number + 1 ∧
       parent.header.timestamp < block.header.timestamp := by
-  exact validateHeader_succ (Staging.E.stateTransitionCoreE_header h)
+  exact validateHeader_succ (stateTransitionCoreE_header h)
 
 /-- The configured fork is no earlier than the parent's scheduled fork. -/
 theorem stateTransitionUsing_fork_mono {cfg : ChainConfig} {ch ch' : BlockChain}
@@ -3441,7 +2646,7 @@ theorem stateTransitionUsing_fork_mono {cfg : ChainConfig} {ch ch' : BlockChain}
       stateTransitionScheduledE cfg f ch block = .ok (.ok ch') := by
   obtain ⟨f, hf, hrun⟩ := stateTransitionUsing_run h
   obtain ⟨tip, htip, hnum, htime⟩ := validateHeader_succ
-    (Staging.E.stateTransitionCoreE_header (stateTransitionScheduledE_eq_ok_iff.mp hrun))
+    (stateTransitionCoreE_header (stateTransitionScheduledE_eq_ok_iff.mp hrun))
   rw [hlast] at htip
   cases htip
   exact ⟨f, hf, ChainConfig.forkAt_index_mono (by omega) (by omega) h₀ hf, hrun⟩
@@ -3476,7 +2681,7 @@ theorem stateTransitionScheduledE_firstFee_gasLimit
   obtain ⟨fp, hfp, hp⟩ := hshape parent hlast
   rw [h₀] at hfp
   cases hfp
-  have hv := Staging.E.stateTransitionCoreE_header (stateTransitionScheduledE_eq_ok_iff.mp h)
+  have hv := stateTransitionCoreE_header (stateTransitionScheduledE_eq_ok_iff.mp h)
   have hc : checkHeaderShape f.ruleSet block.header = .ok () := by
     unfold validateHeader at hv
     obtain ⟨u, hu, _⟩ := Except.bind_eq_ok hv

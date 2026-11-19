@@ -27,31 +27,31 @@ open Jaune
 withdrawal requests, consolidation requests): begin the transaction, so that each takes its own
 input state as the original state, and run the system message. A run whose refund counter faults
 fails the call. -/
-def Staging.processSystemTransaction (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :
-    Except Fault Staging.MessageRun := do
+def processSystemTransaction (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :
+    Except Fault TopLevelRun := do
   let benv := benv.beginTransaction
   let txEnv : Tenv := systemTransactionEnvironment benv
   let systemTxMsg : Msg := systemTransactionMessage benv txEnv target data code
-  let run ← Staging.Message.run systemTxMsg
+  let run ← TopLevel.run systemTxMsg
   let _ ← run.refundCounter
   pure run
 
 /-- A system call that runs the contract's code as it stands, even none. -/
-def Staging.processUncheckedSystemTransaction (benv : Benv) (target : Address) (data : Bytes) :
-    Except Fault Staging.MessageRun :=
+def processUncheckedSystemTransaction (benv : Benv) (target : Address) (data : Bytes) :
+    Except Fault TopLevelRun :=
   let systemContractCode : ByteArray := benv.state.getCode target
-  Staging.processSystemTransaction benv target systemContractCode data
+  processSystemTransaction benv target systemContractCode data
 
 /-- A mandatory system call: a contract without code rejects the block before the call
 (`BlockException.SYSTEM_CONTRACT_EMPTY`), and so does a call that settles with a halt or a
 revert; the rejection carries the settled halt. -/
-def Staging.processCheckedSystemTransaction (benv : Benv) (target : Address) (data : Bytes) :
-    Except TransitionError Staging.MessageRun := do
+def processCheckedSystemTransaction (benv : Benv) (target : Address) (data : Bytes) :
+    Except TransitionError TopLevelRun := do
   let systemContractCode : ByteArray := benv.state.getCode target
   if systemContractCode.isEmpty then
     .error <| .block <| .systemContractEmpty <| .text
       s!"system contract address {target.toHex} holds no code"
-  let run ← (Staging.processSystemTransaction benv target systemContractCode data).mapError
+  let run ← (processSystemTransaction benv target systemContractCode data).mapError
     (fun e => TransitionError.vm e.toEvmError)
   match run.error with
   | some halt => .error <| .block <| .systemContractCallFailed target halt
@@ -61,12 +61,12 @@ def Staging.processCheckedSystemTransaction (benv : Benv) (target : Address) (da
 non-empty return data is appended prefixed with its type byte; under rules with a block-level
 access list each call incorporates its reads and writes, and the contract account `create_evm`
 read, at `idx`. -/
-def Staging.runRequestContracts (idx : Nat) :
+def runRequestContracts (idx : Nat) :
     List (UInt8 × Address) → Benv → List Bytes → BlockAccessListBuilder →
       Except TransitionError (State × List Bytes × BlockAccessListBuilder)
   | [], benv, acc, bal => .ok ⟨benv.state, acc, bal⟩
   | ⟨requestType, address⟩ :: rest, benv, acc, bal => do
-    let run ← Staging.processCheckedSystemTransaction benv address []
+    let run ← processCheckedSystemTransaction benv address []
     let acc :=
       if run.returnData.length > 0 then
         acc ++ [[requestType] ++ run.returnData]
@@ -76,11 +76,11 @@ def Staging.runRequestContracts (idx : Nat) :
       | none => bal
       | some _ => bal.incorporate idx benv.state run.state
           (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList
-    Staging.runRequestContracts idx rest (benv.withState run.state) acc bal
+    Jaune.runRequestContracts idx rest (benv.withState run.state) acc bal
 
 /-- Run the block's request-producing system contracts, after the deposit requests parsed from the
 receipts, and collect their output (EIP-7685). -/
-def Staging.processGeneralPurposeRequestsAt (balIndex : Nat) (benv : Benv) (bout : BlockOutput) :
+def processGeneralPurposeRequestsAt (balIndex : Nat) (benv : Benv) (bout : BlockOutput) :
     Except TransitionError (State × BlockOutput) := do
   let depositRequests ← parseDepositRequests bout
   let seeded : List Bytes :=
@@ -89,23 +89,23 @@ def Staging.processGeneralPurposeRequestsAt (balIndex : Nat) (benv : Benv) (bout
     else
       bout.requests
   let ⟨state, allRequests, bal⟩ ←
-    Staging.runRequestContracts balIndex benv.stat.rules.requests benv seeded bout.blockAccessListBuilder
+    runRequestContracts balIndex benv.stat.rules.requests benv seeded bout.blockAccessListBuilder
   .ok ⟨state, {bout with requests := allRequests, blockAccessListBuilder := bal}⟩
 
 /-- The block pipeline's request pass, at the post-execution index `n + 1` (EIP-7928), `n` the
 number of receipts. -/
-def Staging.processGeneralPurposeRequests (benv : Benv) (bout : BlockOutput) :
+def processGeneralPurposeRequests (benv : Benv) (bout : BlockOutput) :
     Except TransitionError (State × BlockOutput) :=
-  Staging.processGeneralPurposeRequestsAt (bout.receiptKeys.length + 1) benv bout
+  processGeneralPurposeRequestsAt (bout.receiptKeys.length + 1) benv bout
 
 /-- EIP-4788's pre-execution beacon-roots call (Cancun on), with its block-level access-list
 incorporation at index 0; under rules without `sys.beaconRoots` the identity: the state as given and
 an empty builder. -/
-def Staging.beaconRootsCall (rules : ForkRules) (benv : Benv) :
+def beaconRootsCall (rules : ForkRules) (benv : Benv) :
     Except TransitionError (State × BlockAccessListBuilder) :=
   if rules.systemCalls.beaconRoots then do
     let run ←
-      (Staging.processUncheckedSystemTransaction benv beaconRootsAddress
+      (processUncheckedSystemTransaction benv beaconRootsAddress
           benv.stat.parentBeaconBlockRoot.toBytes).mapError
         (fun e => TransitionError.vm e.toEvmError)
     .ok ⟨run.state, BlockAccessListBuilder.incorporateSystem {} rules 0 benv.state run.state
@@ -115,14 +115,14 @@ def Staging.beaconRootsCall (rules : ForkRules) (benv : Benv) :
 
 /-- EIP-2935's pre-execution history-storage call (Prague on), incorporated at index 0; under rules
 without `sys.historyStorage` the identity. -/
-def Staging.historyStorageCall (rules : ForkRules) (benv : Benv) (bal : BlockAccessListBuilder) :
+def historyStorageCall (rules : ForkRules) (benv : Benv) (bal : BlockAccessListBuilder) :
     Except TransitionError (State × BlockAccessListBuilder) :=
   if rules.systemCalls.historyStorage then do
     let lastHash ←
        benv.stat.blockHashes.getLast?.toExcept
          (TransitionError.internal (.invariant (.text "block hashes is empty")))
     let run ←
-      (Staging.processUncheckedSystemTransaction benv historyStorageAddress lastHash.toBytes).mapError
+      (processUncheckedSystemTransaction benv historyStorageAddress lastHash.toBytes).mapError
         (fun e => TransitionError.vm e.toEvmError)
     .ok ⟨run.state, bal.incorporateSystem rules 0 benv.state run.state
       (historyStorageAddress :: run.accountReads.toList) run.storageReads.toList

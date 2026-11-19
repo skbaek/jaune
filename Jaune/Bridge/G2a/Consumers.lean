@@ -29,7 +29,7 @@ open Jaune
 /-! ### The run's functions assembled are W2-1's rendering -/
 
 /-- The output record the run's functions assemble, given its refund counter. Bridge only. -/
-def outputOf (run : Staging.MessageRun) (refundCounter : Nat) : MsgCallOutput :=
+def outputOf (run : TopLevelRun) (refundCounter : Nat) : Bridge.G2a.Old.MessageCallOutput :=
   { gasLeft := run.gasLeft
     refundCounter := refundCounter
     logs := run.logs
@@ -45,36 +45,36 @@ def outputOf (run : Staging.MessageRun) (refundCounter : Nat) : MsgCallOutput :=
 
 /-- **The output square.** For every run, W2-1's rendering is the run's refund counter, then the
 state and the output the run's functions assemble. -/
-theorem MessageRun.output_eq (run : Staging.MessageRun) :
-    Staging.MessageRun.output run = (do
+theorem MessageRun.output_eq (run : TopLevelRun) :
+    Bridge.G2a.Phased.MessageRun.output run = (do
       let n ← run.refundCounter.mapError Fault.toEvmError
       pure (run.state, outputOf run n)) := by
   obtain ⟨entry, prep, root, result⟩ := run
   cases prep with
   | refused reason halted =>
     cases hs : entry.benv.stat.rules.stateGas <;>
-      simp [Staging.MessageRun.output, Staging.MessageRun.refundCounter, outputOf,
-        settleTopLevelPreparationFailure, Staging.MessageRun.state, Staging.MessageRun.gasLeft,
-        Staging.MessageRun.logs, Staging.MessageRun.accountsToDelete, Staging.MessageRun.error,
-        Staging.MessageRun.returnData, Staging.MessageRun.stateGasLeft,
-        Staging.MessageRun.stateGasUsed, Staging.MessageRun.accountReads,
-        Staging.MessageRun.storageReads, Staging.MessageRun.storageWrites,
-        Staging.MessageRun.touchedAccounts, Staging.MessageRun.stateGasRules,
-        Staging.MessageRun.refusalMachine, hs, bind, Except.bind, Except.mapError, pure,
+      simp [Bridge.G2a.Phased.MessageRun.output, TopLevelRun.refundCounter, outputOf,
+        Bridge.G2a.Old.settleTopLevelPreparationFailure, TopLevelRun.state, TopLevelRun.gasLeft,
+        TopLevelRun.logs, TopLevelRun.accountsToDelete, TopLevelRun.error,
+        TopLevelRun.returnData, TopLevelRun.stateGasLeft,
+        TopLevelRun.stateGasUsed, TopLevelRun.accountReads,
+        TopLevelRun.storageReads, TopLevelRun.storageWrites,
+        TopLevelRun.touchedAccounts, TopLevelRun.stateGasRules,
+        TopLevelRun.refusalMachine, hs, bind, Except.bind, Except.mapError, pure,
         Except.pure]
   | frame f a =>
     cases result with
     | none => rfl
     | some r =>
       cases hs : entry.benv.stat.rules.stateGas <;> cases r <;>
-        simp [Staging.MessageRun.output, Staging.MessageRun.refundCounter, outputOf,
-          Frame.output, Frame.outputAmsterdam, Frame.Result.refundCounter,
-          Staging.MessageRun.state, Staging.MessageRun.gasLeft,
-          Staging.MessageRun.logs, Staging.MessageRun.accountsToDelete, Staging.MessageRun.error,
-          Staging.MessageRun.returnData, Staging.MessageRun.stateGasLeft,
-          Staging.MessageRun.stateGasUsed, Staging.MessageRun.accountReads,
-          Staging.MessageRun.storageReads, Staging.MessageRun.storageWrites,
-          Staging.MessageRun.touchedAccounts, Staging.MessageRun.stateGasRules, hs, bind,
+        simp [Bridge.G2a.Phased.MessageRun.output, TopLevelRun.refundCounter, outputOf,
+          Bridge.G2a.Old.Frame.output, Bridge.G2a.Old.Frame.outputAmsterdam, Bridge.G2a.Old.Frame.Result.refundCounter,
+          TopLevelRun.state, TopLevelRun.gasLeft,
+          TopLevelRun.logs, TopLevelRun.accountsToDelete, TopLevelRun.error,
+          TopLevelRun.returnData, TopLevelRun.stateGasLeft,
+          TopLevelRun.stateGasUsed, TopLevelRun.accountReads,
+          TopLevelRun.storageReads, TopLevelRun.storageWrites,
+          TopLevelRun.touchedAccounts, TopLevelRun.stateGasRules, hs, bind,
           Except.bind, Except.mapError, pure, Except.pure]
       all_goals
         rename_i _ _ _ _ substate _
@@ -83,7 +83,7 @@ theorem MessageRun.output_eq (run : Staging.MessageRun) :
 /-- The state and output pair the old system calls returned, read from a run: the output map of
 the system-call bridges. A system call returns only runs whose refund counter is a number
 (`Staging.processSystemTransaction` reads it), which is the counter rendered. Bridge only. -/
-def render (run : Staging.MessageRun) : State × MsgCallOutput :=
+def render (run : TopLevelRun) : State × Bridge.G2a.Old.MessageCallOutput :=
   (run.state, outputOf run (match run.refundCounter with | .ok n => n | .error _ => 0))
 
 /-! ### System calls -/
@@ -92,14 +92,14 @@ def render (run : Staging.MessageRun) : State × MsgCallOutput :=
 target, code and data, the old call's result is the staged run rendered, faults included. -/
 theorem processSystemTransaction_eq (benv : Benv) (target : Address) (code : ByteArray)
     (data : Bytes) :
-    processSystemTransaction benv target code data =
-      render <$> (Staging.processSystemTransaction benv target code data).mapError
+    Bridge.G2a.Old.processSystemTransaction benv target code data =
+      render <$> (processSystemTransaction benv target code data).mapError
         Fault.toEvmError := by
-  unfold processSystemTransaction Staging.processSystemTransaction
+  unfold Bridge.G2a.Old.processSystemTransaction processSystemTransaction
   rw [← processMessageCall_eq]
-  unfold Staging.processMessageCall
+  unfold Bridge.G2a.Phased.processMessageCall
   dsimp only
-  generalize Staging.Message.run _ = x
+  generalize TopLevel.run _ = x
   cases x with
   | error e => rfl
   | ok run =>
@@ -110,22 +110,22 @@ theorem processSystemTransaction_eq (benv : Benv) (target : Address) (code : Byt
 
 /-- **Bridge at `processUncheckedSystemTransaction`** (output map `render`). -/
 theorem processUncheckedSystemTransaction_eq (benv : Benv) (target : Address) (data : Bytes) :
-    processUncheckedSystemTransaction benv target data =
-      render <$> (Staging.processUncheckedSystemTransaction benv target data).mapError
+    Bridge.G2a.Old.processUncheckedSystemTransaction benv target data =
+      render <$> (processUncheckedSystemTransaction benv target data).mapError
         Fault.toEvmError :=
   processSystemTransaction_eq _ _ _ _
 
 /-- **Bridge at `processCheckedSystemTransaction`** (output map `render`), rejection text
 included. -/
 theorem processCheckedSystemTransaction_eq (benv : Benv) (target : Address) (data : Bytes) :
-    processCheckedSystemTransaction benv target data =
-      render <$> Staging.processCheckedSystemTransaction benv target data := by
-  unfold processCheckedSystemTransaction Staging.processCheckedSystemTransaction
+    Bridge.G2a.Old.processCheckedSystemTransaction benv target data =
+      render <$> processCheckedSystemTransaction benv target data := by
+  unfold Bridge.G2a.Old.processCheckedSystemTransaction processCheckedSystemTransaction
   by_cases hc : (benv.state.getCode target).isEmpty
   · simp [hc, bind, Except.bind, Functor.map, Except.map]
   · simp only [hc, Bool.false_eq_true, ↓reduceIte]
     rw [processSystemTransaction_eq]
-    cases Staging.processSystemTransaction benv target (benv.state.getCode target) data with
+    cases processSystemTransaction benv target (benv.state.getCode target) data with
     | error e => rfl
     | ok run =>
       cases he : run.error <;>
@@ -136,15 +136,15 @@ theorem processCheckedSystemTransaction_eq (benv : Benv) (target : Address) (dat
 accumulator and builder; the whole result. -/
 theorem runRequestContracts_eq (idx : Nat) (contracts : List (UInt8 × Address)) (benv : Benv)
     (acc : List Bytes) (bal : BlockAccessListBuilder) :
-    Staging.runRequestContracts idx contracts benv acc bal =
-      runRequestContracts idx contracts benv acc bal := by
+    runRequestContracts idx contracts benv acc bal =
+      Bridge.G2a.Old.runRequestContracts idx contracts benv acc bal := by
   induction contracts generalizing benv acc bal with
   | nil => rfl
   | cons c rest ih =>
     obtain ⟨requestType, address⟩ := c
-    simp only [Staging.runRequestContracts, runRequestContracts,
+    simp only [runRequestContracts, Bridge.G2a.Old.runRequestContracts,
       processCheckedSystemTransaction_eq]
-    cases Staging.processCheckedSystemTransaction benv address [] with
+    cases processCheckedSystemTransaction benv address [] with
     | error e => rfl
     | ok run =>
       simp only [bind, Except.bind, Functor.map, Except.map, render, outputOf]
@@ -152,38 +152,38 @@ theorem runRequestContracts_eq (idx : Nat) (contracts : List (UInt8 × Address))
 
 /-- **Bridge at `processGeneralPurposeRequestsAt`.** -/
 theorem processGeneralPurposeRequestsAt_eq (balIndex : Nat) (benv : Benv) (bout : BlockOutput) :
-    Staging.processGeneralPurposeRequestsAt balIndex benv bout =
-      processGeneralPurposeRequestsAt balIndex benv bout := by
-  simp only [Staging.processGeneralPurposeRequestsAt, processGeneralPurposeRequestsAt,
+    processGeneralPurposeRequestsAt balIndex benv bout =
+      Bridge.G2a.Old.processGeneralPurposeRequestsAt balIndex benv bout := by
+  simp only [processGeneralPurposeRequestsAt, Bridge.G2a.Old.processGeneralPurposeRequestsAt,
     runRequestContracts_eq]
 
 /-- **Bridge at `processGeneralPurposeRequests`.** -/
 theorem processGeneralPurposeRequests_eq (benv : Benv) (bout : BlockOutput) :
-    Staging.processGeneralPurposeRequests benv bout = processGeneralPurposeRequests benv bout :=
+    processGeneralPurposeRequests benv bout = Bridge.G2a.Old.processGeneralPurposeRequests benv bout :=
   processGeneralPurposeRequestsAt_eq _ _ _
 
 /-- **Bridge at `beaconRootsCall`.** Every rule set and block environment; the whole result. -/
 theorem beaconRootsCall_eq (rules : ForkRules) (benv : Benv) :
-    Staging.beaconRootsCall rules benv = beaconRootsCall rules benv := by
-  unfold Staging.beaconRootsCall beaconRootsCall
+    beaconRootsCall rules benv = Bridge.G2a.Old.beaconRootsCall rules benv := by
+  unfold beaconRootsCall Bridge.G2a.Old.beaconRootsCall
   split
   · rw [processUncheckedSystemTransaction_eq]
-    cases Staging.processUncheckedSystemTransaction benv beaconRootsAddress
+    cases processUncheckedSystemTransaction benv beaconRootsAddress
         benv.stat.parentBeaconBlockRoot.toBytes <;> rfl
   · rfl
 
 /-- **Bridge at `historyStorageCall`.** Every rule set, block environment and builder; the whole
 result. -/
 theorem historyStorageCall_eq (rules : ForkRules) (benv : Benv) (bal : BlockAccessListBuilder) :
-    Staging.historyStorageCall rules benv bal = historyStorageCall rules benv bal := by
-  unfold Staging.historyStorageCall historyStorageCall
+    historyStorageCall rules benv bal = Bridge.G2a.Old.historyStorageCall rules benv bal := by
+  unfold historyStorageCall Bridge.G2a.Old.historyStorageCall
   split
   · cases benv.stat.blockHashes.getLast? with
     | none => rfl
     | some lastHash =>
       simp only [Option.toExcept, bind, Except.bind]
       rw [processUncheckedSystemTransaction_eq]
-      cases Staging.processUncheckedSystemTransaction benv historyStorageAddress
+      cases processUncheckedSystemTransaction benv historyStorageAddress
           lastHash.toBytes <;> rfl
   · rfl
 
@@ -191,36 +191,36 @@ theorem historyStorageCall_eq (rules : ForkRules) (benv : Benv) (bal : BlockAcce
 
 /-- Settling a run whose refund counter is `n` is cut A's settlement of its state and assembled
 output. -/
-theorem Transaction.settle_eq (prepared : Staging.Transaction.Prepared) (tx : Transaction)
-    (index : Nat) (run : Staging.MessageRun) {n : Nat} (hn : run.refundCounter = .ok n) :
-    Staging.B2.Transaction.settle prepared tx index run =
-      Staging.Transaction.settle prepared tx index run.state (outputOf run n) := by
-  simp only [Staging.B2.Transaction.settle, Staging.Transaction.settle, hn, outputOf]
+theorem Transaction.settle_eq (prepared : Transaction.Prepared) (tx : Transaction)
+    (index : Nat) (run : TopLevelRun) {n : Nat} (hn : run.refundCounter = .ok n) :
+    Bridge.G2a.Phased.B2.Transaction.settle prepared tx index run =
+      Bridge.G2a.Phased.Transaction.settle prepared tx index run.state (outputOf run n) := by
+  simp only [Bridge.G2a.Phased.B2.Transaction.settle, Bridge.G2a.Phased.Transaction.settle, hn, outputOf]
   rfl
 
 /-- **Bridge B2 at `processTransaction`, against cut A.** For every block environment, block
 output, transaction and index, settling the run computes exactly cut A's staged result. -/
 theorem processTransaction_eq_staged (benv : Benv) (bout : BlockOutput) (tx : Transaction)
     (index : Nat) :
-    Staging.B2.processTransaction benv bout tx index =
-      Staging.processTransaction benv bout tx index := by
-  simp only [Staging.B2.processTransaction, Staging.processTransaction]
-  cases Staging.Transaction.check benv bout tx index with
+    Bridge.G2a.Phased.B2.processTransaction benv bout tx index =
+      Bridge.G2a.Phased.processTransaction benv bout tx index := by
+  simp only [Bridge.G2a.Phased.B2.processTransaction, Bridge.G2a.Phased.processTransaction]
+  cases Transaction.admit benv bout tx index with
   | error e => rfl
   | ok checked =>
     simp only [bind, Except.bind]
-    cases Staging.Transaction.prepare checked tx index with
+    cases Transaction.prepare checked tx index with
     | error e => rfl
     | ok prepared =>
-      simp only [Staging.processMessageCall]
-      cases Staging.Message.run prepared.msg with
+      simp only [Bridge.G2a.Phased.processMessageCall]
+      cases TopLevel.run prepared.msg with
       | error e => rfl
       | ok run =>
         simp only [Except.mapError, bind, Except.bind]
         rw [MessageRun.output_eq]
         cases hr : run.refundCounter with
         | error e =>
-          simp [Staging.B2.Transaction.settle, hr, Except.mapError, bind, Except.bind]
+          simp [Bridge.G2a.Phased.B2.Transaction.settle, hr, Except.mapError, bind, Except.bind]
         | ok n =>
           rw [Transaction.settle_eq prepared tx index run hr]
           simp [Except.mapError, bind, Except.bind, pure, Except.pure]
@@ -230,7 +230,7 @@ transaction and index, settling the run computes exactly today's `processTransac
 rejection text included. -/
 theorem processTransaction_eq_b2 (benv : Benv) (bout : BlockOutput) (tx : Transaction)
     (index : Nat) :
-    Staging.B2.processTransaction benv bout tx index = processTransaction benv bout tx index := by
+    Bridge.G2a.Phased.B2.processTransaction benv bout tx index = Bridge.G2a.Old.processTransaction benv bout tx index := by
   rw [processTransaction_eq_staged, processTransaction_eq]
 
 end Jaune.Bridge.G2a

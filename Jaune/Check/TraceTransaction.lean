@@ -25,7 +25,7 @@ private def TraceTransaction.sweepGuardSurvives (fork : Fork) : Bool :=
   let benv : Benv := { (default : Benv) with
     state := state
     stat := { (default : BenvStat) with fork := fork, origState := state } }
-  let prepared : TraceTransaction.PreparedTransaction :=
+  let prepared : Bridge.G2a.Old.TraceTransaction.PreparedTransaction :=
     ⟨benv, .init, 0x5000, 0, 0, 0, default⟩
   let tx : Transaction := {
     nonce := 0
@@ -36,7 +36,7 @@ private def TraceTransaction.sweepGuardSurvives (fork : Fork) : Bool :=
     r := []
     s := []
     type := .legacy 0 (some 0) }
-  let out : MsgCallOutput := {
+  let out : Bridge.G2a.Old.MessageCallOutput := {
     gasLeft := 0
     refundCounter := 0
     logs := []
@@ -44,7 +44,7 @@ private def TraceTransaction.sweepGuardSurvives (fork : Fork) : Bool :=
     error := none
     returnData := []
     touchedAccounts := (.emptyWithCapacity : AdrSet).insert TraceTransaction.sweepGuardAdr }
-  match TraceTransaction.finishTransaction prepared tx 0 state out with
+  match Bridge.G2a.Old.TraceTransaction.finishTransaction prepared tx 0 state out with
   | .ok (post, _) => post[TraceTransaction.sweepGuardAdr]?.isSome
   | .error _ => true
 

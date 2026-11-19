@@ -33,8 +33,8 @@ end Jaune.Bridge.Import
 namespace Jaune.Staging
 
 theorem importExplicit_eq (fork : Fork) (chain : BlockChain) (candidate : CanonicalBlock) :
-    Staging.importExplicit fork chain candidate = Bridge.Import.addBlockToChainCanonicalE fork chain candidate := by
-  unfold Staging.importExplicit importCore Bridge.Import.addBlockToChainCanonicalE
+    importExplicit fork chain candidate = Bridge.Import.addBlockToChainCanonicalE fork chain candidate := by
+  unfold importExplicit importCore Bridge.Import.addBlockToChainCanonicalE
   cases checkBlockRlpSize fork.ruleSet.block candidate.rawSize with
   | error e => rfl
   | ok unit =>
@@ -46,8 +46,8 @@ theorem importExplicit_eq (fork : Fork) (chain : BlockChain) (candidate : Canoni
 
 theorem importScheduled_eq (cfg : ChainConfig) (fork : Fork) (chain : BlockChain)
     (candidate : CanonicalBlock) :
-    Staging.importScheduled cfg fork chain candidate = Bridge.Import.addBlockToChainScheduledCanonicalE cfg fork chain candidate := by
-  unfold Staging.importScheduled importCore Bridge.Import.addBlockToChainScheduledCanonicalE
+    importScheduled cfg fork chain candidate = Bridge.Import.addBlockToChainScheduledCanonicalE cfg fork chain candidate := by
+  unfold importScheduled importCore Bridge.Import.addBlockToChainScheduledCanonicalE
   cases checkBlockRlpSize fork.ruleSet.block candidate.rawSize with
   | error e => rfl
   | ok unit =>

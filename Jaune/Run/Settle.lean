@@ -18,80 +18,20 @@ gate G2a's bridge modules.
 
 namespace Jaune
 
-open Jaune Jaune.Staging
+open Jaune
 
-/-- Settle a transaction after its message run: read the run's refund counter, then refund the
-sender, pay the coinbase, erase the writes of emptied and deleted accounts, settle the
-self-destructs, sweep the touched empty accounts, record the gas, the receipt and the logs, and
-incorporate the block access list at `index + 1`. -/
-def Staging.B2.Transaction.settle (prepared : Staging.Transaction.Prepared) (tx : Transaction) (index : Nat)
-    (run : Staging.MessageRun) : Except TransitionError (State × BlockOutput) := do
-  let benv := prepared.benv
-  let bout := prepared.bout
-  let sender := prepared.sender
-  let effectiveGasPrice := prepared.effectiveGasPrice
-  let txBlobGasUsed := prepared.txBlobGasUsed
-  let calldataFloorGasCost := prepared.calldataFloorGasCost
-  let refundCounter : Nat ←
-    run.refundCounter.mapError (fun e => TransitionError.vm e.toEvmError)
-  let settlement :=
-    settleTransactionGas benv.stat.rules tx.gasLimit calldataFloorGasCost
-      run.gasLeft run.stateGasLeft refundCounter run.stateGasUsed
-  let gasRefundAmount : Nat :=
-    settlement.gasLeft * effectiveGasPrice
-  let priorityFeePerGas := effectiveGasPrice - benv.stat.baseFeePerGas
-  let transactionFee := settlement.gasUsed * priorityFeePerGas
-  let state := run.state.addBal sender gasRefundAmount.toU256
-  let storageWrites :=
-    run.storageWrites.clearIfEmpty state sender
-  let state := state.addBal benv.stat.coinbase transactionFee.toU256
-  let storageWrites :=
-    storageWrites.clearIfEmpty state benv.stat.coinbase
-  let storageWrites := run.accountsToDelete.toList.foldl
-    (fun writes a => writes.eraseAddress a) storageWrites
-  let state := settleSelfdestructs benv.stat.rules
-    run.accountsToDelete.toList state
-  -- EIP-161: `destroy_touched_empty_accounts` (Spurious Dragon to Gray Glacier).
-  let state := sweepTouchedAccounts benv.stat.rules
-    run.touchedAccounts.toList state
-  let bout ← .ok (bout.withGasSettlement settlement txBlobGasUsed)
-  let receipt :=
-    makeReceipt tx run.error bout.cumulativeGasUsed run.logs
-  let receiptKey : Bytes := Rlp.Item.toBytes <| .bytes index.toBytes
-  let bout ← .ok {bout with
-    receiptKeys := bout.receiptKeys ++ [receiptKey]
-    receiptsTrie := bout.receiptsTrie.insert receiptKey receipt
-    blockLogs := bout.blockLogs ++ run.logs}
-  -- EIP-7928: `incorporate_tx_into_block` at `index + 1`, after the
-  -- self-destruct settlement: surviving explicit storage writes and account
-  -- changes, plus reads and the transaction-level ones --
-  -- the sender (`check_transaction`, `update_sender_state`, the refund) and
-  -- the coinbase (`disburse_gas_fees` credits it even a zero fee).
-  let bal := match benv.stat.rules.blockAccessListRules with
-    | none => bout.blockAccessListBuilder
-    | some _ => bout.blockAccessListBuilder.incorporate (index + 1) benv.state state
-        (sender :: benv.stat.coinbase :: run.accountReads.toList)
-        run.storageReads.toList storageWrites.toList
-  .ok ⟨state, {bout with blockAccessListBuilder := bal}⟩
 
-/-- One transaction: check, prepare, the top-level message run, settle. -/
-def Staging.B2.processTransaction (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
-    Except TransitionError (State × BlockOutput) := do
-  let checked ← Staging.Transaction.check benv bout tx index
-  let prepared ← Staging.Transaction.prepare checked tx index
-  let run ← (Staging.Message.run prepared.msg).mapError (fun e => TransitionError.vm e.toEvmError)
-  Staging.B2.Transaction.settle prepared tx index run
 
 /-- The successful phases of one transaction. The block output is threaded separately, so a
 record can be read independently of earlier entries in the block's tries. -/
-structure Staging.B2.TransactionRun where
+structure TransactionRun where
   index : Nat
   transaction : Transaction
   sender : Address
   intrinsicGas : Nat
   blobGasUsed : Nat
   effectiveGasPrice : Nat
-  message : Staging.MessageRun
+  message : TopLevelRun
   gasSettlement : TransactionGasSettlement
   state : State
   receipt : Fin 5 × Receipt
@@ -99,9 +39,9 @@ structure Staging.B2.TransactionRun where
   storageWrites : KeySet
 
 /-- Settle a prepared transaction, keeping the observations beside the updated block output. -/
-def Staging.B2.Transaction.settleRun (checked : Staging.Transaction.Checked) (prepared : Staging.Transaction.Prepared)
-    (tx : Transaction) (index : Nat) (run : Staging.MessageRun) :
-    Except TransitionError (Staging.B2.TransactionRun × BlockOutput) := do
+def Transaction.settleRun (checked : Transaction.Admitted) (prepared : Transaction.Prepared)
+    (tx : Transaction) (index : Nat) (run : TopLevelRun) :
+    Except TransitionError (TransactionRun × BlockOutput) := do
   let benv := prepared.benv
   let bout := prepared.bout
   let sender := prepared.sender
@@ -152,22 +92,12 @@ def Staging.B2.Transaction.settleRun (checked : Staging.Transaction.Checked) (pr
     run, settlement, state, receipt, storageWrites⟩, {bout with blockAccessListBuilder := bal})
 
 /-- Execute one transaction and keep its message, gas settlement and receipt. -/
-def Staging.B2.Transaction.run (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
-    Except TransitionError (Staging.B2.TransactionRun × BlockOutput) := do
-  let checked ← Staging.Transaction.check benv bout tx index
-  let prepared ← Staging.Transaction.prepare checked tx index
-  let message ← (Staging.Message.run prepared.msg).mapError (fun e => TransitionError.vm e.toEvmError)
-  Staging.B2.Transaction.settleRun checked prepared tx index message
+def Transaction.run (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
+    Except TransitionError (TransactionRun × BlockOutput) := do
+  let checked ← Transaction.admit benv bout tx index
+  let prepared ← Transaction.prepare checked tx index
+  let message ← (TopLevel.run prepared.msg).mapError (fun e => TransitionError.vm e.toEvmError)
+  Transaction.settleRun checked prepared tx index message
 
-/-- Erasing the transaction record preserves both failure and the entire successful output. -/
-theorem Staging.B2.Transaction.run_output (benv : Benv) (bout : BlockOutput) (tx : Transaction) (index : Nat) :
-    (fun pair => (pair.1.state, pair.2)) <$> Staging.B2.Transaction.run benv bout tx index =
-      Staging.B2.processTransaction benv bout tx index := by
-  unfold Staging.B2.Transaction.run Staging.B2.processTransaction
-  simp only [map_bind]
-  refine bind_congr fun checked => bind_congr fun prepared => bind_congr fun message => ?_
-  unfold Staging.B2.Transaction.settleRun Staging.B2.Transaction.settle
-  simp only [map_bind]
-  exact bind_congr fun _ => rfl
 
 end Jaune

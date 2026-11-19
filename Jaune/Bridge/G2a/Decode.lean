@@ -341,17 +341,17 @@ def applyBodyDecoding
     (wds : List Withdrawal) :
     Except TransitionError (State × BlockOutput) := do
   let rules := benv.stat.rules
-  let ⟨stBeacon, bal⟩ ← beaconRootsCall rules benv
+  let ⟨stBeacon, bal⟩ ← Bridge.G2a.Old.beaconRootsCall rules benv
   let benvBeacon : Benv := benv.withState stBeacon
-  let ⟨stHistory, bal⟩ ← historyStorageCall rules benvBeacon bal
+  let ⟨stHistory, bal⟩ ← Bridge.G2a.Old.historyStorageCall rules benvBeacon bal
   let benvHistory := benvBeacon.withState stHistory
   let ⟨benvTxs, boutTxs⟩ ←
-    applyTransactions (← txs.mapM (decode benvHistory.stat.rules)).putIndex benvHistory {BlockOutput.init with blockAccessListBuilder := bal}
-  let ⟨stWds, boutWds⟩ := withdrawalsPass rules benvTxs boutTxs wds
-  let ⟨stReq, boutReq⟩ ← requestsPass rules (benvTxs.withState stWds) boutWds
+    Bridge.G2a.Old.applyTransactions (← txs.mapM (decode benvHistory.stat.rules)).putIndex benvHistory {BlockOutput.init with blockAccessListBuilder := bal}
+  let ⟨stWds, boutWds⟩ := Bridge.G2a.Old.withdrawalsPass rules benvTxs boutTxs wds
+  let ⟨stReq, boutReq⟩ ← Bridge.G2a.Old.requestsPass rules (benvTxs.withState stWds) boutWds
   let stRewards := match rules.proofOfWork with
     | none => stReq
-    | some pow => payRewards pow benv.stat.number benv.stat.coinbase ommers stReq
+    | some pow => Bridge.G2a.Old.payRewards pow benv.stat.number benv.stat.coinbase ommers stReq
   let list := match rules.blockAccessListRules with
     | none => []
     | some _ => boutReq.blockAccessListBuilder.build
@@ -360,14 +360,14 @@ def applyBodyDecoding
 
 theorem applyBody_eq_decoding (benv : Benv) (txs : List (Bytes ⊕ Transaction))
     (ommers : List Header) (wds : List Withdrawal) :
-    applyBody benv txs ommers wds = applyBodyDecoding decodeTransaction benv txs ommers wds := rfl
+    Bridge.G2a.Old.applyBody benv txs ommers wds = applyBodyDecoding decodeTransaction benv txs ommers wds := rfl
 
 /-- The body run's result differs: both pre-execution system calls succeed, and the decode
 differs (`DecodeDiffers`) for byte `x`. -/
 def BodyDiffers (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (x : UInt8) : Prop :=
   ∃ stBeacon bal stHistory bal',
-    beaconRootsCall benv.stat.rules benv = .ok (stBeacon, bal) ∧
-    historyStorageCall benv.stat.rules (benv.withState stBeacon) bal = .ok (stHistory, bal') ∧
+    Bridge.G2a.Old.beaconRootsCall benv.stat.rules benv = .ok (stBeacon, bal) ∧
+    Bridge.G2a.Old.historyStorageCall benv.stat.rules (benv.withState stBeacon) bal = .ok (stHistory, bal') ∧
     DecodeDiffers benv.stat.rules txs x
 
 /-- **Difference theorem, `applyBody`.** The body run with the staged decoder equals `applyBody`
@@ -376,21 +376,21 @@ rejection, for the first failing slot's byte. -/
 theorem applyBody_difference (benv : Benv) (txs : List (Bytes ⊕ Transaction))
     (ommers : List Header) (wds : List Withdrawal) :
     (applyBodyDecoding Staging.decodeTransaction benv txs ommers wds =
-          applyBody benv txs ommers wds ∧ ∀ x, ¬ BodyDiffers benv txs x) ∨
+          Bridge.G2a.Old.applyBody benv txs ommers wds ∧ ∀ x, ¬ BodyDiffers benv txs x) ∨
       ∃ x, BodyDiffers benv txs x ∧
-        applyBody benv txs ommers wds = .error (oldUnknownTypeError x) ∧
+        Bridge.G2a.Old.applyBody benv txs ommers wds = .error (oldUnknownTypeError x) ∧
         applyBodyDecoding Staging.decodeTransaction benv txs ommers wds =
           .error (Staging.transactionTypeNotSupported x) := by
   rw [applyBody_eq_decoding]
   unfold applyBodyDecoding
-  cases hb : beaconRootsCall benv.stat.rules benv with
+  cases hb : Bridge.G2a.Old.beaconRootsCall benv.stat.rules benv with
   | error e =>
     refine .inl ⟨by simp [hb, bind, Except.bind], ?_⟩
     rintro x ⟨_, _, _, _, h1, -⟩
     rw [hb] at h1; cases h1
   | ok p =>
     obtain ⟨stB, bal⟩ := p
-    cases hh : historyStorageCall benv.stat.rules (benv.withState stB) bal with
+    cases hh : Bridge.G2a.Old.historyStorageCall benv.stat.rules (benv.withState stB) bal with
     | error e =>
       refine .inl ⟨by simp [hb, hh, bind, Except.bind], ?_⟩
       rintro x ⟨_, _, _, _, h1, h2, -⟩
@@ -441,7 +441,7 @@ def stateTransitionCoreEDecoding
 
 theorem stateTransitionCoreE_eq_decoding {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
-    stateTransitionCoreE embed f ch block checkOmmers =
+    Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers =
       stateTransitionCoreEDecoding decodeTransaction embed f ch block checkOmmers := rfl
 
 /-- The transition's result differs: the header validates, the ommer check passes and the body
@@ -457,10 +457,10 @@ candidate's rejection: `oldUnknownTypeError_split`, `transactionTypeNotSupported
 theorem stateTransitionCoreE_difference {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
     (stateTransitionCoreEDecoding Staging.decodeTransaction embed f ch block checkOmmers =
-          stateTransitionCoreE embed f ch block checkOmmers ∧
+          Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers ∧
         ∀ x, ¬ TransitionDiffers f ch block checkOmmers x) ∨
       ∃ x, TransitionDiffers f ch block checkOmmers x ∧
-        stateTransitionCoreE embed f ch block checkOmmers = .error (embed (oldUnknownTypeError x)) ∧
+        Bridge.G2a.Old.stateTransitionCoreE embed f ch block checkOmmers = .error (embed (oldUnknownTypeError x)) ∧
         stateTransitionCoreEDecoding Staging.decodeTransaction embed f ch block checkOmmers =
           .error (embed (Staging.transactionTypeNotSupported x)) := by
   rw [stateTransitionCoreE_eq_decoding]

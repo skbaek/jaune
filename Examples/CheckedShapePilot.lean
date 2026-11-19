@@ -68,7 +68,7 @@ private def firstSpawn : Nat → Checked.Frame.Running → Option (Checked.Frame
 /-- What the transaction reads of the native top-level frame: the world after it and the logs it
 keeps (a failed frame keeps none). Both pilot preparations are frames. -/
 private def rendered (msg : Msg) : Option (State × List Log) := do
-  let .ok (.frame f _) := Staging.TopLevel.prepare msg | none
+  let .ok (.frame f _) := TopLevel.prepare msg | none
   let cf ← checkedFrame f
   let .ok result := Checked.Frame.runTop cf | none
   let logs := match result with

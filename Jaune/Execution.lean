@@ -672,28 +672,6 @@ def calcExcessBlobGas (blob : BlobSchedule) (parentHeader : Header) : Nat :=
       else
         parentBlobGas - blob.target
 
-structure MsgCallOutput : Type where
-  gasLeft : Nat
-  refundCounter : Int
-  logs : List Log
-  accountsToDelete : AdrSet
-  error: Option SettledHalt
-  returnData : Bytes
-  /-- State-gas reservoir returned by the top frame. Zero on the legacy path. -/
-  stateGasLeft : Nat := 0
-  /-- Net state gas consumed by the transaction; refunds may make it negative. -/
-  stateGasUsed : Int := 0
-  /-- EIP-7928: the accounts the top frame and its children read (goal C).
-  Empty on the legacy path and under `rules.bal = none`. -/
-  accountReads : AdrSet := .emptyWithCapacity
-  /-- EIP-7928: the storage slots read. -/
-  storageReads : KeySet := .emptyWithCapacity
-  /-- Explicit writes surviving frame rollback and storage deletion. -/
-  storageWrites : KeySet := .emptyWithCapacity
-  /-- EIP-161: the accounts the transaction touched, for the end-of-transaction
-  sweep. Empty when the transaction failed, on the Amsterdam path, and under
-  every rule set without `settle.touchedSweep`. -/
-  touchedAccounts : AdrSet := .emptyWithCapacity
 
 def Except.bimap
   {ε : Type u0} {δ : Type u1} {ξ : Type u2} {υ : Type u3}

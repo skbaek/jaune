@@ -37,67 +37,67 @@ open Jaune
 /-! ### The runner is the run -/
 
 /-- The fold the runners use keeps exactly the run's last prefix. -/
-theorem Staging.Body.fold_eq_run (benv : Benv) :
-    ∀ (p : Staging.Body.Prefix) (ops : List Staging.BodyOp),
-      Staging.Body.fold benv p ops = Prod.snd <$> Staging.Body.run benv p ops
+theorem Body.fold_eq_run (benv : Benv) :
+    ∀ (p : Body.Prefix) (ops : List BodyOp),
+      Body.fold benv p ops = Prod.snd <$> Body.run benv p ops
   | p, [] => rfl
   | p, op :: ops => by
-    simp only [Staging.Body.fold, Staging.Body.run]
-    cases Staging.Body.step benv p op with
+    simp only [Body.fold, Body.run]
+    cases Body.step benv p op with
     | error e => rfl
     | ok r =>
       obtain ⟨r, q⟩ := r
       simp only [bind, Except.bind]
-      rw [Staging.Body.fold_eq_run benv q ops]
-      cases Staging.Body.run benv q ops with
+      rw [Body.fold_eq_run benv q ops]
+      cases Body.run benv q ops with
       | error e => rfl
       | ok s => rfl
 
 /-- A run over two lists is the run over the first, then the run over the second from where the
 first ended. -/
-theorem Staging.Body.run_append (benv : Benv) :
-    ∀ (p : Staging.Body.Prefix) (xs ys : List Staging.BodyOp),
-      Staging.Body.run benv p (xs ++ ys) = (do
-        let (r, q) ← Staging.Body.run benv p xs
-        let (s, q') ← Staging.Body.run benv q ys
+theorem Body.run_append (benv : Benv) :
+    ∀ (p : Body.Prefix) (xs ys : List BodyOp),
+      Body.run benv p (xs ++ ys) = (do
+        let (r, q) ← Body.run benv p xs
+        let (s, q') ← Body.run benv q ys
         pure (r ++ s, q'))
   | p, [], ys => by
-    simp only [List.nil_append, Staging.Body.run]
-    cases h : Staging.Body.run benv p ys with
+    simp only [List.nil_append, Body.run]
+    cases h : Body.run benv p ys with
     | error e => simp [h, bind, Except.bind, pure, Except.pure]
     | ok s => simp [h, bind, Except.bind, pure, Except.pure]
   | p, op :: xs, ys => by
-    simp only [List.cons_append, Staging.Body.run]
-    cases Staging.Body.step benv p op with
+    simp only [List.cons_append, Body.run]
+    cases Body.step benv p op with
     | error e => rfl
     | ok r =>
       obtain ⟨r, q⟩ := r
       simp only [bind, Except.bind]
-      rw [Staging.Body.run_append benv q xs ys]
-      cases Staging.Body.run benv q xs with
+      rw [Body.run_append benv q xs ys]
+      cases Body.run benv q xs with
       | error e => rfl
       | ok s =>
         obtain ⟨s, q'⟩ := s
-        cases h : Staging.Body.run benv q' ys with
+        cases h : Body.run benv q' ys with
         | error e => simp [h, bind, Except.bind, pure, Except.pure]
         | ok t => simp [h, bind, Except.bind, pure, Except.pure]
 
 /-- Folding a list in pieces. -/
-theorem Staging.Body.fold_append (benv : Benv) :
-    ∀ (p : Staging.Body.Prefix) (xs ys : List Staging.BodyOp),
-      Staging.Body.fold benv p (xs ++ ys) = Staging.Body.fold benv p xs >>= fun q => Staging.Body.fold benv q ys
+theorem Body.fold_append (benv : Benv) :
+    ∀ (p : Body.Prefix) (xs ys : List BodyOp),
+      Body.fold benv p (xs ++ ys) = Body.fold benv p xs >>= fun q => Body.fold benv q ys
   | p, [], ys => rfl
   | p, op :: xs, ys => by
-    simp only [List.cons_append, Staging.Body.fold]
-    cases Staging.Body.step benv p op with
+    simp only [List.cons_append, Body.fold]
+    cases Body.step benv p op with
     | error e => rfl
-    | ok r => exact Staging.Body.fold_append benv r.2 xs ys
+    | ok r => exact Body.fold_append benv r.2 xs ys
 
 /-! ### What a transaction writes -/
 
 /-- Each transaction record supplies the exact trie entry and logs that settlement wrote. -/
-theorem Staging.B2.Transaction.run_writes {benv : Benv} {bout out : BlockOutput} {tx : Transaction}
-    {index : Nat} {r : Staging.B2.TransactionRun} (h : Staging.B2.Transaction.run benv bout tx index = .ok (r, out)) :
+theorem Transaction.run_writes {benv : Benv} {bout out : BlockOutput} {tx : Transaction}
+    {index : Nat} {r : TransactionRun} (h : Transaction.run benv bout tx index = .ok (r, out)) :
     r.index = index ∧ r.transaction = tx ∧
     (benv.stat.rules.stateGas = none →
       r.gasSettlement.executionGasUsed = r.gasSettlement.gasUsed ∧ r.gasSettlement.stateGasUsed = 0) ∧
@@ -110,14 +110,14 @@ theorem Staging.B2.Transaction.run_writes {benv : Benv} {bout out : BlockOutput}
         (index + 1) benv.state r.state
         (r.sender :: benv.stat.coinbase :: r.message.accountReads.toList)
         r.message.storageReads.toList r.storageWrites.toList } := by
-  unfold Staging.B2.Transaction.run at h
+  unfold Transaction.run at h
   obtain ⟨checked, hc, h⟩ := Except.bind_eq_ok h
   obtain ⟨prepared, hp, h⟩ := Except.bind_eq_ok h
   obtain ⟨run, _, h⟩ := Except.bind_eq_ok h
   have hcb : checked.bout =
       {bout with transactionsTrie := bout.transactionsTrie.insert (rlpKey index) tx} ∧
       checked.benv = benv.beginTransaction := by
-    unfold Staging.Transaction.check at hc
+    unfold Transaction.admit at hc
     obtain ⟨_, hb, hc⟩ := Except.bind_eq_ok hc
     cases hb
     obtain ⟨_, _, hc⟩ := Except.bind_eq_ok hc
@@ -126,12 +126,12 @@ theorem Staging.B2.Transaction.run_writes {benv : Benv} {bout out : BlockOutput}
     cases hc
     exact ⟨rfl, rfl⟩
   have hpb : prepared.bout = checked.bout ∧ prepared.benv = checked.benv ∧ prepared.sender = checked.sender := by
-    unfold Staging.Transaction.prepare at hp
+    unfold Transaction.prepare at hp
     obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
     obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
     cases hp
     exact ⟨rfl, rfl, rfl⟩
-  unfold Staging.B2.Transaction.settleRun at h
+  unfold Transaction.settleRun at h
   obtain ⟨refundCounter, _, h⟩ := Except.bind_eq_ok h
   cases h
   refine ⟨rfl, rfl, ?_, ?_⟩
@@ -145,30 +145,30 @@ theorem Staging.B2.Transaction.run_writes {benv : Benv} {bout out : BlockOutput}
 /-- Reconstruct the block prefix from the operations' observations. A transaction contributes its
 settled world, receipt and surviving writes. System calls contribute the world and reads of their
 message run. No operation executes a message while reading this record. -/
-def Staging.OpRun.apply (benv : Benv) (p : Staging.Body.Prefix) : Staging.OpRun → Staging.Body.Prefix
+def OpRun.apply (benv : Benv) (p : Body.Prefix) : OpRun → Body.Prefix
   | .transaction run =>
     let key := rlpKey run.index
     let output := p.toBlockOutput.withGasSettlement run.gasSettlement run.blobGasUsed
-    Staging.Body.Prefix.ofBlockOutput run.state { output with
+    Body.Prefix.ofBlockOutput run.state { output with
       transactionsTrie := p.transactionsTrie.insert key run.transaction
       receiptKeys := p.receiptKeys ++ [key]
       receiptsTrie := p.receiptsTrie.insert key run.receipt
       blockLogs := p.logs ++ run.receipt.2.logs
-      blockAccessListBuilder := p.accessList.incorporateSystem benv.stat.rules
+      blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules
         (run.index + 1) p.state run.state
         (run.sender :: benv.stat.coinbase :: run.message.accountReads.toList)
         run.message.storageReads.toList run.storageWrites.toList }
   | .systemCall index address run =>
     { p with
       state := run.state
-      accessList := p.accessList.incorporateSystem benv.stat.rules index p.state run.state
+      blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules index p.state run.state
         (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList }
   | .withdrawals index ws =>
     let state := processWithdrawalsState p.state ws
     { p with
-      state
+      state := state
       withdrawalsTrie := processWithdrawalsTrie p.withdrawalsTrie ws
-      accessList := p.accessList.incorporateSystem benv.stat.rules index p.state state
+      blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules index p.state state
         (ws.map Withdrawal.address) [] [] }
   | .depositRequests deposits =>
     { p with requests := if deposits.length > 0
@@ -178,26 +178,26 @@ def Staging.OpRun.apply (benv : Benv) (p : Staging.Body.Prefix) : Staging.OpRun 
       state := run.state
       requests := if run.returnData.length > 0 then p.requests ++ [[type] ++ run.returnData]
         else p.requests
-      accessList := p.accessList.incorporateSystem benv.stat.rules index p.state run.state
+      blockAccessListBuilder := p.blockAccessListBuilder.incorporateSystem benv.stat.rules index p.state run.state
         (address :: run.accountReads.toList) run.storageReads.toList run.storageWrites.toList }
   | .rewards coinbase amount credits =>
-    { p with state := Staging.creditAll credits (p.state.addBal coinbase amount.toU256) }
+    { p with state := creditAll credits (p.state.addBal coinbase amount.toU256) }
   | .buildAccessList _ =>
-    { p with builtAccessList := match benv.stat.rules.blockAccessListRules with
+    { p with blockAccessList := match benv.stat.rules.blockAccessListRules with
       | none => []
-      | some _ => p.accessList.build }
+      | some _ => p.blockAccessListBuilder.build }
   | .checkAccessListLimit => p
 
 /-- The rich observation of each successful operation determines its next prefix. -/
-theorem Staging.Body.step_apply {benv : Benv} {p q : Staging.Body.Prefix} {op : Staging.BodyOp} {run : Staging.OpRun}
-    (h : Staging.Body.step benv p op = .ok (run, q)) : run.apply benv p = q := by
+theorem Body.step_apply {benv : Benv} {p q : Body.Prefix} {op : BodyOp} {run : OpRun}
+    (h : Body.step benv p op = .ok (run, q)) : run.apply benv p = q := by
   cases op with
   | transaction tx index =>
-    simp only [Staging.Body.step] at h
+    simp only [Body.step] at h
     obtain ⟨⟨tr, output⟩, ht, h⟩ := Except.bind_eq_ok h
     cases h
-    obtain ⟨hi, hx, _, hw⟩ := Staging.B2.Transaction.run_writes ht
-    simp only [Prod.fst, Prod.snd, Staging.OpRun.apply]
+    obtain ⟨hi, hx, _, hw⟩ := Transaction.run_writes ht
+    simp only [Prod.fst, Prod.snd, Jaune.OpRun.apply]
     rw [hi, hx, hw]
     rfl
   | systemCall address data index =>
@@ -221,36 +221,36 @@ theorem Staging.Body.step_apply {benv : Benv} {p q : Staging.Body.Prefix} {op : 
 
 /-- Folding the operations' records reconstructs the whole final prefix, including its tries,
 receipt keys, logs, requests and block access list. -/
-theorem Staging.Body.run_apply (benv : Benv) : ∀ (ops : List Staging.BodyOp) (p q : Staging.Body.Prefix) (runs : List Staging.OpRun),
-    Staging.Body.run benv p ops = .ok (runs, q) →
+theorem Body.run_apply (benv : Benv) : ∀ (ops : List BodyOp) (p q : Body.Prefix) (runs : List OpRun),
+    Body.run benv p ops = .ok (runs, q) →
       runs.foldl (fun p run => run.apply benv p) p = q
   | [], _, _, _, h => by cases h; rfl
   | op :: ops, p, q, runs, h => by
-    simp only [Staging.Body.run] at h
+    simp only [Body.run] at h
     obtain ⟨⟨r, next⟩, hs, h⟩ := Except.bind_eq_ok h
     obtain ⟨⟨rs, last⟩, hr, h⟩ := Except.bind_eq_ok h
     cases h
-    simp only [List.foldl_cons, Staging.Body.step_apply hs]
-    exact Staging.Body.run_apply benv ops next last rs hr
+    simp only [List.foldl_cons, Body.step_apply hs]
+    exact Body.run_apply benv ops next last rs hr
 
 /-- The streaming runner returns exactly the result reconstructed from the ordered records,
 including the same error whenever an operation fails. -/
-theorem Staging.Body.fold_eq_apply (benv : Benv) (p : Staging.Body.Prefix) (ops : List Staging.BodyOp) :
-    Staging.Body.fold benv p ops =
-      (fun pair => pair.1.foldl (fun q run => run.apply benv q) p) <$> Staging.Body.run benv p ops := by
-  rw [Staging.Body.fold_eq_run]
-  cases h : Staging.Body.run benv p ops with
+theorem Body.fold_eq_apply (benv : Benv) (p : Body.Prefix) (ops : List BodyOp) :
+    Body.fold benv p ops =
+      (fun pair => pair.1.foldl (fun q run => run.apply benv q) p) <$> Body.run benv p ops := by
+  rw [Body.fold_eq_run]
+  cases h : Body.run benv p ops with
   | error e => rfl
   | ok pair =>
     obtain ⟨rs, q⟩ := pair
-    exact congrArg Except.ok (Staging.Body.run_apply benv ops p q rs h).symm
+    exact congrArg Except.ok (Body.run_apply benv ops p q rs h).symm
 
 /-! ### What the other operations leave alone -/
 
 /-- Every operation but a transaction leaves the gas counters, the transaction and receipt tries,
 the receipt keys and the logs as they were. -/
-theorem Staging.Body.step_frame {benv : Benv} {p q : Staging.Body.Prefix} {op : Staging.BodyOp} {r : Staging.OpRun}
-    (hop : ∀ tx i, op ≠ .transaction tx i) (h : Staging.Body.step benv p op = .ok (r, q)) :
+theorem Body.step_frame {benv : Benv} {p q : Body.Prefix} {op : BodyOp} {r : OpRun}
+    (hop : ∀ tx i, op ≠ .transaction tx i) (h : Body.step benv p op = .ok (r, q)) :
     q.executionGasUsed = p.executionGasUsed ∧ q.stateGasUsed = p.stateGasUsed ∧
       q.cumulativeGasUsed = p.cumulativeGasUsed ∧ q.blobGasUsed = p.blobGasUsed ∧
       q.transactionsTrie = p.transactionsTrie ∧ q.receiptsTrie = p.receiptsTrie ∧
@@ -258,42 +258,42 @@ theorem Staging.Body.step_frame {benv : Benv} {p q : Staging.Body.Prefix} {op : 
   cases op with
   | transaction tx i => exact absurd rfl (hop tx i)
   | systemCall address data index =>
-    simp only [Staging.Body.step] at h
+    simp only [Body.step] at h
     obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
     obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
     cases h
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   | withdrawals ws index =>
-    simp only [Staging.Body.step] at h
+    simp only [Body.step] at h
     cases h
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   | depositRequests =>
-    simp only [Staging.Body.step] at h
+    simp only [Body.step] at h
     obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
     cases h
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   | requestCall type address index =>
-    simp only [Staging.Body.step] at h
+    simp only [Body.step] at h
     obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
     cases h
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   | rewards coinbase minerReward credits =>
-    simp only [Staging.Body.step] at h
+    simp only [Body.step] at h
     cases h
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   | buildAccessList =>
-    simp only [Staging.Body.step] at h
+    simp only [Body.step] at h
     cases h
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   | checkAccessListLimit =>
-    simp only [Staging.Body.step] at h
+    simp only [Body.step] at h
     obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
     cases h
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- A transaction step, read through `B2.Transaction.run_writes`. -/
-theorem Staging.Body.step_transaction_output {benv : Benv} {p q : Staging.Body.Prefix} {tx : Transaction}
-    {index : Nat} {r : Staging.OpRun} (h : Staging.Body.step benv p (.transaction tx index) = .ok (r, q)) :
+theorem Body.step_transaction_output {benv : Benv} {p q : Body.Prefix} {tx : Transaction}
+    {index : Nat} {r : OpRun} (h : Body.step benv p (.transaction tx index) = .ok (r, q)) :
     ∃ (settlement : TransactionGasSettlement) (txBlobGasUsed : Nat)
       (receipt : Fin 5 × Receipt),
       q.toBlockOutput = { p.toBlockOutput.withGasSettlement settlement txBlobGasUsed with
@@ -301,14 +301,14 @@ theorem Staging.Body.step_transaction_output {benv : Benv} {p q : Staging.Body.P
         receiptKeys := p.receiptKeys ++ [rlpKey index]
         receiptsTrie := p.receiptsTrie.insert (rlpKey index) receipt
         blockLogs := p.logs ++ receipt.2.logs
-        blockAccessListBuilder := q.accessList } ∧
+        blockAccessListBuilder := q.blockAccessListBuilder } ∧
       (benv.stat.rules.stateGas = none →
         settlement.executionGasUsed = settlement.gasUsed ∧ settlement.stateGasUsed = 0) ∧
       (∃ run, r = .transaction run ∧ run.receipt = receipt) := by
-  simp only [Staging.Body.step] at h
+  simp only [Body.step] at h
   obtain ⟨⟨run, bout⟩, ht, h⟩ := Except.bind_eq_ok h
   cases h
-  obtain ⟨_, _, hgas, hw⟩ := Staging.B2.Transaction.run_writes ht
+  obtain ⟨_, _, hgas, hw⟩ := Transaction.run_writes ht
   refine ⟨run.gasSettlement, run.blobGasUsed, run.receipt, ?_, hgas, run, rfl, rfl⟩
   change bout = _
   rw [hw]
@@ -316,7 +316,7 @@ theorem Staging.Body.step_transaction_output {benv : Benv} {p q : Staging.Body.P
 
 /-! ### Receipts so far, deposit requests and the legacy relation -/
 
-theorem Staging.forIn_filter_mapM {ε α β : Type} (C : α → Prop) [DecidablePred C]
+theorem forIn_filter_mapM {ε α β : Type} (C : α → Prop) [DecidablePred C]
     (E : α → Except ε (List β)) (F : α → List β → Except ε (ForInStep (List β)))
     (hF : ∀ x s, F x s = if C x then (fun r => ForInStep.yield (s ++ r)) <$> E x
       else pure (ForInStep.yield s)) :
@@ -331,15 +331,15 @@ theorem Staging.forIn_filter_mapM {ε α β : Type} (C : α → Prop) [Decidable
       | error e => rfl
       | ok r =>
         simp only [Functor.map, Except.map, bind, Except.bind]
-        rw [Staging.forIn_filter_mapM C E F hF l (a ++ r)]
+        rw [Jaune.forIn_filter_mapM C E F hF l (a ++ r)]
         cases (l.filter C).mapM E with
         | error e => rfl
         | ok rs => simp [pure, Except.pure, List.append_assoc]
     · simp only [hc, ↓reduceIte, decide_false, Bool.false_eq_true, not_false_eq_true,
         List.filter_cons_of_neg, pure, Except.pure, bind, Except.bind]
-      exact Staging.forIn_filter_mapM C E F hF l a
+      exact Jaune.forIn_filter_mapM C E F hF l a
 
-theorem Staging.forIn_lookup_flatMap {ε α β κ : Type} [Ord κ] (C : α → Prop) [DecidablePred C]
+theorem forIn_lookup_flatMap {ε α β κ : Type} [Ord κ] (C : α → Prop) [DecidablePred C]
     (E : α → Except ε (List β)) (logs : ν → List α) (trie : Std.TreeMap κ ν compare) (err : ε)
     (G : κ → List β → Except ε (ForInStep (List β)))
     (hG : ∀ k s, G k s = (trie[k]?.toExcept err) >>= fun v =>
@@ -356,7 +356,7 @@ theorem Staging.forIn_lookup_flatMap {ε α β κ : Type} [Ord κ] (C : α → P
     | error e => rfl
     | ok rs =>
       simp only []
-      rw [Staging.forIn_lookup_flatMap C E logs trie err G hG l (a ++ rs.flatten)
+      rw [Jaune.forIn_lookup_flatMap C E logs trie err G hG l (a ++ rs.flatten)
         (fun y hy => hl y (List.mem_cons_of_mem _ hy))]
       simp only [Functor.map, Except.map]
       cases ((l.flatMap (fun x => logs x.2)).filter C).mapM E with
@@ -367,28 +367,28 @@ theorem Staging.forIn_lookup_flatMap {ε α β κ : Type} [Ord κ] (C : α → P
 /-- **The receipts so far.** The prefix holds the receipts of the transactions at
 `0, 1, …, n-1`, in order: its receipt keys are those indices' keys, and each is bound to its
 receipt. -/
-structure Staging.Body.Prefix.Receipts (q : Staging.Body.Prefix) (n : Nat) (rcpts : List (Fin 5 × Receipt)) :
+structure Body.Prefix.Receipts (q : Body.Prefix) (n : Nat) (rcpts : List (Fin 5 × Receipt)) :
     Prop where
   keys : q.receiptKeys = (List.range n).map rlpKey
   length : rcpts.length = n
   get : ∀ (i : Nat) (h : i < rcpts.length), q.receiptsTrie[rlpKey i]? = some rcpts[i]
 
-theorem Staging.Body.Prefix.receipts_init (s : State) : (Staging.Body.Prefix.init s).Receipts 0 [] :=
+theorem Body.Prefix.receipts_init (s : State) : (Body.Prefix.init s).Receipts 0 [] :=
   ⟨rfl, rfl, fun _ h => absurd h (Nat.not_lt_zero _)⟩
 
-theorem Staging.Body.Prefix.Receipts.of_eq {p q : Staging.Body.Prefix} {n : Nat} {rcpts : List (Fin 5 × Receipt)}
+theorem Body.Prefix.Receipts.of_eq {p q : Body.Prefix} {n : Nat} {rcpts : List (Fin 5 × Receipt)}
     (hp : p.Receipts n rcpts) (hk : q.receiptKeys = p.receiptKeys)
     (ht : q.receiptsTrie = p.receiptsTrie) : q.Receipts n rcpts :=
   ⟨hk ▸ hp.keys, hp.length, fun i h => ht ▸ hp.get i h⟩
 
 /-- A transaction at the next index adds its receipt at that index, appends its logs and enters
 the transaction under the same key. -/
-theorem Staging.Body.Prefix.Receipts.step_transaction {benv : Benv} {p q : Staging.Body.Prefix} {tx : Transaction}
-    {n : Nat} {rcpts : List (Fin 5 × Receipt)} {r : Staging.OpRun} (hp : p.Receipts n rcpts)
-    (h : Staging.Body.step benv p (.transaction tx n) = .ok (r, q)) :
+theorem Body.Prefix.Receipts.step_transaction {benv : Benv} {p q : Body.Prefix} {tx : Transaction}
+    {n : Nat} {rcpts : List (Fin 5 × Receipt)} {r : OpRun} (hp : p.Receipts n rcpts)
+    (h : Body.step benv p (.transaction tx n) = .ok (r, q)) :
     ∃ receipt, q.Receipts (n + 1) (rcpts ++ [receipt]) ∧ q.logs = p.logs ++ receipt.2.logs ∧
       q.transactionsTrie = p.transactionsTrie.insert (rlpKey n) tx := by
-  obtain ⟨_, _, receipt, hq, -, -⟩ := Staging.Body.step_transaction_output h
+  obtain ⟨_, _, receipt, hq, -, -⟩ := Body.step_transaction_output h
   have hk : q.receiptKeys = p.receiptKeys ++ [rlpKey n] := congrArg BlockOutput.receiptKeys hq
   have ht : q.receiptsTrie = p.receiptsTrie.insert (rlpKey n) receipt :=
     congrArg BlockOutput.receiptsTrie hq
@@ -414,17 +414,17 @@ theorem Staging.Body.Prefix.Receipts.step_transaction {benv : Benv} {p q : Stagi
 
 /-- A deposit log: emitted by the deposit contract, with the deposit event's signature as its
 first topic. -/
-abbrev Staging.IsDepositLog (log : Log) : Prop :=
+abbrev IsDepositLog (log : Log) : Prop :=
   log.address = depositContractAddress ∧ log.topics[0]? = some depositEventSignatureHash
 
 /-- **Deposit requests read the receipts so far.** Over a prefix holding the receipts of
 `0, …, n-1`, the deposit requests are the deposit logs of those receipts, in index order and
 each receipt's log order, each extracted (a malformed one is a block error), and concatenated.
 "Receipt not found" is unreachable. -/
-theorem Staging.parseDepositRequests_of_receipts {q : Staging.Body.Prefix} {n : Nat}
+theorem parseDepositRequests_of_receipts {q : Body.Prefix} {n : Nat}
     {rcpts : List (Fin 5 × Receipt)} (h : q.Receipts n rcpts) :
     parseDepositRequests q.toBlockOutput =
-      List.flatten <$> ((rcpts.flatMap (·.2.logs)).filter (fun log => decide (Staging.IsDepositLog log))).mapM
+      List.flatten <$> ((rcpts.flatMap (·.2.logs)).filter (fun log => decide (IsDepositLog log))).mapM
         (fun log => Except.mapError TransitionError.block (extractDepositData log.data)) := by
   have hl : (((List.range n).map rlpKey).zip rcpts).map Prod.fst = (List.range n).map rlpKey := by
     rw [List.map_fst_zip]; simp [h.length]
@@ -436,9 +436,9 @@ theorem Staging.parseDepositRequests_of_receipts {q : Staging.Body.Prefix} {n : 
     simp only [List.getElem_zip, List.getElem_map, List.getElem_range]
     exact h.get i (by simp at hi; omega)
   unfold parseDepositRequests
-  simp only [Staging.Body.Prefix.toBlockOutput]
+  simp only [Body.Prefix.toBlockOutput]
   rw [h.keys, ← hl]
-  rw [Staging.forIn_lookup_flatMap Staging.IsDepositLog
+  rw [forIn_lookup_flatMap IsDepositLog
     (fun log => Except.mapError TransitionError.block (extractDepositData log.data))
     (fun v : Fin 5 × Receipt => v.2.logs) q.receiptsTrie
     (TransitionError.internal (.invariant (.text "receipt not found"))) _ ?_ _ [] hmem]
@@ -447,44 +447,44 @@ theorem Staging.parseDepositRequests_of_receipts {q : Staging.Body.Prefix} {n : 
       conv_rhs => rw [← hr]
       rw [List.flatMap_map]
     rw [this]
-    cases ((rcpts.flatMap (·.2.logs)).filter (fun log => decide (Staging.IsDepositLog log))).mapM
+    cases ((rcpts.flatMap (·.2.logs)).filter (fun log => decide (IsDepositLog log))).mapM
       (fun log => Except.mapError TransitionError.block (extractDepositData log.data)) <;> rfl
   · intro k s
     simp only [bind]
     congr 1
     funext v
-    rw [Staging.forIn_filter_mapM Staging.IsDepositLog _ _ ?_ v.2.logs s]
-    · cases ((v.2.logs).filter (fun log => decide (Staging.IsDepositLog log))).mapM
+    rw [forIn_filter_mapM IsDepositLog _ _ ?_ v.2.logs s]
+    · cases ((v.2.logs).filter (fun log => decide (IsDepositLog log))).mapM
         (fun log => Except.mapError TransitionError.block (extractDepositData log.data)) <;> rfl
     · intro x s
-      by_cases hc : Staging.IsDepositLog x
-      · simp only [Staging.IsDepositLog] at hc
-        simp only [Staging.IsDepositLog, hc, and_self, ↓reduceIte]
+      by_cases hc : IsDepositLog x
+      · simp only [IsDepositLog] at hc
+        simp only [IsDepositLog, hc, and_self, ↓reduceIte]
         cases Except.mapError TransitionError.block (extractDepositData x.data) <;> rfl
-      · simp only [Staging.IsDepositLog] at hc
-        simp only [Staging.IsDepositLog, hc, ↓reduceIte]
+      · simp only [IsDepositLog] at hc
+        simp only [IsDepositLog, hc, ↓reduceIte]
 
 
 /-- Operations other than transactions keep the receipts so far. -/
-theorem Staging.Body.fold_receipts_of_noTransaction (benv : Benv) :
-    ∀ (ops : List Staging.BodyOp) (p q : Staging.Body.Prefix) (n : Nat) (rcpts : List (Fin 5 × Receipt)),
+theorem Body.fold_receipts_of_noTransaction (benv : Benv) :
+    ∀ (ops : List BodyOp) (p q : Body.Prefix) (n : Nat) (rcpts : List (Fin 5 × Receipt)),
       (∀ op ∈ ops, ∀ tx i, op ≠ .transaction tx i) → p.Receipts n rcpts →
-      Staging.Body.fold benv p ops = .ok q → q.Receipts n rcpts
+      Body.fold benv p ops = .ok q → q.Receipts n rcpts
   | [], p, q, n, rcpts, _, hp, h => by cases h; exact hp
   | op :: ops, p, q, n, rcpts, hops, hp, h => by
-    simp only [Staging.Body.fold] at h
+    simp only [Body.fold] at h
     obtain ⟨⟨r, p'⟩, hs, h⟩ := Except.bind_eq_ok h
-    have hf := Staging.Body.step_frame (hops op (List.mem_cons_self ..)) hs
-    exact Staging.Body.fold_receipts_of_noTransaction benv ops p' q n rcpts
+    have hf := Body.step_frame (hops op (List.mem_cons_self ..)) hs
+    exact Body.fold_receipts_of_noTransaction benv ops p' q n rcpts
       (fun op' h' => hops op' (List.mem_cons_of_mem _ h'))
       (hp.of_eq hf.2.2.2.2.2.2.1 hf.2.2.2.2.2.1) h
 
 /-- Transactions at the next indices, in order, add their receipts in order. -/
-theorem Staging.Body.fold_transactions_receipts (benv : Benv) :
-    ∀ (l : List (Nat × Transaction)) (p q : Staging.Body.Prefix) (n : Nat)
+theorem Body.fold_transactions_receipts (benv : Benv) :
+    ∀ (l : List (Nat × Transaction)) (p q : Body.Prefix) (n : Nat)
       (rcpts : List (Fin 5 × Receipt)),
       l.map Prod.fst = List.range' n l.length → p.Receipts n rcpts →
-      Staging.Body.fold benv p (l.map fun x => .transaction x.2 x.1) = .ok q →
+      Body.fold benv p (l.map fun x => .transaction x.2 x.1) = .ok q →
       ∃ rs, rs.length = l.length ∧ q.Receipts (n + l.length) (rcpts ++ rs) ∧
         q.logs = p.logs ++ rs.flatMap (·.2.logs) ∧
         q.transactionsTrie = l.foldl (fun t x => t.insert (rlpKey x.1) x.2) p.transactionsTrie
@@ -492,11 +492,11 @@ theorem Staging.Body.fold_transactions_receipts (benv : Benv) :
   | ⟨i, tx⟩ :: l, p, q, n, rcpts, hl, hp, h => by
     simp only [List.map_cons, List.length_cons, List.range'_succ, List.cons.injEq] at hl
     obtain ⟨rfl, hl⟩ := hl
-    simp only [List.map_cons, Staging.Body.fold] at h
+    simp only [List.map_cons, Body.fold] at h
     obtain ⟨⟨r, p'⟩, hs, h⟩ := Except.bind_eq_ok h
     obtain ⟨receipt, hp', hlog, htx⟩ := hp.step_transaction hs
     obtain ⟨rs, hrs, hq, hlog', htx'⟩ :=
-      Staging.Body.fold_transactions_receipts benv l p' q (i + 1) _ hl hp' h
+      Body.fold_transactions_receipts benv l p' q (i + 1) _ hl hp' h
     refine ⟨receipt :: rs, by simp [hrs], ?_, ?_, ?_⟩
     · simpa [Nat.add_assoc, Nat.add_comm 1] using hq
     · rw [hlog', hlog]
@@ -504,112 +504,112 @@ theorem Staging.Body.fold_transactions_receipts (benv : Benv) :
     · rw [htx', htx]
       rfl
 
-theorem Staging.putIndex_aux_fst {ξ : Type} : ∀ (k : Nat) (xs : List ξ),
+theorem putIndex_aux_fst {ξ : Type} : ∀ (k : Nat) (xs : List ξ),
     (List.putIndex.aux k xs).map Prod.fst = List.range' k (List.putIndex.aux k xs).length
   | _, [] => rfl
   | k, _ :: xs => by
     simp only [List.putIndex.aux, List.map_cons, List.length_cons, List.range'_succ]
-    rw [Staging.putIndex_aux_fst (k + 1) xs]
+    rw [Jaune.putIndex_aux_fst (k + 1) xs]
 
-theorem Staging.length_putIndex_aux {ξ : Type} : ∀ (k : Nat) (xs : List ξ),
+theorem length_putIndex_aux {ξ : Type} : ∀ (k : Nat) (xs : List ξ),
     (List.putIndex.aux k xs).length = xs.length
   | _, [] => rfl
-  | k, _ :: xs => by simp [List.putIndex.aux, Staging.length_putIndex_aux (k + 1) xs]
+  | k, _ :: xs => by simp [List.putIndex.aux, Jaune.length_putIndex_aux (k + 1) xs]
 
-theorem Staging.length_putIndex {ξ : Type} (xs : List ξ) : xs.putIndex.length = xs.length :=
-  Staging.length_putIndex_aux 0 xs
+theorem length_putIndex {ξ : Type} (xs : List ξ) : xs.putIndex.length = xs.length :=
+  length_putIndex_aux 0 xs
 
 /-- **The importer reaches the deposit step with the receipts so far.** After the pre-execution
 system calls, the transactions and the withdrawals (the operations `Body.ops` runs before
 `.depositRequests`), the prefix holds the receipts of all `decoded.length` transactions, and
 the deposit requests are their deposit logs. -/
-theorem Staging.Body.importer_depositRequests (benv : Benv) (decoded : List Transaction)
-    (wds : List Withdrawal) {q : Staging.Body.Prefix}
-    (h : Staging.Body.fold benv (Staging.Body.Prefix.init benv.state)
-      (Staging.Body.preOps benv ++ Staging.Body.transactionOps decoded ++
+theorem Body.importer_depositRequests (benv : Benv) (decoded : List Transaction)
+    (wds : List Withdrawal) {q : Body.Prefix}
+    (h : Body.fold benv (Body.Prefix.init benv.state)
+      (Body.preOps benv ++ Body.transactionOps decoded ++
         (if benv.stat.rules.header.withdrawalsRoot then [.withdrawals wds (decoded.length + 1)]
           else [])) = .ok q) :
     ∃ rcpts : List (Fin 5 × Receipt), rcpts.length = decoded.length ∧
       q.Receipts decoded.length rcpts ∧
       parseDepositRequests q.toBlockOutput =
         List.flatten <$>
-          ((rcpts.flatMap (·.2.logs)).filter (fun log => decide (Staging.IsDepositLog log))).mapM
+          ((rcpts.flatMap (·.2.logs)).filter (fun log => decide (IsDepositLog log))).mapM
             (fun log => Except.mapError TransitionError.block (extractDepositData log.data)) := by
-  rw [Staging.Body.fold_append, Staging.Body.fold_append] at h
+  rw [Body.fold_append, Body.fold_append] at h
   obtain ⟨p2, h12, h3⟩ := Except.bind_eq_ok h
   obtain ⟨p1, h1, h2⟩ := Except.bind_eq_ok h12
-  have hpre : ∀ op ∈ Staging.Body.preOps benv, ∀ tx i, op ≠ .transaction tx i := by
+  have hpre : ∀ op ∈ Body.preOps benv, ∀ tx i, op ≠ .transaction tx i := by
     intro op hop tx i e
     subst e
-    unfold Staging.Body.preOps at hop
+    unfold Body.preOps at hop
     simp only [List.mem_append] at hop
     rcases hop with hop | hop <;> split at hop <;> simp at hop
-  have r1 := Staging.Body.fold_receipts_of_noTransaction benv _ _ _ 0 [] hpre
-    (Staging.Body.Prefix.receipts_init benv.state) h1
-  have hops : Staging.Body.transactionOps decoded =
-      (List.putIndex.aux 0 decoded).map fun x => Staging.BodyOp.transaction x.2 x.1 := by
-    unfold Staging.Body.transactionOps List.putIndex
+  have r1 := Body.fold_receipts_of_noTransaction benv _ _ _ 0 [] hpre
+    (Body.Prefix.receipts_init benv.state) h1
+  have hops : Body.transactionOps decoded =
+      (List.putIndex.aux 0 decoded).map fun x => BodyOp.transaction x.2 x.1 := by
+    unfold Body.transactionOps List.putIndex
     exact List.map_congr_left (fun x _ => rfl)
   rw [hops] at h2
-  obtain ⟨rs, hrs, r2, -, -⟩ := Staging.Body.fold_transactions_receipts benv _ _ _ 0 [] (Staging.putIndex_aux_fst 0 decoded)
+  obtain ⟨rs, hrs, r2, -, -⟩ := Body.fold_transactions_receipts benv _ _ _ 0 [] (putIndex_aux_fst 0 decoded)
     r1 h2
-  rw [Staging.length_putIndex_aux] at hrs r2
+  rw [length_putIndex_aux] at hrs r2
   simp only [Nat.zero_add, List.nil_append] at r2
-  have r3 := Staging.Body.fold_receipts_of_noTransaction benv _ _ _ _ _
+  have r3 := Body.fold_receipts_of_noTransaction benv _ _ _ _ _
     (by intro op hop tx i e; subst e; split at hop <;> simp at hop) r2 h3
-  exact ⟨rs, hrs, r3, Staging.parseDepositRequests_of_receipts r3⟩
+  exact ⟨rs, hrs, r3, parseDepositRequests_of_receipts r3⟩
 
 /-! ### Legacy gas accounting -/
 
 /-- Under a legacy schedule every operation keeps the legacy relation between the counters. -/
-theorem Staging.Body.step_legacyGasAccounting {benv : Benv} {p q : Staging.Body.Prefix} {op : Staging.BodyOp} {r : Staging.OpRun}
+theorem Body.step_legacyGasAccounting {benv : Benv} {p q : Body.Prefix} {op : BodyOp} {r : OpRun}
     (hnone : benv.stat.rules.stateGas = none) (hp : p.toBlockOutput.LegacyGasAccounting)
-    (h : Staging.Body.step benv p op = .ok (r, q)) : q.toBlockOutput.LegacyGasAccounting := by
+    (h : Body.step benv p op = .ok (r, q)) : q.toBlockOutput.LegacyGasAccounting := by
   by_cases hop : ∃ tx i, op = .transaction tx i
   · obtain ⟨tx, i, rfl⟩ := hop
-    obtain ⟨_, txBlobGasUsed, _, hq, hs, -⟩ := Staging.Body.step_transaction_output h
+    obtain ⟨_, txBlobGasUsed, _, hq, hs, -⟩ := Body.step_transaction_output h
     rw [hq]
     exact BlockOutput.LegacyGasAccounting.withGasSettlement hp (hs hnone) txBlobGasUsed
-  · obtain ⟨h1, h2, h3, -⟩ := Staging.Body.step_frame (fun tx i e => hop ⟨tx, i, e⟩) h
+  · obtain ⟨h1, h2, h3, -⟩ := Body.step_frame (fun tx i e => hop ⟨tx, i, e⟩) h
     unfold BlockOutput.LegacyGasAccounting at hp ⊢
-    simp only [Staging.Body.Prefix.toBlockOutput] at hp ⊢
+    simp only [Body.Prefix.toBlockOutput] at hp ⊢
     rw [h1, h2, h3]
     exact hp
 
-theorem Staging.Body.fold_legacyGasAccounting {benv : Benv} (hnone : benv.stat.rules.stateGas = none) :
-    ∀ (ops : List Staging.BodyOp) (p q : Staging.Body.Prefix), p.toBlockOutput.LegacyGasAccounting →
-      Staging.Body.fold benv p ops = .ok q → q.toBlockOutput.LegacyGasAccounting
+theorem Body.fold_legacyGasAccounting {benv : Benv} (hnone : benv.stat.rules.stateGas = none) :
+    ∀ (ops : List BodyOp) (p q : Body.Prefix), p.toBlockOutput.LegacyGasAccounting →
+      Body.fold benv p ops = .ok q → q.toBlockOutput.LegacyGasAccounting
   | [], p, q, hp, h => by cases h; exact hp
   | op :: ops, p, q, hp, h => by
-    simp only [Staging.Body.fold] at h
+    simp only [Body.fold] at h
     obtain ⟨⟨r, p'⟩, hs, h⟩ := Except.bind_eq_ok h
-    exact Staging.Body.fold_legacyGasAccounting hnone ops p' q (Staging.Body.step_legacyGasAccounting hnone hp hs) h
+    exact Body.fold_legacyGasAccounting hnone ops p' q (Body.step_legacyGasAccounting hnone hp hs) h
 
-theorem Staging.Body.importer_legacyGasAccounting {benv : Benv} (hnone : benv.stat.rules.stateGas = none)
+theorem Body.importer_legacyGasAccounting {benv : Benv} (hnone : benv.stat.rules.stateGas = none)
     {txs : List (Bytes ⊕ Transaction)} {ommers : List Header} {wds : List Withdrawal}
-    {q : Staging.Body.Prefix} (h : Staging.Body.importer benv txs ommers wds = .ok q) :
+    {q : Body.Prefix} (h : Body.importer benv txs ommers wds = .ok q) :
     q.toBlockOutput.LegacyGasAccounting := by
-  unfold Staging.Body.importer at h
+  unfold Body.importer at h
   obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  exact Staging.Body.fold_legacyGasAccounting hnone _ (Staging.Body.Prefix.init benv.state) _
+  exact Body.fold_legacyGasAccounting hnone _ (Body.Prefix.init benv.state) _
     BlockOutput.init_legacyGasAccounting h
 
 /-- **`applyBody_legacyGasAccounting` over the staged body.** A successful legacy block body
 keeps the legacy block-counter relation: every step does. -/
-theorem Staging.applyBody_legacyGasAccounting {benv : Benv} (hnone : benv.stat.rules.stateGas = none)
+theorem applyBody_legacyGasAccounting {benv : Benv} (hnone : benv.stat.rules.stateGas = none)
     {txs : List (Bytes ⊕ Transaction)} {ommers : List Header} {wds : List Withdrawal} {p}
-    (hp : Staging.applyBody benv txs ommers wds = .ok p) : p.2.LegacyGasAccounting := by
-  unfold Staging.applyBody at hp
-  cases h : Staging.Body.importer benv txs ommers wds with
+    (hp : applyBody benv txs ommers wds = .ok p) : p.2.LegacyGasAccounting := by
+  unfold applyBody at hp
+  cases h : Body.importer benv txs ommers wds with
   | error e => simp [h, Functor.map, Except.map] at hp
   | ok q =>
     simp only [h, Functor.map, Except.map, Except.ok.injEq] at hp
     rw [← hp]
-    exact Staging.Body.importer_legacyGasAccounting hnone h
+    exact Body.importer_legacyGasAccounting hnone h
 
 /-! ### Prefix summaries -/
 
-theorem Staging.checkTransaction_congr {benv : Benv} {b b' : BlockOutput} (tx : Transaction)
+theorem checkTransaction_congr {benv : Benv} {b b' : BlockOutput} (tx : Transaction)
     (hg : b.blockGasUsed = b'.blockGasUsed) (hs : b.blockStateGasUsed = b'.blockStateGasUsed)
     (hb : b.blobGasUsed = b'.blobGasUsed) :
     checkTransaction benv b tx = checkTransaction benv b' tx := by
@@ -618,55 +618,55 @@ theorem Staging.checkTransaction_congr {benv : Benv} {b b' : BlockOutput} (tx : 
 
 /-- The receipts so far as later steps read them: each receipt key with what the receipt trie
 binds it to. -/
-def Staging.receiptsRead (keys : List Bytes) (trie : Std.TreeMap Bytes (Fin 5 × Receipt) compare) :
+def receiptsRead (keys : List Bytes) (trie : Std.TreeMap Bytes (Fin 5 × Receipt) compare) :
     List (Bytes × Option (Fin 5 × Receipt)) :=
   keys.map fun k => (k, trie[k]?)
 
-theorem Staging.receiptsRead_insert (keys : List Bytes) (trie : Std.TreeMap Bytes (Fin 5 × Receipt) compare)
+theorem receiptsRead_insert (keys : List Bytes) (trie : Std.TreeMap Bytes (Fin 5 × Receipt) compare)
     (key : Bytes) (r : Fin 5 × Receipt) :
-    Staging.receiptsRead (keys ++ [key]) (trie.insert key r) =
-      (Staging.receiptsRead keys trie).map (fun x => (x.1, if key = x.1 then some r else x.2)) ++
+    receiptsRead (keys ++ [key]) (trie.insert key r) =
+      (receiptsRead keys trie).map (fun x => (x.1, if key = x.1 then some r else x.2)) ++
         [(key, some r)] := by
-  simp [Staging.receiptsRead, Std.TreeMap.getElem?_insert]
+  simp [receiptsRead, Std.TreeMap.getElem?_insert]
 
 /-- What later steps read of a block output, beside the state: the four gas counters and the
 receipts so far. -/
-def Staging.outputSummary (b : BlockOutput) :
+def outputSummary (b : BlockOutput) :
     Nat × Nat × Nat × Nat × List (Bytes × Option (Fin 5 × Receipt)) :=
   (b.blockGasUsed, b.blockStateGasUsed, b.cumulativeGasUsed, b.blobGasUsed,
-    Staging.receiptsRead b.receiptKeys b.receiptsTrie)
+    receiptsRead b.receiptKeys b.receiptsTrie)
 
-theorem Staging.Except.ok_bind' {ε α β : Type} (a : α) (f : α → Except ε β) :
+theorem Except.ok_bind' {ε α β : Type} (a : α) (f : α → Except ε β) :
     (Except.ok a >>= f) = f a := rfl
 
-theorem Staging.B2.Transaction.run_summary {benv : Benv} {b b' : BlockOutput} (tx : Transaction)
-    (index : Nat) (h : Staging.outputSummary b = Staging.outputSummary b') :
-    (fun q => (q.1, Staging.outputSummary q.2)) <$> Staging.B2.Transaction.run benv b tx index =
-      (fun q => (q.1, Staging.outputSummary q.2)) <$> Staging.B2.Transaction.run benv b' tx index := by
-  simp only [Staging.outputSummary, Prod.mk.injEq] at h
+theorem Transaction.run_summary {benv : Benv} {b b' : BlockOutput} (tx : Transaction)
+    (index : Nat) (h : outputSummary b = outputSummary b') :
+    (fun q => (q.1, outputSummary q.2)) <$> Transaction.run benv b tx index =
+      (fun q => (q.1, outputSummary q.2)) <$> Transaction.run benv b' tx index := by
+  simp only [outputSummary, Prod.mk.injEq] at h
   obtain ⟨hg, hs, hc, hb, hk⟩ := h
-  unfold Staging.B2.Transaction.run Staging.Transaction.check Staging.Transaction.prepare Staging.B2.Transaction.settleRun
-  simp only [map_bind, bind_assoc, Staging.Except.ok_bind', pure_bind]
-  rw [Staging.checkTransaction_congr (b := {b with
+  unfold Transaction.run Transaction.admit Transaction.prepare Transaction.settleRun
+  simp only [map_bind, bind_assoc, Except.ok_bind', pure_bind]
+  rw [checkTransaction_congr (b := {b with
     transactionsTrie := b.transactionsTrie.insert (Rlp.Item.bytes (Nat.toBytes index)).toBytes tx})
     (b' := {b' with
     transactionsTrie := b'.transactionsTrie.insert (Rlp.Item.bytes (Nat.toBytes index)).toBytes tx})
     tx hg hs hb]
   refine bind_congr fun _ => bind_congr fun _ => bind_congr fun _ => bind_congr fun _ =>
     bind_congr fun _ => bind_congr fun _ => bind_congr fun _ => ?_
-  simp only [Functor.map, Except.map, Staging.outputSummary, BlockOutput.withGasSettlement,
-    Staging.receiptsRead_insert, hg, hs, hc, hb, hk]
+  simp only [Functor.map, Except.map, outputSummary, BlockOutput.withGasSettlement,
+    receiptsRead_insert, hg, hs, hc, hb, hk]
 
 /-- **A prefix's summary**: what later steps read of it — the state, the execution, state,
 sender and blob gas used so far, and the receipts so far (each receipt key with its receipt). -/
-abbrev Staging.Body.Prefix.Summary : Type :=
+abbrev Body.Prefix.Summary : Type :=
   State × Nat × Nat × Nat × Nat × List (Bytes × Option (Fin 5 × Receipt))
 
 /-- The summary of a prefix. -/
-def Staging.Body.Prefix.summary (p : Staging.Body.Prefix) : Staging.Body.Prefix.Summary :=
-  (p.state, Staging.outputSummary p.toBlockOutput)
+def Body.Prefix.summary (p : Body.Prefix) : Body.Prefix.Summary :=
+  (p.state, outputSummary p.toBlockOutput)
 
-theorem Staging.forIn_congr_mem {m : Type → Type} [Monad m] {α β : Type} (f g : α → β → m (ForInStep β)) :
+theorem forIn_congr_mem {m : Type → Type} [Monad m] {α β : Type} (f g : α → β → m (ForInStep β)) :
     ∀ (l : List α) (b : β), (∀ a ∈ l, ∀ s, f a s = g a s) → forIn l b f = forIn l b g
   | [], b, _ => rfl
   | a :: l, b, h => by
@@ -675,33 +675,33 @@ theorem Staging.forIn_congr_mem {m : Type → Type} [Monad m] {α β : Type} (f 
     funext r
     cases r with
     | done c => rfl
-    | yield c => exact Staging.forIn_congr_mem f g l c (fun x hx => h x (List.mem_cons_of_mem _ hx))
+    | yield c => exact Jaune.forIn_congr_mem f g l c (fun x hx => h x (List.mem_cons_of_mem _ hx))
 
-theorem Staging.receiptsRead_eq {t t' : Std.TreeMap Bytes (Fin 5 × Receipt) compare} :
-    ∀ (ks ks' : List Bytes), Staging.receiptsRead ks t = Staging.receiptsRead ks' t' →
+theorem receiptsRead_eq {t t' : Std.TreeMap Bytes (Fin 5 × Receipt) compare} :
+    ∀ (ks ks' : List Bytes), receiptsRead ks t = receiptsRead ks' t' →
       ks = ks' ∧ ∀ k ∈ ks, t[k]? = t'[k]?
   | [], [], _ => ⟨rfl, fun _ h => absurd h (List.not_mem_nil)⟩
-  | [], _ :: _, h => by simp [Staging.receiptsRead] at h
-  | _ :: _, [], h => by simp [Staging.receiptsRead] at h
+  | [], _ :: _, h => by simp [receiptsRead] at h
+  | _ :: _, [], h => by simp [receiptsRead] at h
   | k :: ks, k' :: ks', h => by
-    simp only [Staging.receiptsRead, List.map_cons, List.cons.injEq, Prod.mk.injEq] at h
+    simp only [receiptsRead, List.map_cons, List.cons.injEq, Prod.mk.injEq] at h
     obtain ⟨⟨rfl, hv⟩, h⟩ := h
-    obtain ⟨rfl, ih⟩ := Staging.receiptsRead_eq ks ks' h
+    obtain ⟨rfl, ih⟩ := Jaune.receiptsRead_eq ks ks' h
     refine ⟨rfl, fun x hx => ?_⟩
     rcases List.mem_cons.mp hx with rfl | hx
     · exact hv
     · exact ih x hx
 
 /-- The deposit parse reads only the receipts so far. -/
-theorem Staging.parseDepositRequests_congr {b b' : BlockOutput}
-    (h : Staging.receiptsRead b.receiptKeys b.receiptsTrie = Staging.receiptsRead b'.receiptKeys b'.receiptsTrie) :
+theorem parseDepositRequests_congr {b b' : BlockOutput}
+    (h : receiptsRead b.receiptKeys b.receiptsTrie = receiptsRead b'.receiptKeys b'.receiptsTrie) :
     parseDepositRequests b = parseDepositRequests b' := by
-  obtain ⟨hks, hlk⟩ := Staging.receiptsRead_eq _ _ h
+  obtain ⟨hks, hlk⟩ := receiptsRead_eq _ _ h
   unfold parseDepositRequests
   simp only []
   rw [← hks]
   congr 1
-  apply Staging.forIn_congr_mem
+  apply forIn_congr_mem
   intro k hk s
   rw [hlk k hk]
 
@@ -709,88 +709,88 @@ theorem Staging.parseDepositRequests_congr {b b' : BlockOutput}
 /-- **Later steps read only the summary.** Every operation but the access-list build and its
 limit check (which read the access list, a function of the run) succeeds or fails alike from two
 prefixes with the same summary, with the same record, and leaves prefixes with the same summary. -/
-theorem Staging.Body.step_summary (benv : Benv) {p p' : Staging.Body.Prefix} {op : Staging.BodyOp}
+theorem Body.step_summary (benv : Benv) {p p' : Body.Prefix} {op : BodyOp}
     (h1 : op ≠ .buildAccessList) (h2 : op ≠ .checkAccessListLimit)
     (hs : p.summary = p'.summary) :
-    (fun x => (x.1, x.2.summary)) <$> Staging.Body.step benv p op =
-      (fun x => (x.1, x.2.summary)) <$> Staging.Body.step benv p' op := by
-  have hsum : Staging.outputSummary p.toBlockOutput = Staging.outputSummary p'.toBlockOutput :=
+    (fun x => (x.1, x.2.summary)) <$> Body.step benv p op =
+      (fun x => (x.1, x.2.summary)) <$> Body.step benv p' op := by
+  have hsum : outputSummary p.toBlockOutput = outputSummary p'.toBlockOutput :=
     congrArg Prod.snd hs
   have hst : p.state = p'.state := congrArg Prod.fst hs
-  simp only [Staging.Body.Prefix.summary, Staging.outputSummary, Staging.Body.Prefix.toBlockOutput, Prod.mk.injEq] at hs
+  simp only [Body.Prefix.summary, outputSummary, Body.Prefix.toBlockOutput, Prod.mk.injEq] at hs
   obtain ⟨-, hg, hsg, hc, hb, hk⟩ := hs
   cases op with
   | buildAccessList => exact absurd rfl h1
   | checkAccessListLimit => exact absurd rfl h2
   | transaction tx index =>
-    have key := Staging.B2.Transaction.run_summary (benv := benv.withState p'.state) tx index hsum
-    simp only [Staging.Body.step, hst]
+    have key := Transaction.run_summary (benv := benv.withState p'.state) tx index hsum
+    simp only [Body.step, hst]
     revert key
-    cases Staging.B2.Transaction.run (benv.withState p'.state) p.toBlockOutput tx index <;>
-      cases Staging.B2.Transaction.run (benv.withState p'.state) p'.toBlockOutput tx index <;>
+    cases Transaction.run (benv.withState p'.state) p.toBlockOutput tx index <;>
+      cases Transaction.run (benv.withState p'.state) p'.toBlockOutput tx index <;>
       intro key <;>
-      simp_all [Functor.map, Except.map, bind, Except.bind, pure, Except.pure, Staging.Body.Prefix.summary]
+      simp_all [Functor.map, Except.map, bind, Except.bind, pure, Except.pure, Body.Prefix.summary]
   | systemCall address data index =>
-    simp only [Staging.Body.step, hst]
+    simp only [Body.step, hst]
     cases data with
     | error e => rfl
     | ok d =>
       simp only [bind, Except.bind]
-      cases (Staging.processUncheckedSystemTransaction (benv.withState p'.state) address d).mapError
+      cases (processUncheckedSystemTransaction (benv.withState p'.state) address d).mapError
         (fun e => TransitionError.vm e.toEvmError) with
       | error e => rfl
       | ok run =>
-        simp only [Functor.map, Except.map, pure, Except.pure, Staging.Body.Prefix.summary, Staging.outputSummary,
-          Staging.Body.Prefix.toBlockOutput, hg, hsg, hc, hb, hk]
+        simp only [Functor.map, Except.map, pure, Except.pure, Body.Prefix.summary, outputSummary,
+          Body.Prefix.toBlockOutput, hg, hsg, hc, hb, hk]
   | withdrawals ws index =>
-    simp only [Staging.Body.step, hst, Functor.map, Except.map, pure, Except.pure, Staging.Body.Prefix.summary,
-      Staging.outputSummary, Staging.Body.Prefix.toBlockOutput, hg, hsg, hc, hb, hk]
+    simp only [Body.step, hst, Functor.map, Except.map, pure, Except.pure, Body.Prefix.summary,
+      outputSummary, Body.Prefix.toBlockOutput, hg, hsg, hc, hb, hk]
   | depositRequests =>
     have hd : parseDepositRequests p.toBlockOutput = parseDepositRequests p'.toBlockOutput :=
-      Staging.parseDepositRequests_congr hk
-    simp only [Staging.Body.step, hd]
+      parseDepositRequests_congr hk
+    simp only [Body.step, hd]
     cases parseDepositRequests p'.toBlockOutput with
     | error e => rfl
     | ok d =>
-      simp only [bind, Except.bind, Functor.map, Except.map, pure, Except.pure, Staging.Body.Prefix.summary,
-        Staging.outputSummary, Staging.Body.Prefix.toBlockOutput, hst, hg, hsg, hc, hb, hk]
+      simp only [bind, Except.bind, Functor.map, Except.map, pure, Except.pure, Body.Prefix.summary,
+        outputSummary, Body.Prefix.toBlockOutput, hst, hg, hsg, hc, hb, hk]
   | requestCall type address index =>
-    simp only [Staging.Body.step, hst]
-    cases Staging.processCheckedSystemTransaction (benv.withState p'.state) address [] with
+    simp only [Body.step, hst]
+    cases processCheckedSystemTransaction (benv.withState p'.state) address [] with
     | error e => rfl
     | ok run =>
-      simp only [bind, Except.bind, Functor.map, Except.map, pure, Except.pure, Staging.Body.Prefix.summary,
-        Staging.outputSummary, Staging.Body.Prefix.toBlockOutput, hg, hsg, hc, hb, hk]
+      simp only [bind, Except.bind, Functor.map, Except.map, pure, Except.pure, Body.Prefix.summary,
+        outputSummary, Body.Prefix.toBlockOutput, hg, hsg, hc, hb, hk]
   | rewards coinbase minerReward credits =>
-    simp only [Staging.Body.step, hst, Functor.map, Except.map, pure, Except.pure, Staging.Body.Prefix.summary,
-      Staging.outputSummary, Staging.Body.Prefix.toBlockOutput, hg, hsg, hc, hb, hk]
+    simp only [Body.step, hst, Functor.map, Except.map, pure, Except.pure, Body.Prefix.summary,
+      outputSummary, Body.Prefix.toBlockOutput, hg, hsg, hc, hb, hk]
 
 
 /-- **A run reads only its starting summary.** A run without the access-list build and its limit
 check gives the same records and the same final summary from two prefixes with the same
 summary. -/
-theorem Staging.Body.run_summary (benv : Benv) :
-    ∀ (ops : List Staging.BodyOp) (p p' : Staging.Body.Prefix),
+theorem Body.run_summary (benv : Benv) :
+    ∀ (ops : List BodyOp) (p p' : Body.Prefix),
       (∀ op ∈ ops, op ≠ .buildAccessList ∧ op ≠ .checkAccessListLimit) →
       p.summary = p'.summary →
-      (fun x => (x.1, x.2.summary)) <$> Staging.Body.run benv p ops =
-        (fun x => (x.1, x.2.summary)) <$> Staging.Body.run benv p' ops
+      (fun x => (x.1, x.2.summary)) <$> Body.run benv p ops =
+        (fun x => (x.1, x.2.summary)) <$> Body.run benv p' ops
   | [], p, p', _, hs => by
-    simp only [Staging.Body.run, Functor.map, Except.map, pure, Except.pure, hs]
+    simp only [Body.run, Functor.map, Except.map, pure, Except.pure, hs]
   | op :: ops, p, p', hops, hs => by
-    have key := Staging.Body.step_summary benv (hops op (List.mem_cons_self ..)).1
+    have key := Body.step_summary benv (hops op (List.mem_cons_self ..)).1
       (hops op (List.mem_cons_self ..)).2 hs
-    have ih := fun q q' => Staging.Body.run_summary benv ops q q'
+    have ih := fun q q' => Body.run_summary benv ops q q'
       (fun op' h' => hops op' (List.mem_cons_of_mem _ h'))
-    simp only [Staging.Body.run]
+    simp only [Body.run]
     revert key
-    cases Staging.Body.step benv p op with
+    cases Body.step benv p op with
     | error e =>
-      cases Staging.Body.step benv p' op with
+      cases Body.step benv p' op with
       | error e' => intro key; simpa [Functor.map, Except.map, bind, Except.bind] using key
       | ok y => intro key; simp [Functor.map, Except.map] at key
     | ok x =>
-      cases Staging.Body.step benv p' op with
+      cases Body.step benv p' op with
       | error e' => intro key; simp [Functor.map, Except.map] at key
       | ok y =>
         intro key
@@ -801,34 +801,34 @@ theorem Staging.Body.run_summary (benv : Benv) :
         have := ih q q' hq
         simp only [bind, Except.bind]
         revert this
-        cases Staging.Body.run benv q ops <;> cases Staging.Body.run benv q' ops <;> intro this <;>
+        cases Body.run benv q ops <;> cases Body.run benv q' ops <;> intro this <;>
           simp_all [Functor.map, Except.map, pure, Except.pure]
 
 /-! ### The block run -/
 
 /-- The block run's final prefix is the importer's body. -/
-theorem Staging.BlockRun.run_final (f : Fork) (ch : BlockChain) (block : Block) :
-    Staging.BlockRun.final <$> Staging.BlockRun.run f ch block =
-      Staging.Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers
+theorem BlockRun.run_final (f : Fork) (ch : BlockChain) (block : Block) :
+    BlockRun.final <$> BlockRun.run f ch block =
+      Body.importer (initBlockEnvironment f ch block.header) block.transactions block.ommers
         block.withdrawals := by
-  unfold Staging.BlockRun.run Staging.Body.importer
+  unfold BlockRun.run Body.importer
   simp only [bind, Except.bind]
   cases block.transactions.mapM (decodeTransaction (initBlockEnvironment f ch block.header).stat.rules) with
   | error e => rfl
   | ok txs =>
-    have h := (Staging.Body.fold_eq_run (initBlockEnvironment f ch block.header)
-      (Staging.Body.Prefix.init (initBlockEnvironment f ch block.header).state)
-      (Staging.Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals)).symm
+    have h := (Body.fold_eq_run (initBlockEnvironment f ch block.header)
+      (Body.Prefix.init (initBlockEnvironment f ch block.header).state)
+      (Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals)).symm
     dsimp only
-    cases hr : Staging.Body.run (initBlockEnvironment f ch block.header)
-        (Staging.Body.Prefix.init (initBlockEnvironment f ch block.header).state)
-        (Staging.Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals) with
+    cases hr : Body.run (initBlockEnvironment f ch block.header)
+        (Body.Prefix.init (initBlockEnvironment f ch block.header).state)
+        (Body.ops (initBlockEnvironment f ch block.header) txs block.ommers block.withdrawals) with
     | error e => rw [hr] at h; exact h
     | ok sq => rw [hr] at h; exact h
 
-theorem Staging.BlockRun.run_fork {f : Fork} {ch : BlockChain} {block : Block} {r : Staging.BlockRun}
-    (h : Staging.BlockRun.run f ch block = .ok r) : r.fork = f := by
-  unfold Staging.BlockRun.run at h
+theorem BlockRun.run_fork {f : Fork} {ch : BlockChain} {block : Block} {r : BlockRun}
+    (h : BlockRun.run f ch block = .ok r) : r.fork = f := by
+  unfold BlockRun.run at h
   simp only [bind, Except.bind] at h
   split at h
   · cases h
@@ -839,17 +839,17 @@ theorem Staging.BlockRun.run_fork {f : Fork} {ch : BlockChain} {block : Block} {
 /-- **The transition over the block run.** The staged transition validates the header, checks the
 ommers, runs the block, checks the run's commitments, and appends the block with the run's final
 state. -/
-theorem Staging.E.stateTransitionCoreE_eq_run {ε : Type} (embed : TransitionError → ε) (f : Fork)
+theorem stateTransitionCoreE_eq_run {ε : Type} (embed : TransitionError → ε) (f : Fork)
     (ch : BlockChain) (block : Block) (checkOmmers : Unit → Except ε Unit) :
-    Staging.E.stateTransitionCoreE embed f ch block checkOmmers = (do
+    stateTransitionCoreE embed f ch block checkOmmers = (do
       Except.mapError embed (validateHeader f.ruleSet ch block.header)
       checkOmmers ()
-      let r ← Except.mapError embed (Staging.BlockRun.run f ch block)
-      Except.mapError (embed ∘ TransitionError.block) (Staging.Block.check block.header r.commitments)
+      let r ← Except.mapError embed (BlockRun.run f ch block)
+      Except.mapError (embed ∘ TransitionError.block) (Block.check block.header r.commitments)
       .ok ⟨appendBlock ch.blocks block, r.final.state, ch.chainId⟩) := by
-  unfold Staging.E.stateTransitionCoreE
-  have h := Staging.BlockRun.run_final f ch block
-  cases hr : Staging.BlockRun.run f ch block with
+  unfold stateTransitionCoreE
+  have h := BlockRun.run_final f ch block
+  cases hr : BlockRun.run f ch block with
   | error e =>
     rw [hr] at h
     rw [← h]
@@ -857,7 +857,7 @@ theorem Staging.E.stateTransitionCoreE_eq_run {ε : Type} (embed : TransitionErr
   | ok r =>
     rw [hr] at h
     rw [← h]
-    have hf : r.fork = f := Staging.BlockRun.run_fork hr
+    have hf : r.fork = f := BlockRun.run_fork hr
     cases hv : validateHeader f.ruleSet ch block.header with
     | error e => rfl
     | ok u =>
@@ -865,6 +865,6 @@ theorem Staging.E.stateTransitionCoreE_eq_run {ε : Type} (embed : TransitionErr
       | error e => simp only [bind, Except.bind, Except.mapError]
       | ok u' =>
         simp only [bind, Except.bind, Except.mapError, Functor.map, Except.map,
-          Staging.BlockRun.commitments, hf]
+          BlockRun.commitments, hf]
 
 end Jaune

@@ -4,11 +4,11 @@ import Jaune.Run.BodyFacts
 namespace Jaune
 
 /-- A message's run, together with its actual top-level code entry, if any. -/
-def Staging.MessageRoots (msg : Msg) (run : Staging.MessageRun) (roots : List Root) : Prop :=
-  Staging.Message.run msg = .ok run ∧ roots = run.enteredRoot.toList
+def Staging.MessageRoots (msg : Msg) (run : TopLevelRun) (roots : List Root) : Prop :=
+  TopLevel.run msg = .ok run ∧ roots = run.enteredRoot.toList
 
-theorem Staging.exists_messageRoots {msg : Msg} {run : Staging.MessageRun}
-    (h : Staging.Message.run msg = .ok run) : ∃ roots, MessageRoots msg run roots :=
+theorem Staging.exists_messageRoots {msg : Msg} {run : TopLevelRun}
+    (h : TopLevel.run msg = .ok run) : ∃ roots, MessageRoots msg run roots :=
   ⟨_, h, rfl⟩
 
 theorem Staging.MessageRoots.atMostOne {msg run roots} (h : MessageRoots msg run roots) :
@@ -19,14 +19,14 @@ theorem Staging.MessageRoots.atMostOne {msg run roots} (h : MessageRoots msg run
 /-- Expose the sender and the root of the very message that contributed the final receipt. -/
 def Staging.TransactionRoots (benv : Benv) (input : BlockOutput) (tx : Transaction) (index : Nat)
     (state : State) (output : BlockOutput) (sender : Address) (roots : List Root) : Prop :=
-  ∃ run, Staging.B2.Transaction.run benv input tx index = .ok (run, output) ∧ run.state = state ∧
+  ∃ run, Transaction.run benv input tx index = .ok (run, output) ∧ run.state = state ∧
     run.sender = sender ∧ roots = run.message.enteredRoot.toList
 
 theorem Staging.exists_transactionRoots {benv input tx index state output}
-    (h : (fun pair => (pair.1.state, pair.2)) <$> Staging.B2.Transaction.run benv input tx index =
+    (h : (fun pair => (pair.1.state, pair.2)) <$> Transaction.run benv input tx index =
       .ok (state, output)) :
     ∃ sender roots, TransactionRoots benv input tx index state output sender roots := by
-  cases hr : Staging.B2.Transaction.run benv input tx index with
+  cases hr : Transaction.run benv input tx index with
   | error err => simp [hr, Functor.map, Except.map] at h
   | ok pair =>
     obtain ⟨run, next⟩ := pair
@@ -36,29 +36,29 @@ theorem Staging.exists_transactionRoots {benv input tx index state output}
 
 /-- Each phase records its complete prefix, including state, receipts and gas meters. -/
 structure Staging.BodyPhase where
-  records : List Staging.OpRun
-  final : Staging.Body.Prefix
+  records : List OpRun
+  final : Body.Prefix
 
-def Staging.BodyPhase.roots (phase : BodyPhase) : List Root := phase.records.filterMap Staging.OpRun.messageRoot
+def Staging.BodyPhase.roots (phase : BodyPhase) : List Root := phase.records.filterMap OpRun.messageRoot
 
 def Staging.BodyPhase.frames (phase : BodyPhase) : List Exec.Frame := phase.roots.flatMap Root.frames
 
-def Staging.BodyPhase.Ran (phase : BodyPhase) (benv : Benv) (start : Staging.Body.Prefix) (ops : List Staging.BodyOp) : Prop :=
-  Staging.Body.run benv start ops = .ok (phase.records, phase.final)
+def Staging.BodyPhase.Ran (phase : BodyPhase) (benv : Benv) (start : Body.Prefix) (ops : List BodyOp) : Prop :=
+  Body.run benv start ops = .ok (phase.records, phase.final)
 
 def Staging.PreRoots (benv : Benv) (phase : BodyPhase) : Prop :=
-  phase.Ran benv (.init benv.state) (Staging.Body.preOps benv)
+  phase.Ran benv (.init benv.state) (Body.preOps benv)
 
 /-- The receipt-derived deposit request and the configured request calls in schedule order. -/
-def Staging.Body.requestOps (benv : Benv) (index : Nat) : List Staging.BodyOp :=
+def Staging.Body.requestOps (benv : Benv) (index : Nat) : List BodyOp :=
   if benv.stat.rules.header.requestsHash then
     .depositRequests :: benv.stat.rules.requests.map fun ⟨kind, address⟩ => .requestCall kind address index
   else []
 
-def Staging.Body.withdrawalOps (benv : Benv) (index : Nat) (withdrawals : List Withdrawal) : List Staging.BodyOp :=
+def Staging.Body.withdrawalOps (benv : Benv) (index : Nat) (withdrawals : List Withdrawal) : List BodyOp :=
   if benv.stat.rules.header.withdrawalsRoot then [.withdrawals withdrawals index] else []
 
-def Staging.Body.finishOps (benv : Benv) (ommers : List Header) : List Staging.BodyOp :=
+def Staging.Body.finishOps (benv : Benv) (ommers : List Header) : List BodyOp :=
   (match benv.stat.rules.proofOfWork with
    | none => []
    | some pow =>
@@ -68,13 +68,13 @@ def Staging.Body.finishOps (benv : Benv) (ommers : List Header) : List Staging.B
   [.buildAccessList, .checkAccessListLimit]
 
 theorem Staging.Body.postOps_phases (benv : Benv) (n : Nat) (ommers : List Header) (wds : List Withdrawal) :
-    Staging.Body.postOps benv n ommers wds =
+    Body.postOps benv n ommers wds =
       Body.withdrawalOps benv (n + 1) wds ++
       (Body.requestOps benv (n + 1) ++ Body.finishOps benv ommers) := by
-  simp only [Staging.Body.postOps, Body.withdrawalOps, Body.requestOps, Body.finishOps, List.append_assoc]
+  simp only [Body.postOps, Body.withdrawalOps, Body.requestOps, Body.finishOps, List.append_assoc]
   rfl
 
-def Staging.RequestRoots (benv : Benv) (index : Nat) (start : Staging.Body.Prefix) (phase : BodyPhase) : Prop :=
+def Staging.RequestRoots (benv : Benv) (index : Nat) (start : Body.Prefix) (phase : BodyPhase) : Prop :=
   phase.Ran benv start (Body.requestOps benv index)
 
 structure Staging.BodyRun where
@@ -85,11 +85,11 @@ structure Staging.BodyRun where
   requests : BodyPhase
   finish : BodyPhase
 
-def Staging.BodyRun.records (run : BodyRun) : List Staging.OpRun :=
+def Staging.BodyRun.records (run : BodyRun) : List OpRun :=
   run.pre.records ++ run.transactions.records ++ run.withdrawals.records ++
     run.requests.records ++ run.finish.records
 
-def Staging.BodyRun.roots (run : BodyRun) : List Root := run.records.filterMap Staging.OpRun.messageRoot
+def Staging.BodyRun.roots (run : BodyRun) : List Root := run.records.filterMap OpRun.messageRoot
 
 def Staging.BodyRun.frames (run : BodyRun) : List Exec.Frame := run.roots.flatMap Root.frames
 
@@ -98,7 +98,7 @@ structure Staging.BodyRoots (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (
     (wds : List Withdrawal) (state : State) (output : BlockOutput) (run : BodyRun) : Prop where
   decoded : txs.mapM (Jaune.decodeTransaction benv.stat.rules) = .ok run.decoded
   pre : PreRoots benv run.pre
-  transactions : run.transactions.Ran benv run.pre.final (Staging.Body.transactionOps run.decoded)
+  transactions : run.transactions.Ran benv run.pre.final (Body.transactionOps run.decoded)
   withdrawals : run.withdrawals.Ran benv run.transactions.final
     (Body.withdrawalOps benv (run.decoded.length + 1) wds)
   requests : RequestRoots benv (run.decoded.length + 1) run.withdrawals.final run.requests
@@ -107,20 +107,20 @@ structure Staging.BodyRoots (benv : Benv) (txs : List (Bytes ⊕ Transaction)) (
 
 /-- Split a successful run at an arbitrary operation boundary. -/
 theorem Staging.Body.run_split {benv p q xs ys records}
-    (h : Staging.Body.run benv p (xs ++ ys) = .ok (records, q)) :
+    (h : Body.run benv p (xs ++ ys) = .ok (records, q)) :
     ∃ left right : BodyPhase, left.Ran benv p xs ∧ right.Ran benv left.final ys ∧
       records = left.records ++ right.records ∧ right.final = q := by
-  rw [Staging.Body.run_append] at h
+  rw [Body.run_append] at h
   obtain ⟨⟨l, mid⟩, hl, h⟩ := Except.bind_eq_ok h
   obtain ⟨⟨r, last⟩, hr, h⟩ := Except.bind_eq_ok h
   cases h
   exact ⟨⟨l, mid⟩, ⟨r, q⟩, hl, hr, rfl, rfl⟩
 
 theorem Staging.BodyPhase.exists_of_fold {benv start ops final}
-    (accepted : Staging.Body.fold benv start ops = .ok final) :
+    (accepted : Body.fold benv start ops = .ok final) :
     ∃ phase : BodyPhase, phase.Ran benv start ops ∧ phase.final = final := by
-  rw [Staging.Body.fold_eq_run] at accepted
-  cases hr : Staging.Body.run benv start ops with
+  rw [Body.fold_eq_run] at accepted
+  cases hr : Body.run benv start ops with
   | error e => rw [hr] at accepted; cases accepted
   | ok pair =>
     obtain ⟨records, last⟩ := pair
@@ -128,41 +128,41 @@ theorem Staging.BodyPhase.exists_of_fold {benv start ops final}
     exact ⟨⟨records, last⟩, hr, Except.ok.inj accepted⟩
 
 theorem Staging.exists_preRoots {benv final}
-    (h : Staging.Body.fold benv (.init benv.state) (Staging.Body.preOps benv) = .ok final) :
+    (h : Body.fold benv (.init benv.state) (Body.preOps benv) = .ok final) :
     ∃ phase, PreRoots benv phase ∧ phase.final = final := BodyPhase.exists_of_fold h
 
 theorem Staging.exists_requestRoots {benv index start final}
-    (h : Staging.Body.fold benv start (Body.requestOps benv index) = .ok final) :
+    (h : Body.fold benv start (Body.requestOps benv index) = .ok final) :
     ∃ phase, RequestRoots benv index start phase ∧ phase.final = final := BodyPhase.exists_of_fold h
 
 /-- Phase boundaries partition the original operation records, preserving their order. -/
 theorem Staging.BodyRoots.of_run {benv txs decoded ommers wds records final}
     (hd : txs.mapM (Jaune.decodeTransaction benv.stat.rules) = .ok decoded)
-    (hr : Staging.Body.run benv (.init benv.state) (Staging.Body.ops benv decoded ommers wds) = .ok (records, final)) :
+    (hr : Body.run benv (.init benv.state) (Body.ops benv decoded ommers wds) = .ok (records, final)) :
     ∃ run, BodyRoots benv txs ommers wds final.state final.toBlockOutput run ∧
       run.records = records ∧ run.finish.final = final := by
-  rw [Staging.Body.ops, Body.postOps_phases, List.append_assoc] at hr
+  rw [Body.ops, Body.postOps_phases, List.append_assoc] at hr
   obtain ⟨pre, following, hp, hf, hrecords, hfinal⟩ := Body.run_split hr
   obtain ⟨transactions, post, ht, hpost, htRecords, hpFinal⟩ := Body.run_split hf
   obtain ⟨withdrawals, remaining, hw, hremaining, hwRecords, hwFinal⟩ := Body.run_split hpost
   obtain ⟨requests, finish, hq, hfinish, hqRecords, hfFinal⟩ := Body.run_split hremaining
   have last : finish.final = final := hfFinal.trans (hwFinal.trans (hpFinal.trans hfinal))
   exact ⟨⟨decoded, pre, transactions, withdrawals, requests, finish⟩,
-    ⟨hd, hp, ht, hw, hq, hfinish, congrArg Staging.Body.Prefix.output last⟩,
+    ⟨hd, hp, ht, hw, hq, hfinish, congrArg Body.Prefix.output last⟩,
     by simp only [BodyRun.records, hrecords, htRecords, hwRecords, hqRecords, List.append_assoc],
     last⟩
 
 /-- Recover all five phase boundaries and their code entries from the actual importer. -/
 theorem Staging.exists_bodyRoots {benv txs ommers wds state out}
-    (accepted : Staging.applyBody benv txs ommers wds = .ok (state, out)) :
+    (accepted : applyBody benv txs ommers wds = .ok (state, out)) :
     ∃ run, BodyRoots benv txs ommers wds state out run := by
-  unfold Staging.applyBody Staging.Body.importer at accepted
+  unfold applyBody Body.importer at accepted
   cases hd : txs.mapM (Jaune.decodeTransaction benv.stat.rules) with
   | error err => rw [hd] at accepted; cases accepted
   | ok decoded =>
     rw [hd] at accepted
-    simp only [bind, Except.bind, Staging.Body.fold_eq_run] at accepted
-    cases hr : Staging.Body.run benv (.init benv.state) (Staging.Body.ops benv decoded ommers wds) with
+    simp only [bind, Except.bind, Body.fold_eq_run] at accepted
+    cases hr : Body.run benv (.init benv.state) (Body.ops benv decoded ommers wds) with
     | error err => rw [hr] at accepted; cases accepted
     | ok pair =>
       obtain ⟨records, final⟩ := pair
@@ -173,16 +173,16 @@ theorem Staging.exists_bodyRoots {benv txs ommers wds state out}
       exact ⟨run, phases⟩
 
 /-- The block and its reconstructed body contain the same roots and the same retained frames. -/
-theorem Staging.BlockRun.exists_bodyRoots {fork parent block run}
-    (h : Staging.BlockRun.run fork parent block = .ok run) :
+theorem BlockRun.exists_bodyRoots {fork parent block run}
+    (h : BlockRun.run fork parent block = .ok run) :
     ∃ body, Staging.BodyRoots run.benv block.transactions block.ommers block.withdrawals
       run.final.state run.final.toBlockOutput body ∧ body.roots = run.roots ∧ body.frames = run.frames := by
-  unfold Staging.BlockRun.run at h
+  unfold BlockRun.run at h
   obtain ⟨txs, hd, h⟩ := Except.bind_eq_ok h
   obtain ⟨⟨ops, final⟩, hr, h⟩ := Except.bind_eq_ok h
   cases h
   obtain ⟨body, roots, records, _⟩ := Staging.BodyRoots.of_run hd hr
-  exact ⟨body, roots, congrArg (List.filterMap Staging.OpRun.messageRoot) records,
-    congrArg (fun xs => (xs.filterMap Staging.OpRun.messageRoot).flatMap Staging.Root.frames) records⟩
+  exact ⟨body, roots, congrArg (List.filterMap OpRun.messageRoot) records,
+    congrArg (fun xs => (xs.filterMap OpRun.messageRoot).flatMap Staging.Root.frames) records⟩
 
 end Jaune
