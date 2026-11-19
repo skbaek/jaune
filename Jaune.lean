@@ -142,6 +142,13 @@ import Jaune.Bridge.G2b.FinalChronology
 import Jaune.MessageCall.FinalRunInvariants
 import Jaune.MessageCall.FinalDriverInvariants
 import Jaune.MessageCall.FinalCanonical
+import Jaune.MessageCall.CheckedResumeFacts
+import Jaune.MessageCall.CheckedGasFacts
+import Jaune.MessageCall.CheckedPlainGasFacts
+import Jaune.MessageCall.CheckedMessageGasFacts
+import Jaune.MessageCall.CheckedStepGasBound
+import Jaune.MessageCall.CheckedPartsGas
+import Jaune.MessageCall.CheckedTotality
 import Jaune.Instructions.Word
 import Jaune.Instructions.WordRows
 import Jaune.Instructions.WordFacts
