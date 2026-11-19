@@ -352,8 +352,8 @@ def MessageRun.output (run : MessageRun) : Except EvmError (State × MsgCallOutp
   match run.preparation, run.result with
   | .frame f authorizationRefund, some r =>
     match run.entry.benv.stat.rules.stateGas with
-    | none => f.output authorizationRefund r
-    | some _ => f.outputAmsterdam r
+    | none => Jaune.Frame.output f authorizationRefund r
+    | some _ => Jaune.Frame.outputAmsterdam f r
   | .frame _ _, none =>
     -- Unreachable: `Message.run` records a result for every frame (`Message.run_result`). A
     -- breach is an internal invariant failure and fails closed.
@@ -370,7 +370,7 @@ def MessageRun.output (run : MessageRun) : Except EvmError (State × MsgCallOutp
 /-- The top-level message call: the run, then what it hands the transaction. -/
 def processMessageCall (msg : Msg) : Except EvmError (State × MsgCallOutput) := do
   let run ← (Message.run msg).mapError Fault.toEvmError
-  run.output
+  MessageRun.output run
 
 /-- `Message.run` records a result exactly for a frame. -/
 theorem Message.run_result {msg : Msg} {run : MessageRun} (h : Message.run msg = .ok run) :

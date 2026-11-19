@@ -1,4 +1,5 @@
 import Jaune.Bridge.G2a.Old.Transaction
+import Jaune.Bridge.G2a.Phased
 import Jaune.MessageCall.SpawnFacts
 import Jaune.Run.Transaction
 
@@ -20,8 +21,8 @@ theorem processMessageCall_of_frame {msg : Msg} {f : Frame} {a : Nat}
     Staging.processMessageCall msg = (do
       let r ← (Frame.runTop f).mapError Fault.toEvmError
       match msg.benv.stat.rules.stateGas with
-      | none => f.output a r
-      | some _ => f.outputAmsterdam r) := by
+      | none => Frame.output f a r
+      | some _ => Frame.outputAmsterdam f r) := by
   unfold Staging.processMessageCall Staging.Message.run Frame.runTop
   rw [hp]
   simp only [bind, Except.bind]

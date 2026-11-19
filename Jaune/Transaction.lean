@@ -38,7 +38,7 @@ def processTopLevelAmsterdam (state : StateGasRules) (msg : Msg) (isCreate : Boo
   | .ok ⟨msg, devm⟩ => do
     let f : Frame := ⟨Message.ofTop msg isCreate, Frame.State.ofDevm devm⟩
     let r ← (Frame.runTop f).mapError Fault.toEvmError
-    f.outputAmsterdam r
+    Frame.outputAmsterdam f r
 
 def processMessageCall.create (msg : Msg) :
     Except EvmError (State × MsgCallOutput) := do
@@ -52,7 +52,7 @@ def processMessageCall.create (msg : Msg) :
     else
       let f := Frame.ofTop msg true
       let r ← (Frame.runTop f).mapError Fault.toEvmError
-      f.output 0 r
+      Frame.output f 0 r
   | some state => processTopLevelAmsterdam state msg true
 
 def processMessageCall.call (msg : Msg) :
@@ -62,7 +62,7 @@ def processMessageCall.call (msg : Msg) :
     let ⟨delegated, authorizationRefund⟩ ← processMessageCall.authorize msg
     let f := Frame.ofTop (TopLevel.resolveCodeDelegation delegated) false
     let r ← (Frame.runTop f).mapError Fault.toEvmError
-    f.output authorizationRefund r
+    Frame.output f authorizationRefund r
   | some state => processTopLevelAmsterdam state msg false
 
 def processMessageCall (msg : Msg) :
@@ -2582,14 +2582,14 @@ theorem prepareTopLevelAmsterdam_message {state : StateGasRules} {msg : Msg} {p 
   split at h <;> obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h <;> exact key _ h
 
 private theorem frameOutput_canonical {f : Frame} {a : Nat} {r : Frame.Result}
-    (hw : (f.worldAfter r).Canonical) {p} (hp : f.output a r = .ok p) : State.Canonical p.1 := by
+    (hw : (f.worldAfter r).Canonical) {p} (hp : Frame.output f a r = .ok p) : State.Canonical p.1 := by
   unfold Frame.output at hp
   obtain ⟨refund, _, hp⟩ := Except.bind_eq_ok hp
   cases hp
   exact hw.1
 
 private theorem frameOutputAmsterdam_canonical {f : Frame} {r : Frame.Result}
-    (hw : (f.worldAfter r).Canonical) {p} (hp : f.outputAmsterdam r = .ok p) :
+    (hw : (f.worldAfter r).Canonical) {p} (hp : Frame.outputAmsterdam f r = .ok p) :
     State.Canonical p.1 := by
   unfold Frame.outputAmsterdam at hp
   obtain ⟨refund, _, hp⟩ := Except.bind_eq_ok hp

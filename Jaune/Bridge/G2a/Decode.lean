@@ -1,6 +1,7 @@
 import Batteries.Tactic.OpenPrivate
 import Jaune.Transaction
 import Jaune.Run.Decode
+import Jaune.Bridge.G2a.Old.Body
 
 /-!
 # W2-T: the difference theorem for decision 16 (goal `jaune-shape-and-names-v1`, gate G2a, bridge)

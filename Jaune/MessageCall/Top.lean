@@ -52,7 +52,7 @@ def Frame.Result.refundCounter : Frame.Result → Except EvmError Nat
 authorization refund; a failed frame keeps no log, deletion or touch. -/
 def Frame.output (f : Frame) (authorizationRefund : Nat) (r : Frame.Result) :
     Except EvmError (Jaune.State × MsgCallOutput) := do
-  let refund ← r.refundCounter
+  let refund ← Frame.Result.refundCounter r
   let (logs, accountsToDelete, touchedAccounts) := match r with
     | .success _ _ _ _ substate _ =>
       (substate.logs, substate.selfDestructs, substate.touchedAccounts)
@@ -65,7 +65,7 @@ def Frame.output (f : Frame) (authorizationRefund : Nat) (r : Frame.Result) :
 explicit writes in every outcome, the state-gas meter, and no touched accounts. -/
 def Frame.outputAmsterdam (f : Frame) (r : Frame.Result) :
     Except EvmError (Jaune.State × MsgCallOutput) := do
-  let refundCounter ← r.refundCounter
+  let refundCounter ← Frame.Result.refundCounter r
   let (logs, accountsToDelete) := match r with
     | .success _ _ _ _ substate _ => (substate.logs, substate.selfDestructs)
     | _ => ([], .emptyWithCapacity)

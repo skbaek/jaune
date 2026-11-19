@@ -1,4 +1,5 @@
 import Jaune.Bridge.G2a.Run
+import Jaune.Bridge.G2a.Phased
 import Jaune.Run.Settle
 import Jaune.Run.SystemCall
 
@@ -45,7 +46,7 @@ def outputOf (run : Staging.MessageRun) (refundCounter : Nat) : MsgCallOutput :=
 /-- **The output square.** For every run, W2-1's rendering is the run's refund counter, then the
 state and the output the run's functions assemble. -/
 theorem MessageRun.output_eq (run : Staging.MessageRun) :
-    run.output = (do
+    Staging.MessageRun.output run = (do
       let n ← run.refundCounter.mapError Fault.toEvmError
       pure (run.state, outputOf run n)) := by
   obtain ⟨entry, prep, root, result⟩ := run

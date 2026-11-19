@@ -32,7 +32,7 @@ def runTopLevelAmsterdam {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     let result ← Trace.runFrame sink frame runId
     let value : Except EvmError (State × MsgCallOutput) := do
       let r ← result.value.mapError Fault.toEvmError
-      frame.outputAmsterdam r
+      Frame.outputAmsterdam frame r
     pure ⟨value, by simp only [processTopLevelAmsterdam, hprep, value, result.erases]; rfl⟩
 
 /-- The successful return of the actual monadic driver projects to the public
@@ -62,7 +62,7 @@ def runMessageCreate {m : Type → Type} [Monad m] (sink : Trace.Sink m)
       let result ← Trace.runFrame sink frame runId
       let value : Except EvmError (State × MsgCallOutput) := do
         let r ← result.value.mapError Fault.toEvmError
-        frame.output 0 r
+        Frame.output frame 0 r
       pure ⟨value, by
         simp only [processMessageCall.create, hfork, hcollision, value, result.erases, frame]
         rfl⟩
@@ -85,7 +85,7 @@ def runMessageCall {m : Type → Type} [Monad m] (sink : Trace.Sink m)
       let result ← Trace.runFrame sink frame runId
       let value : Except EvmError (State × MsgCallOutput) := do
         let r ← result.value.mapError Fault.toEvmError
-        frame.output refund r
+        Frame.output frame refund r
       pure ⟨value, by
         simp only [processMessageCall.call, hfork, hauth, value, result.erases, frame]
         rfl⟩
