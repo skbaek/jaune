@@ -1,5 +1,6 @@
 import Jaune.MessageCall.CheckedContext
 import Jaune.MessageCall.CheckedExec
+import Jaune.MessageCall.CheckedMessageOps
 import Jaune.Execution
 
 namespace Jaune.Checked
@@ -94,6 +95,147 @@ def prepareWithoutStateGas (input : Input) : Except Fault Prepared := do
     let (input, refund) ← applyAuthorizations input
     let input := resolveCodeDelegation input
     .ok (.frame input.message input.checkpoint refund)
+
+/-- A failure during Amsterdam preparation, with its state at the point of failure. -/
+inductive PreparationFailure where
+  | halt (reason : ExceptionalHalt)
+  | fault (reason : Fault)
+
+abbrev PreparationResult (α : Type) := Except (PreparationFailure × Frame.State) α
+
+def preparationCharge (charge : Except (ExceptionalHalt × Frame.State) Frame.State) :
+    PreparationResult Frame.State :=
+  charge.mapError (fun (reason, state) => (.halt reason, state))
+
+def chargeNewAuthority (rules : StateGasRules) (authority : Address) (s : Frame.State) :
+    PreparationResult Frame.State :=
+  if ¬AccountExists s.world.state authority then preparationCharge (s.chargeStateGas rules.newAccount)
+  else .ok s
+
+def chargeAuthorityWrite (rules : StateGasRules) (authority : Address) (s : Frame.State)
+    (paidWrites : AdrSet) : PreparationResult (Frame.State × AdrSet) :=
+  if paidWrites.contains authority then .ok (s, paidWrites)
+  else do
+    let s ← preparationCharge (s.chargeGas rules.accountWrite)
+    .ok (s, paidWrites.insert authority)
+
+def chargeAuthorizationBase (rules : StateGasRules) (originalState : State)
+    (authority target : Address) (s : Frame.State) (delegationSetFor : AdrSet) :
+    PreparationResult (Frame.State × AdrSet) :=
+  if target = 0 then .ok (s, delegationSetFor)
+  else do
+    let delegatedBeforeTx := isValidDelegation (originalState.getCode authority)
+    let s ← if ¬delegatedBeforeTx && ¬delegationSetFor.contains authority then
+      preparationCharge (s.chargeStateGas rules.authBase)
+      else .ok s
+    .ok (s, delegationSetFor.insert authority)
+
+def applyValidatedAuthorization (rules : StateGasRules) (context : CallContext)
+    (authority target : Address) (s : Frame.State) (paidWrites delegationSetFor : AdrSet) :
+    PreparationResult (Frame.State × AdrSet × AdrSet) := do
+  let s ← chargeNewAuthority rules authority s
+  let (s, paidWrites) ← chargeAuthorityWrite rules authority s paidWrites
+  let (s, delegationSetFor) ←
+    chargeAuthorizationBase rules context.tx.originalState authority target s delegationSetFor
+  .ok (s.writeDelegation authority target, paidWrites, delegationSetFor)
+
+def amsterdamAuthorizationStep (rules : StateGasRules) (context : CallContext)
+    (auth : Authorization) (s : Frame.State) (paidWrites delegationSetFor : AdrSet) :
+    PreparationResult (Frame.State × AdrSet × AdrSet) :=
+  if auth.chainId != context.block.chainId.toU256 && auth.chainId != 0 then
+    .ok (s, paidWrites, delegationSetFor)
+  else if auth.nonce = UInt64.max then
+    .ok (s, paidWrites, delegationSetFor)
+  else
+    match recoverAuthority auth with
+    | .error (.invalidSignature _) => .ok (s, paidWrites, delegationSetFor)
+    | .error reason => .error (.fault (.crypto reason), s)
+    | .ok authority =>
+      let s := (s.addAccessedAddress authority).recordAccountRead context.block.rules authority
+      let account := s.world.state.get authority
+      if ¬(account.code.isEmpty ∨ isValidDelegation account.code) then
+        .ok (s, paidWrites, delegationSetFor)
+      else if account.nonce != auth.nonce then
+        .ok (s, paidWrites, delegationSetFor)
+      else
+        applyValidatedAuthorization rules context authority auth.address s paidWrites delegationSetFor
+
+def amsterdamAuthorizationLoop (rules : StateGasRules) (context : CallContext) :
+    List Authorization → Frame.State → AdrSet → AdrSet →
+      PreparationResult (Frame.State × AdrSet × AdrSet)
+  | [], s, paidWrites, delegationSetFor => .ok (s, paidWrites, delegationSetFor)
+  | auth :: rest, s, paidWrites, delegationSetFor => do
+    let (s, paidWrites, delegationSetFor) ←
+      amsterdamAuthorizationStep rules context auth s paidWrites delegationSetFor
+    amsterdamAuthorizationLoop rules context rest s paidWrites delegationSetFor
+
+def _root_.Jaune.Checked.Message.isCreate (message : Message) : Bool :=
+  match message.kind with
+  | .create => true
+  | .call => false
+
+def applyAmsterdamAuthorizations (rules : StateGasRules) (input : Input) :
+    PreparationResult Frame.State := do
+  let context := input.message.context
+  let paidWrites : AdrSet := {context.caller}
+  let paidWrites :=
+    if input.message.isCreate || context.value != 0 then paidWrites.insert context.recipient
+    else paidWrites
+  let (s, _, _) ← amsterdamAuthorizationLoop rules context input.authorizationList input.checkpoint
+    paidWrites .emptyWithCapacity
+  .ok s
+
+def resolveAmsterdamCall (message : Message) (s : Frame.State) :
+    PreparationResult (Message × Frame.State) := do
+  let context := message.context
+  let rules := context.block.rules
+  let (delegated, codeAddress, accessCost) :=
+    Checked.ForkRules.delegationCost rules s context.recipient
+  let s ← preparationCharge (s.chargeGas accessCost)
+  let (code, s) := completeDelegationAccess s delegated codeAddress
+  let s := s.recordAccountRead rules codeAddress
+  .ok ({ message with
+    context := { context with code }
+    codeAddress := some codeAddress
+    disablePrecompiles := delegated }, s)
+
+def dispatchAmsterdam (rules : StateGasRules) (message : Message) (s : Frame.State) :
+    PreparationResult (Message × Frame.State) := do
+  let context := message.context
+  let recipient := context.recipient
+  let s := s.recordAccountRead context.block.rules recipient
+  match message.kind with
+  | .create =>
+    if accountHasCodeOrNonce s.world.state recipient then
+      .error (.halt (.addressCollision .none), s)
+    else do
+      let s ← if (context.tx.originalState.get recipient).isEmpty then
+        preparationCharge (s.chargeStateGas rules.newAccount)
+        else .ok s
+      .ok (message, s)
+  | .call =>
+    let s ← if context.value != 0 && decide (s.world.state.get recipient).isEmpty then
+      preparationCharge (s.chargeStateGas rules.newAccount)
+      else .ok s
+    resolveAmsterdamCall message s
+
+def prepareAmsterdamFrame (rules : StateGasRules) (input : Input) :
+    PreparationResult (Message × Frame.State) := do
+  let s ← if input.authorizationList.isEmpty then .ok input.checkpoint
+    else applyAmsterdamAuthorizations rules input
+  let s := if input.authorizationList.isEmpty then s else s.commitStateGas
+  dispatchAmsterdam rules input.message s
+
+/-- Prepare a native Checked message with its fork's charge and refusal rules. -/
+def prepareNative (input : Input) : Except Fault Prepared :=
+  match input.message.context.block.rules.stateGas with
+  | none => prepareWithoutStateGas input
+  | some rules =>
+    match prepareAmsterdamFrame rules input with
+    | .ok (message, s) => .ok (.frame message s 0)
+    | .error (.fault fault, _) => .error fault
+    | .error (.halt reason, s) => .ok (.refused (.stateGas reason input.message.stateGasGrant
+        s.trail.accountReads s.trail.storageReads))
 
 end TopLevel
 

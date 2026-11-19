@@ -401,6 +401,320 @@ theorem TopLevel.Input.ofLegacy_checkpoint (msg : Msg) :
 
 namespace TopLevel
 
+private def PreparationFailure.toEvmError : PreparationFailure → EvmError
+  | .halt reason => .halt reason
+  | .fault reason => Fault.toEvmError reason
+
+/-- Compare preparation outcomes after projecting both checkpoint representations,
+including the checkpoint carried by any failure. -/
+private def PreparationAgrees (checked : PreparationResult α) (waiting : Except (EvmError × Devm) β)
+    (seeChecked : α → γ) (seeWaiting : β → γ) : Prop :=
+  ((checked.mapError fun (err, s) => (err.toEvmError, s.toLegacy)).map seeChecked) =
+    ((waiting.mapError fun (err, d) => (err, Jaune.Frame.State.ofDevm d)).map seeWaiting)
+
+private theorem PreparationAgrees.bind {checked : PreparationResult α}
+    {waiting : Except (EvmError × Devm) β} {seeChecked : α → γ} {seeWaiting : β → γ}
+    {nextChecked : α → PreparationResult α'} {nextWaiting : β → Except (EvmError × Devm) β'}
+    {seeNextChecked : α' → γ'} {seeNextWaiting : β' → γ'}
+    (head : PreparationAgrees checked waiting seeChecked seeWaiting)
+    (tail : ∀ a b, seeChecked a = seeWaiting b →
+      PreparationAgrees (nextChecked a) (nextWaiting b) seeNextChecked seeNextWaiting) :
+    PreparationAgrees (checked >>= nextChecked) (waiting >>= nextWaiting) seeNextChecked seeNextWaiting := by
+  cases checked <;> cases waiting <;>
+    simp only [PreparationAgrees, Except.mapError, Except.map] at head
+  · exact congrArg Except.error (Except.error.inj head)
+  · contradiction
+  · contradiction
+  · exact tail _ _ (Except.ok.inj head)
+
+private abbrev StateAgrees := @PreparationAgrees Frame.State Devm Jaune.Frame.State
+
+private theorem charge_agrees (charge : Except (ExceptionalHalt × Frame.State) Frame.State)
+    (execution : Execution) (s : Except (ExceptionalHalt × Jaune.Frame.State) Jaune.Frame.State)
+    (native : MemorySimulation.Square charge s)
+    (waiting : Jaune.Frame.State.ofExecution execution = Except.ofHalt s) :
+    StateAgrees (preparationCharge charge) execution Frame.State.toLegacy Jaune.Frame.State.ofDevm := by
+  rw [native.legacy_eq] at waiting
+  cases charge <;> cases execution <;>
+    simp only [Jaune.Frame.State.ofExecution, Except.mapResultState] at waiting
+  all_goals first | contradiction | exact waiting.symm
+
+private theorem chargeGas_agrees (gas : Nat) (s : Frame.State) (d : Devm)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    StateAgrees (preparationCharge (s.chargeGas gas)) (Jaune.chargeGas gas d)
+      Frame.State.toLegacy Jaune.Frame.State.ofDevm := by
+  apply charge_agrees _ _ (s.toLegacy.chargeGas gas) (MemorySimulation.Frame.State.chargeGas s gas)
+  rw [hs, Jaune.Frame.State.ofExecution_chargeGas]
+
+private theorem chargeStateGas_agrees (gas : Nat) (s : Frame.State) (d : Devm)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    StateAgrees (preparationCharge (s.chargeStateGas gas)) (Jaune.chargeStateGas gas d)
+      Frame.State.toLegacy Jaune.Frame.State.ofDevm := by
+  apply charge_agrees _ _ (s.toLegacy.chargeStateGas gas)
+    (MemorySimulation.Frame.State.chargeStateGas s gas)
+  rw [hs, Jaune.Frame.State.ofExecution_chargeStateGas]
+
+private theorem chargeNewAuthority_agrees (rules : StateGasRules) (authority : Address)
+    (s : Frame.State) (d : Devm) (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    StateAgrees (chargeNewAuthority rules authority s) (chargeNewAuthorityAmsterdam rules authority d)
+      Frame.State.toLegacy Jaune.Frame.State.ofDevm := by
+  have hw : s.world.state = d.state := congrArg (fun state : Jaune.Frame.State => state.world.state) hs
+  unfold chargeNewAuthority chargeNewAuthorityAmsterdam
+  rw [hw]
+  split
+  · exact chargeStateGas_agrees _ _ _ hs
+  · exact congrArg Except.ok hs
+
+private theorem chargeAuthorityWrite_agrees (rules : StateGasRules) (authority : Address)
+    (s : Frame.State) (d : Devm) (paidWrites : AdrSet) (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    PreparationAgrees (chargeAuthorityWrite rules authority s paidWrites)
+      (chargePaidAccountWriteAmsterdam rules authority d paidWrites)
+      (Prod.map Frame.State.toLegacy id) (Prod.map Jaune.Frame.State.ofDevm id) := by
+  unfold chargeAuthorityWrite chargePaidAccountWriteAmsterdam
+  split
+  · exact congrArg Except.ok (congrArg (·, paidWrites) hs)
+  · apply PreparationAgrees.bind (chargeGas_agrees _ _ _ hs)
+    intro _ _ h
+    exact congrArg Except.ok (congrArg (·, paidWrites.insert authority) h)
+
+private theorem chargeAuthorizationBase_agrees (rules : StateGasRules) (msg : Msg)
+    (authority target : Address) (s : Frame.State) (d : Devm) (delegationSetFor : AdrSet)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    PreparationAgrees (chargeAuthorizationBase rules msg.benv.stat.origState authority target s delegationSetFor)
+      (chargeAuthBaseAmsterdam rules msg authority target d delegationSetFor)
+      (fun (next, written) => (next.toLegacy, written,
+        if target = 0 then .empty else (eoaDelegationMarker ++ target.toBytes).toByteArray))
+      (fun (next, written, code) => (Jaune.Frame.State.ofDevm next, written, code)) := by
+  by_cases ht : target = 0
+  · simp only [chargeAuthorizationBase, chargeAuthBaseAmsterdam, ht, ↓reduceIte]
+    exact congrArg Except.ok (congrArg (·, delegationSetFor, ByteArray.empty) hs)
+  · simp only [chargeAuthorizationBase, chargeAuthBaseAmsterdam, ht, ↓reduceIte]
+    split
+    · apply PreparationAgrees.bind (chargeStateGas_agrees _ _ _ hs)
+      intro _ _ h
+      exact congrArg Except.ok (congrArg (·, delegationSetFor.insert authority,
+        (eoaDelegationMarker ++ target.toBytes).toByteArray) h)
+    · exact congrArg Except.ok (congrArg (·, delegationSetFor.insert authority,
+        (eoaDelegationMarker ++ target.toBytes).toByteArray) hs)
+
+private theorem writeDelegation_agrees (authority target : Address) (s : Frame.State) (d : Devm)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    (s.writeDelegation authority target).toLegacy = Jaune.Frame.State.ofDevm
+      ((d.setCode authority
+        (if target = 0 then .empty else (eoaDelegationMarker ++ target.toBytes).toByteArray)).incrNonce authority) := by
+  rw [Jaune.Frame.State.ofDevm_incrNonce, Jaune.Frame.State.ofDevm_setCode, ← hs]
+  rfl
+
+private theorem applyValidatedAuthorization_agrees (rules : StateGasRules) (msg : Msg) (isCreate : Bool)
+    (authority target : Address) (s : Frame.State) (d : Devm) (paidWrites delegationSetFor : AdrSet)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    PreparationAgrees (applyValidatedAuthorization rules (legacyInput msg isCreate).message.context
+        authority target s paidWrites delegationSetFor)
+      (applyValidatedDelegationAmsterdam rules msg authority target d paidWrites delegationSetFor)
+      (Prod.map Frame.State.toLegacy id) (Prod.map Jaune.Frame.State.ofDevm id) := by
+  unfold applyValidatedAuthorization applyValidatedDelegationAmsterdam
+  apply PreparationAgrees.bind (chargeNewAuthority_agrees _ _ _ _ hs)
+  intro s d h
+  apply PreparationAgrees.bind (chargeAuthorityWrite_agrees _ _ _ _ _ h)
+  rintro ⟨s, paid⟩ ⟨d, paid'⟩ hpaid
+  change (s.toLegacy, paid) = (Jaune.Frame.State.ofDevm d, paid') at hpaid
+  obtain ⟨h, rfl⟩ := Prod.mk.inj hpaid
+  apply PreparationAgrees.bind (chargeAuthorizationBase_agrees _ msg _ _ _ _ _ h)
+  rintro ⟨s, written⟩ ⟨d, written', code⟩ hwritten
+  change (s.toLegacy, written, if target = 0 then .empty else (eoaDelegationMarker ++ target.toBytes).toByteArray) =
+    (Jaune.Frame.State.ofDevm d, written', code) at hwritten
+  obtain ⟨hstate, rfl, rfl⟩ := Prod.mk.inj hwritten |>.imp_right Prod.mk.inj
+  exact congrArg Except.ok (congrArg (·, paid, written) (writeDelegation_agrees _ _ _ _ hstate))
+
+private theorem recordAccountRead_agrees (rules : ForkRules) (a : Address) (s : Frame.State) (d : Devm)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    (s.recordAccountRead rules a).toLegacy = Jaune.Frame.State.ofDevm (d.balReadAccount rules a) := by
+  rw [Jaune.Frame.State.ofDevm_balReadAccount, ← hs]
+  rfl
+
+private theorem amsterdamAuthorizationStep_agrees (rules : StateGasRules) (msg : Msg) (isCreate : Bool)
+    (auth : Authorization) (s : Frame.State) (d : Devm) (paidWrites delegationSetFor : AdrSet)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    PreparationAgrees (amsterdamAuthorizationStep rules (legacyInput msg isCreate).message.context
+        auth s paidWrites delegationSetFor)
+      (setDelegationAmsterdamStep rules msg auth d paidWrites delegationSetFor)
+      (Prod.map Frame.State.toLegacy id) (Prod.map Jaune.Frame.State.ofDevm id) := by
+  have chain : (legacyInput msg isCreate).message.context.block.chainId = msg.benv.stat.chainId := rfl
+  have fork : (legacyInput msg isCreate).message.context.block.rules = msg.benv.stat.rules := rfl
+  unfold amsterdamAuthorizationStep setDelegationAmsterdamStep
+  rw [chain, fork]
+  split
+  · exact congrArg Except.ok (congrArg (·, paidWrites, delegationSetFor) hs)
+  split
+  · exact congrArg Except.ok (congrArg (·, paidWrites, delegationSetFor) hs)
+  cases recovered : recoverAuthority auth with
+  | error reason =>
+    cases reason with
+    | invalidSignature => exact congrArg Except.ok (congrArg (·, paidWrites, delegationSetFor) hs)
+    | pointCompression detail => exact congrArg Except.error (congrArg (EvmError.crypto (.pointCompression detail), ·) hs)
+    | value detail => exact congrArg Except.error (congrArg (EvmError.crypto (.value detail), ·) hs)
+  | ok authority =>
+    have ha : (s.addAccessedAddress authority).toLegacy =
+        Jaune.Frame.State.ofDevm (Jaune.addAccessedAddress d authority) := by
+      rw [Jaune.Frame.State.ofDevm_addAccessedAddress, ← hs]
+      rfl
+    have hr := recordAccountRead_agrees msg.benv.stat.rules authority _ _ ha
+    have hw := congrArg (fun state : Jaune.Frame.State => state.world.state) hr
+    change ((s.addAccessedAddress authority).recordAccountRead msg.benv.stat.rules authority).world.state =
+      ((Jaune.addAccessedAddress d authority).balReadAccount msg.benv.stat.rules authority).state at hw
+    simp only [hw]
+    split
+    · exact congrArg Except.ok (congrArg (·, paidWrites, delegationSetFor) hr)
+    split
+    · exact congrArg Except.ok (congrArg (·, paidWrites, delegationSetFor) hr)
+    · exact applyValidatedAuthorization_agrees _ _ _ _ _ _ _ _ _ hr
+
+private theorem amsterdamAuthorizationLoop_agrees (rules : StateGasRules) (msg : Msg) (isCreate : Bool)
+    (auths : List Authorization) (s : Frame.State) (d : Devm) (paidWrites delegationSetFor : AdrSet)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    PreparationAgrees (amsterdamAuthorizationLoop rules (legacyInput msg isCreate).message.context
+        auths s paidWrites delegationSetFor)
+      (setDelegationAmsterdamLoop rules msg auths d paidWrites delegationSetFor)
+      (Prod.map Frame.State.toLegacy id) (Prod.map Jaune.Frame.State.ofDevm id) := by
+  induction auths generalizing s d paidWrites delegationSetFor with
+  | nil => exact congrArg Except.ok (congrArg (·, paidWrites, delegationSetFor) hs)
+  | cons auth rest ih =>
+    unfold amsterdamAuthorizationLoop setDelegationAmsterdamLoop
+    apply PreparationAgrees.bind (amsterdamAuthorizationStep_agrees _ _ _ _ _ _ _ _ hs)
+    rintro ⟨s, paid, written⟩ ⟨d, paid', written'⟩ h
+    change (s.toLegacy, paid, written) = (Jaune.Frame.State.ofDevm d, paid', written') at h
+    obtain ⟨hstate, rfl, rfl⟩ := Prod.mk.inj h |>.imp_right Prod.mk.inj
+    exact ih _ _ _ _ hstate
+
+private theorem applyAmsterdamAuthorizations_agrees (rules : StateGasRules) (msg : Msg)
+    (s : Frame.State) (d : Devm) (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    StateAgrees (applyAmsterdamAuthorizations rules { Input.ofLegacy msg with checkpoint := s })
+      (setDelegationAmsterdam rules msg d) Frame.State.toLegacy Jaune.Frame.State.ofDevm := by
+  have hkind : (Input.ofLegacy msg).message.isCreate = msg.target.isNone := by
+    cases h : msg.target.isNone <;>
+      simp only [Message.isCreate, Input.ofLegacy, legacyInput, Message.ofLegacy, Jaune.Message.ofTop, h,
+        Bool.false_eq_true, ↓reduceIte]
+  unfold applyAmsterdamAuthorizations setDelegationAmsterdam
+  dsimp only
+  rw [hkind]
+  apply PreparationAgrees.bind (amsterdamAuthorizationLoop_agrees _ _ _ _ _ _ _ _ hs)
+  rintro ⟨s, _, _⟩ ⟨d, _, _⟩ h
+  exact congrArg Except.ok (congrArg Prod.fst h)
+
+private theorem delegationCost_agrees (rules : ForkRules) (a : Address) (s : Frame.State) (d : Devm)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    Checked.ForkRules.delegationCost rules s a = Jaune.ForkRules.delegationCost rules d a := by
+  have code : s.code a = d.state.getCode a :=
+    congrArg (fun state : Jaune.Frame.State => state.code a) hs
+  have warm : s.accessedAddresses = d.accessedAddresses :=
+    congrArg (fun state : Jaune.Frame.State => state.accessedAddresses) hs
+  unfold Checked.ForkRules.delegationCost Jaune.ForkRules.delegationCost
+  split
+  · unfold Checked.GasSchedule.delegationCost Jaune.GasSchedule.delegationCost
+    simp only [code, warm]
+    rfl
+  · rfl
+
+private theorem completeDelegationAccess_agrees (s : Frame.State) (d : Devm) (delegated : Bool) (a : Address)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    Prod.map id Frame.State.toLegacy (Checked.completeDelegationAccess s delegated a) =
+    Prod.map id Jaune.Frame.State.ofDevm (Jaune.completeDelegationAccess d delegated a) := by
+  have ha : (s.addAccessedAddress a).toLegacy = Jaune.Frame.State.ofDevm (Jaune.addAccessedAddress d a) := by
+    rw [Jaune.Frame.State.ofDevm_addAccessedAddress, ← hs]
+    rfl
+  cases delegated
+  · exact congrArg (fun state : Jaune.Frame.State => (state.code a, state)) hs
+  · exact congrArg (fun state : Jaune.Frame.State => (state.code a, state)) ha
+
+private abbrev MessageAgrees (checked : PreparationResult (Message × Frame.State))
+    (waiting : Except (EvmError × Devm) (Msg × Devm)) (isCreate : Bool) :=
+  PreparationAgrees checked waiting (Prod.map id Frame.State.toLegacy)
+    (fun (msg, d) => (Message.ofLegacy (Jaune.Message.ofTop msg isCreate), Jaune.Frame.State.ofDevm d))
+
+private theorem resolveAmsterdamCall_agrees (msg : Msg) (isCreate : Bool) (s : Frame.State) (d : Devm)
+    (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    MessageAgrees (resolveAmsterdamCall (legacyInput msg isCreate).message s)
+      (resolveTopLevelCallAmsterdam msg d) isCreate := by
+  have cost : Checked.ForkRules.delegationCost (legacyInput msg isCreate).message.context.block.rules
+      s (legacyInput msg isCreate).message.context.recipient =
+      Jaune.ForkRules.delegationCost msg.benv.stat.rules d msg.currentTarget :=
+    delegationCost_agrees msg.benv.stat.rules msg.currentTarget s d hs
+  unfold resolveAmsterdamCall resolveTopLevelCallAmsterdam
+  dsimp only
+  rw [cost]
+  rcases Jaune.ForkRules.delegationCost msg.benv.stat.rules d msg.currentTarget with ⟨delegated, address, gas⟩
+  apply PreparationAgrees.bind (chargeGas_agrees _ _ _ hs)
+  intro s d h
+  have access := completeDelegationAccess_agrees s d delegated address h
+  rcases hc : Checked.completeDelegationAccess s delegated address with ⟨code, next⟩
+  rcases hd : Jaune.completeDelegationAccess d delegated address with ⟨code', next'⟩
+  rw [hc, hd] at access
+  change (code, next.toLegacy) = (code', Jaune.Frame.State.ofDevm next') at access
+  obtain ⟨rfl, hnext⟩ := Prod.mk.inj access
+  exact congrArg Except.ok (congrArg (fun state => (_, state)) (recordAccountRead_agrees _ _ _ _ hnext))
+
+private theorem dispatchAmsterdam_agrees (rules : StateGasRules) (msg : Msg)
+    (s : Frame.State) (d : Devm) (hs : s.toLegacy = Jaune.Frame.State.ofDevm d) :
+    MessageAgrees (dispatchAmsterdam rules (Input.ofLegacy msg).message s)
+      (dispatchTopLevelAmsterdam rules msg d) msg.target.isNone := by
+  have hr := recordAccountRead_agrees msg.benv.stat.rules msg.currentTarget s d hs
+  have fork : (Input.ofLegacy msg).message.context.block.rules = msg.benv.stat.rules := rfl
+  have recipient : (Input.ofLegacy msg).message.context.recipient = msg.currentTarget := rfl
+  have value : (Input.ofLegacy msg).message.context.value = msg.value := rfl
+  have original : (Input.ofLegacy msg).message.context.tx.originalState = msg.benv.stat.origState := rfl
+  have hw := congrArg (fun state : Jaune.Frame.State => state.world.state) hr
+  change (s.recordAccountRead msg.benv.stat.rules msg.currentTarget).world.state =
+    (d.balReadAccount msg.benv.stat.rules msg.currentTarget).state at hw
+  unfold dispatchAmsterdam dispatchTopLevelAmsterdam
+  dsimp only
+  by_cases hcreate : msg.target.isNone = true
+  · have kind : (Input.ofLegacy msg).message.kind = .create := by
+      simp only [Input.ofLegacy, legacyInput, Message.ofLegacy, Jaune.Message.ofTop, hcreate, ↓reduceIte]
+    have message_agrees (next : Devm) : (Input.ofLegacy msg).message =
+        Message.ofLegacy (Jaune.Message.ofTop (preparedTopLevelMessage msg next) true) := by
+      unfold Input.ofLegacy
+      rw [hcreate]
+      rfl
+    simp only [kind, hcreate, ↓reduceIte, fork, recipient, original, hw]
+    split
+    · exact congrArg Except.error (congrArg (EvmError.halt (.addressCollision .none), ·) hr)
+    · split
+      · apply PreparationAgrees.bind (chargeStateGas_agrees _ _ _ hr)
+        intro _ next h
+        exact congrArg Except.ok (Prod.ext (message_agrees next) h)
+      · exact congrArg Except.ok (Prod.ext (message_agrees _) hr)
+  · have hcall : msg.target.isNone = false := Bool.eq_false_of_not_eq_true hcreate
+    have kind : (Input.ofLegacy msg).message.kind = .call := by
+      simp only [Input.ofLegacy, legacyInput, Message.ofLegacy, Jaune.Message.ofTop, hcall,
+        Bool.false_eq_true, ↓reduceIte]
+    simp only [kind, hcall, Bool.false_eq_true, ↓reduceIte, fork, recipient, value, hw]
+    split
+    · apply PreparationAgrees.bind (chargeStateGas_agrees _ _ _ hr)
+      intro _ _ h
+      simpa only [Input.ofLegacy, hcall] using resolveAmsterdamCall_agrees msg false _ _ h
+    · simpa only [Input.ofLegacy, hcall, bind, Except.bind] using resolveAmsterdamCall_agrees msg false _ _ hr
+
+/-- Amsterdam's authorization fold and dispatch agree on the prepared message and full
+checkpoint, including the checkpoint at any halt or fault. -/
+private theorem prepareAmsterdamFrame_agrees (rules : StateGasRules) (msg : Msg) :
+    MessageAgrees (prepareAmsterdamFrame rules (Input.ofLegacy msg))
+      (prepareTopLevelAmsterdam rules msg) msg.target.isNone := by
+  have hs : (Input.ofLegacy msg).checkpoint.toLegacy = Jaune.Frame.State.ofDevm (initDevm msg) := by
+    rw [Input.ofLegacy_checkpoint]
+    exact Frame.State.toLegacy_ofLegacy _ _
+  have auths : (Input.ofLegacy msg).authorizationList = msg.tenv.stat.auths := rfl
+  unfold prepareAmsterdamFrame prepareTopLevelAmsterdam
+  by_cases empty : msg.tenv.stat.auths.isEmpty = true
+  · simp only [auths, empty, ↓reduceIte, bind, Except.bind, finishTopLevelAmsterdam]
+    exact dispatchAmsterdam_agrees rules msg _ _ hs
+  · simp only [auths, empty, finishTopLevelAmsterdam]
+    apply PreparationAgrees.bind (applyAmsterdamAuthorizations_agrees rules msg _ _ hs)
+    intro s d h
+    apply dispatchAmsterdam_agrees
+    change s.commitStateGas.toLegacy = Jaune.Frame.State.ofDevm d.commitStateGas
+    rw [Jaune.Frame.State.ofDevm_commitStateGas, ← h]
+    rfl
+
 private theorem authorizationStep_observe (auth : Authorization) (msg : Msg) (refund : U256)
     (isCreate : Bool) :
     (authorizationStep auth (legacyInput msg isCreate) refund).mapError Fault.toEvmError =
@@ -556,6 +870,90 @@ theorem prepareWithoutStateGas_observe (msg : Msg) (hgas : msg.benv.stat.rules.s
       simp only [bind, Except.bind, pure, Except.pure, resolveCodeDelegation_observe,
         Except.map, ofPreparation, Prepared.ofWaiting_frameOfTop]
 
+private theorem prepare_waiting_amsterdam (msg : Msg) (rules : StateGasRules)
+    (hgas : msg.benv.stat.rules.stateGas = some rules) :
+    Jaune.TopLevel.prepare msg = Jaune.TopLevel.prepare.amsterdam rules msg msg.target.isNone := by
+  cases h : msg.target.isNone <;>
+    simp only [Jaune.TopLevel.prepare, Jaune.TopLevel.prepare.create, Jaune.TopLevel.prepare.call,
+      hgas, h, Bool.false_eq_true, ↓reduceIte]
+
+private theorem prepareNative_amsterdam_observe (msg : Msg) (rules : StateGasRules)
+    (hgas : msg.benv.stat.rules.stateGas = some rules) :
+    prepareNative (Input.ofLegacy msg) = (prepare msg).map Prepared.ofWaiting := by
+  have gas : (Input.ofLegacy msg).message.context.block.rules.stateGas = some rules := hgas
+  have hw := prepare_waiting_amsterdam msg rules hgas
+  have agreement := prepareAmsterdamFrame_agrees rules msg
+  unfold prepareNative prepare
+  rw [gas]
+  dsimp only
+  cases hn : prepareAmsterdamFrame rules (Input.ofLegacy msg) <;>
+    cases ho : prepareTopLevelAmsterdam rules msg <;>
+    simp only [MessageAgrees, PreparationAgrees, hn, ho, Except.mapError, Except.map] at agreement
+  · rename_i native waiting
+    rcases native with ⟨failure, s⟩
+    rcases waiting with ⟨error, d⟩
+    obtain ⟨herror, hstate⟩ := Prod.mk.inj (Except.error.inj agreement)
+    cases failure with
+    | halt reason =>
+      simp only [PreparationFailure.toEvmError] at herror
+      subst error
+      have waiting : Jaune.TopLevel.prepare msg = .ok (.refused reason d) := by
+        rw [hw]
+        unfold Jaune.TopLevel.prepare.amsterdam
+        split <;> rename_i h <;> rw [ho] at h <;> cases h
+        rfl
+      have reads := congrArg Jaune.Frame.State.trail hstate
+      change s.trail = (Jaune.Frame.State.ofDevm d).trail at reads
+      change (Except.ok (.refused (.stateGas reason (Input.ofLegacy msg).message.stateGasGrant
+        s.trail.accountReads s.trail.storageReads)) : Except Fault Prepared) = _
+      split <;> rename_i h <;> rw [waiting] at h <;> cases h
+      simp only [Except.map, ofPreparation, Prepared.ofWaiting, hgas, reads]
+      rfl
+    | fault fault =>
+      simp only [PreparationFailure.toEvmError] at herror
+      subst error
+      have waiting : Jaune.TopLevel.prepare msg = .error fault := by
+        rw [hw]
+        unfold Jaune.TopLevel.prepare.amsterdam
+        cases fault <;> simp only [Fault.toEvmError] at ho <;>
+          split <;> rename_i h <;> rw [ho] at h <;> cases h <;> rfl
+      change (Except.error fault : Except Fault Prepared) = _
+      split <;> rename_i h <;> rw [waiting] at h <;> cases h
+      rfl
+  · contradiction
+  · contradiction
+  · rename_i native waiting
+    rcases native with ⟨message, s⟩
+    rcases waiting with ⟨prepared, d⟩
+    change (Except.ok (.frame message s 0) : Except Fault Prepared) = _
+    obtain ⟨hmessage, hstate⟩ := Prod.mk.inj (Except.ok.inj agreement)
+    change message = Message.ofLegacy (Jaune.Message.ofTop prepared msg.target.isNone) at hmessage
+    change s.toLegacy = Jaune.Frame.State.ofDevm d at hstate
+    have waiting : Jaune.TopLevel.prepare msg =
+        .ok (.frame ⟨Jaune.Message.ofTop prepared msg.target.isNone, Jaune.Frame.State.ofDevm d⟩ 0) := by
+      rw [hw]
+      unfold Jaune.TopLevel.prepare.amsterdam
+      split <;> rename_i h <;> rw [ho] at h <;> cases h
+      rfl
+    split <;> rename_i h <;> rw [waiting] at h <;> cases h
+    simp only [Except.map, ofPreparation, Prepared.ofWaiting, Frame.ofLegacy]
+    have hcheckpoint (raw : Jaune.Frame.State) (hraw : s.toLegacy = raw) (wf : raw.machine.memory.Wf) :
+        Frame.State.ofLegacy raw wf = s := by
+      subst raw
+      exact Frame.State.ofLegacy_toLegacy s
+    rw [hmessage, hcheckpoint _ hstate]
+
+/-- Native preparation preserves the full observable outcome on every fork. -/
+theorem prepareNative_observe (msg : Msg) :
+    prepareNative (Input.ofLegacy msg) = (prepare msg).map Prepared.ofWaiting := by
+  cases hgas : msg.benv.stat.rules.stateGas with
+  | none =>
+    have hg : (Input.ofLegacy msg).message.context.block.rules.stateGas = none := hgas
+    unfold prepareNative
+    rw [hg]
+    exact prepareWithoutStateGas_observe msg hgas
+  | some rules => exact prepareNative_amsterdam_observe msg rules hgas
+
 end TopLevel
 
 /-- Project the current prepared transaction onto the Checked settlement inputs. -/
@@ -585,6 +983,22 @@ theorem Transaction.prepare_observe (admitted : Jaune.Transaction.Admitted) (tx 
     cases tx.type.to? <;>
       simp only [Option.isNone, ↓reduceIte, pure, Except.pure, Except.map,
         Prepared.ofLegacy, TopLevel.Input.ofLegacy, legacyInput] <;> rfl
+
+/-- Signed transaction preparation followed by native top-level preparation preserves the
+observed refusal, fault, or frame of the waiting signed path. -/
+theorem Transaction.prepareFrame_observe (admitted : Jaune.Transaction.Admitted) (tx : Jaune.Transaction)
+    (index : Nat) :
+    (prepare admitted.benv.stat.toBlockContext admitted.benv.stat.origState admitted tx >>= fun prepared =>
+      (TopLevel.prepareNative prepared.input).mapError (fun fault => TransitionError.vm fault.toEvmError)) =
+    (Jaune.Transaction.prepare admitted tx index >>= fun prepared =>
+      ((TopLevel.prepare prepared.msg).map TopLevel.Prepared.ofWaiting).mapError
+        (fun fault => TransitionError.vm fault.toEvmError)) := by
+  rw [Transaction.prepare_observe admitted tx index]
+  cases Jaune.Transaction.prepare admitted tx index with
+  | error => rfl
+  | ok prepared =>
+    exact congrArg (Except.mapError (fun fault => TransitionError.vm fault.toEvmError))
+      (TopLevel.prepareNative_observe prepared.msg)
 
 theorem _root_.Jaune.Transaction.admit_originalState {benv : Benv} {bout : BlockOutput}
     {tx : Jaune.Transaction} {index : Nat} {admitted : Jaune.Transaction.Admitted}
