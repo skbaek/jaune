@@ -76,40 +76,47 @@ deriving DecidableEq
 
 instance : Inhabited U128 := ⟨⟨0, 0⟩⟩
 
-def U256 : Type := U128 × U128
-deriving DecidableEq
+def U256 : Type := BitVec 256
 
-instance : Inhabited U256 := ⟨⟨Inhabited.default, Inhabited.default⟩⟩
+instance : DecidableEq U256 := inferInstanceAs (DecidableEq (BitVec 256))
+
+private abbrev U256.asBV (x : U256) : BitVec 256 := x
+private abbrev U256.ofBV (v : BitVec 256) : U256 := v
+
+def U256.toNat (x : U256) : Nat := BitVec.toNat x
+def Nat.toU256 (n : Nat) : U256 := BitVec.ofNat 256 n
+
+instance {n} : OfNat U256 n := ⟨n.toU256⟩
+
+def U256.zero : U256 := BitVec.ofNat 256 0
+instance : Zero U256 := ⟨.zero⟩
+def U256.one : U256 := BitVec.ofNat 256 1
+instance : One U256 := ⟨.one⟩
+
+instance : Inhabited U256 := ⟨0⟩
 
 def U128.highBit (x : U128) : Bool := x.1.highBit
 def U128.lowBit  (x : U128) : Bool := x.2.lowBit
 
-def U256.highBit (x : U256) : Bool := x.1.highBit
-def U256.lowBit  (x : U256) : Bool := x.2.lowBit
+def U256.highBit (x : U256) : Bool := (U256.asBV x).msb
+def U256.lowBit  (x : U256) : Bool := (x.toNat &&& 1) != 0
 
 def UInt64.max : UInt64 := 0xFFFFFFFFFFFFFFFF
 def U128.max : U128 := ⟨.max, .max⟩
-def U256.max : U256 := ⟨.max, .max⟩
+def U256.max : U256 := BitVec.allOnes 256
 
 def U128.LT (x y : U128) : Prop :=
   x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 < y.2)
 instance : @LT U128 := ⟨U128.LT⟩
 instance {x y : U128} : Decidable (x < y) := instDecidableOr
 
-def U256.LT (x y : U256) : Prop :=
-  x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 < y.2)
-
-instance : @LT U256 := ⟨U256.LT⟩
-instance {x y : U256} : Decidable (x < y) := instDecidableOr
+instance : LT U256 := inferInstanceAs (LT (BitVec 256))
+instance {x y : U256} : Decidable (x < y) := inferInstanceAs (Decidable ((U256.asBV x) < (U256.asBV y)))
 
 def Nat.toU128 (n : Nat) : U128 :=
   ⟨(n >>> 64).toUInt64, n.toUInt64⟩
 
-def Nat.toU256 (n : Nat) : U256 :=
-  ⟨(n >>> 128).toU128, n.toU128⟩
-
 instance {n} : OfNat U128 n := ⟨n.toU128⟩
-instance {n} : OfNat U256 n := ⟨n.toU256⟩
 
 theorem U256.kernel_decidable_comparisons :
     ((0x06fdde03 : U256) < (0x095ea7b3 : U256)) ∧
@@ -157,8 +164,14 @@ def UInt64.highs (x : UInt64) : UInt32 := (x >>> 32).toUInt32
 def UInt64.lows : UInt64 → UInt32 := UInt64.toUInt32
 def UInt64.toHex (x : UInt64) : String := x.highs.toHex ++ x.lows.toHex
 
+def U256.toBytes.go : Nat → Nat → Bytes → Bytes
+  | 0, _, acc => acc
+  | k + 1, n, acc => U256.toBytes.go k (n >>> 8) (n.toUInt8 :: acc)
+
+def U256.toBytes (x : U256) : Bytes := U256.toBytes.go 32 x.toNat []
+
 def U128.toHex (x : U128) : String := x.1.toHex ++ x.2.toHex
-def U256.toHex (x : U256) : String := x.1.toHex ++ x.2.toHex
+def U256.toHex (x : U256) : String := Bytes.toHex x.toBytes
 
 instance : ToString UInt8 := ⟨UInt8.toHex⟩
 instance : ToString UInt16 := ⟨UInt16.toHex⟩
@@ -172,10 +185,8 @@ def U128.LE (x y : U128) : Prop :=
 instance : @LE U128 := ⟨U128.LE⟩
 instance {x y : U128} : Decidable (x ≤ y) := instDecidableOr
 
-def U256.LE (x y : U256) : Prop :=
-  x.1 < y.1 ∨ (x.1 = y.1 ∧ x.2 ≤ y.2)
-instance : @LE U256 := ⟨U256.LE⟩
-instance {x y : U256} : Decidable (x ≤ y) := instDecidableOr
+instance : LE U256 := inferInstanceAs (LE (BitVec 256))
+instance {x y : U256} : Decidable (x ≤ y) := inferInstanceAs (Decidable ((U256.asBV x) ≤ (U256.asBV y)))
 
 def U128.shiftLeft : U128 → Nat → U128
   | ⟨xs, ys⟩, os =>
@@ -209,85 +220,52 @@ def U128.and : U128 → U128 → U128
   | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh &&& yh, xl &&& yl⟩
 instance : HAnd U128 U128 U128 := ⟨U128.and⟩
 
-def U256.or : U256 → U256 → U256
-  | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh ||| yh, xl ||| yl⟩
+def U256.or (x y : U256) : U256 := (U256.asBV x) ||| (U256.asBV y)
 instance : HOr U256 U256 U256 := ⟨U256.or⟩
-def U256.and : U256 → U256 → U256
-  | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh &&& yh, xl &&& yl⟩
+def U256.and (x y : U256) : U256 := (U256.asBV x) &&& (U256.asBV y)
 instance : HAnd U256 U256 U256 := ⟨U256.and⟩
 
 def U128.xor : U128 → U128 → U128
   | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh ^^^ yh, xl ^^^ yl⟩
 instance : HXor U128 U128 U128 := ⟨U128.xor⟩
-def U256.xor : U256 → U256 → U256
-  | ⟨xh, xl⟩, ⟨yh, yl⟩ => ⟨xh ^^^ yh, xl ^^^ yl⟩
+def U256.xor (x y : U256) : U256 := (U256.asBV x) ^^^ (U256.asBV y)
 instance : HXor U256 U256 U256 := ⟨U256.xor⟩
 
-def U256.shiftRight : U256 → Nat → U256
-  | ⟨xs, ys⟩, os =>
-    if os = 0
-    then ⟨xs, ys⟩
-    else if os < 128
-         then ⟨ xs >>> os,
-                (xs <<< (128 - os)) ||| (ys >>> os) ⟩
-         else if os < 256
-              then ⟨0, xs >>> (os - 128)⟩
-              else ⟨0, 0⟩
+def U256.shiftRight (x : U256) (n : Nat) : U256 :=
+  if n < 256 then BitVec.ushiftRight x n else 0
 instance : HShiftRight U256 Nat U256 := ⟨U256.shiftRight⟩
 
-def U256.shiftLeft : U256 → Nat → U256
-  | ⟨xs, ys⟩, os =>
-    if os = 0
-    then ⟨xs, ys⟩
-    else  if os < 128
-         then ⟨(xs <<< os) ||| (ys >>> (128 - os)), ys <<< os⟩
-         else if os < 256
-              then ⟨ys <<< (os - 128), 0⟩
-              else ⟨0, 0⟩
+def U256.shiftLeft (x : U256) (n : Nat) : U256 :=
+  if n < 256 then BitVec.shiftLeft x n else 0
 instance : HShiftLeft U256 Nat U256 := ⟨U256.shiftLeft⟩
 
 def U256.isNeg : U256 → Bool := U256.highBit
 
 def U256.arithShiftRight (xs : U256) (os : Nat) : U256 :=
-  let xs' := xs >>> os
-  if xs.isNeg
-  then
-    let mask := U256.max <<< (256 - os)
-    xs' ||| mask
-  else xs'
+  BitVec.sshiftRight xs (min os 256)
 
-def U256.SignedLt (xs ys : U256) : Prop :=
-  let x := xs.highBit
-  let y := ys.highBit
-  let xs' : U256 := xs &&& (U256.max >>> 1)
-  let ys' : U256 := ys &&& (U256.max >>> 1)
-  y < x ∨ (x = y ∧ xs' < ys')
-instance {xs ys : U256} : Decidable (U256.SignedLt xs ys) := instDecidableOr
+def U256.SignedLt (xs ys : U256) : Prop := (U256.asBV xs).slt (U256.asBV ys) = true
+instance {xs ys : U256} : Decidable (U256.SignedLt xs ys) := inferInstanceAs (Decidable ((U256.asBV xs).slt (U256.asBV ys) = true))
 
 def U256.SignedGt (xs ys : U256) : Prop := U256.SignedLt ys xs
-instance {xs ys : U256} : Decidable (U256.SignedGt xs ys) := instDecidableOr
+instance {xs ys : U256} : Decidable (U256.SignedGt xs ys) := inferInstanceAs (Decidable (U256.SignedLt ys xs))
 
 def U128.complement : U128 → U128
   | ⟨xs, ys⟩ => ⟨~~~ xs, ~~~ ys⟩
 instance : Complement U128 := ⟨U128.complement⟩
 
-def U256.complement : U256 → U256
-  | ⟨xs, ys⟩ => ⟨~~~ xs, ~~~ ys⟩
+def U256.complement (x : U256) : U256 := BitVec.xor x (BitVec.allOnes 256)
 instance : Complement U256 := ⟨U256.complement⟩
 
-def UInt8.toU256  (x : UInt8)  : U256 := ⟨0, ⟨0, x.toUInt64⟩⟩
-def UInt16.toU256 (x : UInt16) : U256 := ⟨0, ⟨0, x.toUInt64⟩⟩
-def UInt32.toU256 (x : UInt32) : U256 := ⟨0, ⟨0, x.toUInt64⟩⟩
-def UInt64.toU256 (x : UInt64) : U256 := ⟨0, ⟨0, x⟩⟩
+def UInt8.toU256  (x : UInt8)  : U256 := BitVec.ofNat 256 x.toNat
+def UInt16.toU256 (x : UInt16) : U256 := BitVec.ofNat 256 x.toNat
+def UInt32.toU256 (x : UInt32) : U256 := BitVec.ofNat 256 x.toNat
+def UInt64.toU256 (x : UInt64) : U256 := BitVec.ofNat 256 x.toNat
 
 def U128.zero : U128 := ⟨0, 0⟩
 instance : Zero U128 := ⟨.zero⟩
 def U128.one : U128 := ⟨0, 1⟩
 instance : One U128 := ⟨.one⟩
-def U256.zero : U256 := ⟨0, 0⟩
-instance : Zero U256 := ⟨.zero⟩
-def U256.one : U256 := ⟨0, 1⟩
-instance : One U256 := ⟨.one⟩
 
 def U128.sub (x y : U128) : U128 :=
   let l := x.2 - y.2
@@ -301,29 +279,23 @@ def U128.add (x y : U128) : U128 :=
   ⟨x.1 + y.1 + c, l⟩
 instance : HAdd U128 U128 U128 := ⟨U128.add⟩
 
-def U256.add (x y : U256) : U256 :=
-  let l := x.2 + y.2
-  let c : U128 := if l < x.2 then 1 else 0
-  ⟨x.1 + y.1 + c, l⟩
+def U256.add (x y : U256) : U256 := (U256.asBV x) + (U256.asBV y)
 instance : HAdd U256 U256 U256 := ⟨U256.add⟩
 
-def U256.sub (x y : U256) : U256 :=
-  let l := x.2 - y.2
-  let c : U128 := if x.2 < y.2 then 1 else 0
-  ⟨(x.1 - y.1) - c, l⟩
+def U256.sub (x y : U256) : U256 := (U256.asBV x) - (U256.asBV y)
 instance : HSub U256 U256 U256 := ⟨U256.sub⟩
 instance : Sub U256 := ⟨U256.sub⟩
 
-def U256.neg (xs : U256) : U256 := (~~~ xs) + U256.one
+def U256.neg (xs : U256) : U256 := - (U256.asBV xs)
 
 -- minimum possible value in 2's complement
 def UInt64.signedMin : UInt64 := 0x8000000000000000
 def U128.signedMin : U128 := ⟨.signedMin, 0⟩
-def U256.signedMin : U256 := ⟨.signedMin, 0⟩
+def U256.signedMin : U256 := BitVec.intMin 256
 
 def UInt64.negOne  : UInt64  := .max
 def U128.negOne : U128 := .max
-def U256.negOne : U256 := .max
+def U256.negOne : U256 := BitVec.allOnes 256
 
 def Nat.toBool : Nat → Bool
   | 0 => 0
@@ -349,7 +321,6 @@ def UInt64.byteswap (w : UInt64) : UInt64 :=
   ((w >>> 56) &&& (0x00000000000000FF : UInt64))
 
 def U128.toBytes (x : U128) : Bytes := x.1.toBytes ++ x.2.toBytes
-def U256.toBytes (x : U256) : Bytes := x.1.toBytes ++ x.2.toBytes
 
 def List.ekat {ξ : Type u} (n : Nat) (xs : List ξ) : List ξ :=
   (xs.reverse.take n).reverse
@@ -392,7 +363,6 @@ theorem Bytes.getElem_packV (xs : Bytes) (n i : Nat) (h : i < n) :
     List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hlen]
 
 def U128.toNat (x : U128) : Nat := (x.1.toNat <<< 64) ||| x.2.toNat
-def U256.toNat (x : U256) : Nat := (x.1.toNat <<< 128) ||| x.2.toNat
 
 def U256.addmod (x y z : U256) : U256 :=
   if z = 0
@@ -405,12 +375,8 @@ def U256.mulmod (x y z : U256) : U256 :=
   else ((x.toNat * y.toNat) % z.toNat).toU256 -- (x + y) % z
 
 def U256.signext (x y : U256) : U256 :=
-  if h : x < 31 then
-    have h : (32 - (x.toNat + 1)) < 32 := by omega
-    let z : UInt8 := (Bytes.pack y.toBytes 32)[32 - (x.toNat + 1)]
-    cond z.highBit
-      ((U256.max <<< (8 * (x.toNat + 1))) ||| y)
-      ((U256.max >>> (256 - (8 * (x.toNat + 1)))) &&& y)
+  if x.toNat < 31 then
+    ((U256.asBV y).setWidth (8 * (x.toNat + 1))).signExtend 256
   else y
 
 instance {ξ : Type u} {ρ : ξ → Prop} {xs : List ξ}
@@ -618,35 +584,32 @@ lemma List.of_get?_succ_eq_some {X} {l : List X} {k : ℕ} {x} :
       rcases ih h with ⟨y', h'⟩
       exact ⟨y', h'⟩
 
-def U256.mul (x y : U256) : U256 := (x.toNat * y.toNat).toU256
+def U256.mul (x y : U256) : U256 := (U256.asBV x) * (U256.asBV y)
 instance : HMul U256 U256 U256 := ⟨U256.mul⟩
+
+def U256.div (x y : U256) : U256 :=
+  if y = 0 then 0 else BitVec.udiv x y
+
+def U256.mod (x y : U256) : U256 :=
+  if y = 0 then 0 else BitVec.umod x y
 
 def U256.divMod (x y : U256) : U256 × U256 :=
   if y = 0
   then ⟨0, 0⟩
-  else ⟨(x.toNat / y.toNat).toU256, (x.toNat % y.toNat).toU256⟩
+  else ⟨BitVec.udiv x y, BitVec.umod x y⟩
 
-instance : HDiv U256 U256 U256 := ⟨λ x y => (U256.divMod x y).fst⟩
-instance : HMod U256 U256 U256 := ⟨λ x y => (U256.divMod x y).snd⟩
+instance : HDiv U256 U256 U256 := ⟨U256.div⟩
+instance : HMod U256 U256 U256 := ⟨U256.mod⟩
 
 def U256.sdiv (xs ys : U256) : U256 :=
-  if ys = 0
-  then 0
-  else if xs = signedMin ∧ ys = negOne
-       then signedMin
-       else match (isNeg xs, isNeg ys) with
-            | (0, 0) => xs / ys
-            | (1, 0) => neg ((neg xs) / ys)
-            | (0, 1) => neg (xs / (neg ys))
-            | (1, 1) => (neg xs) / (neg ys)
+  BitVec.sdiv xs ys
 
 def U256.abs (xs : U256) : U256 := if isNeg xs then neg xs else xs
 
 def U256.smod (xs ys : U256) : U256 :=
   if ys = 0
   then 0
-  else let mod := (abs xs) % (abs ys)
-       if isNeg xs then neg mod else mod
+  else BitVec.srem xs ys
 
 def UInt64.testBit (xs : UInt64) (n : Nat) : Bool :=
   ((xs >>> n.toUInt64) &&& 0x0000000000000001) != 0
@@ -657,9 +620,7 @@ def U128.testBit (xs : U128) (n : Nat) : Bool :=
   else xs.1.testBit (n - 64)
 
 def U256.testBit (xs : U256) (n : Nat) : Bool :=
-  if n < 128
-  then xs.2.testBit n
-  else xs.1.testBit (n - 128)
+  (U256.asBV xs).getLsbD n
 
 /-- Efficient modular exponentiation with the EVM convention at modulus zero.
 Lean's kernel definition specifies the result; its runtime implementation uses
@@ -852,10 +813,12 @@ def Bytes.toU128Diff : Bytes → Option (U128 × Bytes)
       ⟩
   | _ => none
 
-def Bytes.toU256? (xs : Bytes) : Option U256 := do
-  let ⟨h, xs'⟩ ← xs.toU128Diff
-  let ⟨l, []⟩ ← xs'.toU128Diff | none
-  some ⟨h, l⟩
+def Bytes.toU256 (xs : Bytes) : U256 :=
+  let xs' := if xs.length ≤ 32 then xs else xs.drop (xs.length - 32)
+  Nat.toU256 (xs'.foldl (fun n b => n * 256 + b.toNat) 0)
+
+def Bytes.toU256? (xs : Bytes) : Option U256 :=
+  if xs.length = 32 then some (Bytes.toU256 xs) else none
 
 def Hex.toUInt64? (hx : String) : Option UInt64 := do
   Hex.toBytes hx >>= Bytes.toUInt64?
@@ -1198,41 +1161,30 @@ def Bytes.toU128 (xs : Bytes) : U128 :=
   let xl := xs'.drop 8
   ⟨Bytes.toUInt64 xh, Bytes.toUInt64 xl⟩
 
--- Big-endian byte-list → word, as a single left-to-right pass over the four
--- 64-bit limbs: each byte is shifted into the low limb and the overflow of
--- every limb spills into the next. Bytes beyond the 32 most recent ones fall
--- off the top, so this agrees with the old `pack 32`-then-split codec on both
--- of its behaviors: left zero-extension of short lists, and truncation to the
--- last 32 bytes of long ones. No `pack`, `take`, `drop`, or reversal.
-def Bytes.toU256.go (l3 l2 l1 l0 : UInt64) : Bytes → U256
-  | [] => ⟨⟨l3, l2⟩, ⟨l1, l0⟩⟩
-  | b :: bs =>
-    go ((l3 <<< 8) ||| (l2 >>> 56))
-       ((l2 <<< 8) ||| (l1 >>> 56))
-       ((l1 <<< 8) ||| (l0 >>> 56))
-       ((l0 <<< 8) ||| b.toUInt64)
-       bs
+private lemma Bytes.foldl_toU256_zero_cons (xs : Bytes) :
+    (0 :: xs).foldl (fun n b => n * 256 + b.toNat) 0 =
+      xs.foldl (fun n b => n * 256 + b.toNat) 0 := rfl
 
-def Bytes.toU256 (xs : Bytes) : U256 := Bytes.toU256.go 0 0 0 0 xs
-
--- Equation lemmas for the codec: leading zero bytes are inert, and the short
--- concrete case that downstream proofs unfold. These replace the `pack`/`take`/
--- `drop` reasoning the old definition invited.
-lemma Bytes.toU256_zero_cons (xs : Bytes) : Bytes.toU256 (0 :: xs) = Bytes.toU256 xs :=
-  rfl
+lemma Bytes.toU256_zero_cons (xs : Bytes) : Bytes.toU256 (0 :: xs) = Bytes.toU256 xs := by
+  unfold Bytes.toU256
+  dsimp only
+  by_cases h1 : xs.length < 32
+  · rw [ite_eq_left (by simp; omega), ite_eq_left (by omega)]
+    rfl
+  · by_cases h2 : xs.length = 32
+    · rw [ite_eq_right (by simp [h2]), ite_eq_left (by omega)]
+      simp [h2]
+    · rw [ite_eq_right (by simp; omega), ite_eq_right (by omega)]
+      rw [show (0 :: xs).length - 32 = (xs.length - 32) + 1 by simp; omega, List.drop_succ_cons]
 
 lemma Bytes.toU256_pair (b0 b1 : UInt8) :
-    Bytes.toU256 [b0, b1] = ⟨⟨0, 0⟩, ⟨0, (b0.toUInt64 <<< 8) ||| b1.toUInt64⟩⟩ := by
-  simp only [Bytes.toU256, Bytes.toU256.go]
-  simp
-  apply Prod.ext
-  · rfl
-  apply Prod.ext
-  · apply UInt64.toNat.inj
-    simp
-    apply Nat.shiftRight_eq_zero
-    exact Nat.lt_of_lt_of_le (UInt8.toNat_lt b0) (by norm_num)
-  · rfl
+    Bytes.toU256 [b0, b1] = Nat.toU256 ((b0.toNat <<< 8) ||| b1.toNat) := by
+  simp only [Bytes.toU256, List.length_cons, List.length_nil, Nat.reduceLeDiff, ↓reduceIte,
+    List.foldl_cons, List.foldl_nil, Nat.zero_mul, Nat.zero_add]
+  congr 1
+  have hb1 : b1.toNat < 256 := b1.toNat_lt
+  rw [← Nat.shiftLeft_add_eq_or_of_lt (by simpa using hb1), Nat.shiftLeft_eq,
+    show (2 : Nat) ^ 8 = 256 from rfl]
 
 private lemma Nat.lo_lo_of_le_codec {x m n : Nat} (h : n ≤ m) :
     (x ↾ m) ↾ n = x ↾ n := by
@@ -1448,45 +1400,35 @@ lemma UInt64.ofBytes_eq_toUInt64 (a b c d e f g h : UInt8) :
   rw [UInt32.ofBytes_eq_halves, UInt32.ofBytes_eq_halves]
   rfl
 
-lemma Bytes.toU256_go_eight (l3 l2 l1 l0 : UInt64) (a b c d e f g h : UInt8) :
-    Bytes.toU256.go l3 l2 l1 l0 [a, b, c, d, e, f, g, h] =
-      ⟨⟨l2, l1⟩, ⟨l0, UInt64.ofBytes a b c d e f g h⟩⟩ := by
-  simp only [Bytes.toU256.go]
-  refine Prod.ext (Prod.ext ?_ ?_) (Prod.ext ?_ ?_)
-  · apply UInt64.spill_eight (h := 0)
-    all_goals apply UInt64.shr56_lt
-  · apply UInt64.spill_eight (h := 0)
-    all_goals apply UInt64.shr56_lt
-  · apply UInt64.spill_eight (h := 0)
-    all_goals first | apply UInt64.shr56_lt | exact UInt8.toNat_lt _
-  · exact UInt64.shiftIn_eight l0 a b c d e f g h
+private lemma U256.toBytes_go_length (k n : Nat) (acc : Bytes) :
+    (U256.toBytes.go k n acc).length = k + acc.length := by
+  induction k generalizing n acc with
+  | zero => simp [U256.toBytes.go]
+  | succ k ih => simp [U256.toBytes.go, ih]; omega
 
-lemma Bytes.toU256_go_eight_cons (l3 l2 l1 l0 : UInt64) (a b c d e f g h : UInt8)
-    (tail : Bytes) :
-    Bytes.toU256.go l3 l2 l1 l0 (a :: b :: c :: d :: e :: f :: g :: h :: tail) =
-      Bytes.toU256.go l2 l1 l0 (UInt64.ofBytes a b c d e f g h) tail := by
-  have hs := Bytes.toU256_go_eight l3 l2 l1 l0 a b c d e f g h
-  simp only [Bytes.toU256.go] at hs ⊢
-  rcases Prod.mk.inj hs with ⟨hhi, hlo⟩
-  rcases Prod.mk.inj hhi with ⟨h3, h2⟩
-  rcases Prod.mk.inj hlo with ⟨h1, h0⟩
-  rw [h3, h2, h1, h0]
-
-lemma Bytes.toU256_go_append_toBytes (l3 l2 l1 l0 y : UInt64) (tail : Bytes) :
-    Bytes.toU256.go l3 l2 l1 l0 (y.toBytes ++ tail) =
-      Bytes.toU256.go l2 l1 l0 y tail := by
-  simp only [UInt64.toBytes, UInt32.toBytes, UInt16.toBytes, List.cons_append, List.nil_append]
-  rw [Bytes.toU256_go_eight_cons, UInt64.ofBytes_eq_toUInt64]
-  exact congrArg (fun z => Bytes.toU256.go l2 l1 l0 z tail) (UInt64.toUInt64_toBytes y)
+private lemma U256.toBytes_go_foldl (k n : Nat) (acc : Bytes) :
+    (U256.toBytes.go k n acc).foldl (fun m b => m * 256 + b.toNat) 0 =
+      acc.foldl (fun m b => m * 256 + b.toNat) (n % 256 ^ k) := by
+  induction k generalizing n acc with
+  | zero => simp [U256.toBytes.go, Nat.mod_one]
+  | succ k ih =>
+    simp only [U256.toBytes.go]
+    rw [ih, List.foldl_cons]
+    congr 1
+    rw [UInt8.toNat_ofNat', Nat.shiftRight_eq_div_pow, show (2 : Nat) ^ 8 = 256 from rfl]
+    rw [Nat.pow_succ', Nat.mod_mul]
+    rw [Nat.mul_comm (n / 256 % 256 ^ k) 256]
+    omega
 
 lemma U256.toU256_toBytes (x : U256) : x.toBytes.toU256 = x := by
-  show Bytes.toU256.go 0 0 0 0 (U256.toBytes x) = ((x.1.1, x.1.2), (x.2.1, x.2.2))
-  simp only [U256.toBytes, U128.toBytes, List.append_assoc]
-  rw [Bytes.toU256_go_append_toBytes, Bytes.toU256_go_append_toBytes,
-      Bytes.toU256_go_append_toBytes]
-  rw [show x.2.2.toBytes = x.2.2.toBytes ++ [] by simp]
-  rw [Bytes.toU256_go_append_toBytes]
-  rfl
+  unfold Bytes.toU256 U256.toBytes
+  dsimp only
+  have hlen : (U256.toBytes.go 32 x.toNat []).length = 32 :=
+    U256.toBytes_go_length 32 x.toNat []
+  rw [ite_eq_left (Nat.le_of_eq hlen), U256.toBytes_go_foldl, List.foldl_nil]
+  have hx : x.toNat < 256 ^ 32 := BitVec.isLt x
+  rw [Nat.mod_eq_of_lt hx]
+  exact BitVec.eq_of_toNat_eq ((BitVec.toNat_ofNat _ _).trans (Nat.mod_eq_of_lt (BitVec.isLt x)))
 
 def Array.writeD {ξ : Type u} (xs : Array ξ) (n : ℕ) : List ξ → Array ξ
   | [] => xs
@@ -1549,7 +1491,11 @@ def UInt16.toNibbles (x : UInt16) : List UInt8 := x.highs.toNibbles ++ x.lows.to
 def UInt32.toNibbles (x : UInt32) : List UInt8 := x.highs.toNibbles ++ x.lows.toNibbles
 def UInt64.toNibbles (x : UInt64) : List UInt8 := x.highs.toNibbles ++ x.lows.toNibbles
 def U128.toNibbles (x : U128) : List UInt8 := x.1.toNibbles ++ x.2.toNibbles
-def U256.toNibbles (x : U256) : List UInt8 := x.1.toNibbles ++ x.2.toNibbles
+def U256.toNibbles.go : Nat → Nat → Bytes → Bytes
+  | 0, _, acc => acc
+  | k + 1, n, acc => U256.toNibbles.go k (n >>> 4) ((n &&& 0xF).toUInt8 :: acc)
+
+def U256.toNibbles (x : U256) : List UInt8 := U256.toNibbles.go 64 x.toNat []
 
 def Bytes.toNibbles : Bytes → Bytes
   | [] => []
@@ -1736,8 +1682,12 @@ def UInt32s.toUInt64 (x y : UInt32) : UInt64 :=
 def UInt32s.toU128 (x0 x1 y0 y1 : UInt32) : U128 :=
   ⟨UInt32s.toUInt64 x0 x1, UInt32s.toUInt64 y0 y1⟩
 
-def UInt32s.toU256 (x0 x1 x2 x3 y0 y1 y2 y3: UInt32) : U256 :=
-  ⟨UInt32s.toU128 x0 x1 x2 x3, UInt32s.toU128 y0 y1 y2 y3⟩
+def UInt32s.toU256 (x0 x1 x2 x3 y0 y1 y2 y3 : UInt32) : U256 :=
+  let w0 := UInt32s.toUInt64 x0 x1
+  let w1 := UInt32s.toUInt64 x2 x3
+  let w2 := UInt32s.toUInt64 y0 y1
+  let w3 := UInt32s.toUInt64 y2 y3
+  Nat.toU256 ((w0.toNat <<< 192) ||| (w1.toNat <<< 128) ||| (w2.toNat <<< 64) ||| w3.toNat)
 
 /-- Take the first `sz` entries of `xs` into an array of exactly `sz` slots,
 padded with `x`, and return the rest of the list.

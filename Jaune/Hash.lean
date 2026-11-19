@@ -791,6 +791,14 @@ theorem f1600_eq (ws : Vector UInt64 25) :
   rw [show State1600.toVec ⟨ws[0], ws[1], ws[2], ws[3], ws[4], ws[5], ws[6], ws[7], ws[8], ws[9], ws[10], ws[11], ws[12], ws[13], ws[14], ws[15], ws[16], ws[17], ws[18], ws[19], ws[20], ws[21], ws[22], ws[23], ws[24]⟩ = ws from (vec_eta ws).symm]
 -- END GENERATED
 
+/-- Squeeze the first four 64-bit lanes of a Keccak state into a big-endian 256-bit word. -/
+private def squeezeWord (ws : Vector UInt64 25) : U256 :=
+  let w0 := UInt64.byteswap (ws[0])
+  let w1 := UInt64.byteswap (ws[1])
+  let w2 := UInt64.byteswap (ws[2])
+  let w3 := UInt64.byteswap (ws[3])
+  Nat.toU256 ((w0.toNat <<< 192) ||| (w1.toNat <<< 128) ||| (w2.toNat <<< 64) ||| w3.toNat)
+
 def Bytes.run : Fin 17 → Bytes → Vector UInt64 25 → U256
   | wc, b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: bs, ws =>
     let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
@@ -808,8 +816,7 @@ def Bytes.run : Fin 17 → Bytes → Vector UInt64 25 → U256
     let temp0 := xorLane ws wc.val (by omega) t
     let temp1 := xorLane temp0 16 (by omega) s
     let ws' := f1600 temp1
-    ⟨ ⟨UInt64.byteswap (ws'[0]), UInt64.byteswap (ws'[1])⟩,
-      ⟨UInt64.byteswap (ws'[2]), UInt64.byteswap (ws'[3])⟩ ⟩
+    squeezeWord ws'
 
 /-- The ranged sponge. `bnd` is the end of the range being absorbed and `n` the
 number of bytes still to absorb, so `n ≤ bnd ≤ bs.size` is the invariant that
@@ -853,8 +860,7 @@ def ByteArray.run (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
     let temp0 := xorLane ws wc.val (by omega) t
     let temp1 := xorLane temp0 16 (by omega) s
     let ws' := f1600 temp1
-    ⟨ ⟨UInt64.byteswap (ws'[0]), UInt64.byteswap (ws'[1])⟩,
-      ⟨UInt64.byteswap (ws'[2]), UInt64.byteswap (ws'[3])⟩ ⟩
+    squeezeWord ws'
   termination_by n => n
 
 end KECCAK

@@ -1338,7 +1338,7 @@ theorem PlainOp.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
   case mstore8 =>
     exact popNatPopChargePure_gasLt devm
       (fun start _ d => Gas.veryLow + d.extCost [(start, 1)])
-      (fun start value d => d.memWrite start [value.2.2.toUInt8])
+      (fun start value d => d.memWrite start [value.toNat.toUInt8])
       (by intros; unfold Gas.veryLow; omega)
       (by intros; simp only [Devm.memWrite_gasMeasure]) h
   case mcopy =>

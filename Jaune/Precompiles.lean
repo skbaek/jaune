@@ -16,10 +16,10 @@ def executeEcrecover (evm : Evm) : PrecompileResult :=
   let data := evm.sta.data
   PrecompileResult.chargeGas Gas.ecrecover evm fun () =>
     let h := Bytes.toU256 <| data.sliceD 0 32 (0x00 : UInt8)
-    let v_opt := match (Bytes.toU256 <| data.sliceD 32 32 (0x00 : UInt8)) with
-                 | 0x1B => some false
-                 | 0x1C => some true
-                 | _ => none
+    let v_word := Bytes.toU256 <| data.sliceD 32 32 (0x00 : UInt8)
+    let v_opt := if v_word = 0x1B then some false
+                 else if v_word = 0x1C then some true
+                 else none
     match v_opt with
     | none => .ok Gas.ecrecover []
     | some v =>

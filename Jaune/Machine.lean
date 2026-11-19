@@ -532,21 +532,16 @@ def U256.zerocount (x : U256) : Nat → Nat
   | 0 => 0
   | k + 1 => if x = 0 then k + 1 else U256.zerocount (x >>> 8) k
 
-def U256.bytecount (x : U256) : Nat := 32 - (U256.zerocount x 32)
+def U256.bytecount (x : U256) : Nat :=
+  if x = 0 then 0 else Nat.log2 x.toNat / 8 + 1
 
 /-- Leading zero bits of one 64-bit limb; 64 for zero. -/
 def UInt64.leadingZeros (x : UInt64) : Nat :=
   if x = 0 then 64 else 63 - Nat.log2 x.toNat
 
-/-- Leading zero bits of a 256-bit word; 256 for zero.
-
-This is EIP-7939's `256 - x.bit_length()` stated directly, and it is computed
-limb by limb so that a word is never widened to a bignum to be measured. -/
+/-- Leading zero bits of a 256-bit word; 256 for zero. -/
 def U256.leadingZeros (x : U256) : Nat :=
-  if x.1.1 ≠ 0 then UInt64.leadingZeros x.1.1
-  else if x.1.2 ≠ 0 then 64 + UInt64.leadingZeros x.1.2
-  else if x.2.1 ≠ 0 then 128 + UInt64.leadingZeros x.2.1
-  else 192 + UInt64.leadingZeros x.2.2
+  if x = 0 then 256 else 255 - Nat.log2 x.toNat
 
 def accountToKeyValue (pr : Address × Account) : Bytes × Bytes :=
   let ad := pr.fst
@@ -834,9 +829,7 @@ instance : Hashable Address := ⟨fun x => x.2.2⟩
 -- address hash with all four 64-bit limbs of the B256 key (finding 3.9). A
 -- key-insensitive hash sent every same-address slot into one bucket.
 instance : Hashable (Address × U256) :=
-  ⟨λ x =>
-    let k := x.2
-    mixHash (hash x.1) (mixHash k.1.1 (mixHash k.1.2 (mixHash k.2.1 k.2.2)))⟩
+  ⟨λ x => mixHash (hash x.1) (hash x.2.toNat)⟩
 
 abbrev AdrSet : Type := @Std.HashSet Address _ _
 abbrev KeySet : Type := @Std.HashSet (Address × U256) _ _
@@ -1729,35 +1722,21 @@ though `Withdrawal.amount` stores 256 bits for balance arithmetic, so a
 decoded withdrawal always has its upper 192 bits clear. Design report §7 names
 this as the one place a semantic field is wider than its wire type. -/
 def Withdrawal.WireWellFormed (w : Withdrawal) : Prop :=
-  w.amount.1 = ((0, 0) : U128) ∧ w.amount.2.1 = (0 : UInt64)
+  w.amount.toNat < 2 ^ 64
 
 instance (w : Withdrawal) : Decidable (Withdrawal.WireWellFormed w) := by
   unfold Withdrawal.WireWellFormed
-  apply decidable_of_iff (w.amount.1.1 = 0 ∧ w.amount.1.2 = 0 ∧ w.amount.2.1 = 0)
-  · constructor
-    · rintro ⟨ha, hb, hc⟩
-      exact ⟨by exact Prod.ext ha hb, hc⟩
-    · rintro ⟨h, hc⟩
-      exact ⟨Prod.mk.inj h |>.1, Prod.mk.inj h |>.2, hc⟩
+  infer_instance
 
 /-- Widening a `UInt64` to a `B256` leaves the upper 192 bits clear. This is
 what makes `Withdrawal.WireWellFormed` a genuine lift of
 `BLT.toExWithdrawal`, which reads the amount with the 64-bit scalar
 decoder and then widens it. -/
 theorem UInt64.toNat_toU256_high (x : UInt64) :
-    (x.toNat.toU256).1 = ((0, 0) : U128) ∧ (x.toNat.toU256).2.1 = (0 : UInt64) := by
+    (x.toNat.toU256).toNat < 2 ^ 64 := by
   have hx : x.toNat < 2 ^ 64 := x.toNat_lt
-  have h128 : x.toNat >>> 128 = 0 := by
-    rw [Nat.shiftRight_eq_div_pow]
-    exact Nat.div_eq_of_lt
-      (Nat.lt_of_lt_of_le hx (Nat.pow_le_pow_right (by norm_num) (by norm_num)))
-  have h64 : x.toNat >>> 64 = 0 := by
-    rw [Nat.shiftRight_eq_div_pow]
-    exact Nat.div_eq_of_lt hx
-  constructor
-  · simp [Nat.toU256, h128, Nat.toU128]
-    rfl
-  · simp [Nat.toU256, Nat.toU128, h64]
+  rw [U256.toNat_toU256_of_lt (Nat.lt_trans hx (by norm_num))]
+  exact hx
 
 /-- A transaction slot inside a block body. `BLT.toExBlock` turns a list
 item into a decoded legacy transaction and a byte-string item into opaque
@@ -4385,7 +4364,7 @@ def PlainOp.runCore
     let ⟨value, devm⟩ ← devm.pop
     let extend_memory_cost := devm.extCost [⟨start_index, 1⟩]
     let devm ← chargeGas (Gas.veryLow + extend_memory_cost) devm
-    .ok <| devm.memWrite start_index [value.2.2.toUInt8]
+    .ok <| devm.memWrite start_index [value.toNat.toUInt8]
   | .gas => do
     let devm ← chargeGas Gas.base devm
     devm.push devm.gasLeft.toU256
