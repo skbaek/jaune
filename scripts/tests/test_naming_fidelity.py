@@ -50,6 +50,18 @@ class NamingFidelityTests(unittest.TestCase):
         with self.assertRaises(CHECK.Mismatch):
             self.run_check()
 
+    def test_swap_maps_each_side_once(self):
+        # `a -> Old.a` and `Staging.a -> a` in one map: each before constant is compared
+        # with its own image, so exchanging the two bodies fails.
+        self.before = snapshot({'N.a': constant(2), 'N.Staging.a': constant(3)}, ['N.a', 'N.Staging.a'])
+        self.after = snapshot({'N.Old.a': constant(2), 'N.a': constant(3)}, ['N.Old.a', 'N.a'])
+        self.renames = self.entries(('N.a', 'N.Old.a', 'declaration', {}),
+                                    ('N.Staging.a', 'N.a', 'declaration', {}))
+        self.assertEqual(self.run_check()['authored_constants'], 2)
+        self.after = snapshot({'N.Old.a': constant(3), 'N.a': constant(2)}, ['N.Old.a', 'N.a'])
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
     def test_module_identity_requires_relocation_rows(self):
         self.before = snapshot({'N.f': constant()}, ['N.f'])
         self.after = snapshot({'N.f': constant()}, ['N.f'])

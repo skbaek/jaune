@@ -77,6 +77,19 @@ class NamingMapTests(unittest.TestCase):
         entries, _ = MODULE.validate_map(data)
         self.assertEqual(entries, 4)
 
+    def test_swap_of_old_and_staged_names_passes(self):
+        # One map may move the old name away and give it to the staged one.
+        data = dict(self.base_data)
+        data["entries"] = [
+            _sample_entry(old="Jaune.applyBody", new="Jaune.Bridge.G2a.Old.applyBody", kind="relocation",
+                          rule="4", source="Plain English (rule 4)", from_module="Jaune.Transaction",
+                          to_module="Jaune.Bridge.G2a.Old.Body"),
+            _sample_entry(old="Jaune.Staging.applyBody", new="Jaune.applyBody", rule="4",
+                          source="Plain English (rule 4)"),
+        ]
+        entries, _ = MODULE.validate_map(data)
+        self.assertEqual(entries, 2)
+
     def test_missing_source_fails(self):
         data = dict(self.base_data)
         bad = _sample_entry()

@@ -299,6 +299,55 @@ class NamingTreeTests(unittest.TestCase):
                 self.assertEqual((fixture.root / 'Src.lean').read_bytes(),
                                  fixture.files['Src.lean'].encode())
 
+    def test_swap_relocates_old_and_promotes_staged_in_one_map(self):
+        # G2a's one-run swap: the old `P.a` moves to the bridge as `P.Old.a` while the
+        # staged `P.Staging.a` takes the name `P.a`, in one map; no name repeats on a side.
+        src = 'namespace P\n/-- old -/\ndef a := 2\nend P\n'
+        stage = 'namespace P\ndef Staging.a := 3\nend P\n'
+        client = 'import Src\nimport Tgt\nimport Stage\nnamespace P\ndef c := a + Staging.a\nend P\n'
+        files = {'Src.lean': src, 'Tgt.lean': 'import Src\ndef t := 0\n', 'Stage.lean': stage,
+                 'Client.lean': client, 'lakefile.lean': ''}
+        fixture = TreeFixture(self.directory / 'swap', files,
+                              {'Client': ['Src', 'Tgt', 'Stage'], 'Tgt': ['Src']})
+        a0, a1 = src.index('/-- old -/'), src.index('end P') - 1
+        fixture.export('Src', decls={'P.a': (a0, a1, src.index('def a') + 4)},
+                       commands=[(0, 11, 'namespace', '[anonymous]', [], [False] * 3),
+                                 (a0, a1, 'declaration', 'P', [], [False] * 3)],
+                       eof=[0, '[anonymous]', []])
+        s0 = stage.index('def Staging.a')
+        fixture.export('Stage', decls={'P.Staging.a': (s0, stage.index('end P') - 1, s0 + 4)},
+                       commands=[(0, 11, 'namespace', '[anonymous]', [], [False] * 3),
+                                 (s0, stage.index('end P') - 1, 'declaration', 'P', [], [False] * 3)],
+                       eof=[0, '[anonymous]', []])
+        # The compiler's selection range covers the whole dotted header `Staging.a`.
+        export = json.loads((fixture.capture / 'Stage.json').read_text())
+        whole = fixture.lsp(stage, s0 + 4) + fixture.lsp(stage, s0 + 13)
+        export['index']['decls']['P.Staging.a'][4:] = whole
+        export['index']['references'][json.dumps({'c': {'m': 'Stage', 'n': 'P.Staging.a'}})]['definition'] = whole
+        (fixture.capture / 'Stage.json').write_text(json.dumps(export))
+        fixture.exports['Stage']['sha256'] = TREE.CANDIDATE.file_sha(fixture.capture / 'Stage.json')
+        fixture.export('Tgt', decls={}, commands=[], eof=[0, '[anonymous]', []])
+        c0 = client.index('def c')
+        uses = client.index('a + '), client.index('Staging.a')
+        fixture.export('Client', decls={'P.c': (c0, client.index('end P') - 1, c0 + 4)},
+                       commands=[(client.index('namespace'), c0 - 1, 'namespace', '[anonymous]', [], [False] * 3),
+                                 (c0, client.index('end P') - 1, 'declaration', 'P', [], [False] * 3)],
+                       eof=[0, '[anonymous]', []],
+                       refs=[('P.a', 'Src', uses[0], uses[0] + 1),
+                             ('P.Staging.a', 'Stage', uses[1], uses[1] + 9)])
+        rows = [dict(old='P.a', new='P.Old.a', kind='relocation', layer='execution', rule='4',
+                     source='Synthetic swap control', from_module='Src', to_module='Tgt'),
+                dict(old='P.Staging.a', new='P.a', kind='declaration', layer='execution', rule='4',
+                     source='Synthetic swap control')]
+        plan = fixture.plan(rows)
+        self.assertEqual(plan['status'], 'planned', plan)
+        TREE.apply_plan(fixture.root, plan, fixture.map)
+        self.assertEqual((fixture.root / 'Client.lean').read_text(),
+                         'import Src\nimport Tgt\nimport Stage\nnamespace P\ndef c := Old.a + a\nend P\n')
+        self.assertEqual((fixture.root / 'Stage.lean').read_text(), 'namespace P\ndef a := 3\nend P\n')
+        self.assertEqual((fixture.root / 'Src.lean').read_text(), 'namespace P\nend P\n')
+        self.assertIn('def Old.a := 2', (fixture.root / 'Tgt.lean').read_text())
+
     def test_registered_exclusion_is_accounted_not_omitted(self):
         import hashlib
         text = 'def legacy := A.a\n'
