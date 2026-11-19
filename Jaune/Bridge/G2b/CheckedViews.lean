@@ -1,4 +1,5 @@
 import Jaune.FrameRun.CheckedDecompose
+import Jaune.FrameRun.CheckedFacts
 import Jaune.MessageCall.CheckedDerivOrder
 import Jaune.Bridge.G2b.CheckedDriver
 import Jaune.Bridge.G2b.FinalRetained
@@ -6,6 +7,7 @@ import Jaune.Bridge.G2b.FinalPrefix
 import Jaune.Bridge.G3.FrameViews
 import Jaune.FrameRun.Unique
 import Jaune.MessageCall.FinalAdequacy
+import Jaune.Run.Root
 
 /-!
 # Checked view bridges (goal `jaune-shape-and-names-v1`, G2b, S5)
@@ -609,6 +611,28 @@ theorem committedFrames_toLegacy {r out} (t : Frame.Run r (.exit out)) :
   rw [committedFrames_exec, ← Exec.toLegacy_committedFrames, toLegacy,
     ← Staging.Frame.Run.committedFrames_bridge, List.map_map]
   congr 1
+
+private theorem rootFrames_toLegacy (frame : Frame) {running raw old}
+    (run : Frame.Run running (.exit raw)) (waiting : Staging.Exec running.toLegacy old)
+    (outcome : old = raw.map Frame.Exit.toLegacy) :
+    (Root.frames ⟨frame, running, raw, run⟩).map Kept.legacyObservation =
+      (Staging.Root.frames ⟨frame.toLegacy, running.toLegacy, _, waiting⟩).map
+        Staging.Exec.Frame.observation := by
+  subst old
+  dsimp only [Root.frames, Staging.Root.frames]
+  rw [Frame.settlementCommits_toLegacy]
+  split
+  · rw [committedFrames_toLegacy, Subsingleton.elim (toLegacy run) (Staging.Frame.Run.ofExec waiting),
+      ← Staging.Frame.Run.committedFrames_bridge, List.map_map]
+    rfl
+  · rfl
+
+/-- A checked root retains exactly the same ordered frames and post-states as its staged entry. -/
+theorem _root_.Jaune.Checked.Root.ofEntry_frames_toLegacy
+    (frame : Frame) (running : Frame.Running) :
+    ((Root.ofEntry frame running).frames.map Kept.legacyObservation) =
+      ((Staging.Root.ofEntry frame.toLegacy running.toLegacy).frames.map Staging.Exec.Frame.observation) := by
+  exact rootFrames_toLegacy frame _ _ (exec_toLegacy running)
 
 /-- The staged node of a checked one. -/
 def Node.toLegacy (n : Node) : Staging.Frame.Run.Node := ⟨_, _, Checked.Frame.Run.toLegacy n.run⟩
