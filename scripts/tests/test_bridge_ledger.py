@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
 
 ROOT = Path(__file__).parents[2]
 SPEC = importlib.util.spec_from_file_location('check_bridge_ledger', ROOT / 'scripts/check-bridge-ledger.py')
@@ -40,7 +41,7 @@ def environment(constants):
 
 
 def renamer(rows):
-    return FIDELITY.MAP.Renamer([dict(old=a, new=b, kind='declaration') for a, b in rows.items()])
+    return [dict(old=a, new=b, kind='declaration') for a, b in rows.items()]
 
 
 class ClosureTests(unittest.TestCase):
@@ -120,8 +121,15 @@ class ClosureTests(unittest.TestCase):
         del self.after['constants']['J.helper']
         self.assertEqual(self.compare()['verdict'], 'REGRESSION')
 
+    def test_new_dependency_of_the_old_side_fails(self):
+        self.after['constants']['J.Old.root'] = definition(app(c('Nat.add'), c('J.helper'), c('J.extra')))
+        self.after['constants']['J.extra'] = definition(['lit', 1])
+        self.after['roots'].add('J.extra')
+        self.assertEqual(self.compare()['verdict'], 'REGRESSION')
+
     def test_maps_compose_in_order(self):
         self.after['constants']['J.Older.root'] = self.after['constants'].pop('J.Old.root')
+        self.after['roots'] = set(self.after['constants'])
         self.maps = [renamer({'J.root': 'J.Old.root'}), renamer({'J.Old.root': 'J.Older.root'})]
         result = LEDGER.closure_compare(self.before, self.after, self.maps, ['J.root'], ['J.Older.root'], {})
         self.assertEqual(result['verdict'], 'OK')
@@ -137,6 +145,82 @@ class ClosureTests(unittest.TestCase):
         self.assertEqual((result['verdict'], result['generated']), ('OK', 1))
         self.after['constants']['J.Old.root.match_1'] = definition(['lit', 4])
         self.assertEqual(self.compare()['verdict'], 'REGRESSION')
+
+
+    def test_unreached_generated_members_match_by_graph_not_by_number(self):
+        # The root's own comparison stops at its first difference, so its
+        # matchers are matched afterwards by graph; their numbering swapped.
+        self.before['constants']['J.root'] = definition(app(['lit', 0], c('J.root.match_1'), c('J.root.match_2')))
+        self.before['constants']['J.root.match_1'] = definition(['lit', 3])
+        self.before['constants']['J.root.match_2'] = definition(['lit', 4])
+        self.after['constants']['J.Old.root'] = definition(app(['lit', 9], c('J.Old.root.match_2'),
+                                                               c('J.Old.root.match_1')))
+        self.after['constants']['J.Old.root.match_1'] = definition(['lit', 4])
+        self.after['constants']['J.Old.root.match_2'] = definition(['lit', 3])
+        for env in (self.before, self.after):
+            env['roots'] -= {n for n in env['constants'] if '.match_' in n}
+        result = self.compare()
+        self.assertEqual([m.split(':')[0] for m in result['mismatches']], ['constant J.root'])
+        self.after['constants']['J.Old.root.match_2'] = definition(['lit', 5])
+        self.assertIn('no verified generated-constant match for J.root.match_1',
+                      ' '.join(self.compare()['mismatches']))
+
+class ModeBGlueTests(unittest.TestCase):
+    """`mode_b` end to end from capture-shaped snapshots over synthetic
+    compiler exports (the snapshot reader itself is naming-candidate's)."""
+
+    def export(self, tmp, label, root, helper_value):
+        source = f'def {root.split(".", 1)[1]} := helper\ndef helper := {helper_value}\n'
+        width = len(root.split('.', 1)[1])
+        index = dict(version=5, module='M', directImports=[], references={},
+                     decls={root: [0, 0, 0, 4 + width, 0, 4, 0, 4 + width], 'J.helper': [1, 0, 1, 15, 1, 4, 1, 10]})
+        constants = {root: dict(definition(app(c('Nat.succ'), c('J.helper'))), equation_origin=None),
+                     'J.helper': dict(definition(['lit', helper_value]), equation_origin=None)}
+        data = dict(schema_version=6, lean_version='x', source=source, index=index, constants=constants,
+                    guards=[], attribute_syntax=[], checked_commands=[], imports={})
+        path = Path(tmp) / f'{label}.export.json'
+        path.write_text(json.dumps(data))
+        (Path(tmp) / f'{label}.snapshot.json').write_text('{}')
+        modules = {'M': dict(path='M.lean', sha256=hashlib.sha256(source.encode()).hexdigest(), imports=[],
+                             is_module=False)}
+        return dict(candidate=dict(head='0' * 40, files={}, modules=modules, source_dirs=['.']),
+                    tool_sources={}, artifacts={}, exports={'M': dict(path=path.name, sha256='x')},
+                    export_paths={'M': path})
+
+    def run_b(self, helper_after):
+        ledger = dict(schema_version=1, standard_axioms=STANDARD,
+                      gates=dict(GX=dict(tag='gate/gx', commit=None, status='pending')),
+                      entries=[dict(id='GX-1', gate='GX', kind='theorem', theorem='J.bridge', module='M',
+                                    audit=[dict(kind='union_walk', file='U.lean')],
+                                    old=dict(revision='0' * 40, roots=['J.root'], modules=['M'],
+                                             at_tag=['J.Old.root'], modules_at_tag=['M']),
+                                    new=dict(names=[], modules=[]), exempt=[], maps=[], n4_receipts=[],
+                                    accepted=[], gaps=[], notes=[])])
+        with tempfile.TemporaryDirectory() as tmp:
+            sides = {'before': self.export(tmp, 'before', 'J.root', 1),
+                     'after': self.export(tmp, 'after', 'J.Old.root', helper_after)}
+            map_file = Path(tmp) / 'map.json'
+            map_file.write_text(json.dumps(dict(schema_version=1, retired_tokens=[], allowed_abbreviations=[],
+                                                entries=[dict(old='J.root', new='J.Old.root', kind='declaration',
+                                                              layer='execution', rule='4', source='fixture')])))
+            ledger['entries'][0]['maps'] = [dict(path='map.json', revision=None, gap='fixture',
+                                                 sha256=hashlib.sha256(map_file.read_bytes()).hexdigest())]
+            reader = LEDGER.Git(ROOT)
+            try:
+                with unittest.mock.patch.object(LEDGER.CANDIDATE, 'read_snapshot',
+                                                lambda path, fidelity=True: sides[Path(path).name.split('.')[0]]):
+                    return LEDGER.mode_b(ledger, reader, 'GX', Path(tmp) / 'before.snapshot.json',
+                                         Path(tmp) / 'after.snapshot.json', maps=[map_file])
+            finally:
+                reader.close()
+
+    def test_receipt_binds_maps_and_verdict(self):
+        receipt = self.run_b(1)
+        self.assertEqual(receipt['verdict'], 'OK')
+        self.assertEqual((receipt['entries'][0]['closure'], receipt['before']['bound'], receipt['after']['bound']),
+                         (2, False, False))
+        self.assertEqual(len(receipt['entries'][0]['maps']), 1)
+        self.assertEqual(self.run_b(2)['verdict'], 'REGRESSION')
 
 
 THEOREM = '''import Jaune.Old
@@ -284,6 +368,7 @@ class ModeATests(unittest.TestCase):
         result = self.run_a()
         self.assertEqual(len(result['gaps']), 1)
         self.assertFinding('gate GX not closed', require_closed=['GX'])
+        self.assertFinding('gate GY not closed: its tag is pending', require_closed=['GY'])
         del row['gap']
         self.assertFinding('uncommitted with its gap stated')
 

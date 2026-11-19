@@ -945,6 +945,23 @@ Two different contracts, and confusing them is the most common misreading:
   that point. It needs the built binary and no corpus, so a bare runner can run
   it after a build; it never builds one itself.
 
+- **`scripts/check-bridge-ledger.py` is an all-hold ledger gate with recorded
+  gaps.** Mode A passes iff every check in its row holds for every entry of
+  `scripts/bridge-ledger.json`; an open gap (an uncommitted map, a stated gap,
+  a theorem bridge with neither a Mode B receipt nor an accepted closure
+  decision) is printed and counted but does not fail the default run, because
+  a pending gate's gaps are work in progress. `--require-closed GATE` turns
+  that gate's gaps into failures and is the verdict for the landing that
+  deletes the gate's bridges. Mode B (`--closure`) passes iff every member of
+  every old root's dependency closure (exempt and non-Jaune constants
+  excluded) is equal at the tag under the entry's maps by N4's per-constant
+  comparator, every old root maps to the old side the ledger names, and the
+  external import artifacts of both captures are identical; a gate's receipt
+  counts in Mode A only with both captures bound (the clean tree of the old
+  revision and of the tag commit). Adding an exemption needs another ledger
+  entry that bridges it; a gap is closed by evidence, never by deleting its
+  line.
+
 `--bls` is a middle case: it compares against a tracked baseline like a tier,
 but that baseline is a hand-authored *target*, so `--rebase` is refused — edit
 `scripts/baseline-bls.txt` directly, with a written justification for any

@@ -477,6 +477,8 @@ def mode_a(ledger, git, head='HEAD', receipts=RECEIPTS, require_closed=()):
     for name in require_closed:
         if name not in ledger['gates']:
             raise ValueError(f'--require-closed: unknown gate {name}')
+        if ledger['gates'][name]['status'] != 'tagged':
+            problems.append(f'gate {name} not closed: its tag is pending')
         open_here = [g for g in gaps if any(g.startswith(f'entry {e["id"]}:') for e in ledger['entries']
                                              if e['gate'] == name)]
         problems.extend(f'gate {name} not closed: {g}' for g in open_here)
@@ -534,7 +536,18 @@ class Composed(MAP.Renamer):
             self.namespaces, self.relocations = {}, {}
             self.exact = {old: self._through(old) for one in self.parts for old in one.exact}
             self.modules = {old: self._module(old) for one in self.parts for old in one.modules}
+            if any(hasattr(one, 'public_from') for one in self.parts):
+                # A newer map schema's private-to-public rows, composed.
+                self.public_from = {old: self._through(old) for one in self.parts
+                                    for old in getattr(one, 'public_from', {})}
         self.exact.update(self.overrides)
+
+    def __getattr__(self, attr):
+        # One map: any further table a (newer) comparator reads is that map's.
+        parts = self.__dict__.get('parts')
+        if parts is not None and len(parts) == 1:
+            return getattr(parts[0], attr)
+        raise AttributeError(attr)
 
     def _through(self, name):
         for one in self.parts:
@@ -604,44 +617,71 @@ def exemptions(ledger, entry):
     return rows
 
 
-def closure_compare(before, after, renamers, roots, at_tag, exempt, plan_edits=None, reviewed=None):
-    """Compare the old roots' dependency closure, under the composed maps,
-    with the tag environment. `before`/`after` are comparator environments
-    (`check-naming-fidelity.read_exports` / `naming-candidate` shapes)."""
-    overrides = {name: row['replacement'] for name, row in exempt.items() if row.get('replacement')}
-    mapping = Composed(renamers, overrides)
+def scoped_maps(maps, names):
+    """Each map's rows that concern `names` (and, map by map, their images):
+    namespace and module rows always; an exact row when it renames one of
+    the names, or the user part of a private one, or names it `public_from`.
+    The comparator's map-scope checks (every relocation row names an authored
+    constant in scope) then hold for the closure, as they do for N4's scope."""
+    current, scoped = set(names), []
+    for entries in maps:
+        users = current | {MAP.split_private(n)[2] for n in current if MAP.split_private(n)}
+        rows = [row for row in entries if row['kind'] in ('namespace', 'module') or
+                row['old'] in users or row.get('public_from') in current]
+        scoped.append(rows)
+        one = MAP.Renamer(rows)
+        current = current | {one(n) for n in current}
+    return scoped
+
+
+def closure_compare(before, after, maps, roots, at_tag, exempt, plan_edits=None, reviewed=None):
+    """N4's comparator run on the old roots' dependency closure.
+
+    `before`/`after` are comparator environments (`read_exports` /
+    `naming-candidate` shapes), `maps` the entry lists of the entry's maps in
+    order. The old closure is walked from the roots, the tag closure from the
+    old side the ledger names at the tag, each stopping at exempt names (on
+    the tag side at their replacement or image) and at constants no export
+    holds. `Comparison.run` then compares the two scopes exactly as N4
+    compares a whole capture: authored constants under the map, generated
+    constants matched bijectively by graph, attributes, owners and holders.
+    Guards, attribute commands, checks and imports are module-level, not
+    closure members, and are left out."""
     missing = [r for r in roots if r not in before['constants']]
     if missing:
         raise ValueError(f'old roots not in the old export: {missing}')
-    comparison = FIDELITY.Comparison(before, after, mapping, reviewed=reviewed, collect=True, plan_edits=plan_edits)
+    members, stopped, external = walk(before['constants'], roots, set(exempt))
+    overrides = {name: row['replacement'] for name, row in exempt.items() if row.get('replacement')}
+    mapping = Composed([MAP.Renamer(rows) for rows in scoped_maps(maps, members | set(exempt))] or
+                       [MAP.Renamer([])], overrides)
     mismatches = []
     for root, expected in zip(roots, at_tag):
-        if comparison.name(root) != expected:
-            mismatches.append(f'old root {root} maps to {comparison.name(root)}, ledger names {expected} at the tag')
-    members, stopped, external = walk(before['constants'], roots, set(exempt))
-    authored = sorted(m for m in members if m in before['roots'])
-    for name in authored:
-        try:
-            comparison.pair(name, comparison.name(name))
-        except FIDELITY.Mismatch as error:
-            mismatches.append(f'constant {name}: {error}')
-        except KeyError:
-            mismatches.append(f'constant {name}: {comparison.name(name)} missing at the tag')
-    generated = sorted(members - set(authored))
-    for name in generated:
-        if name in comparison.pairs:
-            continue
-        try:
-            comparison.pair(name, comparison.preferred_generated(name))
-        except (FIDELITY.Mismatch, KeyError) as error:
-            mismatches.append(f'generated closure member {name}: no verified match at the tag ({error})')
+        if mapping(root) != expected:
+            mismatches.append(f'old root {root} maps to {mapping(root)}, ledger names {expected} at the tag')
+    images = {mapping(name) for name in exempt}
+    tag_members, _, _ = walk(after['constants'], at_tag, images)
+
+    def scope(env, names):
+        return dict(env, constants={n: env['constants'][n] for n in names}, roots=env['roots'] & names,
+                    guards=[], attributes=[], checks=[], modules={},
+                    item_modules={key: [] for key in FIDELITY.ITEMS},
+                    derived={n: v for n, v in (env.get('derived') or {}).items() if n in names})
+
+    comparison = FIDELITY.Comparison(scope(before, members), scope(after, tag_members), mapping,
+                                     reviewed=reviewed, collect=True, plan_edits=plan_edits)
+    try:
+        comparison.run()
+    except FIDELITY.Mismatch as error:
+        lines = str(error).split('\n')
+        mismatches.extend(lines[1:] if lines[0].endswith('mismatch(es):') else lines)
+    authored = members & before['roots']
     return dict(verdict='REGRESSION' if mismatches else 'OK', closure=len(members), authored=len(authored),
-                generated=len(generated), stopped_exempt=sorted(stopped), external_references=len(external),
-                mismatches=mismatches)
+                generated=len(members) - len(authored), tag_closure=len(tag_members),
+                stopped_exempt=sorted(stopped), external_references=len(external), mismatches=mismatches)
 
 
 def load_maps(git, entry, supplied):
-    """The entry's maps as validated Renamers, each bound to its sha256: a
+    """The entry's maps as validated entry lists, each bound to its sha256: a
     committed map is read at its revision, an uncommitted one from `--map`."""
     by_sha = {}
     for path in supplied:
@@ -657,15 +697,15 @@ def load_maps(git, entry, supplied):
             raise ValueError(f'entry {entry["id"]}: map {row["path"]} sha256 differs from the ledger')
         data = json.loads(raw)
         MAP.validate_map(data)
-        renamers.append(MAP.Renamer(data['entries']))
-    return renamers or [MAP.Renamer([])]
+        renamers.append(data['entries'])
+    return renamers
 
 
 def bound(git, snapshot, revision):
     """Whether the capture is the clean tree of `revision`: same commit and
     every inventoried file byte-identical to the commit's blob."""
     candidate = snapshot['candidate']
-    if candidate['head'] != revision:
+    if candidate['head'] != revision or git.commit(revision) != revision or not candidate['files']:
         return False
     return all((lambda data: data is not None and sha256(data) == digest)(git.blob(revision, path))
                for path, digest in candidate['files'].items())
