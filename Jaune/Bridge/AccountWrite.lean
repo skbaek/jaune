@@ -1,4 +1,4 @@
-import Jaune.Execution
+import Jaune.MessageCall
 
 /-! Equations between the existing account writers and the per-operation empty-account rules. -/
 
@@ -47,6 +47,11 @@ def clearDevm (devm : Devm) (a : Address) : Devm :=
     (if (devm.state.get a).isEmpty then devm.world.storageWrites.eraseAddress a
      else devm.world.storageWrites)
 
+/-- The world-level clearing body before the shared KeySet helper. -/
+def clearWorld (w : World) (a : Address) : World :=
+  { w with storageWrites :=
+      if (w.state.get a).isEmpty then w.storageWrites.eraseAddress a else w.storageWrites }
+
 end Bridge.OldAccount
 
 theorem State.writeAccount_eraseNil (w : State) (a : Address) (f : Account → Account) :
@@ -76,6 +81,21 @@ theorem State.writeAccount_erase (w : State) (a : Address) (f : Account → Acco
       decide
     simp [State.writeAccount, Bridge.OldAccount.setAccount, Account.clearIfEmpty, Bridge.OldAccount.set, empty, nondefault]
 
+/-- The convenience setter preserves the historical default-account erasure. -/
+theorem State.set_eq_oldAccount (w : State) (a : Address) (ac : Account) :
+    w.set a ac = Bridge.OldAccount.set w a ac :=
+  State.writeAccount_eraseNil w a (fun _ => ac)
+
+/-- The presence-preserving setter still inserts every account value. -/
+theorem State.setPresent_eq_oldAccount (w : State) (a : Address) (ac : Account) :
+    w.setPresent a ac = Bridge.OldAccount.setPresent w a ac :=
+  State.writeAccount_keep w a (fun _ => ac)
+
+/-- The normalizing setter preserves the historical empty-account deletion. -/
+theorem State.setAccount_eq_oldAccount (w : State) (a : Address) (ac : Account) :
+    w.setAccount a ac = Bridge.OldAccount.setAccount w a ac :=
+  State.writeAccount_erase w a (fun _ => ac)
+
 theorem State.setBal_eq_writeAccount (w : State) (a : Address) (v : U256) :
     Bridge.OldAccount.setBal w a v = w.writeAccount .erase a (fun ac => ac.withBalance v) := by
   rw [State.writeAccount_erase]
@@ -102,6 +122,26 @@ theorem State.setStorVal_eq_writeAccount (w : State) (a : Address) (key value : 
   rw [State.writeAccount_keepIfPresent]
   rfl
 
+theorem State.setBal_eq_oldAccount (w : State) (a : Address) (v : U256) :
+    w.setBal a v = Bridge.OldAccount.setBal w a v :=
+  (State.setBal_eq_writeAccount w a v).symm
+
+theorem State.setCode_eq_oldAccount (w : State) (a : Address) (code : ByteArray) :
+    w.setCode a code = Bridge.OldAccount.setCode w a code :=
+  (State.setCode_eq_writeAccount w a code).symm
+
+theorem State.incrNonce_eq_oldAccount (w : State) (a : Address) :
+    w.incrNonce a = Bridge.OldAccount.incrNonce w a :=
+  (State.incrNonce_eq_writeAccount w a).symm
+
+theorem State.setStor_eq_oldAccount (w : State) (a : Address) (s : Storage) :
+    w.setStor a s = Bridge.OldAccount.setStor w a s :=
+  (State.setStor_eq_writeAccount w a s).symm
+
+theorem State.setStorVal_eq_oldAccount (w : State) (a : Address) (key value : U256) :
+    w.setStorVal a key value = Bridge.OldAccount.setStorVal w a key value :=
+  (State.setStorVal_eq_writeAccount w a key value).symm
+
 theorem KeySet.clearIfEmpty_eq (writes : KeySet) (state : State) (a : Address) :
     writes.clearIfEmpty state a =
       if (state.get a).isEmpty then writes.eraseAddress a else writes := rfl
@@ -111,5 +151,8 @@ theorem Benv.clearStorageWritesIfEmpty_eq (benv : Benv) (a : Address) :
 
 theorem Devm.clearStorageWritesIfEmpty_eq (devm : Devm) (a : Address) :
     devm.clearStorageWritesIfEmpty a = Bridge.OldAccount.clearDevm devm a := rfl
+
+theorem World.clearStorageWritesIfEmpty_eq (w : World) (a : Address) :
+    w.clearStorageWritesIfEmpty a = Bridge.OldAccount.clearWorld w a := rfl
 
 end Jaune
