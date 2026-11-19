@@ -1,6 +1,7 @@
 import Jaune.MessageCall.CheckedTrace
 import Jaune.MessageCall.TraceJson
 import Jaune.Bridge.G2b.CheckedTop
+import Jaune.Run.Trace
 
 /-!
 # Bridge: the staged checked tracer against the `Devm` tracer (G2b, F1e)
@@ -1112,5 +1113,64 @@ theorem MessageResult.output_eq {msg : Msg} (result : MessageResult msg) :
       processMessageCall msg := by
   rw [result.erases]
   exact Checked.preparedMessageOutput_square msg
+
+/-- The checked message run makes the same JSON sink calls and reports the
+same authorization refund at the same point as the staged transaction tracer. -/
+theorem runMessage_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
+    (trace frames : IO.FS.Handle) (authorizationRefund : Nat → IO Unit) (msg : Msg) (runId : String) :
+    (fun _ => ()) <$> runMessage (TraceJson.sink cfg state trace frames) authorizationRefund msg runId =
+      (fun _ => ()) <$> Staging.TraceTransaction.runMessage
+        (TraceJson.sink cfg state trace frames) authorizationRefund msg runId := by
+  let sink := TraceJson.sink cfg state trace frames
+  have frameEffects (f : Checked.Frame) :
+      (fun _ => ()) <$> Checked.Trace.runFrame sink f runId =
+        (fun _ => ()) <$> Trace.runFrame sink (Checked.Trace.frame f) runId := by
+    have h := congrArg (Functor.map (fun _ => ())) (runFrame_json cfg state trace frames f runId)
+    simpa only [← comp_map, Function.comp_def] using h
+  unfold Staging.TraceTransaction.runMessage
+  split
+  · rename_i fault hp
+    have hc : Checked.TopLevel.prepare msg = .error fault := by
+      unfold Checked.TopLevel.prepare
+      split <;> rename_i h <;> rw [hp] at h <;> cases h
+      rfl
+    unfold runMessage
+    split <;> rename_i h <;> rw [hc] at h <;> cases h
+    rfl
+  · rename_i reason halted hp
+    let refused : Checked.TopLevel.Refusal := match msg.benv.stat.rules.stateGas with
+      | none => .collision reason
+      | some _ => .stateGas reason msg.stateGasGrant halted.meta.accountReads halted.meta.storageReads
+    have hc : Checked.TopLevel.prepare msg = .ok (.refused refused) := by
+      unfold Checked.TopLevel.prepare
+      split <;> rename_i h <;> rw [hp] at h <;> cases h
+      cases hg : msg.benv.stat.rules.stateGas <;> simp only [refused, hg]
+    unfold runMessage
+    split <;> rename_i h <;> rw [hc] at h <;> cases h
+    simp only [Checked.Trace.runPrepared, pure_bind, map_pure]
+  · rename_i frame refund hp
+    let f := Checked.Frame.ofLegacy frame (Staging.TopLevel.prepare_frame_memory_wf hp)
+    have hc : Checked.TopLevel.prepare msg = .ok (.frame f refund) := by
+      unfold Checked.TopLevel.prepare
+      split <;> rename_i h <;> rw [hp] at h <;> cases h
+      rfl
+    have hFrame := frameEffects f
+    rw [frame_eq, Checked.Frame.toLegacy_ofLegacy] at hFrame
+    unfold runMessage
+    split <;> rename_i h <;> rw [hc] at h <;> cases h
+    simp only [← bind_pure_comp, sink] at hFrame
+    by_cases report : (msg.benv.stat.rules.stateGas.isNone && msg.target.isSome) = true
+    all_goals
+      simp only [report, Bool.false_eq_true, ite_true, ite_false, Checked.Trace.runPrepared,
+        ← bind_pure_comp, bind_assoc, pure_bind]
+      rw [hFrame]
+      unfold Trace.runFrame
+      try refine bind_congr fun _ => ?_
+      dsimp only
+      split <;> rename_i he
+      all_goals first
+        | solve | simp only [bind_assoc, pure_bind]
+        | split <;> rename_i he' <;> rw [he] at he' <;> cases he'
+          simp only [bind_assoc, pure_bind]
 
 end Jaune.Bridge.G2b.CheckedTrace
