@@ -329,16 +329,27 @@ theorem HaltOp.run_memory_accounting_output (sevm : Sevm) (pre : Devm) (l : Halt
                   cases hrun
                   exact hcharged
                 · simp only [hb] at hrun
-                  split at hrun
-                  · cases hrun
-                    dsimp only
-                    simp only [creditSelfdestructRefund_memory,
-                      creditSelfdestructRefund_output]
-                    exact ⟨(Devm.creditBeneficiary_memory _ _ _ _).trans hcharged.1,
-                      (Devm.creditBeneficiary_output _ _ _ _).trans hcharged.2⟩
-                  · cases hrun
-                    exact ⟨(Devm.creditBeneficiary_memory _ _ _ _).trans hcharged.1,
-                      (Devm.creditBeneficiary_output _ _ _ _).trans hcharged.2⟩
+                  -- Rewrite world-only projections before closing so `whnf` does not unfold
+                  -- `State.writeAccount` or `KeySet.clearIfEmpty`.
+                  have hmDel : ∀ (d : Devm) a, (addAccountToDelete d a).memory = d.memory :=
+                    fun _ _ => rfl
+                  have hoDel : ∀ (d : Devm) a, (addAccountToDelete d a).output = d.output :=
+                    fun _ _ => rfl
+                  have hmBal : ∀ (d : Devm) a v, (d.setBal a v).memory = d.memory :=
+                    fun _ _ _ => rfl
+                  have hoBal : ∀ (d : Devm) a v, (d.setBal a v).output = d.output :=
+                    fun _ _ _ => rfl
+                  have hmClear : ∀ (d : Devm) a,
+                      (d.clearStorageWritesIfEmpty a).memory = d.memory := fun _ _ => rfl
+                  have hoClear : ∀ (d : Devm) a,
+                      (d.clearStorageWritesIfEmpty a).output = d.output := fun _ _ => rfl
+                  have hmState : ∀ (d : Devm) s, (d.withState s).memory = d.memory := fun _ _ => rfl
+                  have hoState : ∀ (d : Devm) s, (d.withState s).output = d.output := fun _ _ => rfl
+                  split at hrun <;> cases hrun <;>
+                    simp only [creditSelfdestructRefund_memory, creditSelfdestructRefund_output,
+                      hmDel, hoDel, hmBal, hoBal, Devm.creditBeneficiary_memory,
+                      Devm.creditBeneficiary_output, hmClear, hoClear, hmState, hoState] <;>
+                    exact hcharged
               · simp only [assertDynamic, Except.assert, hd] at hrun
                 cases hrun
                 exact hcharged

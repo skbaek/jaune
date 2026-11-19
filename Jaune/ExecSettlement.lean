@@ -51,16 +51,20 @@ lemma State.setPresent_bal {st : Jaune.State} {a : Address} {ac : Account}
 
 lemma State.setStor_bal {st : Jaune.State} {a : Address} {s : Storage} :
     (st.setStor a s).bal = st.bal := by
-  unfold State.setStor
+  rw [State.setStor, State.writeAccount_keepIfPresent_eq]
   split
   · exact State.setPresent_bal rfl
   · exact State.set_bal rfl
 
 lemma State.incrNonce_bal {st : Jaune.State} {a : Address} :
-    (st.incrNonce a).bal = st.bal := State.set_bal (Account.clearIfEmpty_balance _)
+    (st.incrNonce a).bal = st.bal := by
+  rw [State.incrNonce, State.writeAccount_erase_eq_clear]
+  exact State.set_bal (Account.clearIfEmpty_balance _)
 
 lemma State.setCode_bal {st : Jaune.State} {a : Address} {cd : ByteArray} :
-    (st.setCode a cd).bal = st.bal := State.set_bal (Account.clearIfEmpty_balance _)
+    (st.setCode a cd).bal = st.bal := by
+  rw [State.setCode, State.writeAccount_erase_eq_clear]
+  exact State.set_bal (Account.clearIfEmpty_balance _)
 
 /-- CREATE's nonce and access-list preparation leaves the complete world
 balance map unchanged. -/

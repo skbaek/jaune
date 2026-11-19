@@ -158,6 +158,9 @@ import Jaune.FrameRun.Order
 import Jaune.Bridge.G3.FrameRun
 import Jaune.Bridge.G3.FrameViews
 
+import Jaune.AccountWriteFacts
+import Jaune.Bridge.AccountWrite
+
 namespace Jaune
 
 end Jaune

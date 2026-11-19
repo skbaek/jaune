@@ -16,6 +16,8 @@
   "JauneChecks"
  ],
  "modules": {
+  "Jaune.AccountWriteFacts": "proof",
+  "Jaune.Bridge.AccountWrite": "bridge",
   "Examples.Arithmetic": "check",
   "Examples.Execution": "check",
   "Examples.Prefix": "check",
