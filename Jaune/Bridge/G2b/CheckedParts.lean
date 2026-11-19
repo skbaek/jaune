@@ -1,6 +1,7 @@
 import Jaune.Bridge.G2b.CheckedOutcomes
 import Jaune.MessageCall.FinalParts
 import Jaune.Bridge.G2b.CheckedSimulation
+import Jaune.Bridge.G2b.PrecompileInput
 
 /-! Entry, settlement and resumption preserve each observable field when memory is forgotten. -/
 
@@ -21,11 +22,11 @@ theorem Frame.entered_toLegacy (f : Frame) (s : Frame.State) (w : World) :
 
 theorem runPrecompile_toLegacy (r : Frame.Running) (a : Address) :
     Jaune.runPrecompile r.toLegacy a = (runPrecompile r a).map Frame.Exit.toLegacy := by
-  have hp : precompileRun r.toLegacy.precompileEvm a = precompileRun r.precompileEvm a := by
-    unfold precompileRun; split <;> rfl
+  have hp : precompileRun r.toLegacy.precompileEvm a = Precompile.run r.precompileInput a :=
+    Precompile.run_ofEvm _ a
   unfold Jaune.runPrecompile runPrecompile
   rw [hp]
-  cases precompileRun r.precompileEvm a with
+  cases Precompile.run r.precompileInput a with
   | ok cost output => rfl
   | error reason cost => cases reason <;> rfl
 

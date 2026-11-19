@@ -28,6 +28,9 @@ import Jaune.MessageCall.Top
 import Jaune.MessageCall.Canonical
 import Jaune.DevmProjections
 import Jaune.Precompiles
+import Jaune.PrecompileInput
+import Jaune.PrecompileInputFacts
+import Jaune.Bridge.G2b.PrecompileInput
 import Jaune.Execution
 import Jaune.NativePrecompile
 import Jaune.Sufficiency
@@ -86,7 +89,9 @@ import Jaune.Run.Canonical
 import Jaune.Run.BlockFacts
 import Jaune.Bridge.Memory
 import Jaune.MessageCall.CheckedFrame
+import Jaune.MessageCall.CheckedContext
 import Jaune.Bridge.G2b.CheckedFrame
+import Jaune.Bridge.G2b.CheckedContext
 import Jaune.MessageCall.FrameRelations
 import Jaune.Bridge.G2b.FrameRelations
 import Jaune.Bridge.G2b.MemoryReachability
@@ -97,6 +102,7 @@ import Jaune.MessageCall.CheckedMessageOps
 import Jaune.MessageCall.CheckedParts
 import Jaune.MessageCall.CheckedStep
 import Jaune.MessageCall.CheckedDriver
+import Jaune.MessageCall.CheckedExec
 import Jaune.Bridge.G2b.CheckedIngress
 import Jaune.Bridge.G2b.CheckedSimulation
 import Jaune.Bridge.G2b.CheckedWalk
