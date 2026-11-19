@@ -147,12 +147,15 @@ def read_bundles(paths):
     return {m: FIDELITY.read_exports([path]) for m, path in paths.items()}
 
 
-def read_environments(paths, modules, selected, bundles=None):
+def read_environments(paths, modules, selected, bundles=None, roots=None):
     # Parse each module once. Merged environments share the kernel objects of
     # common dependencies, rather than duplicating those graphs per executable.
+    # `roots` limits the merge to those maximal environments (a batched compare).
     bundles = bundles if bundles is not None else read_bundles(paths)
     result = {}
     for root, members in environments(modules, selected).items():
+        if roots is not None and root not in roots:
+            continue
         merged = empty_environment()
         for member in members:
             data = bundles[member]
@@ -674,7 +677,9 @@ def capture(args):
     return dict(status='OK', snapshot=str(out / 'snapshot.json'), modules=len(selected))
 
 
-def read_snapshot(path, fidelity=True):
+def read_snapshot(path, fidelity=True, roots=None):
+    """`roots`: with fidelity, load and merge only these maximal environments (a
+    batched compare); every other environment must be compared in another batch."""
     path = Path(path)
     data = json.loads(path.read_bytes())
     if data['schema_version'] not in (2, 3) or data['status'] != 'OK' or data['build']['exit'] != 0:
@@ -732,8 +737,16 @@ def read_snapshot(path, fidelity=True):
         # Planning needs bound sources and references, not kernel graphs.
         data['export_paths'] = exports
         return data
+    data['all_environments'] = sorted(environments(candidate['modules'], selected))
+    if roots is not None:
+        unknown = sorted(set(roots) - set(data['all_environments']))
+        if unknown:
+            raise ValueError(f'unknown capture environments: {unknown}')
+        members = set().union(*(closure(candidate['modules'], [r]) for r in roots))
+        exports = {m: e for m, e in exports.items() if m in members}
     data['module_bundles'] = read_bundles(exports)
-    data['fidelity'] = read_environments(exports, candidate['modules'], selected, data['module_bundles'])
+    data['fidelity'] = read_environments(exports, candidate['modules'], selected, data['module_bundles'],
+                                         roots=None if roots is None else set(roots))
     if any(candidate['modules'][m]['is_module'] for m in selected):
         raise ValueError('module-system visibility is not yet supported by fidelity exports')
     if any(env['version'] != json.loads(header_path.read_bytes())['lean_version']
@@ -780,7 +793,10 @@ def plan_edits(plan_raw, map_raw, before_raw):
             for f in plan['files'] for e in f['edits']}
 
 
-def compare(before, after, mapping, inventory=None, reviewed=None, collect=False, plan_edits=None):
+def compare(before, after, mapping, inventory=None, reviewed=None, collect=False, plan_edits=None, batch=False):
+    """`batch`: the snapshots were read with a subset of environments; the result lists
+    the environments compared and the relocation/promotion rows checked, and
+    `combine` must show that the batches together cover every environment and row."""
     left, right = before['candidate'], after['candidate']
     if left['source_dirs'] != right['source_dirs']:
         raise ValueError('module source layout changed; explicit relocation support is required')
@@ -831,7 +847,12 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
                 raise ValueError(f'invalid reviewed quotation: {row!r}')
         records = data['quotations']
     roots = {renamer.module(root): root for root in before['fidelity']}
+    if batch and (reviewed is not None or [renamer.module(r) for r in before['all_environments']]
+                  != after['all_environments']):
+        raise ValueError('a batched compare needs unchanged environment roots and no reviewed quotations')
     if roots.keys() != after['fidelity'].keys():
+        if batch:
+            raise ValueError('a batched compare needs the same environments on both sides')
         if not any(row['kind'] in ('module', 'relocation') for row in mapping['entries']):
             raise ValueError('capture environment roots changed without module/relocation rows')
         # Relocation may move declarations between independent roots: compare
@@ -875,13 +896,18 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
                     raise
                 failures.append(f'[{root}] {error}')
             gc.collect()
-        if scoped - checked_rows:
+        if scoped - checked_rows and not batch:
             missing = [mapping['entries'][i]['old'] for i in sorted(scoped - checked_rows)]
             failures.append(f'relocation or promotion outside every compared environment: {missing}')
         if failures:
             raise FIDELITY.Mismatch('\n'.join(failures))
+        if batch:
+            batch_record = dict(environments=sorted(results), all_environments=before['all_environments'],
+                                scoped_rows=sorted(scoped), scoped_rows_checked=sorted(checked_rows))
     stale_quotations(records, used)
     result = dict(status='OK', environments=results)
+    if batch:
+        result['batch'] = batch_record
     if reviewed is not None:
         result['reviewed_quotations'] = dict(sha256=sha(reviewed[0]), records=records)
     result.update(scope='candidate-affected-local-closure',
@@ -891,6 +917,32 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
                   affected_modules=sorted(affected),
                   excluded_importers=sorted(affected & excluded))
     return result
+
+
+def combine(batches):
+    """Batched compares together: every batch OK on the same snapshots, map and
+    plan; their environments partition every maximal environment; every
+    relocation or promotion row is checked in at least one environment."""
+    keys = ('before_candidate', 'after_candidate', 'before_inventory_sha256', 'after_inventory_sha256',
+            'map_sha256', 'before_snapshot_sha256', 'after_snapshot_sha256')
+    first = batches[0]
+    for b in batches:
+        if b.get('status') != 'OK' or 'batch' not in b:
+            raise FIDELITY.Mismatch('a batch is not an OK batched compare')
+        if any(b.get(k) != first.get(k) for k in keys) or b['batch']['all_environments'] != first['batch']['all_environments'] \
+                or b['batch']['scoped_rows'] != first['batch']['scoped_rows']:
+            raise ValueError('batches compare different candidates, snapshots or maps')
+    seen = [r for b in batches for r in b['batch']['environments']]
+    if len(seen) != len(set(seen)) or sorted(seen) != first['batch']['all_environments']:
+        raise FIDELITY.Mismatch(f'batches do not partition the environments: missing '
+                                f'{sorted(set(first["batch"]["all_environments"]) - set(seen))}, repeated '
+                                f'{sorted({r for r in seen if seen.count(r) > 1})}')
+    checked = set().union(*(b['batch']['scoped_rows_checked'] for b in batches))
+    missing = sorted(set(first['batch']['scoped_rows']) - checked)
+    if missing:
+        raise FIDELITY.Mismatch(f'relocation or promotion rows outside every compared environment: {missing}')
+    return dict({k: first.get(k) for k in keys}, status='OK', batches=len(batches),
+                environments=sorted(seen), scoped_rows=len(checked))
 
 
 def main():
@@ -929,10 +981,16 @@ def main():
                       help='scripts/naming-quotations.json: reviewed capture-qualified quotations')
     comp.add_argument('--inventory', type=Path,
                       help='scripts/naming-inventory.json of both candidates: registered exclusions')
+    comp.add_argument('--environments', help='comma-separated maximal environments: compare only these '
+                      '(a batch); `combine` then checks that the batches cover every environment and row')
+    comb = commands.add_parser('combine')
+    comb.add_argument('batches', type=Path, nargs='+', help='batched compare outputs')
     args = parser.parse_args()
     try:
         if args.command == 'capture':
             result = capture(args)
+        elif args.command == 'combine':
+            result = combine([json.loads(b.read_bytes()) for b in args.batches])
         else:
             inventory = None
             if args.inventory:
@@ -942,9 +1000,14 @@ def main():
             edits = None
             if args.plan:
                 edits = plan_edits(args.plan.read_bytes(), args.map.read_bytes(), args.before.read_bytes())
-            result = compare(read_snapshot(args.before), read_snapshot(args.after),
-                             json.loads(args.map.read_bytes()), inventory, reviewed, args.collect_all, edits)
+            roots = args.environments.split(',') if args.environments else None
+            mapping = json.loads(args.map.read_bytes())
+            after_roots = None if roots is None else [FIDELITY.MAP.Renamer(mapping['entries']).module(r) for r in roots]
+            result = compare(read_snapshot(args.before, roots=roots), read_snapshot(args.after, roots=after_roots),
+                             mapping, inventory, reviewed, args.collect_all, edits, batch=roots is not None)
             result['map_sha256'] = file_sha(args.map)
+            result['before_snapshot_sha256'] = file_sha(args.before)
+            result['after_snapshot_sha256'] = file_sha(args.after)
         print(json.dumps(result, indent=2))
         return 0
     except FIDELITY.Mismatch as error:

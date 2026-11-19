@@ -146,6 +146,39 @@ class CandidateTests(unittest.TestCase):
             CHECK.compare(before, after, dict(EMPTY, entries=[row, dict(row, old='Absent.f',
                           new='Absent.f', from_module='Absent', to_module='AlsoAbsent')]))
 
+    def test_batched_compare_covers_every_environment_and_row(self):
+        graph = {m: module(m + '.lean', m) for m in ('A', 'B', 'Tool')}
+        graph['Client'] = module('Client.lean', 'client', ['A', 'B'])
+        val = dict(kernel=['definition', 1])
+        full = {}
+        for side, owner in [('before', 'A'), ('after', 'B')]:
+            snap = snapshot(graph, ['Client', 'Tool'])
+            env = union_bundle({'N.f': val}, owner)
+            env['modules'].update({'Client': [], 'A': [], 'B': []})
+            snap['fidelity'] = {'Client': env, 'Tool': union_bundle({'main': val}, 'Tool')}
+            snap['all_environments'] = ['Client', 'Tool']
+            full[side] = snap
+        row = dict(old='N.f', new='N.f', kind='relocation', layer='execution', rule='4',
+                   source='fixture', from_module='A', to_module='B')
+        mapping = dict(EMPTY, entries=[row])
+        def batch(*roots):
+            sides = [dict(full[s], fidelity={r: full[s]['fidelity'][r] for r in roots}) for s in ('before', 'after')]
+            return CHECK.compare(*sides, mapping, batch=True)
+        tool, client = batch('Tool'), batch('Client')
+        self.assertEqual((tool['batch']['scoped_rows_checked'], client['batch']['scoped_rows_checked']), ([], [0]))
+        self.assertEqual(CHECK.combine([tool, client])['environments'], ['Client', 'Tool'])
+        # The batches must partition the environments and check every relocation row.
+        with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'missing'):
+            CHECK.combine([client])
+        with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'repeated'):
+            CHECK.combine([tool, client, tool])
+        with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'rows outside'):
+            CHECK.combine([tool, dict(client, batch=dict(client['batch'], scoped_rows_checked=[]))])
+        # A batch still fails on a changed body in its own environment.
+        full['after']['fidelity']['Tool']['constants']['main'] = dict(kernel=['definition', 2])
+        with self.assertRaises(CHECK.FIDELITY.Mismatch):
+            batch('Tool')
+
     def test_relocation_to_a_new_root_compares_the_union(self):
         bundle = union_bundle
         value = dict(kernel=['definition', 1])
