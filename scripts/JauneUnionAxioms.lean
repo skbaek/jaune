@@ -34,6 +34,7 @@ import Jaune.TraceTransaction
 import Jaune.MessageCall.TraceJson
 import Jaune.Run.Trace
 import Jaune.Bridge.G2a.Old.Trace
+import Jaune.Check.TraceTransaction
 import Jaune.Bridge.G2a.Old.T8n
 import Jaune.Run.BodyFactsT8n
 

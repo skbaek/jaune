@@ -55,6 +55,7 @@
   "Jaune.Check.RlpEval": "check",
   "Jaune.Check.Sufficiency": "check",
   "Jaune.Check.Transaction": "check",
+  "Jaune.Check.TraceTransaction": "check",
   "Jaune.Check.Types": "check",
   "Jaune.DevmProjections": "proof",
   "Jaune.EC": "specification",

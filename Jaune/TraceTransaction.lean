@@ -274,44 +274,4 @@ theorem TraceTransaction.runTransaction_id_erasure (sink : Trace.Sink Id)
       Jaune.processTransaction benv bout tx index :=
   (TraceTransaction.runTransaction sink authorizationRefund benv bout tx index runId).erases
 
-/-! ### EIP-161: the sweep runs in transaction settlement
-
-`processTransaction_eq` makes `finishTransaction` the public settlement, so
-these checks pin that `processTransaction` sweeps the touched accounts its
-message call reports: an account holding only storage is erased under Gray
-Glacier and kept under Prague. -/
-
-private def TraceTransaction.sweepGuardAdr : Address := 0x2000
-
-private def TraceTransaction.sweepGuardSurvives (fork : Fork) : Bool :=
-  let state := State.setStorVal .empty TraceTransaction.sweepGuardAdr 1 1
-  let benv : Benv := { (default : Benv) with
-    state := state
-    stat := { (default : BenvStat) with fork := fork, origState := state } }
-  let prepared : TraceTransaction.PreparedTransaction :=
-    ⟨benv, .init, 0x5000, 0, 0, 0, default⟩
-  let tx : Transaction := {
-    nonce := 0
-    gasLimit := 0
-    value := 0
-    data := []
-    v := 27
-    r := []
-    s := []
-    type := .legacy 0 (some 0) }
-  let out : MsgCallOutput := {
-    gasLeft := 0
-    refundCounter := 0
-    logs := []
-    accountsToDelete := .emptyWithCapacity
-    error := none
-    returnData := []
-    touchedAccounts := (.emptyWithCapacity : AdrSet).insert TraceTransaction.sweepGuardAdr }
-  match TraceTransaction.finishTransaction prepared tx 0 state out with
-  | .ok (post, _) => post[TraceTransaction.sweepGuardAdr]?.isSome
-  | .error _ => true
-
-#guard !TraceTransaction.sweepGuardSurvives .grayGlacier
-#guard TraceTransaction.sweepGuardSurvives .prague
-
 end Jaune
