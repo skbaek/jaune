@@ -68,6 +68,24 @@ class NamingApplyTests(unittest.TestCase):
         _, problems = M.plan_file(text, index, rows)
         self.assertTrue(any('leaves the namespace' in p['reason'] for p in problems))
 
+    def test_field_use_follows_its_relocated_renamed_structure(self):
+        # `{ f := 1 }` names the field of a structure that a relocation row moves and
+        # renames (`Pilot.S` -> `Pilot.Old.S`): the field keeps its spelling, as it would
+        # under an exact row. A lexical spelling in another namespace is still requalified.
+        text = 'def a : S := { f := 1 }\ndef b := S.f a\n'
+        index = index_for(text, [('S', 'Pilot.S', 0, False), ('f', 'Pilot.S.f', 1, False),
+                                 ('S.f', 'Pilot.S.f', 0, False)])
+        rows = [dict(entry('Pilot.S', 'Pilot.Old.S'), kind='relocation', from_module='Defs', to_module='Parts'),
+                dict(entry('Pilot.S.f', 'Pilot.Old.S.f'), kind='relocation', from_module='Defs', to_module='Parts')]
+        edits, problems = M.plan_file(text, index, rows)
+        self.assertEqual(problems, [])
+        self.assertEqual([(e['old'], e['new']) for e in edits], [('S', 'Old.S'), ('S.f', 'Old.S.f')])
+        # Without following the relocated parent, the field use is refused.
+        self.assertRaisesRegex(ValueError, 'leaves the namespace', M.replacement, 'f', 'Pilot.S.f',
+                               'Pilot.Old.S.f', M.MAP.Renamer(rows))
+        self.assertEqual(M.replacement('f', 'Pilot.S.f', 'Pilot.Old.S.f', M.MAP.Renamer(rows),
+                                       follow_relocations=True), 'f')
+
     def test_private_reference_resolves_in_its_callers_destination(self):
         text = 'private def helper := 1\ndef caller := helper\n'
         private = '_private.Pilot.0.Pilot.helper'

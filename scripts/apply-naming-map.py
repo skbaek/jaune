@@ -254,7 +254,24 @@ def spelling_parts(name):
     return split_name(private[2] if private else name)
 
 
-def replacement(spelling, old, new, renamer=None, type_directed=False):
+def relocated_scope(renamer, context):
+    """The namespace a spelling resolves in, after renaming. As `Renamer.scope`,
+    and in addition the namespace of a declaration that a relocation row moves
+    and renames follows it, as an exact row's does: a field named in a structure
+    instance of a relocated, renamed structure keeps its spelling. Only the
+    planner's spelling computation uses this; the comparator is unchanged."""
+    scoped = renamer.scope(context)
+    if scoped != context:
+        return scoped
+    parts = context.split('.')
+    for i in range(len(parts), 0, -1):
+        prefix = '.'.join(parts[:i])
+        if prefix in renamer.relocations and renamer.exact.get(prefix, prefix) != prefix:
+            return '.'.join([renamer.exact[prefix]] + parts[i:])
+    return context
+
+
+def replacement(spelling, old, new, renamer=None, type_directed=False, follow_relocations=False):
     """New spelling for one compiler reference.
 
     A leading-dot constructor and a generalized field projection (`x.f`) are
@@ -274,7 +291,12 @@ def replacement(spelling, old, new, renamer=None, type_directed=False):
             raise ValueError(f'unsupported qualified leading-dot spelling {spelling!r}')
         return ('.' if leading_dot else '') + '.'.join(new_parts[-len(parts):])
     context = '.'.join(old_parts[:-len(parts)])
-    renamed = renamer.scope(context) if renamer is not None and context else context
+    if renamer is None or not context:
+        renamed = context
+    elif follow_relocations:
+        renamed = relocated_scope(renamer, context)
+    else:
+        renamed = renamer.scope(context)
     prefix = renamed.split('.') if renamed else []
     if new_parts[:len(prefix)] != prefix or len(new_parts) == len(prefix):
         raise ValueError(f'rename {old} -> {new} leaves the namespace {context or "<root>"!r} '
@@ -531,7 +553,11 @@ def plan_file(text, index, entries, renamer=None, universe=None, stats=None):
                         and new.rpartition('.')[0] == renamer(parent)):
                     a, b = span(positions, parent_loc[:4])
                     projected = a <= start and end <= b
-                renamed = replacement(spelling, const, new, renamer, type_directed=projected)
+                # A reference (not a header: a separately declared child stays under
+                # its namespace syntax, which a relocation does not rename) follows a
+                # relocated, renamed parent's namespace.
+                renamed = replacement(spelling, const, new, renamer, type_directed=projected,
+                                      follow_relocations=(start, end) not in definitions)
             if (start, end) in local_spans and len(comps) == 1:
                 # Field abbreviation `{ gas }` is `{ gas := gas }`: the field is
                 # renamed, the local variable it reads is not.
