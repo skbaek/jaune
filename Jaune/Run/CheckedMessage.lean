@@ -273,6 +273,64 @@ def prepareNative (input : Input) : Except Fault Prepared :=
 def runNative (input : Input) : Except Fault Run :=
   prepareNative input >>= fun prepared => prepared.toPreparation.run
 
+/-- The world, gas and effects reported by a settled top-level message. -/
+structure Settlement where
+  state : State
+  gasLeft : Nat := 0
+  stateGasLeft : Nat := 0
+  stateGasUsed : Int := 0
+  error : Option SettledHalt := none
+  returnData : Bytes := []
+  logs : List Log := []
+  accountsToDelete : AdrSet := .emptyWithCapacity
+  touchedAccounts : AdrSet := .emptyWithCapacity
+  accountReads : AdrSet := .emptyWithCapacity
+  storageReads : KeySet := .emptyWithCapacity
+  storageWrites : KeySet := .emptyWithCapacity
+
+/-- A refusal keeps the entry world. A settled frame reports its successful world or
+its rollback checkpoint. Reads and storage writes are observed on state-gas forks. -/
+def Run.settlement (run : Run) (input : Input) : Settlement :=
+  let entryWorld := input.checkpoint.world
+  match run with
+  | .refused (.collision reason) =>
+    { state := entryWorld.state, error := some (.halt reason) }
+  | .refused (.stateGas reason grant accountReads storageReads) =>
+    { state := entryWorld.state, error := some (.halt reason), stateGasLeft := grant
+      accountReads, storageReads, storageWrites := entryWorld.storageWrites }
+  | .frame f _ run =>
+    let result := run.result
+    let (world, substate) := match result with
+      | .success _ _ _ world substate _ => (world, some substate)
+      | _ => (f.checkpoint.world, none)
+    let settled : Settlement := {
+      state := world.state
+      gasLeft := result.gasLeft
+      error := result.error?
+      returnData := result.output
+      logs := (substate.map Substate.logs).getD []
+      accountsToDelete := (substate.map Substate.selfDestructs).getD .emptyWithCapacity }
+    match input.message.context.block.rules.stateGas with
+    | none => { settled with
+        touchedAccounts := (substate.map Substate.touchedAccounts).getD .emptyWithCapacity }
+    | some _ =>
+      let gas := result.stateGas
+      { settled with
+        stateGasLeft := gas.left
+        stateGasUsed := Int.ofNat f.message.stateGasGrant - Int.ofNat gas.left +
+          Int.ofNat gas.spilled + Int.ofNat gas.committedSpill
+        accountReads := result.trail.accountReads
+        storageReads := result.trail.storageReads
+        storageWrites := world.storageWrites }
+
 end TopLevel
+
+/-- Run a protocol system call on its current world and validate the refund counter. -/
+def processSystemTransaction (block : BlockContext) (state : State) (createdAccounts : AdrSet)
+    (target : Address) (code : ByteArray) (data : Bytes) : Except Fault TopLevel.Settlement := do
+  let input := TopLevel.systemInput block state createdAccounts target code data
+  let run ← TopLevel.runNative input
+  let _ ← run.refundCounter
+  pure (run.settlement input)
 
 end Jaune.Checked
