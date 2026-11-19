@@ -25,8 +25,8 @@
     },
     "G2a": {
       "tag": "gate/g2a",
-      "commit": null,
-      "status": "pending"
+      "commit": "3661b9987eb4bc8ff62eaf54c5348f8a7d7bf937",
+      "status": "tagged"
     },
     "G2b": {
       "tag": "gate/g2b",
@@ -365,7 +365,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical writer for every state and argument."
@@ -441,7 +447,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical writer for every state and argument."
@@ -517,7 +529,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical writer for every state and argument."
@@ -593,7 +611,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical writer for every state and argument."
@@ -669,7 +693,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical writer for every state and argument."
@@ -745,7 +775,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical writer for every state and argument."
@@ -821,7 +857,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical writer for every state and argument."
@@ -897,7 +939,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical writer for every state and argument."
@@ -973,7 +1021,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical storage-write clearing body."
@@ -1049,7 +1103,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical storage-write clearing body."
@@ -1125,7 +1185,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Unconditional equality with the historical storage-write clearing body."
@@ -1242,7 +1308,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Full message observation for every input through the bridge projection."
@@ -1364,7 +1436,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Full state and body output after settlement. The two inlined account-clear expressions belong in the waiting old definition."
@@ -1481,7 +1559,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Equality of the full result, through the run output view where applicable."
@@ -1598,7 +1682,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Equality of the full result, through the run output view where applicable."
@@ -1715,7 +1805,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Equality of the full result, through the run output view where applicable."
@@ -1832,7 +1928,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Equality of the full result, through the run output view where applicable."
@@ -1949,7 +2051,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Equality of the full result, through the run output view where applicable."
@@ -2066,7 +2174,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Equality of the full result, through the run output view where applicable."
@@ -2183,7 +2297,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Equality of the full result, through the run output view where applicable."
@@ -2300,7 +2420,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Equality of the full result, through the run output view where applicable."
@@ -2422,7 +2548,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Full equality off the decision 14 split."
@@ -2544,7 +2676,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Decision 14. Old rejection comes from the system calls, new rejection comes from decoding the whole list."
@@ -2666,7 +2804,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Phased transition auxiliary. The public importer comparison is E.stateTransitionCoreE_eq_of_not_split.",
@@ -2789,7 +2933,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Phased transition auxiliary. The public importer equality off the split is E.stateTransitionCoreE_eq_of_not_split (G2a-15); pre-cut E.stateTransitionCoreE_difference was verified at 5871922e (2de507f8) and superseded by decision 16 (a8e1bd07).",
@@ -2912,7 +3062,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Public block transition equals the ba15f397 transition off the decision 14 split. Decision 16 (a8e1bd07) supersedes the pre-cut composed difference theorem recorded at 5871922e (2de507f8)."
@@ -3039,7 +3195,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Whole adapter observation, including rejects, state and commitments."
@@ -3166,7 +3328,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Whole adapter observation, including rejects, state and commitments."
@@ -3293,7 +3461,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Whole adapter observation, including rejects, state and commitments."
@@ -3425,7 +3599,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Whole typed import result. The historical transition call remains part of the closure."
@@ -3557,7 +3737,13 @@
           "record": "step0-trials-report.md (trial-b-compare-v2 at 9a4ba794, 110 fast-path + 304 SCCs, 78.53 s, 524.01 MiB; trial-b-after captured at 09987e34 + candidate-v3.patch = 5871922e)"
         }
       ],
-      "accepted": [],
+      "accepted": [
+        {
+          "decision": "jsn-g2a-u77-accept",
+          "covers": "closure",
+          "text": "User-approved G2a closure disposition (u77 A2, 2026-11-20): strict unmodified check-bridge-ledger.py verified (1) 4c05d248 (ba15f397 + 11 optional FieldReaders lakefile lines) has 26/26 byte-identical production module inventories, raw exports, and sidecars to ba15f397, (2) 4c05d248 -> 7ae3f459 (pre-Decision-16 direct child of 3661b998) passed all 31 G2a rows / 28 distinct scopes with 0 mismatches (43,266 compared closure members; mac-g2a-precut-strict-rehearsal.json sha256 e99eac5a491503adb64fad92b3ffc3dfab7e5c7959728a3e2727cd2a7667aa24), and (3) 4c05d248 -> 3661b998 isolated all 17 non-OK rows strictly to user-approved Decision 16 (a8e1bd07; mac-g2a-3661-strict-rehearsal.json)."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Whole typed import result. The historical transition call remains part of the closure."
