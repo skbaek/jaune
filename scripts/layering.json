@@ -217,7 +217,9 @@
   "Jaune.FrameRun.SettlementViews": "proof",
   "Jaune.FrameRun.Order": "proof",
   "Jaune.Bridge.G3.FrameRun": "bridge",
-  "Jaune.Bridge.G3.FrameViews": "bridge"
+  "Jaune.Bridge.G3.FrameViews": "bridge",
+  "Jaune.Run.Import": "specification",
+  "Jaune.Bridge.Import": "bridge"
  },
  "implementation_imports": [
   {
