@@ -16,7 +16,7 @@ private theorem push_done_noSpawn {s : Frame.State} {c : Frame} {p : Staging.Pen
   cases s.push 0 <;> simp [MessageOp.Outcome.ofExcept, bind, Except.bind, pure, Except.pure]
 
 /-- A successful CALL-family spawn carries a call message directed to its code address. -/
-theorem genericCall.step_spawn_kind {ctx : CallContext} {s : Frame.State} {gas : Nat} {value : U256}
+theorem genericCall.step_spawn_kind {ctx : Jaune.CallContext} {s : Frame.State} {gas : Nat} {value : U256}
     {caller target codeAddress : Address} {transfer static : Bool} {ii il oi ol : Nat}
     {code : ByteArray} {disabled : Bool} {child : Frame} {p : Staging.Pending}
     (h : genericCall.step ctx s gas value caller target codeAddress transfer static ii il oi ol code
@@ -27,7 +27,7 @@ theorem genericCall.step_spawn_kind {ctx : CallContext} {s : Frame.State} {gas :
   · cases h; exact ⟨rfl, rfl⟩
 
 /-- The caller checkpoint and return window at a CALL-family spawn. -/
-theorem genericCall.step_spawn_checkpoint {ctx : CallContext} {s : Frame.State} {gas : Nat} {value : U256}
+theorem genericCall.step_spawn_checkpoint {ctx : Jaune.CallContext} {s : Frame.State} {gas : Nat} {value : U256}
     {caller target codeAddress : Address} {transfer static : Bool} {ii il oi ol : Nat}
     {code : ByteArray} {disabled : Bool} {child : Frame} {p : Staging.Pending}
     (h : genericCall.step ctx s gas value caller target codeAddress transfer static ii il oi ol code
@@ -39,7 +39,7 @@ theorem genericCall.step_spawn_checkpoint {ctx : CallContext} {s : Frame.State} 
 
 /-- Under state gas the child starts from the cleared caller checkpoint and carries its output
 window, gas reservoir, and new-account charge. -/
-theorem genericCallAmsterdam.step_spawn_checkpoint {ctx : CallContext} {state : StateGasRules}
+theorem genericCallAmsterdam.step_spawn_checkpoint {ctx : Jaune.CallContext} {state : StateGasRules}
     {s : Frame.State} {gas reservoir : Nat} {value : U256} {caller target codeAddress : Address}
     {transfer static : Bool} {ii il oi ol : Nat} {code : ByteArray} {disabled charged insufficient : Bool}
     {child : Frame} {p : Staging.Pending} (h : genericCallAmsterdam.step ctx state s gas reservoir value
@@ -55,7 +55,7 @@ theorem genericCallAmsterdam.step_spawn_checkpoint {ctx : CallContext} {state : 
 
 /-- The legacy creation checkpoint carries the withheld child grant, cleared return data,
 incremented creator nonce and warm destination. -/
-theorem genericCreate.step_spawn_checkpoint {ctx : CallContext} {s : Frame.State} {value : U256}
+theorem genericCreate.step_spawn_checkpoint {ctx : Jaune.CallContext} {s : Frame.State} {value : U256}
     {a : Address} {i len : Nat} {child : Frame} {p : Staging.Pending}
     (h : genericCreate.step ctx s value a i len = .spawn child p) :
     child.checkpoint = (((s.withGasLeft (s.gasLeft - except64th s.gasLeft)).withReturnData
@@ -77,7 +77,7 @@ private theorem chargeStateGas_substate {s t : Frame.State} {n : Nat} (h : s.cha
 
 /-- Amsterdam withholds child gas and drains the reservoir from the charged caller. Its
 checkpoint increments the nonce, and the creation destination remains warm. -/
-theorem genericCreateAmsterdam.step_spawn_checkpoint {ctx : CallContext} {rules : StateGasRules}
+theorem genericCreateAmsterdam.step_spawn_checkpoint {ctx : Jaune.CallContext} {rules : StateGasRules}
     {s : Frame.State} {value : U256} {a : Address} {i len : Nat} {child : Frame} {p : Staging.Pending}
     (h : genericCreateAmsterdam.step ctx rules s value a i len = .spawn child p) :
     let caller := (s.withReturnData []).recordAccountRead ctx.block.rules ctx.recipient
@@ -100,7 +100,7 @@ theorem genericCreateAmsterdam.step_spawn_checkpoint {ctx : CallContext} {rules 
        exact (Std.HashSet.mem_insert_self : a ∈ (_ : AdrSet).insert a))
     | exact (Std.HashSet.mem_insert_self : a ∈ (_ : AdrSet).insert a)
 
-private def SpawnShape (ctx : CallContext) (f : Frame) : Prop :=
+private def SpawnShape (ctx : Jaune.CallContext) (f : Frame) : Prop :=
   f.message.context.block = ctx.block ∧ f.message.context.tx = ctx.tx ∧
     ((f.message.kind = .call ∧ (∃ a, f.message.codeAddress = some a) ∧
       ∃ s : Frame.State, f.checkpoint = s.withReturnData []) ∨
@@ -142,23 +142,23 @@ private theorem walkAny {α β : Type} {P : β → Prop} {x : Except (Exceptiona
   | error e => trivial
   | ok a => exact h a
 
-private def spawnPost (ctx : CallContext) : MessageOp.Outcome → Prop
+private def spawnPost (ctx : Jaune.CallContext) : MessageOp.Outcome → Prop
   | .done _ => True
   | .spawn f _ => SpawnShape ctx f
 
-private theorem ofExcept_spawnPost {ctx : CallContext} {x : Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+private theorem ofExcept_spawnPost {ctx : Jaune.CallContext} {x : Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
     (hx : Walk (fun _ => True) (spawnPost ctx) x) : spawnPost ctx (MessageOp.Outcome.ofExcept x) := by
   cases x with
   | error p => trivial
   | ok o => exact hx
 
-private theorem tail_spawnPost {ctx : CallContext} {o : MessageOp.Outcome}
+private theorem tail_spawnPost {ctx : Jaune.CallContext} {o : MessageOp.Outcome}
     (h : ∀ f p, o = .spawn f p → SpawnShape ctx f) : spawnPost ctx o := by
   cases o with
   | done r => trivial
   | spawn f p => exact h f p rfl
 
-private theorem purePost {ctx : CallContext} (o : MessageOp.Outcome) (h : spawnPost ctx o) :
+private theorem purePost {ctx : Jaune.CallContext} (o : MessageOp.Outcome) (h : spawnPost ctx o) :
     Walk (ε := ExceptionalHalt) (fun _ => True) (spawnPost ctx) (pure o) := h
 
 local macro "spawn_tail" : tactic => `(tactic|
@@ -175,13 +175,13 @@ local macro "spawn_walk" : tactic => `(tactic| repeat' (first
   | split
   | trivial))
 
-private theorem op_spawn_post (ctx : CallContext) (s : Frame.State) (op : Jaune.MessageOp) :
+private theorem op_spawn_post (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.MessageOp) :
     spawnPost ctx (MessageOp.step ctx s op) := by
   cases op <;> simp only [MessageOp.step]
   all_goals repeat' split
   all_goals apply ofExcept_spawnPost; spawn_walk
 
-theorem MessageOp.step_spawn_cases {ctx : CallContext} {s : Frame.State} {x : Jaune.MessageOp}
+theorem MessageOp.step_spawn_cases {ctx : Jaune.CallContext} {s : Frame.State} {x : Jaune.MessageOp}
     {child : Frame} {p : Staging.Pending} (h : MessageOp.step ctx s x = .spawn child p) :
     (child.message.kind = .call ∧ ∃ a, child.message.codeAddress = some a) ∨
       (child.message.kind = .create ∧ child.message.codeAddress = none ∧
@@ -192,7 +192,7 @@ theorem MessageOp.step_spawn_cases {ctx : CallContext} {s : Frame.State} {x : Ja
   · exact .inl ⟨hk, ha⟩
   · exact .inr hc
 
-theorem MessageOp.step_spawn_call_checkpoint {ctx : CallContext} {s : Frame.State} {x : Jaune.MessageOp}
+theorem MessageOp.step_spawn_call_checkpoint {ctx : Jaune.CallContext} {s : Frame.State} {x : Jaune.MessageOp}
     {child : Frame} {p : Staging.Pending} (h : MessageOp.step ctx s x = .spawn child p)
     (hk : child.message.kind = .call) :
     ∃ post : Frame.State, child.checkpoint = post.withReturnData [] := by
@@ -202,7 +202,7 @@ theorem MessageOp.step_spawn_call_checkpoint {ctx : CallContext} {s : Frame.Stat
   · exact hc
   · rw [hk] at hc; cases hc
 
-theorem MessageOp.step_spawn_context {ctx : CallContext} {s : Frame.State} {x : Jaune.MessageOp}
+theorem MessageOp.step_spawn_context {ctx : Jaune.CallContext} {s : Frame.State} {x : Jaune.MessageOp}
     {child : Frame} {p : Staging.Pending} (h : MessageOp.step ctx s x = .spawn child p) :
     child.message.context.block = ctx.block ∧ child.message.context.tx = ctx.tx := by
   have shape := op_spawn_post ctx s x

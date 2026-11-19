@@ -26,7 +26,7 @@ private theorem next_bound {n m fuel : Nat} {x : Option (Except Fault Frame.Exit
 
 /-- The continuation from a child's settled result in the driver's spawn branch. -/
 private def afterChild (p : Staging.Pending) (saved : Frame.State) (pc : Nat)
-    (ctx : CallContext) (fuel : Nat) : Option (Except Fault Frame.Result) → Fueled Fault Frame.Exit
+    (ctx : Jaune.CallContext) (fuel : Nat) : Option (Except Fault Frame.Result) → Fueled Fault Frame.Exit
   | none => Fueled.exhausted
   | some (.error fault) => Fueled.ofExcept (.error fault)
   | some (.ok result) =>

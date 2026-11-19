@@ -1,4 +1,5 @@
 import Jaune.MessageCall.CheckedState
+import Jaune.MessageCall.CheckedContext
 
 namespace Jaune.Checked
 

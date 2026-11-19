@@ -1,4 +1,5 @@
 import Jaune.MessageCall.CheckedState
+import Jaune.MessageCall.CheckedContext
 
 /-! The Log family (S4): `LOG0`–`LOG4`.
 

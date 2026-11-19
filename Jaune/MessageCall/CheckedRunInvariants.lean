@@ -179,7 +179,7 @@ theorem applyTernary_inv (f : U256 → U256 → U256 → U256) (cost : Nat) (h :
 
 end State
 
-theorem State.assertDynamic_inv (ctx : CallContext) {s : Frame.State} {c n : Nat} (h : Inv c n s) :
+theorem State.assertDynamic_inv (ctx : Jaune.CallContext) {s : Frame.State} {c n : Nat} (h : Inv c n s) :
     Walk (Inv c 0) (fun _ => True) (s.assertDynamic ctx) :=
   Walk.assert (h.weaken (Nat.zero_le _))
 
@@ -486,12 +486,12 @@ theorem Family.run_inv (f : Family) (x : Frame.Running) {c : Nat} (h : Inv c 0 x
   | shuffle row => exact liftMachine_inv (P := Inv c 0) (ShuffleRow.step_inv row _ h)
   | memory row => exact liftMachine_inv (P := Inv c 0) (MemoryRow.step_inv row _ _ h)
   | log row =>
-    have hl := LogRow.step_inv row x.context h
-    show Walk (Inv c 0) (Inv c 0) (x.state.liftLog (row.step x.context x.state.machine))
+    have hl := LogRow.step_inv row x.context.toChecked h
+    show Walk (Inv c 0) (Inv c 0) (x.state.liftLog (row.step x.context.toChecked x.state.machine))
     unfold Frame.State.liftLog
     split <;> rename_i he <;> rw [he] at hl <;> exact hl
   | read row =>
-    have hr := ReadRow.step_inv row x.context.block.rules x.context x.state.readView h
+    have hr := ReadRow.step_inv row x.context.block.rules x.context.toChecked x.state.readView h
     show Walk (Inv c 0) (Inv c 0) (x.state.liftRead _ _)
     unfold Frame.State.liftRead
     split <;> rename_i he <;> rw [he] at hr
@@ -502,8 +502,8 @@ theorem Family.run_inv (f : Family) (x : Frame.Running) {c : Nat} (h : Inv c 0 x
   | store kind =>
     cases kind with
     | persistent =>
-      have hs := SstoreRow.step_inv (SstoreRow.ofRules x.context.block.rules) x.context.isStatic
-        (x.state.slotView x.context.recipient x.context.block.origState) h
+      have hs := SstoreRow.step_inv (SstoreRow.ofRules x.context.block.rules) x.context.toChecked.isStatic
+        (x.state.slotView x.context.toChecked.recipient x.context.toChecked.tx.originalState) h
       show Walk (Inv c 0) (Inv c 0) (x.state.liftStore _ _ _)
       unfold Frame.State.liftStore
       split <;> rename_i he <;> rw [he] at hs
@@ -513,7 +513,7 @@ theorem Family.run_inv (f : Family) (x : Frame.Running) {c : Nat} (h : Inv c 0 x
         exact hs
     | transient =>
       have hs := TstoreRow.step_inv (TstoreRow.ofRules x.context.block.rules)
-        x.context.block.rules.opcodes x.context.isStatic h
+        x.context.block.rules.opcodes x.context.toChecked.isStatic h
       show Walk (Inv c 0) (Inv c 0) (x.state.liftStore _ _ _)
       unfold Frame.State.liftStore
       split <;> rename_i he <;> rw [he] at hs
@@ -523,13 +523,13 @@ theorem Family.run_inv (f : Family) (x : Frame.Running) {c : Nat} (h : Inv c 0 x
         exact hs
 
 /-- Ordinary instructions preserve the stack bound and the frame's committed spill on either exit. -/
-theorem PlainOp.runCore_inv (pc : Nat) (ctx : CallContext) (s : Frame.State) {c : Nat}
+theorem PlainOp.runCore_inv (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat}
     (h : Inv c 0 s) (op : Jaune.PlainOp) :
     Walk (Inv c 0) (Inv c 0) (PlainOp.runCore pc ctx s op) :=
   Family.run_inv (PlainOp.family op) ⟨pc, ctx, s⟩ h
 
 /-- A successful jump leaves the same bound on its target state as an exceptional jump. -/
-theorem JumpOp.runCore_inv (pc : Nat) (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s)
+theorem JumpOp.runCore_inv (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s)
     (op : Jaune.JumpOp) : Walk (Inv c 0) (fun p => Inv c 0 p.2) (JumpOp.runCore pc ctx s op) := by
   cases op <;> simp only [JumpOp.runCore] <;> inv_walk
 
@@ -545,7 +545,7 @@ private theorem catchHalt_inv {c : Nat}
   | error e => cases e; exact h
   | ok x => exact h
 
-private theorem selfdestruct_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
+private theorem selfdestruct_inv (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
     ExitInv c (HaltOp.run ctx s .selfdestruct) := by
   cases hs : ctx.block.rules.stateGas with
   | none =>
@@ -592,7 +592,7 @@ private theorem selfdestruct_inv (ctx : CallContext) (s : Frame.State) {c : Nat}
         repeat' split
         all_goals exact hv
 
-theorem HaltOp.run_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s)
+theorem HaltOp.run_inv (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s)
     (op : Jaune.HaltOp) : ExitInv c (HaltOp.run ctx s op) := by
   cases op with
   | stop => exact h
@@ -616,7 +616,7 @@ private theorem pushZero_inv {c : Nat} {s : Frame.State} (h : Inv c 1 s) :
   intro u hu
   exact hu
 
-theorem genericCall.step_inv (ctx : CallContext) (s : Frame.State) (gas : Nat) (value : U256)
+theorem genericCall.step_inv (ctx : Jaune.CallContext) (s : Frame.State) (gas : Nat) (value : U256)
     (caller target codeAddress : Address) (transfersValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat) (code : ByteArray) (disablePrecompiles : Bool)
     {c : Nat} (h : Inv c 1 s) :
@@ -628,7 +628,7 @@ theorem genericCall.step_inv (ctx : CallContext) (s : Frame.State) (gas : Nat) (
     exact pushZero_inv h
   · exact h
 
-theorem genericCallAmsterdam.step_inv (ctx : CallContext) (state : StateGasRules)
+theorem genericCallAmsterdam.step_inv (ctx : Jaune.CallContext) (state : StateGasRules)
     (s : Frame.State) (gas reservoir : Nat) (value : U256) (caller target codeAddress : Address)
     (transfersValue isStaticcall : Bool) (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles newAccountCharged insufficientBalance : Bool) {c : Nat} (h : Inv c 1 s) :
@@ -641,7 +641,7 @@ theorem genericCallAmsterdam.step_inv (ctx : CallContext) (state : StateGasRules
     cases newAccountCharged <;> exact pushZero_inv h
   · exact h
 
-theorem genericCreate.step_inv (ctx : CallContext) (s : Frame.State) (endowment : U256)
+theorem genericCreate.step_inv (ctx : Jaune.CallContext) (s : Frame.State) (endowment : U256)
     (address : Address) (offset size : Nat) {c : Nat} (h : Inv c 1 s) :
     OutcomeInv c (genericCreate.step ctx s endowment address offset size) := by
   unfold genericCreate.step
@@ -657,7 +657,7 @@ theorem genericCreate.step_inv (ctx : CallContext) (s : Frame.State) (endowment 
     · exact pushZero_inv h
     · exact h
 
-theorem genericCreateAmsterdam.step_inv (ctx : CallContext) (rules : StateGasRules)
+theorem genericCreateAmsterdam.step_inv (ctx : Jaune.CallContext) (rules : StateGasRules)
     (s : Frame.State) (endowment : U256) (address : Address) (offset size : Nat) {c : Nat} (h : Inv c 1 s) :
     OutcomeInv c (genericCreateAmsterdam.step ctx rules s endowment address offset size) := by
   unfold genericCreateAmsterdam.step
@@ -695,37 +695,37 @@ local macro "message_inv_walk" : tactic => `(tactic| repeat' first
   | dsimp only
   | split)
 
-private theorem step_call_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
+private theorem step_call_inv (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
     OutcomeInv c (MessageOp.step ctx s .call) := by
   simp only [MessageOp.step]
   message_inv_walk
 
-private theorem step_callcode_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
+private theorem step_callcode_inv (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
     OutcomeInv c (MessageOp.step ctx s .callcode) := by
   simp only [MessageOp.step]
   message_inv_walk
 
-private theorem step_delegatecall_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
+private theorem step_delegatecall_inv (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
     OutcomeInv c (MessageOp.step ctx s .delegatecall) := by
   simp only [MessageOp.step]
   message_inv_walk
 
-private theorem step_staticcall_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
+private theorem step_staticcall_inv (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
     OutcomeInv c (MessageOp.step ctx s .staticcall) := by
   simp only [MessageOp.step]
   message_inv_walk
 
-private theorem step_create_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
+private theorem step_create_inv (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
     OutcomeInv c (MessageOp.step ctx s .create) := by
   simp only [MessageOp.step]
   message_inv_walk
 
-private theorem step_create2_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
+private theorem step_create2_inv (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s) :
     OutcomeInv c (MessageOp.step ctx s .create2) := by
   simp only [MessageOp.step]
   message_inv_walk
 
-theorem MessageOp.step_inv (ctx : CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s)
+theorem MessageOp.step_inv (ctx : Jaune.CallContext) (s : Frame.State) {c : Nat} (h : Inv c 0 s)
     (op : Jaune.MessageOp) : OutcomeInv c (MessageOp.step ctx s op) := by
   cases op with
   | call => exact step_call_inv _ _ h

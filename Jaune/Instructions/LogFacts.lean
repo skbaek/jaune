@@ -203,7 +203,7 @@ theorem PlainOp.logRow?_eq_some {op : Jaune.PlainOp} {row : LogRow} :
 /-- **Table lemma (`LOG0`–`LOG4`):** the row, lifted by `Frame.State.liftLog`, is `PlainOp.run`. -/
 theorem PlainOp.logRow?_run_eq {op : Jaune.PlainOp} {row : LogRow}
     (hrow : PlainOp.logRow? op = some row) (r : Frame.Running) :
-    r.state.liftLog (row.step r.context r.state.machine) = PlainOp.run r op := by
+    r.state.liftLog (row.step r.context.toChecked r.state.machine) = PlainOp.run r op := by
   simp only [PlainOp.run, PlainOp.runCore, PlainOp.logRow?_eq_some.1 hrow, Family.run]
 
 /-- `LOG0`–`LOG4` keep the world and the trail, and of the substate change only the logs. -/
@@ -226,7 +226,7 @@ theorem PlainOp.log_run_gasMeasure_lt {op : Jaune.PlainOp} (hrow : (PlainOp.logR
   | none => simp [h] at hrow
   | some row =>
     rw [← PlainOp.logRow?_run_eq h, Frame.State.liftLog_eq] at hok
-    cases hs : row.step r.context r.state.machine with
+    cases hs : row.step r.context.toChecked r.state.machine with
     | error p => simp [hs] at hok
     | ok p =>
       obtain ⟨m', log⟩ := p

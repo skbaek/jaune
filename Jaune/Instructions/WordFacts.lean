@@ -452,14 +452,14 @@ theorem PlainOp.wordRow?_eq_some {op : Jaune.PlainOp} {row : WordRow} :
 `Frame.State.liftMachine`, is `PlainOp.run`, by the definition of the dispatch. -/
 theorem PlainOp.wordRow?_run_eq {op : Jaune.PlainOp} {row : WordRow}
     (hrow : PlainOp.wordRow? op = some row) (r : Frame.Running) :
-    r.state.liftMachine (row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩) =
+    r.state.liftMachine (row.step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩) =
       PlainOp.run r op := by
   simp only [PlainOp.run, PlainOp.runCore, PlainOp.wordRow?_eq_some.1 hrow, Family.run]
 
 theorem PlainOp.wordRow?_run_fork_eq (f : Fork) {op : Jaune.PlainOp} {row : WordRow}
     (hrow : PlainOp.wordRow? op = some row) (r : Frame.Running)
     (hf : r.context.block.fork = f) :
-    r.state.liftMachine (row.step (Fork.ruleSet f).opcodes ⟨r.pc, r.context⟩) =
+    r.state.liftMachine (row.step (Fork.ruleSet f).opcodes ⟨r.pc, r.context.toChecked⟩) =
       PlainOp.run r op := by
   have hr : r.context.block.rules = Fork.ruleSet f := by
     simp only [BenvStat.rules, hf]
@@ -482,7 +482,8 @@ theorem PlainOp.word_run_congr_fork {op : Jaune.PlainOp} (hword : (PlainOp.wordR
     simp only [PlainOp.wordRuleReads, hrow, Prod.mk.injEq] at h
     cases op <;> simp only [PlainOp.wordRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at hrow <;> subst hrow
     case some.blobbasefee =>
-      simp only [WordRow.step, WordRow.context, BenvStat.rules, Option.some.injEq] at h ⊢
+      simp only [WordRow.step, WordRow.context, BenvStat.rules, BlockContext.rules,
+        Jaune.CallContext.toChecked, BenvStat.toBlockContext, Option.some.injEq] at h ⊢
       simp only [h.1, h.2]
       rfl
     all_goals
@@ -500,7 +501,7 @@ theorem PlainOp.word_run_gasMeasure_lt {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.wordRow?_run_eq hrow] at hok
     unfold Frame.State.liftMachine at hok
-    cases hs : row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩ r.state.machine with
+    cases hs : row.step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩ r.state.machine with
     | error e => simp [hs] at hok
     | ok m' =>
       simp only [hs, Except.ok.injEq] at hok
@@ -516,8 +517,8 @@ theorem PlainOp.word_run_memory {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.wordRow?_run_eq hrow]
     unfold Frame.State.liftMachine
-    have hm := WordRow.step_memory row r.context.block.rules.opcodes ⟨r.pc, r.context⟩ r.state.machine
-    cases hs : row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩ r.state.machine <;>
+    have hm := WordRow.step_memory row r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩ r.state.machine
+    cases hs : row.step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩ r.state.machine <;>
       simpa [hs] using hm
 
 theorem PlainOp.word_run_stateGas {op : Jaune.PlainOp}
@@ -529,8 +530,8 @@ theorem PlainOp.word_run_stateGas {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.wordRow?_run_eq hrow]
     unfold Frame.State.liftMachine
-    have hm := WordRow.step_stateGas row r.context.block.rules.opcodes ⟨r.pc, r.context⟩ r.state.machine
-    cases hs : row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩ r.state.machine <;>
+    have hm := WordRow.step_stateGas row r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩ r.state.machine
+    cases hs : row.step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩ r.state.machine <;>
       simpa [hs] using hm
 
 theorem PlainOp.word_run_world {op : Jaune.PlainOp}
@@ -541,7 +542,7 @@ theorem PlainOp.word_run_world {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.wordRow?_run_eq hrow]
     unfold Frame.State.liftMachine
-    cases row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩ r.state.machine <;> rfl
+    cases row.step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩ r.state.machine <;> rfl
 
 theorem PlainOp.word_run_substate {op : Jaune.PlainOp}
     (hword : (PlainOp.wordRow? op).isSome) (r : Frame.Running) :
@@ -551,7 +552,7 @@ theorem PlainOp.word_run_substate {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.wordRow?_run_eq hrow]
     unfold Frame.State.liftMachine
-    cases row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩ r.state.machine <;> rfl
+    cases row.step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩ r.state.machine <;> rfl
 
 theorem PlainOp.word_run_trail {op : Jaune.PlainOp}
     (hword : (PlainOp.wordRow? op).isSome) (r : Frame.Running) :
@@ -561,6 +562,6 @@ theorem PlainOp.word_run_trail {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.wordRow?_run_eq hrow]
     unfold Frame.State.liftMachine
-    cases row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩ r.state.machine <;> rfl
+    cases row.step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩ r.state.machine <;> rfl
 
 end Jaune.Checked

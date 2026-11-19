@@ -223,7 +223,7 @@ theorem committed_of_enter_run {child : Frame} {cr : Frame.Running} {r : Frame.R
   (Frame.Returns.inv (Frame.Returns.of_exec he hr)).1
 
 /-- A nonterminal instruction running directly or through a completed child. -/
-def NextOp.Run (ctx : CallContext) (s : Frame.State) (n : Jaune.NextOp) (t : Frame.State) : Prop :=
+def NextOp.Run (ctx : Jaune.CallContext) (s : Frame.State) (n : Jaune.NextOp) (t : Frame.State) : Prop :=
   ∃ pc pc', NextOp.step ⟨pc, ctx, s⟩ n = .next pc' t ∨
     ∃ child p r, NextOp.step ⟨pc, ctx, s⟩ n = .spawn child p pc' ∧ Frame.Returns child r ∧
       resume ctx.block.rules p child.checkpoint r = .ok (.ok t)

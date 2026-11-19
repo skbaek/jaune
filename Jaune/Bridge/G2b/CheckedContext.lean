@@ -17,24 +17,6 @@ through the shared one, so a body retyped onto `Checked.CallContext` agrees with
 
 namespace Jaune
 
-/-- The block record a frame reads, from the shared `BenvStat`. -/
-def BenvStat.toBlockContext (b : BenvStat) : BlockContext :=
-  { fork := b.fork, chainId := b.chainId, gasLimit := b.blockGasLimit, blockHashes := b.blockHashes
-    coinbase := b.coinbase, number := b.number, baseFeePerGas := b.baseFeePerGas
-    timestamp := b.time, prevRandao := b.prevRandao, excessBlobGas := b.excessBlobGas
-    parentBeaconBlockRoot := b.parentBeaconBlockRoot, slotNumber := b.slotNumber }
-
-/-- The transaction record a frame reads, from the shared `TenvStat` and the original state. -/
-def TenvStat.toTransactionContext (t : TenvStat) (originalState : State) : TransactionContext :=
-  { origin := t.origin, gasPrice := t.gasPrice, blobVersionedHashes := t.blobVersionedHashes
-    originalState }
-
-/-- The total forgetful map from the shared call context to the checked one. -/
-def CallContext.toChecked (c : CallContext) : Checked.CallContext :=
-  { caller := c.caller, recipient := c.recipient, value := c.value, calldata := c.calldata
-    code := c.code, depthLeft := c.depthLeft, isStatic := c.isStatic
-    tx := c.tx.toTransactionContext c.block.origState, block := c.block.toBlockContext }
-
 namespace CallContext
 
 variable (c : CallContext)

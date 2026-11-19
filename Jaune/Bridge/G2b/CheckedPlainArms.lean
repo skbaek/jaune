@@ -9,8 +9,8 @@ Old side: `Jaune.Checked.PlainOp.runCore`, `Jaune.Checked.PlainOp.run` and their
 `Jaune/MessageCall/CheckedPlain.lean`, and `Jaune.Checked.NextOp.step` from
 `Jaune/MessageCall/CheckedStep.lean`, both at `9ce48608`. They are moved here unchanged into the
 namespace `Jaune.Checked.Arms`; inside it the unchanged text resolves `PlainOp.run`,
-`PlainOp.runCore` and the helpers to the old side. `PlainOp.blockHashAt`, which both sides read,
-stays in the specification (`Jaune.Instructions.Table`), unedited.
+`PlainOp.runCore` and the helpers to the old side. Both sides use `PlainOp.blockHashAt` from `Jaune.Instructions.Table`,
+with the arm projecting the context the helper reads.
 
 New side: the family dispatch (`Jaune.Checked.Family.run`, `Jaune.Checked.PlainOp.runCore`,
 `Jaune.Checked.NextOp.step`). The rows' agreement lemmas against these arms are in
@@ -33,7 +33,7 @@ abbrev unavailable (m : Machine) : Except (ExceptionalHalt × Machine) Machine :
 
 /-- `LOG n` on the machine: pops, the charge, the static check after the charge, the read of the
 data. Returns the log to append. -/
-def logStep (n : Fin 5) (ctx : CallContext) (m : Machine) :
+def logStep (n : Fin 5) (ctx : Jaune.CallContext) (m : Machine) :
     Except (ExceptionalHalt × Machine) (Machine × Log) := do
   let ⟨memory_start_index, m⟩ ← m.popToNat
   let ⟨size, m⟩ ← m.popToNat
@@ -56,7 +56,7 @@ def liftLog (step : Machine → Except (ExceptionalHalt × Machine) (Machine × 
 
 /-- `SSTORE` under the legacy shapes (`stateGas = none`) with net metering and EIP-2929 access
 (Berlin onward). -/
-def sstoreBerlin (ctx : CallContext) (s : Frame.State) :
+def sstoreBerlin (ctx : Jaune.CallContext) (s : Frame.State) :
     Except (ExceptionalHalt × Frame.State) Frame.State := do
   let rules := ctx.block.rules
   let ⟨key, s⟩ ← s.pop
@@ -83,7 +83,7 @@ def sstoreBerlin (ctx : CallContext) (s : Frame.State) :
   .ok ((s.recordAccountRead rules ct).setStorageValue ct key new_value)
 
 /-- `SSTORE` under the other legacy shapes (`stateGas = none`): Frontier to Muir Glacier. -/
-def sstoreLegacy (ctx : CallContext) (s : Frame.State) :
+def sstoreLegacy (ctx : Jaune.CallContext) (s : Frame.State) :
     Except (ExceptionalHalt × Frame.State) Frame.State := do
   let rules := ctx.block.rules
   let ⟨key, s⟩ ← s.pop
@@ -118,7 +118,7 @@ def sstoreLegacy (ctx : CallContext) (s : Frame.State) :
 
 /-- `SSTORE` under the Amsterdam shape (`stateGas = some state`): the static check first, an
 explicit gas check, warming before the reads, and the state creation in the second dimension. -/
-def sstoreAmsterdam (state : StateGasRules) (ctx : CallContext) (s : Frame.State) :
+def sstoreAmsterdam (state : StateGasRules) (ctx : Jaune.CallContext) (s : Frame.State) :
     Except (ExceptionalHalt × Frame.State) Frame.State := do
   let rules := ctx.block.rules
   s.assertDynamic ctx
@@ -143,7 +143,7 @@ def sstoreAmsterdam (state : StateGasRules) (ctx : CallContext) (s : Frame.State
 /-- The plain instructions over the lifetime-grouped state: the successor of
 `Jaune.PlainOp.runCore`. `pc` is the program counter (`PC` reads it), `ctx` what the frame reads
 of its message, `s` its state. -/
-def runCore (pc : Nat) (ctx : CallContext) (s : Frame.State) :
+def runCore (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) :
     Jaune.PlainOp → Except (ExceptionalHalt × Frame.State) Frame.State
   /- Word family: environment pushes. -/
   | .address => s.pushItem ctx.recipient.toU256 Gas.base
@@ -193,7 +193,7 @@ def runCore (pc : Nat) (ctx : CallContext) (s : Frame.State) :
   | .blockhash => s.liftMachine fun m => do
     let ⟨blockNumberWord, m⟩ ← m.pop
     let m ← m.chargeGas Gas.blockhash
-    m.push (blockHashAt ctx blockNumberWord.toNat)
+    m.push (blockHashAt ctx.toChecked blockNumberWord.toNat)
   /- Word family: arithmetic, comparison, bitwise. -/
   | .eq => s.applyBinary .eqCheck Gas.veryLow
   | .lt => s.applyBinary .ltCheck Gas.veryLow

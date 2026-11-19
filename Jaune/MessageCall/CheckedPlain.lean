@@ -18,28 +18,30 @@ warmed key and one recorded read, `liftStore` at most one slot of the recipient 
 its refund and its reads. -/
 def Family.run (f : Family) (x : Frame.Running) :
     Except (ExceptionalHalt × Frame.State) Frame.State :=
+  let rules := x.context.block.rules
+  let context := x.context.toChecked
   match f with
-  | .word row => x.state.liftMachine (row.step x.context.block.rules.opcodes ⟨x.pc, x.context⟩)
-  | .shuffle row => x.state.liftMachine (row.step x.context.block.rules.opcodes)
-  | .memory row => x.state.liftMachine (row.step x.context.block.rules.opcodes x.context)
-  | .log row => x.state.liftLog (row.step x.context x.state.machine)
+  | .word row => x.state.liftMachine (row.step rules.opcodes ⟨x.pc, context⟩)
+  | .shuffle row => x.state.liftMachine (row.step rules.opcodes)
+  | .memory row => x.state.liftMachine (row.step rules.opcodes context)
+  | .log row => x.state.liftLog (row.step context x.state.machine)
   | .read row =>
-    x.state.liftRead x.context.block.rules (row.step x.context.block.rules x.context x.state.readView)
+    x.state.liftRead rules (row.step rules context x.state.readView)
   | .store .persistent =>
-    x.state.liftStore x.context.block.rules x.context.recipient
-      ((SstoreRow.ofRules x.context.block.rules).step x.context.isStatic
-        (x.state.slotView x.context.recipient x.context.block.origState))
+    x.state.liftStore rules context.recipient
+      ((SstoreRow.ofRules rules).step context.isStatic
+        (x.state.slotView context.recipient context.tx.originalState))
   | .store .transient =>
-    x.state.liftStore x.context.block.rules x.context.recipient
-      ((TstoreRow.ofRules x.context.block.rules).step x.context.block.rules.opcodes
-        x.context.isStatic)
+    x.state.liftStore rules context.recipient
+      ((TstoreRow.ofRules rules).step rules.opcodes
+        context.isStatic)
 
 namespace PlainOp
 
 /-- The plain instructions over the lifetime-grouped state: each runs its family's step on its
 row. `pc` is the program counter (`PC` reads it), `ctx` what the frame reads of its message, `s`
 its state. -/
-def runCore (pc : Nat) (ctx : CallContext) (s : Frame.State) (op : Jaune.PlainOp) :
+def runCore (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.PlainOp) :
     Except (ExceptionalHalt × Frame.State) Frame.State :=
   (PlainOp.family op).run ⟨pc, ctx, s⟩
 

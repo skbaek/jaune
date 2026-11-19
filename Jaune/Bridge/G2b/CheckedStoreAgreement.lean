@@ -51,12 +51,12 @@ private theorem except_assert_eq_error {ε : Type} {p : Prop} [Decidable p] {e :
     Except.assert p e = .error e := by
   unfold Except.assert; simp [h]
 
-private theorem assertDynamic_true {ctx : CallContext} {s : Frame.State}
+private theorem assertDynamic_true {ctx : Jaune.CallContext} {s : Frame.State}
     (h : ctx.isStatic = true) :
     Frame.State.assertDynamic ctx s = .error (.writeInStaticContext .none, s) := by
   simp [Frame.State.assertDynamic, Except.assert, h]
 
-private theorem assertDynamic_false {ctx : CallContext} {s : Frame.State}
+private theorem assertDynamic_false {ctx : Jaune.CallContext} {s : Frame.State}
     (h : ctx.isStatic = false) :
     Frame.State.assertDynamic ctx s = .ok () := by
   simp [Frame.State.assertDynamic, Except.assert, h]
@@ -115,7 +115,7 @@ private theorem recordStorageRead_machine (rules : ForkRules) (a : Address) (k :
 private theorem withRefund_machine (s : Frame.State) (r : Int) :
     (s.withRefund r).machine = s.machine := rfl
 
-private theorem sstoreBerlin_eq_sstoreLegacy (ctx : CallContext) (s : Frame.State)
+private theorem sstoreBerlin_eq_sstoreLegacy (ctx : Jaune.CallContext) (s : Frame.State)
     (hs2 : ctx.block.rules.sstore = ⟨true, true⟩)
     (hs3 : ctx.block.rules.access = .eip2929) :
     PlainOp.sstoreBerlin ctx s = PlainOp.sstoreLegacy ctx s := by
@@ -142,7 +142,7 @@ private theorem sstoreBerlin_eq_sstoreLegacy (ctx : CallContext) (s : Frame.Stat
           mt hs_iff.mp hg
         rw [except_assert_eq_error hg, except_assert_eq_error hgL]
 
-private theorem liftStore_sstoreLegacy_eq (ctx : CallContext) (s : Frame.State)
+private theorem liftStore_sstoreLegacy_eq (ctx : Jaune.CallContext) (s : Frame.State)
     (hs1 : ctx.block.rules.stateGas = none) :
     s.liftStore ctx.block.rules ctx.recipient
         ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic
@@ -263,7 +263,7 @@ private theorem liftStore_sstoreLegacy_eq (ctx : CallContext) (s : Frame.State)
         simp only [hlt, ↓reduceIte, withMachine_twice]
         rfl
 
-private theorem liftStore_sstoreBerlin_eq (ctx : CallContext) (s : Frame.State)
+private theorem liftStore_sstoreBerlin_eq (ctx : Jaune.CallContext) (s : Frame.State)
     (hs1 : ctx.block.rules.stateGas = none)
     (hs2 : ctx.block.rules.sstore = ⟨true, true⟩)
     (hs3 : ctx.block.rules.access = .eip2929) :
@@ -274,7 +274,7 @@ private theorem liftStore_sstoreBerlin_eq (ctx : CallContext) (s : Frame.State)
   rw [liftStore_sstoreLegacy_eq ctx s hs1]
   exact (sstoreBerlin_eq_sstoreLegacy ctx s hs2 hs3).symm
 
-private theorem liftStore_sstoreAmsterdam_eq (state : StateGasRules) (ctx : CallContext)
+private theorem liftStore_sstoreAmsterdam_eq (state : StateGasRules) (ctx : Jaune.CallContext)
     (s : Frame.State) (hs : ctx.block.rules.stateGas = some state) :
     s.liftStore ctx.block.rules ctx.recipient
         ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic
@@ -405,7 +405,7 @@ private theorem liftStore_sstoreAmsterdam_eq (state : StateGasRules) (ctx : Call
 /-- **Bridge (`SSTORE`, all `ForkRules`):** `SstoreRow.ofRules ctx.block.rules` lifted through
 `Frame.State.liftStore` equals `Checked.PlainOp.runCore pc ctx s .sstore` for every `ForkRules`
 configuration, `pc`, `CallContext`, and `Frame.State`. -/
-theorem SstoreRow.ofRules_lift_eq (pc : Nat) (ctx : CallContext) (s : Frame.State) :
+theorem SstoreRow.ofRules_lift_eq (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) :
     s.liftStore ctx.block.rules ctx.recipient
         ((SstoreRow.ofRules ctx.block.rules).step ctx.isStatic
           (s.slotView ctx.recipient ctx.block.origState)) =
@@ -427,7 +427,7 @@ theorem SstoreRow.ofRules_lift_eq (pc : Nat) (ctx : CallContext) (s : Frame.Stat
   | some state =>
     exact liftStore_sstoreAmsterdam_eq state ctx s hs1
 
-theorem TstoreRow.ofRules_lift_eq (pc : Nat) (ctx : CallContext) (s : Frame.State) :
+theorem TstoreRow.ofRules_lift_eq (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) :
     s.liftStore ctx.block.rules ctx.recipient
         ((TstoreRow.ofRules ctx.block.rules).step ctx.block.rules.opcodes ctx.isStatic) =
       PlainOp.runCore pc ctx s .tstore := by

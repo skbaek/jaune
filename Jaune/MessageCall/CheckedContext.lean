@@ -1,4 +1,5 @@
 import Jaune.MessageCall.CheckedFrame
+import Jaune.MessageCall.State
 
 /-!
 # What a checked step reads of its message (goal `jaune-shape-and-names-v1`, G2b, decision 13)
@@ -10,8 +11,8 @@ the block record is `BlockContext`, whose fields `timestamp` and `gasLimit` are 
 names them. The other fields of today's message (`target`, `gas`, `codeAddress`,
 `disablePrecompiles`, the value-transfer flag) are read only at `enter` and stay on the message.
 
-Staged: the checked frame still carries the shared `CallContext` until the run-layer retype.
-`Jaune.Bridge.G2b.CheckedContext` gives the total forgetful map from the shared record.
+The instruction rows take this typed context. The existing frame supplies it through
+`CallContext.toChecked` until frame entry carries the typed context directly.
 -/
 
 namespace Jaune.Checked
@@ -74,3 +75,27 @@ structure TopLevel.Input where
   authorizationList : List Authorization
 
 end Jaune.Checked
+
+namespace Jaune
+
+/-- The block record a frame reads, from the shared `BenvStat`. -/
+def BenvStat.toBlockContext (b : BenvStat) : BlockContext :=
+  { fork := b.fork, chainId := b.chainId, gasLimit := b.blockGasLimit, blockHashes := b.blockHashes
+    coinbase := b.coinbase, number := b.number, baseFeePerGas := b.baseFeePerGas
+    timestamp := b.time, prevRandao := b.prevRandao, excessBlobGas := b.excessBlobGas
+    parentBeaconBlockRoot := b.parentBeaconBlockRoot, slotNumber := b.slotNumber }
+
+/-- The transaction record a frame reads, from the shared `TenvStat` and the original state. -/
+def TenvStat.toTransactionContext (t : TenvStat) (originalState : State) : TransactionContext :=
+  { origin := t.origin, gasPrice := t.gasPrice, blobVersionedHashes := t.blobVersionedHashes
+    originalState }
+
+/-- The total forgetful map from the shared call context to the checked one. -/
+def CallContext.toChecked (c : CallContext) : Checked.CallContext :=
+  { caller := c.caller, recipient := c.recipient, value := c.value, calldata := c.calldata
+    code := c.code, depthLeft := c.depthLeft, isStatic := c.isStatic
+    tx := c.tx.toTransactionContext c.block.origState, block := c.block.toBlockContext }
+
+instance : Inhabited Checked.CallContext := ⟨(default : CallContext).toChecked⟩
+
+end Jaune

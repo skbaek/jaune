@@ -49,7 +49,7 @@ def devm (s : Frame.State) : Devm := (state s).toDevm
 def frame (f : Frame) : Jaune.Frame := ⟨f.message, state f.checkpoint⟩
 
 /-- A running frame of the message `msg` as the event's running machine. -/
-def evm (msg : Message) (r : Frame.Running) : Evm := ⟨r.pc, msg.sevm, devm r.state⟩
+def evm (msg : Jaune.Message) (r : Frame.Running) : Evm := ⟨r.pc, msg.sevm, devm r.state⟩
 
 /-- How a frame stopped, as the event's raw result. -/
 def exitRaw : Frame.Exit → Execution
@@ -86,7 +86,7 @@ def topFrame (msg : Msg) (isCreate : Bool) : Frame :=
       s.world, s.substate, s.trail⟩⟩
 
 /-- An entry of a frame of the message `msg` as the event's entry. -/
-def entry (msg : Message) : Frame.Entry → Jaune.Frame.Entry
+def entry (msg : Jaune.Message) : Frame.Entry → Jaune.Frame.Entry
   | .done result => .done result
   | .run r => .run (evm msg r)
 
@@ -106,14 +106,14 @@ def resumedRaw : Except Fault (Except (ExceptionalHalt × Frame.State) Frame.Sta
   | .ok (.ok s) => .ok (devm s)
 
 /-- How the driver goes on after a resumption. -/
-def continueWith (context : CallContext) (pc fuel : Nat) :
+def continueWith (context : Jaune.CallContext) (pc fuel : Nat) :
     Except Fault (Except (ExceptionalHalt × Frame.State) Frame.State) → Fueled Fault Frame.Exit
   | .error fault => Fueled.ofExcept (.error fault)
   | .ok (.error (reason, s)) => Fueled.ofExcept (.ok (.halted reason s))
   | .ok (.ok s) => Checked.execFueled ⟨pc, context, s⟩ fuel
 
 /-- The driver's spawn tail, read through `resumed`. -/
-theorem execFueled_tail (context : CallContext) (rules : ForkRules) (child : Frame)
+theorem execFueled_tail (context : Jaune.CallContext) (rules : ForkRules) (child : Frame)
     (p : Staging.Pending) (pc fuel : Nat) (settled : Except Fault Frame.Result) :
     (match (generalizing := false) some settled with
       | none => Fueled.exhausted
@@ -165,7 +165,7 @@ abbrev Result (r : Frame.Running) (fuel : Nat) := CertifiedResult (Checked.execF
 resumption, for a running frame of the message `msg`. The events and their order are those of
 `Jaune.Trace.execFueled`: fuel zero emits no instruction; child events precede the parent's next
 instruction. -/
-def execFueled {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m) (msg : Message) :
+def execFueled {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m) (msg : Jaune.Message) :
     (r : Frame.Running) → (fuel : Nat) → Jaune.Trace.Context → Nat → m (Result r fuel)
   | _, 0, context, nextFrame => do
     sink (.exited context none)
@@ -254,7 +254,7 @@ structure ExecutionResult (r : Frame.Running) where
 
 /-- Seed exactly the same sufficient fuel as the total interpreter. Exhaustion gives the
 interpreter's own internal invariant fault, with no further event. -/
-def exec {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m) (msg : Message)
+def exec {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m) (msg : Jaune.Message)
     (r : Frame.Running) (context : Jaune.Trace.Context) (nextFrame : Nat) :
     m (ExecutionResult r) := do
   let result ← execFueled sink msg r (sufficientFuel r.state.machine.gasMeasure) context nextFrame

@@ -356,13 +356,13 @@ theorem PlainOp.memoryRow?_eq_some {op : Jaune.PlainOp} {row : MemoryRow} :
 `PlainOp.run`. -/
 theorem PlainOp.memoryRow?_run_eq {op : Jaune.PlainOp} {row : MemoryRow}
     (hrow : PlainOp.memoryRow? op = some row) (r : Frame.Running) :
-    r.state.liftMachine (row.step r.context.block.rules.opcodes r.context) = PlainOp.run r op := by
+    r.state.liftMachine (row.step r.context.block.rules.opcodes r.context.toChecked) = PlainOp.run r op := by
   simp only [PlainOp.run, PlainOp.runCore, PlainOp.memoryRow?_eq_some.1 hrow, Family.run]
 
 theorem PlainOp.memoryRow?_run_fork_eq (f : Fork) {op : Jaune.PlainOp} {row : MemoryRow}
     (hrow : PlainOp.memoryRow? op = some row) (r : Frame.Running)
     (hf : r.context.block.fork = f) :
-    r.state.liftMachine (row.step (Fork.ruleSet f).opcodes r.context) = PlainOp.run r op := by
+    r.state.liftMachine (row.step (Fork.ruleSet f).opcodes r.context.toChecked) = PlainOp.run r op := by
   have hr : r.context.block.rules = Fork.ruleSet f := by simp only [BenvStat.rules, hf]
   rw [← hr]
   exact PlainOp.memoryRow?_run_eq hrow r
@@ -394,7 +394,7 @@ theorem PlainOp.memory_run_world {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.memoryRow?_run_eq hrow]
     unfold Frame.State.liftMachine
-    cases row.step r.context.block.rules.opcodes r.context r.state.machine <;> rfl
+    cases row.step r.context.block.rules.opcodes r.context.toChecked r.state.machine <;> rfl
 
 /-- By type: a Memory opcode keeps the substate, on both channels. -/
 theorem PlainOp.memory_run_substate {op : Jaune.PlainOp}
@@ -405,7 +405,7 @@ theorem PlainOp.memory_run_substate {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.memoryRow?_run_eq hrow]
     unfold Frame.State.liftMachine
-    cases row.step r.context.block.rules.opcodes r.context r.state.machine <;> rfl
+    cases row.step r.context.block.rules.opcodes r.context.toChecked r.state.machine <;> rfl
 
 /-- By type: a Memory opcode keeps the trail, on both channels. -/
 theorem PlainOp.memory_run_trail {op : Jaune.PlainOp}
@@ -416,7 +416,7 @@ theorem PlainOp.memory_run_trail {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.memoryRow?_run_eq hrow]
     unfold Frame.State.liftMachine
-    cases row.step r.context.block.rules.opcodes r.context r.state.machine <;> rfl
+    cases row.step r.context.block.rules.opcodes r.context.toChecked r.state.machine <;> rfl
 
 /-- A successful Memory opcode lowers the termination measure. -/
 theorem PlainOp.memory_run_gasMeasure_lt {op : Jaune.PlainOp}
@@ -428,7 +428,7 @@ theorem PlainOp.memory_run_gasMeasure_lt {op : Jaune.PlainOp}
   | some row =>
     rw [← PlainOp.memoryRow?_run_eq hrow] at hok
     unfold Frame.State.liftMachine at hok
-    cases hs : row.step r.context.block.rules.opcodes r.context r.state.machine with
+    cases hs : row.step r.context.block.rules.opcodes r.context.toChecked r.state.machine with
     | error e => simp [hs] at hok
     | ok m' =>
       simp only [hs, Except.ok.injEq] at hok

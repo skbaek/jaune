@@ -123,7 +123,7 @@ private theorem canonical_applyTernary (f : U256 → U256 → U256 → U256) (co
     Walk Frame.State.Canonical Frame.State.Canonical (s.applyTernary f cost) :=
   liftCanonical h _
 
-private theorem canonical_assertDynamic (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s) :
+private theorem canonical_assertDynamic (ctx : Jaune.CallContext) {s : Frame.State} (h : Frame.State.Canonical s) :
     Walk Frame.State.Canonical (fun _ => True) (s.assertDynamic ctx) := Walk.assert h
 
 open Lean Elab Tactic Meta in
@@ -206,10 +206,10 @@ theorem Family.run_canonical (f : Family) {x : Frame.Running}
   | shuffle row => exact liftCanonical h _
   | memory row => exact liftCanonical h _
   | log row =>
-    have hk := Frame.State.liftLog_keeps x.state (row.step x.context x.state.machine)
-    show Walk _ _ (x.state.liftLog (row.step x.context x.state.machine))
+    have hk := Frame.State.liftLog_keeps x.state (row.step x.context.toChecked x.state.machine)
+    show Walk _ _ (x.state.liftLog (row.step x.context.toChecked x.state.machine))
     revert hk
-    generalize x.state.liftLog (row.step x.context x.state.machine) = r
+    generalize x.state.liftLog (row.step x.context.toChecked x.state.machine) = r
     intro hk
     cases r with
     | error p =>
@@ -221,12 +221,12 @@ theorem Family.run_canonical (f : Family) {x : Frame.Running}
       rw [show s'.world = x.state.world from hk.1]; exact h
   | read row =>
     have hk := Frame.State.liftRead_keeps x.context.block.rules
-      (row.step x.context.block.rules x.context x.state.readView) x.state
+      (row.step x.context.block.rules x.context.toChecked x.state.readView) x.state
     show Walk _ _ (x.state.liftRead x.context.block.rules
-      (row.step x.context.block.rules x.context x.state.readView))
+      (row.step x.context.block.rules x.context.toChecked x.state.readView))
     revert hk
     generalize x.state.liftRead x.context.block.rules
-      (row.step x.context.block.rules x.context x.state.readView) = r
+      (row.step x.context.block.rules x.context.toChecked x.state.readView) = r
     intro hk
     cases r with
     | error p =>
@@ -238,11 +238,11 @@ theorem Family.run_canonical (f : Family) {x : Frame.Running}
       rw [show s'.world = x.state.world from hk.1]; exact h
   | store kind => cases kind <;> exact liftStore_canonical _ _ _ h
 
-theorem PlainOp.runCore_canonical (pc : Nat) (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s)
+theorem PlainOp.runCore_canonical (pc : Nat) (ctx : Jaune.CallContext) {s : Frame.State} (h : Frame.State.Canonical s)
     (op : Jaune.PlainOp) : Walk Frame.State.Canonical Frame.State.Canonical (PlainOp.runCore pc ctx s op) :=
   Family.run_canonical (PlainOp.family op) (x := ⟨pc, ctx, s⟩) h
 
-theorem JumpOp.runCore_canonical (pc : Nat) (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s)
+theorem JumpOp.runCore_canonical (pc : Nat) (ctx : Jaune.CallContext) {s : Frame.State} (h : Frame.State.Canonical s)
     (op : Jaune.JumpOp) :
     Walk Frame.State.Canonical (fun p => Frame.State.Canonical p.2) (JumpOp.runCore pc ctx s op) := by
   cases op <;> simp only [JumpOp.runCore] <;> canonical_walk
@@ -275,7 +275,7 @@ private theorem selfdestructRefund_canonical {s : Frame.State} (h : Frame.State.
   unfold Frame.State.creditSelfdestructRefund
   split <;> exact h
 
-private theorem selfdestruct_canonical (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s) :
+private theorem selfdestruct_canonical (ctx : Jaune.CallContext) {s : Frame.State} (h : Frame.State.Canonical s) :
     ExitCanonical (HaltOp.run ctx s .selfdestruct) := by
   cases hs : ctx.block.rules.stateGas with
   | none =>
@@ -325,7 +325,7 @@ private theorem selfdestruct_canonical (ctx : CallContext) {s : Frame.State} (h 
         repeat' split
         all_goals exact World.Canonical.addBalance hw _ _
 
-theorem HaltOp.run_canonical (ctx : CallContext) {s : Frame.State} (hs : Frame.State.Canonical s)
+theorem HaltOp.run_canonical (ctx : Jaune.CallContext) {s : Frame.State} (hs : Frame.State.Canonical s)
     (op : Jaune.HaltOp) {e : Frame.Exit} (h : HaltOp.run ctx s op = .ok e) : Frame.Exit.Canonical e := by
   suffices hp : ExitCanonical (HaltOp.run ctx s op) by rw [h] at hp; exact hp
   cases op with
@@ -350,7 +350,7 @@ private theorem pushZero_canonical {s : Frame.State} (h : Frame.State.Canonical 
   intro t ht
   exact ht
 
-theorem genericCall.step_canonical (ctx : CallContext) (s : Frame.State) (gas : Nat) (value : U256)
+theorem genericCall.step_canonical (ctx : Jaune.CallContext) (s : Frame.State) (gas : Nat) (value : U256)
     (caller target codeAddress : Address) (transfersValue isStaticcall : Bool)
     (inputIndex inputSize outputIndex outputSize : Nat) (code : ByteArray) (disablePrecompiles : Bool)
     (hc : ctx.block.Canonical) (h : Frame.State.Canonical s) :
@@ -362,7 +362,7 @@ theorem genericCall.step_canonical (ctx : CallContext) (s : Frame.State) (gas : 
     exact pushZero_canonical h
   · exact ⟨h, hc⟩
 
-theorem genericCallAmsterdam.step_canonical (ctx : CallContext) (state : StateGasRules)
+theorem genericCallAmsterdam.step_canonical (ctx : Jaune.CallContext) (state : StateGasRules)
     (s : Frame.State) (gas reservoir : Nat) (value : U256) (caller target codeAddress : Address)
     (transfersValue isStaticcall : Bool) (inputIndex inputSize outputIndex outputSize : Nat)
     (code : ByteArray) (disablePrecompiles newAccountCharged insufficientBalance : Bool) (hc : ctx.block.Canonical) (h : Frame.State.Canonical s) :
@@ -375,7 +375,7 @@ theorem genericCallAmsterdam.step_canonical (ctx : CallContext) (state : StateGa
     cases newAccountCharged <;> exact pushZero_canonical h
   · exact ⟨h, hc⟩
 
-theorem genericCreate.step_canonical (ctx : CallContext) (s : Frame.State) (endowment : U256)
+theorem genericCreate.step_canonical (ctx : Jaune.CallContext) (s : Frame.State) (endowment : U256)
     (address : Address) (offset size : Nat) (hc : ctx.block.Canonical) (h : Frame.State.Canonical s) :
     MessageOp.Outcome.Canonical (genericCreate.step ctx s endowment address offset size) := by
   unfold genericCreate.step
@@ -391,7 +391,7 @@ theorem genericCreate.step_canonical (ctx : CallContext) (s : Frame.State) (endo
     · exact pushZero_canonical (incrNonce_canonical h _)
     · exact ⟨incrNonce_canonical h _, hc⟩
 
-theorem genericCreateAmsterdam.step_canonical (ctx : CallContext) (rules : StateGasRules)
+theorem genericCreateAmsterdam.step_canonical (ctx : Jaune.CallContext) (rules : StateGasRules)
     (s : Frame.State) (endowment : U256) (address : Address) (offset size : Nat) (hc : ctx.block.Canonical) (h : Frame.State.Canonical s) :
     MessageOp.Outcome.Canonical (genericCreateAmsterdam.step ctx rules s endowment address offset size) := by
   unfold genericCreateAmsterdam.step
@@ -416,7 +416,7 @@ private theorem bind_ok {ε α β : Type} (a : α) (f : α → Except ε β) :
 /-- Unfold one dispatch arm and carry the canonical world across its stack pops and charges.
 Keep each opcode a separate kernel declaration. -/
 local macro "canonical_message " name:ident " for " op:term : command =>
-  `(private theorem $name (ctx : CallContext) (s : Frame.State) (hc : ctx.block.Canonical)
+  `(private theorem $name (ctx : Jaune.CallContext) (s : Frame.State) (hc : ctx.block.Canonical)
       (h : Frame.State.Canonical s) : (MessageOp.step ctx s $op).Canonical := by
     simp only [MessageOp.step]
     repeat' first
@@ -440,7 +440,7 @@ canonical_message canonical_staticcall for .staticcall
 canonical_message canonical_create for .create
 canonical_message canonical_create2 for .create2
 
-theorem MessageOp.step_canonical (ctx : CallContext) (s : Frame.State) (hc : ctx.block.Canonical)
+theorem MessageOp.step_canonical (ctx : Jaune.CallContext) (s : Frame.State) (hc : ctx.block.Canonical)
     (h : Frame.State.Canonical s) (op : Jaune.MessageOp) : (MessageOp.step ctx s op).Canonical := by
   cases op with
   | call => exact canonical_call _ _ hc h

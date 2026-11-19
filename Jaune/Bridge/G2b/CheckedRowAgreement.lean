@@ -1,4 +1,5 @@
 import Jaune.Bridge.G2b.CheckedPlainArms
+import Jaune.Bridge.G2b.CheckedContext
 import Jaune.Instructions.WordFacts
 import Jaune.Instructions.ShuffleFacts
 import Jaune.Instructions.PushFacts
@@ -33,8 +34,8 @@ private theorem liftMachine_congr {ε : Type} {f g : Machine → Except (ε × M
 `Frame.State.liftMachine`, equals `Checked.PlainOp.runCore` for every `pc`, `CallContext`,
 and `Frame.State` (hence every `Fork`). -/
 theorem PlainOp.wordRow?_runCore_eq {op : Jaune.PlainOp} {row : WordRow}
-    (hrow : PlainOp.wordRow? op = some row) (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftMachine (row.step ctx.block.rules.opcodes ⟨pc, ctx⟩) = PlainOp.runCore pc ctx s op := by
+    (hrow : PlainOp.wordRow? op = some row) (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) :
+    s.liftMachine (row.step ctx.block.rules.opcodes ⟨pc, ctx.toChecked⟩) = PlainOp.runCore pc ctx s op := by
   cases op <;> simp only [PlainOp.wordRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at hrow <;> subst hrow <;>
     dsimp only [PlainOp.runCore, Frame.State.pushItem, Frame.State.applyUnary,
       Frame.State.applyBinary, Frame.State.applyTernary]
@@ -91,7 +92,7 @@ theorem PlainOp.wordRow?_runCore_eq {op : Jaune.PlainOp} {row : WordRow}
       | error err => rfl
       | ok pair =>
         obtain ⟨x, m'⟩ := pair
-        dsimp only
+        simp only [Jaune.CallContext.toChecked_blobVersionedHashes]
     · simp only [ha, Bool.false_eq_true, ↓reduceIte]
       exact WordRow.step_unavailable (by simp [ha])
   case calldataload =>
@@ -101,7 +102,7 @@ theorem PlainOp.wordRow?_runCore_eq {op : Jaune.PlainOp} {row : WordRow}
     | error err => rfl
     | ok pair =>
       obtain ⟨x, m'⟩ := pair
-      dsimp only
+      simp only [Jaune.CallContext.toChecked_calldata]
   case blockhash =>
     refine liftMachine_congr s ?_
     simp only [WordRow.step, Machine.popWords, ↓reduceIte, bind, Except.bind]
@@ -168,7 +169,7 @@ theorem PlainOp.wordRow?_runCore_eq {op : Jaune.PlainOp} {row : WordRow}
 /-- **Bridge (`DUP1`–`DUP16`, `SWAP1`–`SWAP16`):** the row, lifted by `liftMachine`, equals
 `Checked.PlainOp.runCore` for every `pc`, `CallContext` and `Frame.State` (hence every `Fork`). -/
 theorem PlainOp.shuffleRow?_runCore_eq {op : Jaune.PlainOp} {row : ShuffleRow}
-    (hrow : PlainOp.shuffleRow? op = some row) (pc : Nat) (ctx : CallContext) (s : Frame.State) :
+    (hrow : PlainOp.shuffleRow? op = some row) (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) :
     s.liftMachine (row.step ctx.block.rules.opcodes) = PlainOp.runCore pc ctx s op := by
   cases op <;> simp only [PlainOp.shuffleRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at hrow <;>
     subst hrow <;> dsimp only [PlainOp.runCore] <;> refine liftMachine_congr s ?_ <;>
@@ -227,7 +228,7 @@ for every running frame (hence every `Fork`). -/
 theorem NextOp.pushRow_step_eq (xs : Bytes) (hxs : xs.length ≤ 32) (r : Frame.Running) :
     Step.ofHalt (r.pc + (NextOp.push xs hxs).size)
         (r.state.liftMachine ((NextOp.pushRow xs).step r.context.block.rules.opcodes
-          ⟨r.pc, r.context⟩)) =
+          ⟨r.pc, r.context.toChecked⟩)) =
       NextOp.step r (.push xs hxs) := by
   simp only [NextOp.step]
   by_cases hnil : xs = []
@@ -250,7 +251,7 @@ theorem NextOp.pushRow_step_eq (xs : Bytes) (hxs : xs.length ≤ 32) (r : Frame.
 theorem NextOp.pushRow?_step_eq {n : Jaune.NextOp} {row : WordRow}
     (hrow : NextOp.pushRow? n = some row) (r : Frame.Running) :
     Step.ofHalt (r.pc + n.size)
-        (r.state.liftMachine (row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩)) =
+        (r.state.liftMachine (row.step r.context.block.rules.opcodes ⟨r.pc, r.context.toChecked⟩)) =
       NextOp.step r n := by
   cases n <;> simp only [NextOp.pushRow?, Option.some.injEq, reduceCtorEq] at hrow
   subst hrow
@@ -258,13 +259,14 @@ theorem NextOp.pushRow?_step_eq {n : Jaune.NextOp} {row : WordRow}
 
 /-! ### Log -/
 
-theorem PlainOp.logRow_step_eq (n : Fin 5) : LogRow.step { topics := n } = PlainOp.logStep n := rfl
+theorem PlainOp.logRow_step_eq (n : Fin 5) :
+    (fun ctx : Jaune.CallContext => LogRow.step { topics := n } ctx.toChecked) = PlainOp.logStep n := rfl
 
 /-- **Bridge (`LOG0`–`LOG4`):** the row, lifted by `Frame.State.liftLog`, equals
 `Checked.PlainOp.runCore` for every `pc`, `CallContext` and `Frame.State` (hence every `Fork`). -/
 theorem PlainOp.logRow?_runCore_eq {op : Jaune.PlainOp} {row : LogRow}
-    (hrow : PlainOp.logRow? op = some row) (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftLog (row.step ctx s.machine) = PlainOp.runCore pc ctx s op := by
+    (hrow : PlainOp.logRow? op = some row) (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) :
+    s.liftLog (row.step ctx.toChecked s.machine) = PlainOp.runCore pc ctx s op := by
   cases op <;> simp only [PlainOp.logRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at hrow
   subst hrow
   rfl
@@ -275,8 +277,8 @@ theorem PlainOp.logRow?_runCore_eq {op : Jaune.PlainOp} {row : LogRow}
 equals `Checked.PlainOp.runCore`, for every `pc`, call context and frame state (hence every
 `Fork`). -/
 theorem PlainOp.memoryRow?_runCore_eq {op : Jaune.PlainOp} {row : MemoryRow}
-    (hrow : PlainOp.memoryRow? op = some row) (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftMachine (row.step ctx.block.rules.opcodes ctx) = PlainOp.runCore pc ctx s op := by
+    (hrow : PlainOp.memoryRow? op = some row) (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) :
+    s.liftMachine (row.step ctx.block.rules.opcodes ctx.toChecked) = PlainOp.runCore pc ctx s op := by
   cases op <;> simp only [PlainOp.memoryRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at hrow <;>
     subst hrow <;> dsimp only [PlainOp.runCore] <;> refine liftMachine_congr s ?_
   case mload =>
@@ -455,8 +457,8 @@ local macro "copy_tail " m:term:max cost:term:max : tactic => `(tactic| (
 frame's read view, equals `Checked.PlainOp.runCore`, for every `pc`, call context and frame state
 (hence every `Fork`), on both channels with their touches. -/
 theorem PlainOp.readRow?_runCore_eq {op : Jaune.PlainOp} {row : ReadRow}
-    (hrow : PlainOp.readRow? op = some row) (pc : Nat) (ctx : CallContext) (s : Frame.State) :
-    s.liftRead ctx.block.rules (row.step ctx.block.rules ctx s.readView) =
+    (hrow : PlainOp.readRow? op = some row) (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) :
+    s.liftRead ctx.block.rules (row.step ctx.block.rules ctx.toChecked s.readView) =
       PlainOp.runCore pc ctx s op := by
   cases op <;> simp only [PlainOp.readRow?, PlainOp.family, Option.some.injEq, reduceCtorEq] at hrow <;>
     subst hrow <;> dsimp only [PlainOp.runCore]
@@ -553,6 +555,7 @@ theorem PlainOp.readRow?_runCore_eq {op : Jaune.PlainOp} {row : ReadRow}
         read_tail m₁ g.sload
       | eip2929 =>
         read_norm
+        simp only [Jaune.CallContext.toChecked_recipient]
         by_cases hw : ((ctx.recipient, k) : Address × U256) ∈ s.substate.accessedStorageKeys
         · simp only [hw, ↓reduceIte]
           read_tail m₁ Gas.warmStorageReadCost

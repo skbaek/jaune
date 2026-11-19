@@ -7,7 +7,7 @@ structure Visit where
   path : List Nat
   kept : Bool
   frameStart : Bool
-  enclosing : List CallContext
+  enclosing : List Jaune.CallContext
 
 inductive Event where
   | visit (v : Visit)
@@ -16,7 +16,7 @@ inductive Event where
 /-- Pre-order visits and matching return boundaries. The child counter includes children
 that finished at entry. The caller's continuation stays inside the same frame. -/
 def eventsFrom {r out} (t : Frame.Run r (.exit out)) (path : List Nat)
-    (kept frameStart : Bool) (enclosing : List CallContext) (counter : Nat) : List Event :=
+    (kept frameStart : Bool) (enclosing : List Jaune.CallContext) (counter : Nat) : List Event :=
   let here : Visit := ⟨⟨r, out, t⟩, path, kept, frameStart, enclosing⟩
   match t with
   | .halt _ | .callDoneEnd .. => [.visit here]
@@ -64,14 +64,14 @@ def committedFrames {r out} (t : Frame.Run r (.exit out)) : List Kept :=
 def frames {r out} (t : Frame.Run r (.exit out)) : List Node :=
   ((visits t).filter Visit.frameStart).map Visit.node
 
-def Visit.inside (p : CallContext → Bool) (v : Visit) : Bool :=
+def Visit.inside (p : Jaune.CallContext → Bool) (v : Visit) : Bool :=
   p v.node.start.context || v.enclosing.any p
 
-theorem Visit.inside_iff (p : CallContext → Bool) (v : Visit) :
+theorem Visit.inside_iff (p : Jaune.CallContext → Bool) (v : Visit) :
     v.inside p = true ↔ p v.node.start.context = true ∨ ∃ c ∈ v.enclosing, p c = true := by
   simp [inside]
 
-def Visit.selected (p : CallContext → Bool) (withRoot : Bool) (v : Visit) : Bool :=
+def Visit.selected (p : Jaune.CallContext → Bool) (withRoot : Bool) (v : Visit) : Bool :=
   v.frameStart && (withRoot || !v.path.isEmpty) && p v.node.start.context &&
     (if withRoot then v.enclosing else v.enclosing.dropLast).all (fun c => !p c)
 
@@ -80,7 +80,7 @@ theorem Visit.inside_of_selected {p withRoot v} (h : Visit.selected p withRoot v
   simp only [selected, Bool.and_eq_true] at h
   simp [inside, h.1.2]
 
-def outermostBelow {r out} (p : CallContext → Bool) (t : Frame.Run r (.exit out)) : List Kept :=
+def outermostBelow {r out} (p : Jaune.CallContext → Bool) (t : Frame.Run r (.exit out)) : List Kept :=
   (visits t).filterMap fun v => if v.selected p false then v.toKept? else none
 
 def keptAt {r out} (a : Address) (t : Frame.Run r (.exit out)) : List Kept :=

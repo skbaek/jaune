@@ -36,7 +36,7 @@ private theorem family_store_transient {op : Jaune.PlainOp}
 
 /-- **Bridge (the plain instructions):** the family dispatch equals the per-opcode arms, for
 every program counter, call context and frame state (hence every `Fork`), on both channels. -/
-theorem PlainOp.runCore_arms (pc : Nat) (ctx : CallContext) (s : Frame.State)
+theorem PlainOp.runCore_arms (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State)
     (op : Jaune.PlainOp) : PlainOp.runCore pc ctx s op = Arms.PlainOp.runCore pc ctx s op := by
   cases h : PlainOp.family op with
   | word row =>

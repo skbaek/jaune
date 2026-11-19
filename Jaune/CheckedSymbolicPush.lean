@@ -84,7 +84,7 @@ theorem step_stackOverflow (r : Frame.Running) (bytes : Bytes) (width : bytes.le
     cost, Frame.State.withMachine]
 
 /-- Prepend a decoded PUSH to a run from its successor, preserving its end. -/
-def prepend {pc : Nat} {ctx : CallContext} {pre : Frame.State} {e : Frame.Run.End}
+def prepend {pc : Nat} {ctx : Jaune.CallContext} {pre : Frame.State} {e : Frame.Run.End}
     (bytes : Bytes) (width : bytes.length ≤ 32)
     (decoded : NextOp.At ctx.code pc (.push bytes width))
     (gas : cost bytes ≤ pre.machine.gasLeft) (room : pre.machine.stack.length < 1024)

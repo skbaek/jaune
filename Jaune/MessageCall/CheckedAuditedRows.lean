@@ -57,7 +57,7 @@ theorem Exec.descendantFrames_runOk_of_not_settlementCommits (hnot : Frame.settl
 /-- Row 32. A creation whose raw result finished but whose settlement fails (a failed code
 deposit) contributes no descendant frame. -/
 theorem Exec.descendantFrames_runOk_create_codeDepositRollback {result : Jaune.Frame.Result}
-    (_rawCommits : Exec.finished raw = true) (_hcreate : child.message.kind = Message.Kind.create)
+    (_rawCommits : Exec.finished raw = true) (_hcreate : child.message.kind = Jaune.Message.Kind.create)
     (hsettled : (raw >>= settle child) = .ok result) (hfailed : result.failed = true) :
     Exec.descendantFrames (Exec.runOk hstep henter childRun hr next) = Exec.descendantFrames next := by
   apply Exec.descendantFrames_runOk_of_not_settlementCommits
@@ -112,7 +112,7 @@ theorem Frame.enter_run_benvStat {f : Frame} {r : Frame.Running} (h : enter f = 
   rw [Frame.enter_run_context h]
 
 /-- Row 40. A CALL-family spawn hands the parent's block record to the child frame. -/
-theorem genericCall.step_spawn_benvStat {ctx : CallContext} {parent : Frame.State} {gas : Nat}
+theorem genericCall.step_spawn_benvStat {ctx : Jaune.CallContext} {parent : Frame.State} {gas : Nat}
     {value : U256} {caller target codeAddress : Address} {shouldTransferValue isStaticcall : Bool}
     {inputIndex inputSize outputIndex outputSize : Nat} {code : ByteArray} {disablePrecompiles : Bool}
     {child : Frame} {pending : Staging.Pending}
@@ -123,7 +123,7 @@ theorem genericCall.step_spawn_benvStat {ctx : CallContext} {parent : Frame.Stat
 
 /-- Proposed replacement of row 41. A CREATE-family spawn hands the parent's block and transaction
 records to the child frame. -/
-theorem genericCreate.step_spawn_context {ctx : CallContext} {s : Frame.State} {value : U256}
+theorem genericCreate.step_spawn_context {ctx : Jaune.CallContext} {s : Frame.State} {value : U256}
     {a : Address} {i len : Nat} {child : Frame} {p : Staging.Pending}
     (h : genericCreate.step ctx s value a i len = .spawn child p) :
     child.message.context.block = ctx.block ∧ child.message.context.tx = ctx.tx :=
@@ -131,14 +131,14 @@ theorem genericCreate.step_spawn_context {ctx : CallContext} {s : Frame.State} {
   ⟨hb, ht⟩
 
 /-- Row 41. A CREATE-family spawn hands the parent's block record to the child frame. -/
-theorem genericCreate.step_spawn_benvStat {ctx : CallContext} {s : Frame.State} {value : U256}
+theorem genericCreate.step_spawn_benvStat {ctx : Jaune.CallContext} {s : Frame.State} {value : U256}
     {a : Address} {i len : Nat} {child : Frame} {p : Staging.Pending}
     (h : genericCreate.step ctx s value a i len = .spawn child p) :
     child.message.context.block = ctx.block :=
   (genericCreate.step_spawn_context h).1
 
 /-- Row 42. Every spawning instruction hands the parent's block record to the child. -/
-theorem MessageOp.step_spawn_benvStat {ctx : CallContext} {s : Frame.State} {x : Jaune.MessageOp}
+theorem MessageOp.step_spawn_benvStat {ctx : Jaune.CallContext} {s : Frame.State} {x : Jaune.MessageOp}
     {child : Frame} {p : Staging.Pending} (h : MessageOp.step ctx s x = .spawn child p) :
     child.message.context.block = ctx.block :=
   (MessageOp.step_spawn_context h).1

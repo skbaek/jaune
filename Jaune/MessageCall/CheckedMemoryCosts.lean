@@ -190,7 +190,7 @@ private theorem creditBeneficiary_memoryPotential (rules : ForkRules) (a : Addre
   unfold Frame.State.creditBeneficiary
   split <;> rfl
 
-private theorem selfdestruct_memory (ctx : CallContext) (s : Frame.State)
+private theorem selfdestruct_memory (ctx : Jaune.CallContext) (s : Frame.State)
     (hn : ctx.block.rules.stateGas = none) :
     exitMemory (Machine.memoryPotential s.machine) (HaltOp.run ctx s .selfdestruct) := by
   simp only [HaltOp.run, hn]
@@ -213,7 +213,7 @@ private theorem selfdestruct_memory (ctx : CallContext) (s : Frame.State)
         split <;> exact ⟨le_of_eq_of_le (creditBeneficiary_memoryPotential _ _ _ _) h₂, zeroOutputCost _⟩
       · exact ⟨le_of_eq_of_le (creditBeneficiary_memoryPotential _ _ _ _) h₂, zeroOutputCost _⟩
 
-theorem HaltOp.run_memory_accounting_output (ctx : CallContext) (s : Frame.State) (op : Jaune.HaltOp)
+theorem HaltOp.run_memory_accounting_output (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.HaltOp)
     (hn : ctx.block.rules.stateGas = none) {e : Frame.Exit} (h : HaltOp.run ctx s op = .ok e) :
     Frame.Exit.MemoryAccounted (Machine.memoryPotential s.machine) e := by
   suffices hp : exitMemory (Machine.memoryPotential s.machine) (HaltOp.run ctx s op) by
@@ -235,7 +235,7 @@ theorem HaltOp.run_memory_accounting_output (ctx : CallContext) (s : Frame.State
 
 
 /-- Jumps can only spend execution gas. Any halt along the way stays within the same potential. -/
-theorem JumpOp.runCore_memoryPotential (pc : Nat) (ctx : CallContext) (s : Frame.State) (op : Jaune.JumpOp) :
+theorem JumpOp.runCore_memoryPotential (pc : Nat) (ctx : Jaune.CallContext) (s : Frame.State) (op : Jaune.JumpOp) :
     Walk (fun t => Machine.memoryPotential t.machine ≤ Machine.memoryPotential s.machine)
       (fun p => Machine.memoryPotential p.2.machine ≤ Machine.memoryPotential s.machine)
       (JumpOp.runCore pc ctx s op) := by

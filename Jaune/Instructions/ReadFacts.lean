@@ -312,14 +312,14 @@ read view, is `PlainOp.run`, on both channels with their touches. -/
 theorem PlainOp.readRow?_run_eq {op : Jaune.PlainOp} {row : ReadRow}
     (hrow : PlainOp.readRow? op = some row) (r : Frame.Running) :
     r.state.liftRead r.context.block.rules
-        (row.step r.context.block.rules r.context r.state.readView) = PlainOp.run r op := by
+        (row.step r.context.block.rules r.context.toChecked r.state.readView) = PlainOp.run r op := by
   simp only [PlainOp.run, PlainOp.runCore, PlainOp.readRow?_eq_some.1 hrow, Family.run]
 
 theorem PlainOp.readRow?_run_fork_eq (f : Fork) {op : Jaune.PlainOp} {row : ReadRow}
     (hrow : PlainOp.readRow? op = some row) (r : Frame.Running)
     (hf : r.context.block.fork = f) :
     r.state.liftRead (Fork.ruleSet f)
-        (row.step (Fork.ruleSet f) r.context r.state.readView) = PlainOp.run r op := by
+        (row.step (Fork.ruleSet f) r.context.toChecked r.state.readView) = PlainOp.run r op := by
   have hr : r.context.block.rules = Fork.ruleSet f := by simp only [BenvStat.rules, hf]
   rw [← hr]
   exact PlainOp.readRow?_run_eq hrow r
