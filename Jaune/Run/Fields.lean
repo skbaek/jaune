@@ -4,9 +4,8 @@ import Jaune.Run.Message
 # What a top-level message run hands on (goal `jaune-shape-and-names-v1`, W2 cut B2)
 
 The transaction and the system calls read a top-level message run through the functions below,
-one per value they need. Each is a function of the `MessageRun`, branching on its preparation and
-result and, where the two lanes differ, once on the rules' state gas. There is no output record:
-`MsgCallOutput` dissolves into these functions (W2 design revision 3, §3.1, the table of output fields).
+one per value they need. Each reads the `TopLevelRun` and accounts for its
+preparation, result, and the rules' state-gas mode.
 
 * A frame that ran reports its result: the world after it, its gas, output and settled halt; on
   success its substate's logs, deletions and (without state gas) touched accounts. With state gas
@@ -18,12 +17,9 @@ result and, where the two lanes differ, once on the rules' state gas. There is n
 
 The refund counter is the one value that can fault: a successful frame whose substate refund is
 negative breaks an internal invariant. The transaction reads it first; a system call reads it and
-discards it. A run whose preparation is a frame always has a result (`Message.run_result`); the
-refund counter of a run without one is an internal fault too, so every function here is total over
-every `MessageRun`.
-
-Staged under `Jaune.Staging` beside `MessageRun.output`; a G2a bridge proves that
-`MessageRun.output` is these functions assembled.
+discards it. A run whose preparation is a frame always has a result
+(`TopLevel.run_result`). The refund counter faults if given a frame preparation
+without a result.
 -/
 
 namespace Jaune
@@ -72,7 +68,7 @@ def TopLevelRun.refundCounter (run : TopLevelRun) : Except Fault Nat :=
     | none => (authorizationRefund + ·) <$> refund
     | some _ => refund
   | .frame _ _, none =>
-    -- Unreachable: `Message.run` records a result for every frame (`Message.run_result`).
+    -- Unreachable: `TopLevel.run` records a result for every frame (`TopLevel.run_result`).
     .error (.internal (.invariant (.text "message run: a frame without a result")))
   | .refused .., _ => .ok 0
 

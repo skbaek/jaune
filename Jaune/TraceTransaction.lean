@@ -2,10 +2,9 @@ import Jaune.MessageCall.Trace
 import Jaune.Transaction
 
 /-!
-Transaction-side tracing, kept outside the core executor's import closure.
-Each traced message operation runs the top frame with `Trace.runFrame` and
-renders its settled result exactly as `processMessageCall` does, so its
-certificate is the public operation itself.
+Transaction-side tracing certificates, kept outside the core executor's import
+closure. `Jaune.Run.Trace` uses them to tie the observed results to the pure
+message and transaction runners.
 -/
 namespace Jaune
 open Jaune

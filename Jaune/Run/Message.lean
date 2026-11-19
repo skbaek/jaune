@@ -1,25 +1,18 @@
 import Jaune.Transaction.Parts
 
 /-!
-# The top-level message run (goal `jaune-shape-and-names-v1`, W2 cut B1)
+# The top-level message run
 
-A top-level message call is a preparation followed by at most one frame:
+`TopLevel.prepare` either supplies the frame to run or refuses before entry.
+Without state gas, it checks creation collisions, or authorizes a call and
+resolves delegation. Under the state-gas rules, `prepareTopLevelAmsterdam`
+prepares the machine. Its exceptional halt is a refusal. The preparation
+never reverts (`prepareTopLevelAmsterdam_error_ne_revert`), and ordinary
+authorization fails only by a fault (`TopLevel.applyAuthorizations_error_isFault`).
 
-* `TopLevel.prepare` builds the frame the message runs, or refuses it. Without state gas a
-  creation is refused on an address collision, and a call is first authorized and its delegation
-  resolved; with state gas `prepareTopLevelAmsterdam` prepares the machine, and an exceptional
-  halt during preparation is a refusal. Its faults are cryptographic or internal: preparation
-  never reverts (`prepareTopLevelAmsterdam_error_ne_revert`), and the ordinary authorization fails
-  only by a fault (`processMessageCall.authorize_error_isFault`).
-* `Message.run` runs the prepared frame by entering it from its checkpoint, running the code and
-  settling, as `Frame.runTop` does, and records what it ran in a `MessageRun`.
-* `MessageRun.output` renders the run as the transaction reads it, through `Frame.output`,
-  `Frame.outputAmsterdam` and `settleTopLevelPreparationFailure`.
-
-The Amsterdam preparation helpers are the public definitions in `Jaune.Transaction.Parts`; the
-preparation lemmas below are stated over them. This module stages the new message run under
-`Jaune.Staging`.
-A G2a bridge relates it to the existing message call.
+`TopLevel.run` enters the prepared frame from its checkpoint, runs it, and
+settles it as `Frame.runTop` does. The resulting `TopLevelRun` retains the
+preparation, optional interpreter entry machine, and optional frame result.
 -/
 
 namespace Jaune
@@ -346,7 +339,7 @@ def TopLevel.run (msg : Msg) : Except Fault TopLevelRun := do
 
 
 
-/-- `Message.run` records a result exactly for a frame. -/
+/-- `TopLevel.run` records a result exactly for a frame. -/
 theorem TopLevel.run_result {msg : Msg} {run : TopLevelRun} (h : TopLevel.run msg = .ok run) :
     run.entry = msg ∧
       ((∃ f a, run.preparation = .frame f a) ↔ run.result.isSome) := by

@@ -6,7 +6,7 @@ import Jaune.Run.BodyFacts
 
 t8n's tolerant transaction loop runs each accepted transaction at the accepted count, so it keeps
 `Body.Prefix.Receipts` with the accepted transactions' receipts; its deposit step therefore reads
-the receipts so far (`Staging.parseDepositRequests_of_receipts`). Adapter class: it is a theorem
+the receipts so far (`parseDepositRequests_of_receipts`). Adapter class: it is a theorem
 about the adapter's own driver.
 -/
 

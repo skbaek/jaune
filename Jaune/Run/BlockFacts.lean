@@ -1,23 +1,14 @@
 import Jaune.Run.Block
 
 /-!
-# What a block transition establishes (goal `jaune-shape-and-names-v1`, W2 unit W2-C)
+# What a block transition establishes
 
-Four facts about the staged block transition `E.stateTransitionCoreE`, restated from the ones
-`Jaune.Transaction` states over the old `stateTransitionCoreE` and proved without the bridges:
-
-* `E.stateTransitionCoreE_mapError`: embedding the static transition's error type commutes with
-  the whole algorithm, failures included;
-* `E.stateTransitionCoreE_header`: a success validated the header;
-* `E.stateTransitionCoreE_preserves_chainId`: a success keeps the chain identity;
-* `E.stateTransitionCoreE_eq_ok`: a success validated the header, appended the block, and its
-  state's root is the header's.
-
-The statements are the old ones with the staged transition in place of the old. The state-root
-half of `_eq_ok` reads `Block.check`'s third comparison (`Block.check_stateRoot`) where the old
-read `stateTransitionChecks`'s.
-
-Staged under `Jaune.Staging.E`, beside the transition.
+`stateTransitionCoreE_mapError` shows that the error embedding commutes
+with the whole transition. A successful transition validated the header
+(`stateTransitionCoreE_header`), preserves the chain ID
+(`stateTransitionCoreE_preserves_chainId`), and appended the block with the
+state root in its header (`stateTransitionCoreE_eq_ok`). The state-root
+proof uses `Block.check_stateRoot`.
 -/
 
 namespace Jaune

@@ -5,7 +5,7 @@ import Jaune.Run.Fields
 
 A system call is a top-level message run from the system address with the fixed system gas
 (`systemTransactionMessage`), on a freshly begun transaction. Its consumers read the
-`MessageRun` through its functions (`Jaune.Run.Fields`) instead of a rendered output record:
+`TopLevelRun` through the functions in `Jaune.Run.Fields`.
 
 * `processSystemTransaction` runs the message and returns the run. As before, a run whose refund
   counter faults fails the call; the counter itself is not read further.
@@ -16,7 +16,6 @@ A system call is a top-level message run from the system address with the fixed 
   collect the request contracts' return data and incorporate each call's reads and writes.
 * `beaconRootsCall` and `historyStorageCall` are the two pre-execution calls.
 
-Staged under `Jaune.Staging`; the bridges are in gate G2a's bridge modules.
 -/
 
 namespace Jaune

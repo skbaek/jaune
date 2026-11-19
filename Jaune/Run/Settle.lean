@@ -2,18 +2,17 @@ import Jaune.Run.Transaction
 import Jaune.Run.Fields
 
 /-!
-# The transaction settles its message run (goal `jaune-shape-and-names-v1`, W2 cut B2)
+# Transaction settlement
 
-`processTransaction` is check, prepare, the top-level message run, settle, and the settlement reads
-the `MessageRun` itself through its functions (`Jaune.Run.Fields`): no output record crosses from
-the message call to the settlement. The refund counter is read first; its fault (a negative
-substate refund) is a virtual-machine error of the transaction, as before.
+`Transaction.run` admits and prepares the transaction, runs the top-level
+message, and applies `Transaction.settleRun`. Settlement reads the
+`TopLevelRun` through the functions in `Jaune.Run.Fields`. It reads the
+refund counter first. A negative substate refund is a virtual-machine error
+of the transaction.
 
-Cut A's `Transaction.settle` and `processTransaction` (`Jaune.Run.Transaction`) took the rendered
-output; these supersede them. Because those names are already staged, these are staged one level
-deeper, in `Jaune.Staging.B2`; at the switch they take the final names `Transaction.settle` and
-`processTransaction`, and cut A's two definitions go with the old side. The bridges are in
-gate G2a's bridge modules.
+Settlement refunds the sender, pays the coinbase, applies account deletions
+and the touched-account sweep, and records the receipt and block access list.
+It returns the transaction's observations alongside the updated block output.
 -/
 
 namespace Jaune

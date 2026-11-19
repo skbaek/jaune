@@ -16,11 +16,9 @@ what the header commits to against what the body produced.
 * `BlockRun` is a block's run: the fork, the parent chain, the block, its decoded transactions, the
   record of each body operation and the body's final prefix. `BlockRun.run` builds it with
   `Body.run`; `BlockRun.commitments` are the final prefix's.
-* `E.stateTransitionCoreE` is the typed block transition over these: header validation, the ommer
+* `stateTransitionCoreE` is the typed block transition over these: header validation, the ommer
   check, the importer's body (`Body.importer`, a streaming fold), `Block.check`, append.
 
-Staged under `Jaune.Staging` (the transition under `Jaune.Staging.E`, since cut D staged
-`Jaune.Staging.stateTransitionCoreE`); the bridges are in gate G2a's bridge modules.
 -/
 
 namespace Jaune

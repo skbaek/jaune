@@ -1,23 +1,13 @@
 import Jaune.Run.Message
 
 /-!
-# The transaction in phases (goal `jaune-shape-and-names-v1`, W2 cut A)
+# Transaction admission and preparation
 
-A transaction runs in four phases:
-
-1. `Transaction.check`: begin the transaction, enter it in the block's transaction trie, and run
-   the admission checks (`recoverValidationSender`, `validateTransaction`, `checkTransaction`).
-2. `Transaction.prepare`: charge the fee and bump the sender's nonce, build the transaction
-   environment and the top-level message (`prepareMessage`).
-3. The top-level message call (`processMessageCall`, the run of `Jaune.Run.Message`).
-4. `Transaction.settle`: refund the sender, pay the coinbase, apply the deletions and the sweep,
-   write the receipt and incorporate the block access list, in today's order.
-
-`processTransaction` is their composition. This split was a local copy in the tracer
-(`TraceTransaction.prepareTransaction`/`finishTransaction`); here it is the definition. Also here,
-the staged transaction validators and block-access-list helpers from `Jaune.Transaction.Parts`.
-Staged under `Jaune.Staging`
-until the switch commit; the bridges are in gate G2a's bridge modules.
+`Transaction.admit` begins the transaction, inserts it into the block's
+transaction trie, and runs the admission checks. `Transaction.prepare`
+charges the fee, increments the sender's nonce, and builds the transaction
+environment and top-level message. `Jaune.Run.Settle` composes these phases
+with message execution and transaction settlement.
 -/
 
 namespace Jaune

@@ -5,11 +5,11 @@ import Jaune.Run.BodyFactsRlp
 /-!
 # Theorems of the body run (goal `jaune-shape-and-names-v1`, W2 cut F)
 
-Plain theorems about the staged body (`Jaune.Run.Body`); no old side.
+Theorems about the body runner in `Jaune.Run.Body`.
 
 * **The runner is the run.** `Body.fold_eq_run`: the fold the importer and the transition tool
   use keeps exactly the run's last prefix. `Body.run_append` and `Body.fold_append` split a run.
-* **What each step writes.** `B2.Transaction.run_writes` gives the block output a transaction
+* **What each step writes.** `Transaction.run_writes` gives the block output a transaction
   leaves: its gas settlement, the transaction and receipt entered under the index's key
   (`rlpKey`), the receipt's logs appended, and the access list. Every other operation leaves the
   gas counters, the tries, the receipt keys and the logs alone (`Body.step_frame`).
@@ -23,7 +23,7 @@ Plain theorems about the staged body (`Jaune.Run.Body`); no old side.
   of the receipts in index order (`parseDepositRequests_of_receipts`).
 * **Legacy gas accounting.** Under a legacy schedule every step keeps
   `BlockOutput.LegacyGasAccounting`, hence the importer's body
-  (`Staging.applyBody_legacyGasAccounting`, the restatement of `applyBody_legacyGasAccounting`).
+  (`applyBody_legacyGasAccounting`).
 * **Prefix summaries.** `Body.Prefix.Summary` is what later steps read of a prefix: the state,
   the execution, state, sender and blob gas used so far, and the receipts so far. Every operation
   but the access-list build and its limit check reads only the summary, and the summary after it
@@ -291,7 +291,7 @@ theorem Body.step_frame {benv : Benv} {p q : Body.Prefix} {op : BodyOp} {r : OpR
     cases h
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- A transaction step, read through `B2.Transaction.run_writes`. -/
+/-- A transaction step, read through `Transaction.run_writes`. -/
 theorem Body.step_transaction_output {benv : Benv} {p q : Body.Prefix} {tx : Transaction}
     {index : Nat} {r : OpRun} (h : Body.step benv p (.transaction tx index) = .ok (r, q)) :
     ∃ (settlement : TransactionGasSettlement) (txBlobGasUsed : Nat)
@@ -594,7 +594,7 @@ theorem Body.importer_legacyGasAccounting {benv : Benv} (hnone : benv.stat.rules
   exact Body.fold_legacyGasAccounting hnone _ (Body.Prefix.init benv.state) _
     BlockOutput.init_legacyGasAccounting h
 
-/-- **`applyBody_legacyGasAccounting` over the staged body.** A successful legacy block body
+/-- **Legacy gas accounting in the block body.** A successful legacy block body
 keeps the legacy block-counter relation: every step does. -/
 theorem applyBody_legacyGasAccounting {benv : Benv} (hnone : benv.stat.rules.stateGas = none)
     {txs : List (Bytes ⊕ Transaction)} {ommers : List Header} {wds : List Withdrawal} {p}
@@ -864,7 +864,7 @@ theorem BlockRun.run_fork {f : Fork} {ch : BlockChain} {block : Block} {r : Bloc
     · cases h
     · cases h; rfl
 
-/-- **The transition over the block run.** The staged transition validates the header, checks the
+/-- **The transition over the block run.** The transition validates the header, checks the
 ommers, runs the block, checks the run's commitments, and appends the block with the run's final
 state. -/
 theorem stateTransitionCoreE_eq_run {ε : Type} (embed : TransitionError → ε) (f : Fork)

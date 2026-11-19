@@ -1,8 +1,8 @@
 -- T8n.lean : the `t8n` transition-tool frontend.
 --
--- This module is runner-side infrastructure, not EVM semantics: it is
--- imported by `Main.lean` only, and deliberately not from the `Jaune` library
--- root, so that no proof client depends on it.
+-- This module provides runner-side infrastructure for the fixture runner,
+-- trace JSON, and proofs about the transition tool. It sits outside the
+-- `Jaune.lean` import closure.
 --
 -- `t8n` is the interface every transition tool in the ecosystem exposes: read
 -- a pre-state (`alloc`), an environment (`env`) and a transaction list
@@ -12,19 +12,14 @@
 -- `conformance_target` in `scripts/sources.json`; that revision owns every
 -- field spelling, presence condition and ordering reproduced here.
 --
--- The seam this module sits on is the one `stateTransitionE` uses. That
--- function validates a *sealed header*, builds a `Benv` from a chain and a
--- header, runs the body, computes six values, and *compares* them against the
--- header. A transition tool has no sealed header to compare against, so this
--- module drops `validateHeader` and `stateTransitionChecks`, builds the
--- `Benv` from `env` directly, runs the same body functions, computes the same
--- six values with the same functions, and *emits* rather than compares. No
--- EVM semantics is reimplemented: `processTransaction`, `processWithdrawals`,
--- `processGeneralPurposeRequests` and `processUncheckedSystemTransaction` are
--- called unchanged.
+-- `stateTransitionE` validates the sealed header, derives the `Benv` from
+-- the chain and header, runs the body, and checks the header's commitments.
+-- The transition tool builds its `Benv` from `env` and shares the
+-- importer's body operations through `Body.step` and `Body.fold`. It emits the
+-- resulting state and commitments for the caller.
 --
 -- The one genuinely new piece of control flow is the reject-and-continue
--- fold. `applyTransactions` stops at the first failing transaction because a
+-- fold. Block import stops at the first failing transaction because a
 -- block containing one is invalid; a transition tool instead *records* the
 -- rejection and carries on, having discarded the failed transaction's state.
 -- Rollback is therefore not a new mechanism -- it is not threading the new
@@ -886,7 +881,7 @@ def refuseOutOfRange (txs : List (TransactionParse Transaction)) : IO Unit :=
 ----------------- THE TRANSITION ------------------
 
 /-- Why one transaction did not contribute to the block: it never became a
-`Tx`, or it became one and `processTransaction` refused it. Both are recorded
+`Transaction`, or it became one and `Transaction.run` refused it. Both are recorded
 by constructor and rendered once, at the emission boundary. -/
 inductive RejectReason : Type
   | parse (e : TransactionParseError)
@@ -1027,7 +1022,7 @@ proof of stake, so of the runnable forks only London pays one. `ommers` is
 
 EIP-7928 (goal C): the two pre-execution system calls are incorporated into
 the block-level access list at index 0, each transaction at its index plus one
-inside `processTransaction`, and the post-execution operations -- withdrawals,
+inside `Transaction.settleRun`, and the post-execution operations -- withdrawals,
 then each request call -- at the count of accepted transactions plus
 one (the driver sets the index once, before withdrawals; Appendix E item 2 of
 the goal, as renumbered by ethereum/execution-specs#3849). The list is built

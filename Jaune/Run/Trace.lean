@@ -2,22 +2,18 @@ import Jaune.TraceTransaction
 import Jaune.Run.Settle
 
 /-!
-# Tracing the message run and the transaction (goal `jaune-shape-and-names-v1`, W2 cut B2)
+# Tracing message and transaction runs
 
-The tracer's transaction driver over the staged phases: it prepares the transaction, traces the
-top-level message run and settles the run, and hands the trace summary the `MessageRun` instead of
-a rendered output record. Each traced operation carries a certificate that its value is the public
-operation: `runMessage` is `Message.run`, `runTransaction` is the state and block output of the
-transaction run `B2.Transaction.run` (the production pipeline). The transaction is settled by
-`B2.Transaction.settleRun`, the settlement of that run, so the value is computed by the run itself.
+`TraceTransaction.runMessage` returns a certified observation of
+`TopLevel.run`. It records the prepared frame's entry and settlement events
+with `Trace.runFrame`, runs the frame at most once, and retains the machine
+that entered the interpreter. Without state gas, a call reports its
+authorization refund before frame entry.
 
-The traced message run enters the prepared frame from its checkpoint exactly once, with the entry
-and settlement events `Trace.runFrame` emits, so a precompile or the interpreter never runs twice;
-it records the machine the frame entered the interpreter with, as `Message.run` does. Without state
-gas a call reports its authorization refund before the frame is entered, as before.
-
-Staged under `Jaune.Staging.TraceTransaction`; it supersedes `Jaune.TraceTransaction`'s message
-and transaction drivers at the switch. Like that module it sits outside `Jaune.lean`'s import
+`TraceTransaction.runTransaction` prepares the transaction, traces its
+top-level message, and settles it with `Transaction.settleRun`. It certifies
+the same state and block output as `Transaction.run` and retains the message
+run for the trace summary. This module sits outside the `Jaune.lean` import
 closure.
 -/
 
@@ -55,7 +51,7 @@ def TraceTransaction.runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink
       pure ⟨(do let r ← settled; pure ⟨msg, .frame f a, some evm, some r⟩), by
         simp only [TopLevel.run, hprep, bind, Except.bind, hentry, settled, result.erases]⟩
 
-/-- The traced message run's value is `Message.run`. -/
+/-- The traced message run's value is `TopLevel.run`. -/
 theorem TraceTransaction.runMessage_erasure {msg : Msg} (result : Certified (TopLevel.run msg)) :
     result.value = TopLevel.run msg := result.erases
 
@@ -76,7 +72,7 @@ structure TraceTransaction.TransactionResult (benv : Benv) (bout : BlockOutput) 
       fun prepared => (TopLevel.run prepared.msg).toOption)
 
 /-- Execute one transaction with synchronous instruction observations: check and prepare it,
-trace its message run, settle the run as `B2.Transaction.run` settles it. The certificate connects
+trace its message run, settle the run as `Transaction.run` settles it. The certificate connects
 the value to the public pipeline; the message run is never run a second time. -/
 def TraceTransaction.runTransaction {m : Type → Type} [Monad m] (sink : Trace.Sink m)
     (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction)

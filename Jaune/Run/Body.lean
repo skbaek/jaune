@@ -22,12 +22,9 @@ A block body is a run: a list of operations, each a step from one prefix of the 
   gated by its rule.
 
 The transition tool's body is its own driver over the same `Body.step`
-(`T8n.runBlockchain`, `Jaune.T8n`). The transaction step is cut B2's `processTransaction` and the system calls
-are cut B2's (`Jaune.Run.Settle`, `Jaune.Run.SystemCall`), which still read and write a
-`BlockOutput`; the step passes the prefix through `Body.Prefix.toBlockOutput` and back.
-
-Staged under `Jaune.Staging`; the bridges, including the difference theorem for the decode order,
-are in gate G2a's bridge modules.
+(`T8n.runBlockchain`, `Jaune.T8n`). The transaction step calls `Transaction.run`.
+Transaction and system-call steps use `Body.Prefix.toBlockOutput` to pass the
+prefix's block output to their runners.
 -/
 
 namespace Jaune

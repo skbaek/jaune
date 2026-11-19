@@ -52,8 +52,8 @@ one short (at the end of the file), ever elaborates.
 
 ## Message calls in four parts
 
-[ShapePilot.lean](ShapePilot.lean) runs two message calls through `enter`,
-`exec`, `Frame.runTop` and `processMessageCall`. A Prague caller CALLs a child
+[ShapePilot.lean](ShapePilot.lean) runs two message calls with
+`TopLevel.run`. A Prague caller CALLs a child
 that writes storage and a log and then reverts with the byte `0xAA`; the caller
 receives the byte and keeps neither the slot nor the log. An Amsterdam caller
 CREATEs a child whose code deposit runs out of gas; the caller keeps its

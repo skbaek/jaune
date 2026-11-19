@@ -1,33 +1,16 @@
 import Jaune.Run.Block
 
 /-!
-# Canonicality through the staged chain (goal `jaune-shape-and-names-v1`, W2 unit W2-C)
+# Canonicality of message, transaction, and block runs
 
-Every successful run of the staged chain leaves a canonical state: the top-level message run
-(`Message.run`, read through `MessageRun.state`), the transaction (`B2.Transaction.run`), the
-system calls, one body operation (`Body.step`), a run of operations (`Body.run`, `Body.fold`), the
-importer's body (`Body.importer`, `applyBody`), and the block transition
-(`E.stateTransitionCoreE`). These restate, over the staged definitions, the canonical family that
-`Jaune.Transaction` states over the old chain (`processMessageCall_canonical`,
-`processTransaction_canonical`, the system-call canonicals, `applyTransactions_canonical`,
-`withdrawalsPass_canonical`, `requestsPass_canonical`, `applyBody_canonical`,
-`stateTransitionCoreE_canonical`), and are proved without the bridges.
+Successful runs preserve canonical state through `TopLevel.run`,
+`Transaction.run`, the system calls, `Body.step`, the body runners and folds,
+and `stateTransitionCoreE`. The message and system-call theorems observe
+`TopLevelRun.state`. The body theorems use the prefix's state and require
+canonicality of the block environment's original state.
 
-Where the new types differ the statement follows them:
-
-* the message level has no output pair: `Message.run_canonical` concludes `run.state.Canonical`
-  for the `MessageRun` (the old `processMessageCall_canonical` concluded it of the pair's state);
-* the system calls return a `MessageRun`, so their canonicals conclude `run.state.Canonical`;
-* the body's passes (`applyTransactions`, `withdrawalsPass`, `requestsPass`, `payRewards`) are
-  operations of one step, so their canonicals are the one `Body.step_canonical` and its folds,
-  which ask of the block environment only its original state (`benv.stat.Canonical`): the step
-  reads the prefix's state in place of the environment's.
-
-The Amsterdam preparation canonicals are proved here, publicly, over the public preparation
-helpers of `Jaune.Transaction.Parts`; `Jaune.Transaction` uses them.
-
-Staged under `Jaune.Staging` (the transaction under `Jaune.Staging.B2`, the block transition under
-`Jaune.Staging.E`), beside the definitions they speak of.
+The Amsterdam preparation theorems are stated over the public preparation
+helpers in `Jaune.Transaction.Parts`.
 -/
 
 namespace Jaune
@@ -301,7 +284,7 @@ theorem Transaction.settleRun_canonical {checked : Transaction.Admitted}
     (State.Canonical.addBal (State.Canonical.addBal h _ _) _ _) _ _) _ _
 
 /-- **A successful transaction run leaves a canonical state**: the fee movements go through
-`incrNonce`/`subBal`/`addBal`, the call itself through `Message.run`, and settlement follows the
+`incrNonce`/`subBal`/`addBal`, the call itself through `TopLevel.run`, and settlement follows the
 fork's SELFDESTRUCT rule. -/
 theorem Transaction.run_canonical {benv : Benv} (h : benv.Canonical)
     {bout : BlockOutput} {tx : Transaction} {index : Nat} {p}

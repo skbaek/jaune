@@ -26,8 +26,8 @@ individual declarations one by one.
 
 | class | meaning | what it covers |
 |---|---|---|
-| **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The eight canonical execution modules: `Jaune.ExecFrame`, `Jaune.Exec`, `Jaune.ExecDeriv`, `Jaune.ExecSettlement`, `Jaune.ExecChronology`, `Jaune.MessageExecution`, `Jaune.SymbolicPush`, `Jaune.SymbolicArith`. Also the entry-point families named in sections 3–5, such as `exec`, `Frame.runTop`, `processMessageCall`, `processTransaction`, the checked chain types, and `State`/`Storage` access, and the lemma families and modules named in section 6. |
-| **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration (section 6 lifts named families out of this class) in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.Sufficiency`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Also the `Fueled` residue lemmas in `Jaune.Fuel`, and the cached driver `Jaune.Implementation.CachedDriver` (an implementation module whose declarations are private, reached through `Jaune.MessageCall.Exec`). Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.FixtureTransition`, `Jaune.MessageCall.Trace`, `Jaune.MessageCall.TraceJson`, `Jaune.TraceTransaction`, `Jaune.Adapter.IO`, `Main`, `MemoryProbe`, `TraceMain`) are adapters, and the executable checks (`Jaune.BLSGuards` and the `Jaune.Check.*` modules, library `JauneChecks`) are checks; neither is proof surface. `scripts/layering.json` classifies every module. `Jaune.Bridge.*` modules hold a convergence gate's old definitions and their bridge theorems until the gate's tagged commit, and are deleted in the commit after it. |
+| **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The eight canonical execution modules: `Jaune.ExecFrame`, `Jaune.Exec`, `Jaune.ExecDeriv`, `Jaune.ExecSettlement`, `Jaune.ExecChronology`, `Jaune.MessageExecution`, `Jaune.SymbolicPush`, `Jaune.SymbolicArith`. Also the entry-point families named in sections 3–5, such as `exec`, `Frame.runTop`, `TopLevel.run`, `Transaction.run`, the checked chain types, and `State`/`Storage` access, and the lemma families and modules named in section 6. |
+| **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration (section 6 lifts named families out of this class) in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.Sufficiency`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Also the `Fueled` residue lemmas in `Jaune.Fuel`, and the cached driver `Jaune.Implementation.CachedDriver` (an implementation module whose declarations are private, reached through `Jaune.MessageCall.Exec`). Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.FixtureTransition`, `Jaune.MessageCall.Trace`, `Jaune.MessageCall.TraceJson`, `Jaune.TraceTransaction`, `Jaune.Run.Trace`, `Jaune.Run.BodyFactsT8n`, `Jaune.Adapter.IO`, `Main`, `MemoryProbe`, `TraceMain`) are adapters, and the executable checks (`Jaune.BLSGuards` and the `Jaune.Check.*` modules, library `JauneChecks`) are checks; neither is proof surface. `scripts/layering.json` classifies every module. `Jaune.Bridge.*` modules hold a convergence gate's old definitions and their bridge theorems until the gate's tagged commit, and are deleted in the commit after it. |
 | **experimental** | Implemented and gated, but expected to change as its upstream target moves. | The Amsterdam lane: `amsterdamRules`, the `StateGasRules` / `stateGas` dimension, `genericCallAmsterdam` / `genericCreateAmsterdam` and their lemmas, the state-gas arms of `settle` and `resume`, and the `BlockAccessList` / `BlockAccessList*` family. Also the reusable axiom-audit command `#expect_axioms` (`scripts/AxiomAudit.lean`, library `Assurance`). |
 
 A module's class applies to all of its declarations unless this guide says
@@ -181,9 +181,8 @@ already complete.
 ## 3. Frame, message and transaction execution
 
 **Demonstrated task.** [`Examples/ShapePilot.lean`](Examples/ShapePilot.lean)
-runs two message calls through `enter`, `exec`, `Frame.runTop` and
-`processMessageCall` and checks what they leave with `#guard`: a Prague CALL
-whose child writes storage and a log and then reverts with one byte, and an
+runs two message calls with `TopLevel.run`. Two `#guard` checks cover a Prague
+CALL whose child writes storage and a log and then reverts with one byte, and an
 Amsterdam CREATE whose code deposit runs out of gas. Its theorems
 `call_return_survival` and `create_return_survival` apply the `resume` lemmas
 below at any spawn that a top-level frame's run reaches, without unfolding a
@@ -262,13 +261,22 @@ part in a module of its own below it.
 - `Jaune.ExecSettlement` gives commitment: `Execution.commits`,
   `Frame.settlementCommits` and `Frame.raw_commits_of_settlementCommits`.
 
-**Transactions.** `processMessageCall` is the top-level message dispatch. It
-runs the steps before the frame (without state gas, the collision test for a
-creation and the authorization and delegation resolution for a call; under
-Amsterdam's rules, `prepareTopLevelAmsterdam`), then the frame by
-`Frame.runTop`, and renders its
-result for the transaction with `Frame.output` or `Frame.outputAmsterdam`.
-`processTransaction benv bout tx index` validates and applies one transaction.
+**Transactions.** `TopLevel.run` runs a top-level message call. `TopLevel.prepare`
+either refuses before any frame or supplies a frame. Without state gas,
+preparation handles the creation collision check or resolves authorization
+and delegation for a call. Under Amsterdam's state-gas rules it uses
+`prepareTopLevelAmsterdam`. The frame enters from its checkpoint, runs, and
+settles as in `Frame.runTop`. The `TopLevelRun` retains the message,
+its preparation, the machine that entered the interpreter when there was
+one, and the frame's result when a frame ran.
+
+`Transaction.run benv bout tx index` applies one transaction through
+`Transaction.admit`, `Transaction.prepare`, `TopLevel.run`, and
+`Transaction.settleRun`. Settlement reads the message run through functions
+such as `TopLevelRun.gasLeft` and `TopLevelRun.logs`. A successful transaction
+returns its `TransactionRun`, which includes the message run, gas settlement
+and receipt, together with the updated `BlockOutput`.
+
 The command-line entry for transactions is `lake exe jaune t8n`; see
 [README.md](README.md#the-t8n-transition-tool). `jaune t8n --forks` prints the
 forks it accepts. `Jaune.T8n` is runner code, not proof surface.
@@ -314,7 +322,7 @@ and `addBlockToChainAt_eq_canonical` relate them to the checked forms.
 
 - Canonicity is preserved: `stateTransitionAt_canonical`,
   `stateTransitionUsing_canonical`, `applyBody_canonical`,
-  `processTransaction_canonical`.
+  `Transaction.run_canonical` and `TopLevel.run_canonical`.
 - The chain ID is preserved: `stateTransitionUsing_preserves_chainId`,
   `addBlockToChainUsing_preserves_chainId`.
 

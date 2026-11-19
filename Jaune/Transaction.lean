@@ -14,25 +14,10 @@ open Jaune
 /-!
 # Transaction, block, and chain processing
 
-This module holds every declaration that consumes the message-call driver
-(`Frame.runTop`, `Jaune.MessageCall`), starting at `processMessageCall.create`,
-together with the transaction, block, and chain-level machinery built on top of
-it. It was split out of `Jaune.Execution` so that `Jaune.Sufficiency` could sit
-between the driver and its first consumer.
+This module provides transaction, block, and chain-level operations. The
+transaction and block runners in `Jaune.Run` compose the top-level message
+driver with admission, settlement, and commitment checks.
 -/
-
-/-! ### The top-level message call on the four-part chain
-
-The pre-frame steps are kept: the pre-Amsterdam collision test for a creation, the ordinary
-authorization and delegation resolution for a call, and under Amsterdam the preparation with
-its failure settlement. The frame then runs by `Frame.runTop` and its `Frame.Result` is rendered
-by `Frame.output` or `Frame.outputAmsterdam`. -/
-
-
-
-
-
-
 
 -- The single boundary shared by all four system transactions (beacon roots,
 -- history storage, withdrawal requests, consolidation requests), so each takes
