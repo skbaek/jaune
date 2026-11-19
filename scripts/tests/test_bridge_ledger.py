@@ -210,7 +210,7 @@ class ModeBGlueTests(unittest.TestCase):
                     tool_sources={}, artifacts={}, exports={'M': dict(path=path.name, sha256='x')},
                     export_paths={'M': path})
 
-    def run_b(self, helper_after):
+    def run_b(self, helper_after, repeat_scope=False):
         ledger = dict(schema_version=1, standard_axioms=STANDARD,
                       gates=dict(GX=dict(tag='gate/gx', commit=None, status='pending')),
                       entries=[dict(id='GX-1', gate='GX', kind='theorem', theorem='J.bridge', module='M',
@@ -228,6 +228,11 @@ class ModeBGlueTests(unittest.TestCase):
                                                               layer='execution', rule='4', source='fixture')])))
             ledger['entries'][0]['maps'] = [dict(path='map.json', revision=None, gap='fixture',
                                                  sha256=hashlib.sha256(map_file.read_bytes()).hexdigest())]
+            if repeat_scope:
+                original = ledger['entries'][0]
+                ledger['entries'].append(dict(original, id='GX-2', theorem='J.anotherBridge'))
+                ledger['entries'].append(dict(original, id='GX-3', theorem='J.changedBridge',
+                                              old=dict(original['old'], at_tag=['J.helper'])))
             reader = LEDGER.Git(ROOT)
             try:
                 with unittest.mock.patch.object(LEDGER.CANDIDATE, 'read_snapshot',
@@ -245,6 +250,16 @@ class ModeBGlueTests(unittest.TestCase):
         self.assertEqual(len(receipt['entries'][0]['maps']), 1)
         self.assertRegex(receipt['entries'][0]['closure_scope_sha256'], r'^[0-9a-f]{64}$')
         self.assertEqual(self.run_b(2)['verdict'], 'REGRESSION')
+
+    def test_identical_closure_scope_reuses_comparison_and_keeps_both_receipt_rows(self):
+        with unittest.mock.patch.object(LEDGER, 'closure_compare', wraps=LEDGER.closure_compare) as compare:
+            result = self.run_b(1, repeat_scope=True)
+        self.assertEqual(compare.call_count, 2)
+        first, second, changed = result['entries']
+        self.assertEqual([r['id'] for r in result['entries']], ['GX-1', 'GX-2', 'GX-3'])
+        self.assertEqual(dict(first, id='GX-2'), second)
+        self.assertEqual(changed['verdict'], 'REGRESSION')
+        self.assertNotEqual(changed['closure_scope_sha256'], first['closure_scope_sha256'])
 
 
 THEOREM = '''import Jaune.Old

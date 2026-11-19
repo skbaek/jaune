@@ -783,26 +783,32 @@ def mode_b(ledger, git, gate, before_path, after_path, ids=(), maps=(), plan=Non
     reviewed_rows = None
     if reviewed is not None:
         reviewed_rows = json.loads(Path(reviewed).read_bytes())['quotations']
-    results, receipts_maps = [], []
+    results, comparisons = [], {}
     for entry in entries:
         renamers = load_maps(git, entry, maps)
-        edits = None
-        if plan is not None:
-            if len(entry['maps']) != 1:
-                raise ValueError('--plan binds to exactly one map')
-            raw_map = (git.blob(entry['maps'][0]['revision'], entry['maps'][0]['path']) if entry['maps'][0]['revision']
-                       else next(Path(p).read_bytes() for p in maps if sha256(Path(p).read_bytes()) == entry['maps'][0]['sha256']))
-            edits = CANDIDATE.plan_edits(Path(plan).read_bytes(), raw_map, Path(before_path).read_bytes())
-        old_env, old_selected = environment(before, entry['old']['modules'])
-        new_env, new_selected = environment(after, entry['old']['modules_at_tag'])
-        result = closure_compare(old_env, new_env, renamers, entry['old']['roots'], entry['old']['at_tag'],
-                                 exemptions(ledger, entry), edits, reviewed_rows)
-        result.update(id=entry['id'], roots=entry['old']['roots'], old_revision=revision,
-                      closure_scope_sha256=closure_scope_sha256(entry),
-                      maps=[m['sha256'] for m in entry['maps']],
-                      old_modules=len(old_selected), tag_modules=len(new_selected))
-        results.append(result)
-        del old_env, new_env
+        exempt = exemptions(ledger, entry)
+        scope = closure_scope_sha256(entry)
+        if scope not in comparisons:
+            edits = None
+            if plan is not None:
+                if len(entry['maps']) != 1:
+                    raise ValueError('--plan binds to exactly one map')
+                row = entry['maps'][0]
+                raw_map = (git.blob(row['revision'], row['path']) if row['revision'] else
+                           next(Path(p).read_bytes() for p in maps if sha256(Path(p).read_bytes()) == row['sha256']))
+                edits = CANDIDATE.plan_edits(Path(plan).read_bytes(), raw_map, Path(before_path).read_bytes())
+            old_env, old_selected = environment(before, entry['old']['modules'])
+            new_env, new_selected = environment(after, entry['old']['modules_at_tag'])
+            result = closure_compare(old_env, new_env, renamers, entry['old']['roots'], entry['old']['at_tag'],
+                                     exempt, edits, reviewed_rows)
+            comparisons[scope] = dict(result, old_modules=len(old_selected), tag_modules=len(new_selected))
+            del old_env, new_env
+        # Multiple theorems can observe the same old root under the same
+        # closure rules. Keep their receipt rows separate without rereading
+        # the exports or running the kernel comparison again.
+        results.append(dict(comparisons[scope], id=entry['id'], roots=entry['old']['roots'],
+                            old_revision=revision, closure_scope_sha256=scope,
+                            maps=[m['sha256'] for m in entry['maps']]))
 
     def side(snapshot, path, rev):
         return dict(head=snapshot['candidate']['head'], bound=bool(rev) and bound(git, snapshot, rev),
