@@ -54,7 +54,6 @@ import Jaune.Transaction
 import Jaune.Bridge.G2b.State
 import Jaune.Run.Message
 import Jaune.Run.Transaction
-import Jaune.Bridge.G2a.Run
 import Jaune.MessageCall.Plain
 import Jaune.Bridge.G2b.Plain
 import Jaune.MessageCall.Control
@@ -65,11 +64,8 @@ import Jaune.Bridge.G2b.MessageOpsGas
 import Jaune.Run.Fields
 import Jaune.Run.Settle
 import Jaune.Run.SystemCall
-import Jaune.Bridge.G2a.Consumers
 import Jaune.Run.Body
-import Jaune.Bridge.G2a.Body
 import Jaune.Run.Block
-import Jaune.Bridge.G2a.Block
 import Jaune.MessageCall.FinalStep
 import Jaune.MessageCall.FinalParts
 import Jaune.MessageCall.FinalDriver
@@ -109,7 +105,6 @@ import Jaune.Bridge.G2b.CheckedDriver
 import Jaune.Bridge.G2b.CheckedReachInduction
 import Jaune.Bridge.G2b.CheckedReached
 import Jaune.Bridge.G2b.CheckedTop
-import Jaune.Bridge.G2a.Canonical
 import Jaune.MessageCall.FinalGasFacts
 import Jaune.MessageCall.FinalPlainGasFacts
 import Jaune.FinalSufficiencyWalk
@@ -197,9 +192,7 @@ import Jaune.Bridge.G3.FrameRun
 import Jaune.Bridge.G3.FrameViews
 
 import Jaune.AccountWriteFacts
-import Jaune.Bridge.AccountWrite
 import Jaune.Run.Import
-import Jaune.Bridge.Import
 
 namespace Jaune
 

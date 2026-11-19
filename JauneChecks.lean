@@ -14,7 +14,6 @@ import Jaune.Check.Fork
 import Jaune.Check.CheckedPortAuditA
 import Jaune.Check.CheckedPortAuditB
 import Jaune.Check.FrameBridgeAudit
-import Jaune.Check.G2aBridgeAudit
 import Jaune.Check.InstructionFamiliesAudit
 import Jaune.Check.Hash
 import Jaune.Check.KeccakSpec
@@ -25,9 +24,6 @@ import Jaune.Check.RIPEMD160Spec
 import Jaune.Check.RlpEval
 import Jaune.Check.Sufficiency
 import Jaune.Check.Transaction
-import Jaune.Check.TraceTransaction
 import Jaune.Check.Types
 import Jaune.Run.Trace
-import Jaune.Bridge.G2a.Old.Trace
-import Jaune.Bridge.G2a.Old.T8n
 import Jaune.Run.BodyFactsT8n
