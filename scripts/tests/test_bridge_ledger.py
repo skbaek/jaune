@@ -567,6 +567,15 @@ class ModeATests(unittest.TestCase):
 
 
 class ScannerTests(unittest.TestCase):
+    def test_mutual_end_keeps_the_enclosing_namespace(self):
+        source = ('namespace Jaune\nnamespace T8n\nmutual\n'
+                  'def first := second\ndef second := 1\nend\n'
+                  'def foldTransactions := first\nend T8n\n'
+                  'def State.set := 1\nend Jaune\n')
+        self.assertEqual(LEDGER.declared_names(source), {
+            'Jaune.T8n.first', 'Jaune.T8n.second', 'Jaune.T8n.foldTransactions', 'Jaune.State.set',
+        })
+
     def test_declarations_namespaces_and_blanked_text(self):
         source = ('namespace A.B\n@[simp] protected theorem t : True := trivial\nsection S\n'
                   'def _root_.top := 1\nend S\nend A.B\n'
