@@ -140,6 +140,22 @@ import Jaune.Instructions.WordRows
 import Jaune.Instructions.WordFacts
 import Jaune.Instructions.Store
 import Jaune.Instructions.StoreFacts
+import Jaune.Bridge.G2b.FinalPrefix
+import Jaune.Bridge.G2b.FinalRetained
+import Jaune.Run.Root
+import Jaune.Bridge.G2b.RunRoots
+import Jaune.Bridge.G2b.KeptHistory
+import Jaune.Bridge.G2b.BodyRoots
+import Jaune.FrameRun.Basic
+import Jaune.FrameRun.Adequacy
+import Jaune.FrameRun.Prefix
+import Jaune.FrameRun.Unique
+import Jaune.FrameRun.Views
+import Jaune.FrameRun.Decompose
+import Jaune.FrameRun.SettlementViews
+import Jaune.FrameRun.Order
+import Jaune.Bridge.G3.FrameRun
+import Jaune.Bridge.G3.FrameViews
 
 namespace Jaune
 

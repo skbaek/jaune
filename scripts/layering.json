@@ -18,6 +18,7 @@
  "modules": {
   "Examples.Arithmetic": "check",
   "Examples.Execution": "check",
+  "Examples.Prefix": "check",
   "Examples.ShapePilot": "check",
   "Jaune.Adapter.IO": "adapter",
   "Jaune.BLS": "specification",
@@ -196,7 +197,23 @@
   "Jaune.Instructions.WordRows": "specification",
   "Jaune.Instructions.WordFacts": "proof",
   "Jaune.Instructions.Store": "specification",
-  "Jaune.Instructions.StoreFacts": "proof"
+  "Jaune.Instructions.StoreFacts": "proof",
+  "Jaune.Bridge.G2b.FinalPrefix": "bridge",
+  "Jaune.Bridge.G2b.FinalRetained": "bridge",
+  "Jaune.Run.Root": "proof",
+  "Jaune.Bridge.G2b.RunRoots": "bridge",
+  "Jaune.Bridge.G2b.KeptHistory": "bridge",
+  "Jaune.Bridge.G2b.BodyRoots": "bridge",
+  "Jaune.FrameRun.Basic": "proof",
+  "Jaune.FrameRun.Adequacy": "proof",
+  "Jaune.FrameRun.Prefix": "proof",
+  "Jaune.FrameRun.Unique": "proof",
+  "Jaune.FrameRun.Views": "proof",
+  "Jaune.FrameRun.Decompose": "proof",
+  "Jaune.FrameRun.SettlementViews": "proof",
+  "Jaune.FrameRun.Order": "proof",
+  "Jaune.Bridge.G3.FrameRun": "bridge",
+  "Jaune.Bridge.G3.FrameViews": "bridge"
  },
  "implementation_imports": [
   {

@@ -15,21 +15,15 @@ theorem Exec.observe_rawNodes {pc sevm devm out} (run : Exec pc sevm devm out)
   induction run with
   | halt hs => rfl
   | @cont pc sevm devm pc' devm' out hs next ih =>
-    have cleanNext := OutputWalk.Evm.step_post (⟨pc, sevm, devm⟩ : Evm) clean
-    rw [hs] at cleanNext
-    exact congrArg (List.cons _) (ih cleanNext)
+    exact congrArg (List.cons _) (ih (Evm.next_output_eq_nil hs clean))
   | doneErr hs he hr => rfl
   | @doneOk pc sevm devm child p pc' res devm' out hs he hr next ih =>
-    have saved := OutputWalk.Evm.step_post (⟨pc, sevm, devm⟩ : Evm) clean
-    rw [hs] at saved
-    exact congrArg (List.cons _) (ih (resumeCaller_output_eq_nil saved.1 hr))
+    exact congrArg (List.cons _) (ih (resumeCaller_output_eq_nil (Evm.spawn_legacyOutput_eq_nil hs clean) hr))
   | runErr hs he child hr ih => exact congrArg (List.cons _) (ih (enter_run_output he))
   | @runOk pc sevm devm frame p pc' cr raw resumed out hs he child hr next ihChild ihNext =>
-    have saved := OutputWalk.Evm.step_post (⟨pc, sevm, devm⟩ : Evm) clean
-    rw [hs] at saved
     simp only [Exec.observe, Exec.rawNodes, Staging.Exec.rawNodes, List.map_cons, List.map_append]
     exact congrArg (List.cons _) (congrArg₂ List.append (ihChild (enter_run_output he))
-      (ihNext (resumeCaller_output_eq_nil saved.1 hr)))
+      (ihNext (resumeCaller_output_eq_nil (Evm.spawn_legacyOutput_eq_nil hs clean) hr)))
 
 theorem Frame.settlementCommits_observe (f : Frame) (raw : Execution) :
     Staging.Frame.settlementCommits f (Frame.Exit.ofExecution raw) = Frame.settlementCommits f raw := by

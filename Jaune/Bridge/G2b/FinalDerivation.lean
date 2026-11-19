@@ -44,6 +44,17 @@ theorem resumeCaller_output_eq_nil {rules : ForkRules} {child : Frame} {p : Pend
       · intro h; cases h
       · intro h; cases h; exact clean
 
+theorem Evm.next_output_eq_nil {e : Evm} {pc state} (hs : e.step = .next pc state)
+    (clean : e.dyna.output = []) : state.output = [] := by
+  have post := OutputWalk.Evm.step_post e clean
+  rwa [hs] at post
+
+theorem Evm.spawn_legacyOutput_eq_nil {e : Evm} {child pending pc}
+    (hs : e.step = .spawn child pending pc) (clean : e.dyna.output = []) : pending.legacyOutput = [] := by
+  have post := OutputWalk.Evm.step_post e clean
+  rw [hs] at post
+  exact post.1
+
 private theorem observeSpawn {e : Evm} {child p pc} (ho : e.dyna.output = [])
     (hs : Evm.step e = .spawn child p pc) :
     Staging.step (.ofEvm e) = .ok (.spawn child (.ofLegacy p) pc) ∧
@@ -71,9 +82,7 @@ noncomputable def Exec.observe {pc sevm devm out} (run : Exec pc sevm devm out)
   induction run with
   | halt hs => exact .halt (by rw [Staging.step_ofEvm _ clean, hs]; rfl)
   | @cont pc sevm devm pcNext devmNext out hs next ih =>
-    have hc := OutputWalk.Evm.step_post (⟨pc, sevm, devm⟩ : Evm) clean
-    rw [hs] at hc
-    exact .cont (by rw [Staging.step_ofEvm _ clean, hs]; rfl) (ih hc)
+    exact .cont (by rw [Staging.step_ofEvm _ clean, hs]; rfl) (ih (Evm.next_output_eq_nil hs clean))
   | doneErr hs he hr =>
     obtain ⟨step, _, flag⟩ := observeSpawn clean hs
     exact .doneErr step (observeDone he) (by rw [observe_resumeCaller _ _ _ _ flag]; exact congrArg observeResume hr)
