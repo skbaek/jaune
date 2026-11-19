@@ -201,6 +201,7 @@ import Jaune.FrameRun.Order
 import Jaune.FrameRun.CheckedOrder
 import Jaune.Bridge.G3.FrameRun
 import Jaune.Bridge.G3.FrameViews
+import Jaune.Bridge.G2b.CheckedViews
 
 import Jaune.AccountWriteFacts
 import Jaune.Bridge.AccountWrite

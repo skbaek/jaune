@@ -226,6 +226,8 @@
   "Jaune.Bridge.G2b.CheckedReachInduction": "bridge",
   "Jaune.Bridge.G2b.CheckedReached": "bridge",
   "Jaune.Bridge.G2b.CheckedTop": "bridge",
+  "Jaune.Bridge.G2b.CheckedViews": "bridge",
+  "Examples.CheckedPrefix": "check",
   "Jaune.Instructions.Word": "specification",
   "Jaune.Instructions.WordRows": "specification",
   "Jaune.Instructions.WordFacts": "proof",
