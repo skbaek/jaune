@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "retired_tokens": [],
+  "allowed_abbreviations": [],
+  "entries": [
+    {
+      "old": "Jaune.stateTransitionE",
+      "new": "Jaune.Bridge.Import.stateTransitionE",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical canonical import witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Transaction",
+      "to_module": "Jaune.Bridge.Import"
+    },
+    {
+      "old": "Jaune.stateTransitionScheduledE",
+      "new": "Jaune.Bridge.Import.stateTransitionScheduledE",
+      "kind": "relocation",
+      "layer": "execution",
+      "rule": "4",
+      "source": "Plain English (rule 4). Historical canonical import witness for the G2a bridge ledger.",
+      "from_module": "Jaune.Transaction",
+      "to_module": "Jaune.Bridge.Import"
+    }
+  ]
+}
