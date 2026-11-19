@@ -1,4 +1,5 @@
 import Jaune.Bridge.G2b.RunRoots
+import Jaune.Transaction
 
 namespace Jaune.Staging
 
@@ -31,8 +32,7 @@ theorem KeptStep.of_transition {cfg : ChainConfig} {parent post : BlockChain} {b
   cases u
   obtain ⟨fork, hf, h⟩ := Except.bind_eq_ok h
   refine ⟨fork, Except.mapError_eq_ok_iff.mp chain, Except.mapError_eq_ok_iff.mp hf, ?_⟩
-  rw [Jaune.Bridge.G2a.E.stateTransitionCoreE_eq, Jaune.Bridge.G2a.stateTransitionCoreE_ok_iff,
-    ← Jaune.stateTransitionScheduledE_eq_ok_iff]
+  rw [← Jaune.stateTransitionScheduledE_eq_ok_iff]
   cases hs : Jaune.stateTransitionScheduledE cfg fork parent block with
   | error err => rw [hs] at h; cases h
   | ok result =>
