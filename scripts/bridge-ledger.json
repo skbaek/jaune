@@ -1142,7 +1142,7 @@
         {"path": "scripts/maps/g2a-lower-delta-map.json", "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b", "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"},
         {"path": "scripts/maps/g2a-swap-delta-map-v3.json", "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b", "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"},
         {"path": "scripts/maps/g2a-waiting-support-map.json", "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725", "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"},
-        {"path": "scripts/maps/g2a-import-waiting-map.json", "revision": "2fb201a49dbf27a0534fcbdc7e29e05cd6eb4c46", "sha256": "b58ef7edf5085f587133edf8ac3cf9a64494ecc2303e589295906fc912e962ca"}
+        {"path": "scripts/maps/g2a-import-waiting-map.json", "revision": "682b170466019cccd0f9987b4a9627e4e5a2f06f", "sha256": "80c9e7772856929931eabea81c4ee026c6e75d62ce2e5b130ed6a16e46250043"}
       ],
       "n4_receipts": [],
       "accepted": [],
@@ -1182,7 +1182,7 @@
         {"path": "scripts/maps/g2a-lower-delta-map.json", "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b", "sha256": "911983568fc73b1907c9aae6c73120babc71e90ad56948e54fbbd985f1783312"},
         {"path": "scripts/maps/g2a-swap-delta-map-v3.json", "revision": "e0027aa8a348fc2b42f6abc73a3810dc96778c3b", "sha256": "b159944b3df936f2a4959155d856dbb5058939260d1768bcec5787875582118a"},
         {"path": "scripts/maps/g2a-waiting-support-map.json", "revision": "dd4d2ae3462f81e2c15d6b70be3fcce6ae495725", "sha256": "25bcccf8e368ca91ca89ed4bb570b5550d2b6237226aa3f59cf6f6365ecdecea"},
-        {"path": "scripts/maps/g2a-import-waiting-map.json", "revision": "2fb201a49dbf27a0534fcbdc7e29e05cd6eb4c46", "sha256": "b58ef7edf5085f587133edf8ac3cf9a64494ecc2303e589295906fc912e962ca"}
+        {"path": "scripts/maps/g2a-import-waiting-map.json", "revision": "682b170466019cccd0f9987b4a9627e4e5a2f06f", "sha256": "80c9e7772856929931eabea81c4ee026c6e75d62ce2e5b130ed6a16e46250043"}
       ],
       "n4_receipts": [],
       "accepted": [],
