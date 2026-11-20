@@ -39,6 +39,8 @@
   "Jaune.Check.CheckedMessageCall": "check",
   "Jaune.Check.CheckedSufficiency": "check",
   "Jaune.Check.CheckedTransaction": "check",
+  "Jaune.Check.CheckedBody": "check",
+  "Jaune.Check.CheckedMachine": "check",
   "Jaune.Check.CheckedPortAuditA": "check",
   "Jaune.Check.CheckedPortAuditB": "check",
   "Jaune.Check.CheckedSpecAudit": "check",

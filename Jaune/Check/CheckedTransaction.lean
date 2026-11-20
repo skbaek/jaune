@@ -253,4 +253,148 @@ private def touchSelfdestructThenFund (fork : Fork) : Option (U256 × U256) :=
 #guard touchSelfdestructThenFund .paris = some (1, 0)
 #guard touchSelfdestructThenFund .prague = some (1, 0)
 
+/-! ### Amsterdam authority charges (`Jaune/Check/Transaction.lean:194-209`, jsn-u87)
+
+`delegationChargeGuard`: the validated-authorization charge of W1
+`applyValidatedDelegationAmsterdam` over `initDevm` of `fixtureAmsterdamMsg`, restated over
+`Checked.TopLevel.applyValidatedAuthorization` on the checkpoint of the corresponding input. -/
+
+private def delegationChargeGuard (doRepeat : Bool) :
+    Option (Nat × Nat × Nat × Nat) :=
+  let input := fixtureAmsterdamInput .empty .empty (some 2) 2 0 20000 300000
+  let context := input.message.context
+  match TopLevel.applyValidatedAuthorization amsterdamStateGasRules context 5 6
+      input.checkpoint .emptyWithCapacity .emptyWithCapacity with
+  | .error _ => none
+  | .ok ⟨once, paid, setFor⟩ =>
+    if doRepeat then
+      match TopLevel.applyValidatedAuthorization amsterdamStateGasRules context 5 7
+          once paid setFor with
+      | .error _ => none
+      | .ok ⟨twice, _, _⟩ =>
+        some ⟨once.gasLeft, once.stateGas.left, twice.gasLeft, twice.stateGas.left⟩
+    else some ⟨once.gasLeft, once.stateGas.left, 0, 0⟩
+
+#guard delegationChargeGuard false =
+  some ⟨11000, 81210, 0, 0⟩
+-- The second write to one authority pays neither ACCOUNT_WRITE nor AUTH_BASE.
+#guard delegationChargeGuard true =
+  some ⟨11000, 81210, 11000, 81210⟩
+
+/-! ### Amsterdam failure-order regressions (`Jaune/Check/Transaction.lean:2011-2097`, jsn-u87)
+
+These pin failure precedence and warming at the metering switch over the Checked `PlainOp.runCore`,
+all four Checked `MessageOp.step` CALL variants, and the Checked top-level dispatch boundary
+(`TopLevel.resolveAmsterdamCall`, W1 `resolveTopLevelCallAmsterdam`). `orderingGuardMessage` is
+`Msg`'s defaults with sender and recipient 0x1000 (holding 100 wei, also the original state), the
+given gas and fork, at depth left 8; its `initDevm`/`initSevm` are the input's checkpoint and
+call context. -/
+
+private def orderingGuardState : State := State.setBal .empty (0x1000 : Address) 100
+
+private def orderingGuardInputOn (fork : Fork) (gas : Nat) (state : State)
+    (recipient : Address := 0x1000) (isStatic : Bool := false) : TopLevel.Input :=
+  guardInput
+    { context := {
+        caller := 0x1000, recipient, value := 0, calldata := [], code := .empty
+        depthLeft := 8, isStatic
+        tx := { origin := 0, gasPrice := 0, blobVersionedHashes := []
+                originalState := orderingGuardState }
+        block := { fork, chainId := 0, gasLimit := 0, blockHashes := [], coinbase := 0
+                   number := 0, baseFeePerGas := 0, timestamp := 0, prevRandao := 0
+                   excessBlobGas := 0, parentBeaconBlockRoot := 0 } }
+      kind := .call, codeAddress := none, target := some recipient, gas, stateGasGrant := 0
+      transfersValue := false, disablePrecompiles := false }
+    state
+
+private def orderingGuardSummary (r : Except (ExceptionalHalt × Frame.State) Frame.State) :
+    String × Nat × List Nat × Bool × Bool :=
+  let (status, s) := match r with
+    | .ok s => ("ok", s)
+    | .error (e, s) => (e.render, s)
+  (status, s.gasLeft, s.stack.map U256.toNat,
+    s.substate.accessedAddresses.contains (0x2000 : Address),
+    s.substate.accessedAddresses.contains (0x3000 : Address))
+
+private def orderingGuardTstore (fork : Fork) (gas : Nat) (stack : List U256) :=
+  let input := orderingGuardInputOn fork gas orderingGuardState (isStatic := true)
+  orderingGuardSummary
+    (PlainOp.runCore 0 input.message.context (input.checkpoint.withStack stack) .tstore)
+
+-- Amsterdam follows `storage.py.tstore`: the static error precedes stack
+-- access and charging. The `none` lane retains the pre-Amsterdam order.
+#guard orderingGuardTstore .amsterdam 0 [] =
+  ("WriteInStaticContext", 0, [], false, false)
+#guard orderingGuardTstore .amsterdam 99 [1, 2] =
+  ("WriteInStaticContext", 99, [1, 2], false, false)
+#guard orderingGuardTstore .amsterdam 100 [1, 2] =
+  ("WriteInStaticContext", 100, [1, 2], false, false)
+#guard orderingGuardTstore .prague 0 [] =
+  ("StackUnderflowError", 0, [], false, false)
+#guard orderingGuardTstore .prague 99 [1, 2] =
+  ("OutOfGasError", 99, [], false, false)
+
+/-- `orderingGuardDelegatedMessage`: 0x2000 delegates to 0x3000 in the current state only. -/
+private def orderingGuardDelegatedState : State :=
+  orderingGuardState.setCode 0x2000 (eoaDelegationMarker ++ (0x3000 : Address).toBytes).toByteArray
+
+private def orderingGuardCall (gas : Nat) (x : MessageOp) (stack : List U256) :=
+  let input := orderingGuardInputOn .amsterdam gas orderingGuardDelegatedState
+  match MessageOp.step input.message.context (input.checkpoint.withStack stack) x with
+  | .done r => orderingGuardSummary r
+  | .spawn _ _ => ("spawn", 0, [], false, false)
+
+-- The first check may warm the direct code address. The second includes the
+-- delegated access price and must fail before the delegated address is warmed.
+#guard orderingGuardCall 2999 .staticcall [0, 0x2000, 0, 0, 0, 0] =
+  ("OutOfGasError", 2999, [], false, false)
+#guard orderingGuardCall 3000 .call [0, 0x2000, 0, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard orderingGuardCall 3000 .callcode [0, 0x2000, 0, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard orderingGuardCall 3000 .delegatecall [0, 0x2000, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard orderingGuardCall 3000 .staticcall [0, 0x2000, 0, 0, 0, 0] =
+  ("OutOfGasError", 3000, [], true, false)
+#guard (orderingGuardCall 6000 .staticcall [0, 0x2000, 0, 0, 0, 0]).1 =
+  "spawn"
+
+private def orderingGuardTopLevel (gas : Nat) : String × Nat × Bool × Bool :=
+  let input := orderingGuardInputOn .amsterdam gas orderingGuardDelegatedState 0x2000
+  let s := input.checkpoint.addAccessedAddress 0x2000
+  match TopLevel.resolveAmsterdamCall input.message s with
+  | .error (e, s) =>
+    (match e with
+      | .halt reason => reason.render
+      | .fault _ => "fault", s.gasLeft,
+      s.substate.accessedAddresses.contains (0x2000 : Address),
+      s.substate.accessedAddresses.contains (0x3000 : Address))
+  | .ok (_, s) =>
+    ("ok", s.gasLeft,
+      s.substate.accessedAddresses.contains (0x2000 : Address),
+      s.substate.accessedAddresses.contains (0x3000 : Address))
+
+-- Top-level dispatch has the same boundary: a cold delegated access priced at
+-- 3,000 with only 2,999 gas leaves the already-warm recipient as the sole one.
+#guard orderingGuardTopLevel 2999 = ("OutOfGasError", 2999, true, false)
+
+/-! ### A failed child's block-access-list reads (`Jaune/Check/Transaction.lean:2218-2229`, jsn-u87)
+
+A failed child's reads survive the merge into its parent: the Checked `resume` takes the reverted
+child's trail. The parent is the checkpoint of `orderingGuardMessage .amsterdam 100000`. -/
+
+private def balGuardB : Address := 0x2000
+
+#guard
+  let parent := (orderingGuardInputOn .amsterdam 100000 orderingGuardState).checkpoint
+  let child := (parent.recordAccountRead amsterdamRules balGuardB).recordStorageRead
+    amsterdamRules balGuardB 5
+  let failed : Frame.Result := .revert [] 0 StateGasMeter.zero child.trail
+  match resume amsterdamRules ⟨.call 0 0, false⟩ parent failed with
+  | .ok (.ok merged) =>
+    merged.trail.accountReads.contains balGuardB ∧
+      merged.trail.storageReads.contains (balGuardB, 5) ∧
+      ¬ parent.trail.accountReads.contains balGuardB
+  | _ => False
+
 end Jaune.Checked

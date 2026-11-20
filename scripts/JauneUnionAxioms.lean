@@ -17,6 +17,8 @@ import Jaune.Check.CheckedExecution
 import Jaune.Check.CheckedMessageCall
 import Jaune.Check.CheckedSufficiency
 import Jaune.Check.CheckedTransaction
+import Jaune.Check.CheckedBody
+import Jaune.Check.CheckedMachine
 import Jaune.Check.CheckedPortAuditA
 import Jaune.Check.CheckedPortAuditB
 import Jaune.Check.CheckedRowsAudit
