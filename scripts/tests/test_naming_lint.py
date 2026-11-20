@@ -230,6 +230,93 @@ class NamingLintTests(unittest.TestCase):
         self.bind('Jaune.value', 'value')
         self.assertEqual(self.lint('Jaune.value'), [])
 
+    def register_derived(self, old, new, base='Jaune.Yzz', **changes):
+        root = dict(old='Jaune.Zzz', new='Jaune.Yzz', kind='declaration',
+                    layer='execution', rule='1, 7', source='synthetic protocol name')
+        target = dict(root, old=old, new=new)
+        target.update(changes)
+        self.mapping['entries'] = [root, target]
+        self.bind('Jaune.Yzz', 'YZZ', style='upperCamel', text='YZZ ZZZ KQQ')
+        self.policy['derived'] = {new: dict(old=old, base=base)}
+
+    def test_source_derived_namespace_and_residual_words(self):
+        self.register_derived('Jaune.Zzz.balance', 'Jaune.Yzz.balance')
+        self.assertEqual(self.lint('Jaune.Yzz.balance'), [])
+        self.register_derived('Jaune.Zzz.qxz', 'Jaune.Yzz.qxz')
+        findings = self.lint('Jaune.Yzz.qxz')
+        self.assertEqual([(f['reason'], f['tokens']) for f in findings],
+                         [('unregistered word or source', ['qxz'])])
+
+    def test_component_source_only_covers_the_replaced_occurrences(self):
+        self.register_derived('Jaune.readZzz_Zzz', 'Jaune.readYzz_Yzz')
+        self.assertEqual(self.lint('Jaune.readYzz_Yzz'), [])
+        self.register_derived('Jaune.readYzz_Zzz', 'Jaune.readYzz_Yzz')
+        findings = self.lint('Jaune.readYzz_Yzz')
+        self.assertEqual([f['tokens'] for f in findings], [['Yzz']])
+        self.register_derived('Jaune.qxzZzz', 'Jaune.qxzYzz')
+        self.assertEqual([f['tokens'] for f in self.lint('Jaune.qxzYzz')], [['qxz']])
+
+    def test_derived_binding_requires_same_root_change_and_explicit_actual_old(self):
+        for old, new in [('Jaune.Zzz.read', 'Jaune.Yzz.balance'),
+                         ('Jaune.Foreign.Zzz.read', 'Jaune.Other.Yzz.read'),
+                         ('Jaune.readZzzy', 'Jaune.readYzzy')]:
+            self.register_derived(old, new)
+            with self.assertRaisesRegex(ValueError, 'extends beyond'):
+                self.lint(new)
+        self.register_derived('Jaune.Zzz.read', 'Jaune.Yzz.read')
+        self.policy['derived']['Jaune.Yzz.read']['old'] = 'Jaune.Foreign.Zzz.read'
+        with self.assertRaisesRegex(ValueError, 'lacks matching'):
+            self.lint('Jaune.Yzz.read')
+
+    def test_derived_binding_rechecks_root_source_and_actual_map_citation(self):
+        self.register_derived('Jaune.Zzz.read', 'Jaune.Yzz.read',
+                              source='an unrelated citation')
+        with self.assertRaisesRegex(ValueError, 'lacks matching'):
+            self.lint('Jaune.Yzz.read')
+        self.register_derived('Jaune.Zzz.read', 'Jaune.Yzz.read')
+        self.policy['bindings']['Jaune.Yzz']['spelling'] = 'KQQ'
+        with self.assertRaisesRegex(ValueError, 'case mismatch'):
+            self.lint('Jaune.Yzz.read')
+        self.policy['bindings']['Jaune.Yzz']['spelling'] = 'YZZ'
+        self.policy['sources']['upstream']['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'digest mismatch'):
+            self.lint('Jaune.Yzz.read')
+
+    def test_derived_rows_are_opt_in_and_unused_rows_fail(self):
+        self.register_derived('Jaune.Zzz.read', 'Jaune.Yzz.read')
+        no_rows = self.policy.pop('derived')
+        self.assertIn('map requires matching source binding', [p['reason'] for p in self.lint('Jaune.Yzz.read')])
+        self.policy['derived'] = no_rows
+        pair = self.bundle()
+        result = LINT.check(self.root, self.mapping, self.policy, self.root, [pair], ['Jaune'])
+        self.assertIn('Jaune.Yzz.read', [p['name'] for p in result['problems']
+                                       if p['reason'] == 'unused source binding'])
+
+    def test_internal_lean_suffix_requires_its_theorems_actual_compiler_reference(self):
+        name = 'Jaune.read?_balance'
+        ref = {'c': {'m': 'Jaune.Test', 'n': 'Jaune.read?'}}
+        bundle = {'index': {'module': 'Jaune.Test', 'references': {}},
+                  'constants': {name: {'kernel': {'payload': ['theorem']}}}}
+        words = set(self.policy['words'])
+
+        def check(owner, target, kind):
+            ref['c']['n'] = target
+            bundle['index']['references'] = {json.dumps(ref): {'usages': [[0, 0, 0, 4, owner]]}}
+            bundle['constants'][name]['kernel']['payload'] = [kind]
+            return LINT.lint_names({name: []}, self.mapping, self.policy, words,
+                                   reference_endings=LINT.theorem_reference_endings(bundle))[0]
+
+        self.assertEqual(check(name, 'Jaune.read?', 'theorem'), [])
+        for owner, target, kind in [(name, 'Jaune.Other.read?', 'theorem'),
+                                  ('Jaune.other', 'Jaune.read?', 'theorem'),
+                                  (name, 'Jaune.read?', 'definition')]:
+            self.assertTrue(check(owner, target, kind))
+        words.remove('read')
+        self.assertEqual(check(name, 'Jaune.read?', 'theorem')[0]['tokens'], ['read'])
+        words.add('read')
+        words.remove('balance')
+        self.assertEqual(check(name, 'Jaune.read?', 'theorem')[0]['tokens'], ['balance'])
+
     def test_malformed_policy_refused(self):
         for policy in ([], {}, dict(self.policy, words=['bal', 'bal']),
                        dict(self.policy, sources={'bad': {'citation': 1}})):
