@@ -4,37 +4,6 @@ import Jaune.MessageCall.CheckedDerivation
 
 namespace Jaune.Checked
 
-/-- The raw root finished successfully. A creation still has to deposit its code. -/
-def Exec.finished : Except Fault Frame.Exit → Bool
-  | .ok (.finished ..) => true
-  | _ => false
-
-def Frame.settlementCommits (frame : Frame) (raw : Except Fault Frame.Exit) : Bool :=
-  match raw >>= settle frame with
-  | .ok (.success ..) => true
-  | _ => false
-
-theorem Frame.settlementCommits_iff {frame : Frame} {raw : Except Fault Frame.Exit} :
-    Frame.settlementCommits frame raw = true ↔
-      ∃ output gas meters world substate trail,
-        (raw >>= settle frame) = .ok (.success output gas meters world substate trail) := by
-  unfold Frame.settlementCommits
-  constructor
-  · intro h
-    split at h
-    · exact ⟨_, _, _, _, _, _, by assumption⟩
-    · cases h
-  · rintro ⟨_, _, _, _, _, _, h⟩
-    rw [h]
-
-theorem Frame.finished_of_settlementCommits {frame : Frame} {raw : Except Fault Frame.Exit}
-    (h : Frame.settlementCommits frame raw = true) : Exec.finished raw = true := by
-  rcases raw with fault | ⟨output, s⟩ | ⟨output, s⟩ | ⟨reason, s⟩
-  · cases h
-  · rfl
-  · cases h
-  · cases h
-
 /-- One reached driver node, carrying its full derivation. -/
 structure Exec.Deriv where
   running : Frame.Running

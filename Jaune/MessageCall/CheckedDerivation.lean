@@ -1,19 +1,9 @@
-import Jaune.MessageCall.CheckedDriver
+import Jaune.FrameRun.CheckedBasic
 
 /-! A complete execution derivation over the running frame. A child run and the
 caller's continuation are separate subderivations. Faults carry no frame state. -/
 
 namespace Jaune.Checked
-
-/-- Finishing a call either gives the driver's final outcome or a caller state to resume. -/
-def resumeCaller (rules : ForkRules) (child : Frame) (pending : Staging.Pending) :
-    Except Fault Frame.Result → Except (Except Fault Frame.Exit) Frame.State
-  | .error fault => .error (.error fault)
-  | .ok result =>
-    match resume rules pending child.checkpoint result with
-    | .error fault => .error (.error fault)
-    | .ok (.error (reason, state)) => .error (.ok (.halted reason state))
-    | .ok (.ok state) => .ok state
 
 /-- A derivation of the outcome of the four-part frame driver. -/
 inductive Exec : Frame.Running → Except Fault Frame.Exit → Type
@@ -47,46 +37,6 @@ inductive Exec : Frame.Running → Except Fault Frame.Exit → Type
     resumeCaller r.context.block.rules child pending (raw >>= settle child) = .ok state →
     Exec ⟨pc, r.context, state⟩ out →
     Exec r out
-
-theorem execFueled_spawn_done {r : Frame.Running} {fuel : Nat} {child pending pc result}
-    (hs : step r = .ok (.spawn child pending pc)) (he : enter child = .done result) :
-    execFueled r (fuel + 1) =
-      match resumeCaller r.context.block.rules child pending result with
-      | .error out => Fueled.ofExcept out
-      | .ok state => execFueled ⟨pc, r.context, state⟩ fuel := by
-  rw [execFueled, hs]
-  dsimp only
-  rw [he]
-  cases result with
-  | error f => rfl
-  | ok v =>
-    dsimp only [resumeCaller]
-    rcases resume r.context.block.rules pending child.checkpoint v with
-      f | ⟨reason, state⟩ | state <;> rfl
-
-theorem execFueled_spawn_run {r : Frame.Running} {fuel : Nat} {child pending pc cr}
-    (hs : step r = .ok (.spawn child pending pc)) (he : enter child = .run cr) :
-    execFueled r (fuel + 1) =
-      match (execFueled cr fuel).run with
-      | none => Fueled.exhausted
-      | some raw =>
-        match resumeCaller r.context.block.rules child pending (raw >>= settle child) with
-        | .error out => Fueled.ofExcept out
-        | .ok state => execFueled ⟨pc, r.context, state⟩ fuel := by
-  rw [execFueled, hs]
-  dsimp only
-  rw [he]
-  dsimp only
-  cases hc : (execFueled cr fuel).run with
-  | none => rfl
-  | some raw =>
-    dsimp only [Option.map]
-    cases raw >>= settle child with
-    | error f => rfl
-    | ok v =>
-      dsimp only [resumeCaller]
-      rcases resume r.context.block.rules pending child.checkpoint v with
-        f | ⟨reason, state⟩ | state <;> rfl
 
 /-- Every budget at least the derivation's height suffices, including when the
 driver uses the same remaining budget for a child and then for the caller. -/
