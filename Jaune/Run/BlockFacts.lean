@@ -29,15 +29,6 @@ private theorem except_mapError_comp {ε ε' ε'' α : Type}
     (r.mapError g).mapError g' = r.mapError (g' ∘ g) := by
   cases r <;> rfl
 
-/-- A block check that passes compared the header's state root against the computed one. -/
-theorem Block.check_stateRoot {header : Header} {c : Block.Commitments}
-    (h : Block.check header c = .ok ()) : c.stateRoot = header.stateRoot := by
-  by_contra hne
-  revert h
-  unfold Block.check Block.checkCommitments
-  by_cases h1 : c.gasUsed ≠ header.gasUsed <;>
-    by_cases h2 : c.transactionsRoot ≠ header.transactionsRoot <;>
-    simp [h1, h2, hne, bind, Except.bind]
 
 
 /-- Embedding the static transition's error type commutes with the whole algorithm, including

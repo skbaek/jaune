@@ -8,53 +8,16 @@ namespace Jaune
 These facts do not bound arbitrary initial parent gas or complete the recursive
 memory/output invariant. -/
 
-theorem calculateMsgCallGas_zero_child_le (gas gasLeft memoryCost extraGas cs : Nat) :
-    (calculateMsgCallGas 0 gas gasLeft memoryCost extraGas cs).2 ≤ gas := by
-  simp only [calculateMsgCallGas]
-  split
-  · exact Nat.le_refl gas
-  · exact Nat.min_le_left _ _
 
 theorem calculateMsgCallGas_zero_word_child_lt (gas : U256)
     (gasLeft memoryCost extraGas cs : Nat) :
     (calculateMsgCallGas 0 gas.toNat gasLeft memoryCost extraGas cs).2 < 2 ^ 256 :=
   Nat.lt_of_le_of_lt
-    (calculateMsgCallGas_zero_child_le gas.toNat gasLeft memoryCost extraGas cs)
+    (calculateMessageCallGas_zero_child_le gas.toNat gasLeft memoryCost extraGas cs)
     (U256.toNat_lt gas)
 
-/-- The CALL stipend adds at most its fixed amount to a word-sized requested
-grant, including the underfunded branch of the gas calculator. -/
-theorem calculateMsgCallGas_word_child_lt_with_stipend (value gas : U256)
-    (gasLeft memoryCost extraGas : Nat) :
-    (calculateMsgCallGas value.toNat gas.toNat gasLeft memoryCost extraGas
-      Gas.callStipend).2 < 2 ^ 256 + Gas.callStipend := by
-  have hg := U256.toNat_lt gas
-  unfold calculateMsgCallGas
-  by_cases hv : value.toNat = 0
-  · simp only [hv, ite_true, Nat.add_zero]
-    split
-    · omega
-    · have hm := Nat.min_le_left gas.toNat
-        (except64th (gasLeft - memoryCost - extraGas))
-      omega
-  · simp only [hv, ite_false]
-    split
-    · omega
-    · have hm := Nat.min_le_left gas.toNat
-        (except64th (gasLeft - memoryCost - extraGas))
-      omega
 
-private theorem ceilDiv32_le {a b : Nat} (h : a ≤ b) :
-    ceilDiv a 32 ≤ ceilDiv b 32 := by
-  simp only [ceilDiv]
-  split <;> split <;> omega
 
-theorem calculateMemoryGasCost_mono {a b : Nat} (h : a ≤ b) :
-    calculateMemoryGasCost a ≤ calculateMemoryGasCost b := by
-  have hw := ceilDiv32_le h
-  have hq := Nat.div_le_div_right (c := 512) (Nat.pow_le_pow_left hw 2)
-  simp only [calculateMemoryGasCost, Gas.memory]
-  omega
 
 theorem chargeGas_memory_size {cost : Nat} {before after : Devm}
     (h : chargeGas cost before = .ok after) : after.memory.size = before.memory.size := by
@@ -108,11 +71,6 @@ theorem Devm.push_memory {word : U256} {before after : Devm}
   · simp only [Except.assert, ite_eq_right hs, bind, Except.bind] at h
     contradiction
 
-theorem calculateMsgCallGas_zero_value_cost (gas gasLeft memoryCost extraGas cs : Nat) :
-    (calculateMsgCallGas 0 gas gasLeft memoryCost extraGas cs).1 =
-      (calculateMsgCallGas 0 gas gasLeft memoryCost extraGas cs).2 + extraGas := by
-  simp only [calculateMsgCallGas]
-  split <;> rfl
 
 private theorem pop_memory_output (pre : Devm) :
     match pre.pop with
@@ -482,100 +440,10 @@ theorem executePrecompile_modexp_ok_selected_cost {evm : Evm} {post : Devm}
     rw [Devm.withOutput_output]
     exact ⟨charged, rfl, executeModexp_ok_selected_cost hx⟩
 
-private theorem ceilDiv8_ge_pow157_of_ge_pow160 {n : Nat}
-    (hn : 2 ^ 160 ≤ n) : 2 ^ 157 ≤ ceilDiv n 8 := by
-  have hceil : n ≤ 8 * ceilDiv n 8 := by
-    simp only [ceilDiv]
-    split <;> omega
-  have hp : (2 : Nat) ^ 160 = 8 * 2 ^ 157 := by decide
-  omega
 
-/-- The Prague MODEXP schedule alone rejects a modulus header this large
-within any 256-bit gas grant. -/
-theorem pragueModexpGasCost_large_modulus
-    {baseLength modulusLength expLength expHead : Nat}
-    (hmod : 2 ^ 160 ≤ modulusLength) :
-    2 ^ 256 + Gas.callStipend ≤ modexpGasCost .eip2565 pragueModexpRules
-      baseLength modulusLength expLength expHead := by
-  let words := ceilDiv (max baseLength modulusLength) 8
-  have hw : 2 ^ 157 ≤ words :=
-    ceilDiv8_ge_pow157_of_ge_pow160
-      (Nat.le_trans hmod (Nat.le_max_right baseLength modulusLength))
-  have hsq : (2 ^ 157) ^ 2 ≤ words ^ 2 := Nat.pow_le_pow_left hw 2
-  have hiter : 1 ≤ modexpIterations pragueModexpRules expLength expHead := by
-    unfold modexpIterations
-    exact Nat.le_max_right _ _
-  have hmul : words ^ 2 ≤ words ^ 2 *
-      modexpIterations pragueModexpRules expLength expHead := by
-    simpa only [mul_one] using Nat.mul_le_mul_left (words ^ 2) hiter
-  have hbig : 3 * (2 ^ 256 + Gas.callStipend) ≤ (2 ^ 157) ^ 2 := by decide
-  have hcost : 2 ^ 256 + Gas.callStipend ≤
-      (words ^ 2 * modexpIterations pragueModexpRules expLength expHead) / 3 := by
-    omega
-  simp only [modexpGasCost, modexpComplexity, pragueModexpRules, Nat.one_mul]
-  exact Nat.le_trans hcost (Nat.le_max_right _ _)
 
-/-- Above 1024 bytes EIP-198 charges its third branch. -/
-private theorem eip198Complexity_third
-    {baseLength modulusLength : Nat}
-    (h : 1024 < max baseLength modulusLength) :
-    eip198Complexity baseLength modulusLength =
-      (max baseLength modulusLength) ^ 2 / 16 +
-        480 * (max baseLength modulusLength) - 199680 := by
-  have h64 : ¬ max baseLength modulusLength ≤ 64 := by omega
-  have h1024 : ¬ max baseLength modulusLength ≤ 1024 := by omega
-  simp only [eip198Complexity, h64, h1024, ite_false]
 
-/-- EIP-198's third branch alone prices a 2^160-byte modulus past any 256-bit
-gas grant at divisor 20: `x ^ 2 / 16` at `x = 2 ^ 160` is already `2 ^ 316`. -/
-private theorem eip198Complexity_third_large
-    {baseLength modulusLength : Nat}
-    (hmod : 2 ^ 160 ≤ modulusLength) :
-    20 * (2 ^ 256 + Gas.callStipend) ≤
-      eip198Complexity baseLength modulusLength := by
-  have hX : 2 ^ 160 ≤ max baseLength modulusLength :=
-    Nat.le_trans hmod (Nat.le_max_right baseLength modulusLength)
-  have h1024 : 1024 < max baseLength modulusLength := by
-    calc (1024 : Nat) < 2 ^ 160 := by decide
-    _ ≤ max baseLength modulusLength := hX
-  rw [eip198Complexity_third h1024]
-  have h157 : (2 ^ 157) ^ 2 ≤ (2 ^ 160) ^ 2 := by decide
-  have hsq : (2 ^ 157) ^ 2 ≤ (max baseLength modulusLength) ^ 2 :=
-    Nat.le_trans h157 (Nat.pow_le_pow_left hX 2)
-  have hdiv : (2 ^ 157) ^ 2 / 16 ≤ (max baseLength modulusLength) ^ 2 / 16 :=
-    Nat.div_le_div_right hsq
-  have hmul : 480 * 2 ^ 160 ≤ 480 * max baseLength modulusLength :=
-    Nat.mul_le_mul_left 480 hX
-  have hbig : 20 * (2 ^ 256 + Gas.callStipend) ≤
-      (2 ^ 157) ^ 2 / 16 + 480 * 2 ^ 160 - 199680 := by decide
-  have hle : (2 ^ 157) ^ 2 / 16 + 480 * 2 ^ 160 - 199680 ≤
-      (max baseLength modulusLength) ^ 2 / 16 +
-        480 * (max baseLength modulusLength) - 199680 :=
-    Nat.sub_le_sub_right (Nat.add_le_add hdiv hmul) 199680
-  exact Nat.le_trans hbig hle
 
-/-- The EIP-198 MODEXP schedule alone rejects a modulus header this large
-within any 256-bit gas grant: the divisor is 20 rather than 3, but a
-2^160-byte modulus still costs far past it. -/
-theorem eip198ModexpGasCost_large_modulus
-    {baseLength modulusLength expLength expHead : Nat}
-    (hmod : 2 ^ 160 ≤ modulusLength) :
-    2 ^ 256 + Gas.callStipend ≤ modexpGasCost .eip198 eip198ModexpRules
-      baseLength modulusLength expLength expHead := by
-  have hiter : 1 ≤ modexpIterations eip198ModexpRules expLength expHead := by
-    unfold modexpIterations
-    exact Nat.le_max_right _ _
-  have hbig := eip198Complexity_third_large (baseLength := baseLength) hmod
-  have hmul : eip198Complexity baseLength modulusLength ≤
-      eip198Complexity baseLength modulusLength *
-        modexpIterations eip198ModexpRules expLength expHead := by
-    simpa only [mul_one] using Nat.mul_le_mul_left _ hiter
-  have hcost : 2 ^ 256 + Gas.callStipend ≤
-      (eip198Complexity baseLength modulusLength *
-        modexpIterations eip198ModexpRules expLength expHead) / 20 := by
-    omega
-  simp only [modexpGasCost, modexpComplexity, eip198ModexpRules]
-  exact Nat.le_trans hcost (Nat.le_max_right _ _)
 
 private theorem executeModexp_ok_lengthsInBounds {evm : Evm} {cost : Nat}
     {output : Bytes} (h : executeModexp evm = .ok cost output) :

@@ -312,7 +312,7 @@ theorem MessageOp.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
       obtain ⟨d10, pcall, hstep⟩ := Except.bind_eq_ok hstep
       have estate := chargeStateGas_gasMeasure pstate
       have ecall := chargeGas_gasMeasure pcall
-      have hcalc := calculateMsgCallGas_zero_cost value.toNat gas.toNat d9.gasLeft
+      have hcalc := calculateMessageCallGas_zero_cost value.toNat gas.toNat d9.gasLeft
         Gas.callStipend
       simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
       rw [← hstep]
@@ -323,7 +323,7 @@ theorem MessageOp.step_call_gasDecreasing (sevm : Sevm) (devm : Devm) :
     · simp only [bind, Except.bind] at hstep
       obtain ⟨d9, pcall, hstep⟩ := Except.bind_eq_ok hstep
       have ecall := chargeGas_gasMeasure pcall
-      have hcalc := calculateMsgCallGas_zero_cost value.toNat gas.toNat d8.gasLeft
+      have hcalc := calculateMessageCallGas_zero_cost value.toNat gas.toNat d8.gasLeft
         Gas.callStipend
       simp only [Pure.pure, Except.pure, Except.ok.injEq] at hstep
       rw [← hstep]

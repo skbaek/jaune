@@ -34,74 +34,14 @@ open Jaune
 
 /-! ### The prefix -/
 
-/-- What a block body has produced so far: the state and `BlockOutput`'s carrier. -/
-structure Body.Prefix : Type where
-  state : State
-  /-- Execution gas used by the block (`BlockOutput.blockGasUsed`). -/
-  executionGasUsed : Nat
-  /-- Amsterdam's state gas used by the block (`BlockOutput.blockStateGasUsed`). -/
-  stateGasUsed : Nat
-  /-- Sender-facing gas after refunds, for the receipts. -/
-  cumulativeGasUsed : Nat
-  blobGasUsed : Nat
-  transactionsTrie : Std.TreeMap Bytes Transaction compare
-  receiptsTrie : Std.TreeMap Bytes (Fin 5 × Receipt) compare
-  receiptKeys : List Bytes
-  /-- The block's logs (`BlockOutput.blockLogs`). -/
-  logs : List Log
-  withdrawalsTrie : Std.TreeMap Bytes Withdrawal compare
-  requests : List Bytes
-  /-- EIP-7928: the block-level access-list builder (`BlockOutput.blockAccessListBuilder`). -/
-  blockAccessListBuilder : BlockAccessListBuilder
-  /-- EIP-7928: the built list (`BlockOutput.blockAccessList`). -/
-  blockAccessList : BlockAccessList
 
 
-/-- The block output a prefix carries. -/
-def Body.Prefix.toBlockOutput (p : Body.Prefix) : BlockOutput :=
-  { blockGasUsed := p.executionGasUsed
-    blockStateGasUsed := p.stateGasUsed
-    cumulativeGasUsed := p.cumulativeGasUsed
-    transactionsTrie := p.transactionsTrie
-    receiptsTrie := p.receiptsTrie
-    receiptKeys := p.receiptKeys
-    blockLogs := p.logs
-    withdrawalsTrie := p.withdrawalsTrie
-    blobGasUsed := p.blobGasUsed
-    requests := p.requests
-    blockAccessListBuilder := p.blockAccessListBuilder
-    blockAccessList := p.blockAccessList }
 
-/-- The prefix of a state and a block output. -/
-def Body.Prefix.ofBlockOutput (state : State) (bout : BlockOutput) : Body.Prefix :=
-  { state := state
-    executionGasUsed := bout.blockGasUsed
-    stateGasUsed := bout.blockStateGasUsed
-    cumulativeGasUsed := bout.cumulativeGasUsed
-    blobGasUsed := bout.blobGasUsed
-    transactionsTrie := bout.transactionsTrie
-    receiptsTrie := bout.receiptsTrie
-    receiptKeys := bout.receiptKeys
-    logs := bout.blockLogs
-    withdrawalsTrie := bout.withdrawalsTrie
-    requests := bout.requests
-    blockAccessListBuilder := bout.blockAccessListBuilder
-    blockAccessList := bout.blockAccessList }
 
-/-- The empty prefix over a state. -/
-def Body.Prefix.init (state : State) : Body.Prefix := Body.Prefix.ofBlockOutput state BlockOutput.init
 
-/-- The body's result as the importer returned it: the state and the block output. -/
-def Body.Prefix.output (p : Body.Prefix) : State × BlockOutput := (p.state, p.toBlockOutput)
 
-@[simp] theorem Body.Prefix.toBlockOutput_ofBlockOutput (state : State) (bout : BlockOutput) :
-    (Body.Prefix.ofBlockOutput state bout).toBlockOutput = bout := rfl
 
-@[simp] theorem Body.Prefix.state_ofBlockOutput (state : State) (bout : BlockOutput) :
-    (Body.Prefix.ofBlockOutput state bout).state = state := rfl
 
-@[simp] theorem Body.Prefix.ofBlockOutput_toBlockOutput (p : Body.Prefix) :
-    Body.Prefix.ofBlockOutput p.state p.toBlockOutput = p := rfl
 
 theorem Body.Prefix.output_injective : Function.Injective output := by
   intro p q h
@@ -112,25 +52,6 @@ theorem Body.Prefix.output_injective : Function.Injective output := by
 
 /-! ### Operations -/
 
-/-- One operation of a block body. -/
-inductive BodyOp : Type where
-  /-- An unchecked system call to `address` with `data` (whose failure fails the body before the
-  call), incorporated into the block access list at `index`. -/
-  | systemCall (address : Address) (data : Except TransitionError Bytes) (index : Nat)
-  /-- A transaction at `index`. -/
-  | transaction (tx : Transaction) (index : Nat)
-  /-- The withdrawals, incorporated into the block access list at `index`. -/
-  | withdrawals (ws : List Withdrawal) (index : Nat)
-  /-- The deposit requests parsed from the receipts so far (EIP-6110). -/
-  | depositRequests
-  /-- A checked request call of request type `type` to `address`, incorporated at `index`. -/
-  | requestCall (type : UInt8) (address : Address) (index : Nat)
-  /-- Proof-of-work rewards: `minerReward` to `coinbase`, then each credit in turn. -/
-  | rewards (coinbase : Address) (minerReward : Nat) (credits : List (Address × Nat))
-  /-- Build the block access list from the builder. -/
-  | buildAccessList
-  /-- The block access list's item limit (`validate_block_access_list_gas_limit`). -/
-  | checkAccessListLimit
 
 /-- What one operation produced, beside the next prefix. -/
 inductive OpRun : Type where
@@ -143,9 +64,6 @@ inductive OpRun : Type where
   | buildAccessList (list : BlockAccessList)
   | checkAccessListLimit
 
-/-- Credit each `(address, amount)` in turn (`create_ether`). -/
-def creditAll (credits : List (Address × Nat)) (state : State) : State :=
-  credits.foldl (fun acc c => acc.addBal c.1 c.2.toU256) state
 
 /-- One operation from a prefix, against the block environment `benv` (whose own state the step
 does not read: the prefix's state stands in for it). -/
@@ -235,9 +153,6 @@ def Body.preOps (benv : Benv) : List BodyOp :=
           (·.toBytes)) 0]
   else [])
 
-/-- The transactions, each at its position. -/
-def Body.transactionOps (txs : List Transaction) : List BodyOp :=
-  txs.putIndex.map fun ⟨i, tx⟩ => .transaction tx i
 
 /-- The importer's post-execution operations, for `n` transactions: the withdrawals at `n + 1`
 when `header.withdrawalsRoot`; the deposit requests and each request call at `n + 1` when

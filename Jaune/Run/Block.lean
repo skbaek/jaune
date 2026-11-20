@@ -28,90 +28,12 @@ open Jaune
 
 /-! ### Commitments -/
 
-/-- Every header value the body determines, in the order the transition compares them. -/
-structure Block.Commitments : Type where
-  /-- The block's gas used: the larger of execution gas and (Amsterdam) state gas. -/
-  gasUsed : Nat
-  transactionsRoot : U256
-  stateRoot : U256
-  receiptsRoot : U256
-  logsBloom : Bytes
-  withdrawalsRoot : U256
-  blobGasUsed : Nat
-  /-- `none` exactly under rules without the field (before Prague). -/
-  requestsHash : Option U256
-  /-- EIP-7928: `none` exactly under rules without a block-level access list. -/
-  blockAccessListHash : Option U256
 
-/-- The commitments of a body's final prefix, under `rules`. -/
-def Block.Commitments.ofPrefix (rules : ForkRules) (q : Body.Prefix) : Block.Commitments :=
-  { gasUsed := max q.executionGasUsed q.stateGasUsed
-    transactionsRoot := getTransactionsRoot q.toBlockOutput
-    stateRoot := q.state.root
-    receiptsRoot := getReceiptRoot q.toBlockOutput
-    logsBloom := Jaune.logsBloom q.logs
-    withdrawalsRoot := getWithdrawalsRoot q.toBlockOutput
-    blobGasUsed := q.blobGasUsed
-    requestsHash :=
-      if rules.header.requestsHash then some (computeRequestsHash q.requests) else none
-    blockAccessListHash := rules.blockAccessListRules.map fun _ => q.blockAccessList.hash }
 
 /-! ### The check -/
 
-/-- The header against the commitments of `execute_block`'s comparisons, in order; the first
-mismatch rejects the block. The withdrawals root and the blob gas used are compared only where the
-header carries the field (`validateHeader` has tied its presence to the rules). -/
-def Block.checkCommitments (header : Header) (c : Block.Commitments) :
-    Except BlockValidationError Unit := do
-  if c.gasUsed ≠ header.gasUsed then
-    .error <| .gasUsedMismatch <| .text
-      s!"computed block gas used = {c.gasUsed} ≠ \
-         header block gas used = {header.gasUsed}"
-  if c.transactionsRoot ≠ header.transactionsRoot then
-    .error <| .transactionsRoot <| .text
-      s!"computed transactions root = {c.transactionsRoot} \
-         ≠ header transactions root = {header.transactionsRoot}"
-  if c.stateRoot ≠ header.stateRoot then
-    .error <| .stateRoot <| .text
-      s!"computed state root = {c.stateRoot} ≠ \
-         header state root = {header.stateRoot}"
-  if c.receiptsRoot ≠ header.receiptsRoot then
-    .error <| .receiptsRoot <| .text
-      s!"computed receipts root = {c.receiptsRoot} ≠ \
-         header receipts root = {header.receiptsRoot}"
-  if c.logsBloom ≠ header.logsBloom then
-    .error <| .logBloom <| .text
-      s!"computed logs bloom ≠ header logs bloom"
-  if header.withdrawalsRoot.any (· != c.withdrawalsRoot) then
-    .error <| .withdrawalsRoot <| .text
-      s!"computed withdrawals root = {c.withdrawalsRoot} ≠ \
-         header withdrawals root = {header.withdrawalsRoot.getD 0}"
-  if header.blobGasUsed.any (· != c.blobGasUsed) then
-    .error <| .blobGasUsed <| .text
-      s!"computed blob gas used = {c.blobGasUsed} ≠ \
-         header blob gas used = {header.blobGasUsed.getD 0}"
-  if c.requestsHash ≠ header.requestsHash then
-    .error <| .requestsHash <| .text
-      s!"computed requests hash = {c.requestsHash.getD 0} ≠ \
-         header requests hash = {header.requestsHash}"
 
-/-- EIP-7928: the header's access-list hash against the computed one, under rules that have one. -/
-def Block.checkAccessListHash (header : Header) (c : Block.Commitments) :
-    Except BlockValidationError Unit :=
-  match c.blockAccessListHash with
-  | none => .ok ()
-  | some hash =>
-    if some hash ≠ header.blockAccessListHash then
-      .error <| .blockAccessListHash hash <| .text
-        s!"computed block access list hash = {hash} ≠ \
-           header block access list hash = {header.blockAccessListHash}"
-    else .ok ()
 
-/-- **The block check**: the header against the commitments, in order (`execute_block`'s
-comparisons, then the access-list hash); the first mismatch rejects the block with its reason. -/
-def Block.check (header : Header) (c : Block.Commitments) : Except BlockValidationError Unit := do
-  Block.checkCommitments header c
-  Block.checkAccessListHash header c
 
 /-! ### The block run -/
 

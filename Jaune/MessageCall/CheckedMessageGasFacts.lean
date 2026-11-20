@@ -1,5 +1,4 @@
 import Jaune.CheckedSufficiencyWalk
-import Jaune.Sufficiency
 import Jaune.GasFacts
 
 /-! Gas at a message operation, on the continuation, spawn and exceptional-halt paths. -/
@@ -220,7 +219,7 @@ private theorem chargeForCall {s : Frame.State} {n value gas gasLeft memory extr
       (s.chargeGas ((calculateMsgCallGas value gas gasLeft memory extra).1 + memory)) := by
   apply Walk.mono (Frame.State.chargeGas_gas _ h)
   intro t ht
-  have hgrant := calculateMsgCallGas_stipend_lt (gas := gas) (gasLeft := gasLeft) hpaid
+  have hgrant := calculateMessageCallGas_stipend_lt (gas := gas) (gasLeft := gasLeft) hpaid
   change t.machine.gasMeasure + _ = s.machine.gasMeasure at ht
   omega
 
@@ -231,7 +230,7 @@ private theorem chargeGrant {s : Frame.State} {n value gas : Nat}
       (s.chargeGas (calculateMsgCallGas value gas s.gasLeft 0 0).1) := by
   apply Walk.mono (Frame.State.chargeGas_gas _ (by omega))
   intro t ht
-  rw [calculateMsgCallGas_zero_cost]
+  rw [calculateMessageCallGas_zero_cost]
   change t.machine.gasMeasure + _ = s.machine.gasMeasure at ht
   omega
 

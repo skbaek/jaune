@@ -63,12 +63,6 @@ def absorbMeters (rules : ForkRules) (p : Pending) (saved : Machine) (r : Frame.
       if p.newAccountCharged then m.creditStateGasRefund state.newAccount else m
     else m.repayStateGasSpill
 
-/-- The word the calling opcode pushes: the new address after a successful creation, 1 after a
-successful call, 0 after a failure. -/
-def ReturnTarget.status : ReturnTarget → Frame.Result → U256
-  | .create address, .success .. => address.toU256
-  | .call .., .success .. => 1
-  | _, _ => 0
 
 /-- The calling opcode's effect on the caller's machine: push the status, and for a call write
 the output into the caller's output window. -/

@@ -338,20 +338,7 @@ theorem Inv.memRead {c n : Nat} {d : Devm} (h : Inv c n d) (i size : Nat) :
   unfold Devm.memRead
   exact Inv.keep h rfl rfl (Nat.le_refl _)
 
-theorem List.swap_length {ξ : Type} {l l' : List ξ} {k : Nat} (h : List.swap l k = some l') :
-    l'.length = l.length := by
-  cases l with
-  | nil => simp [List.swap] at h
-  | cons x xs =>
-    simp only [List.swap, bind, Option.bind] at h
-    split at h
-    · cases h
-    · cases h; simp
 
-theorem List.exchange_length {ξ : Type} {l l' : List ξ} {n m : Nat}
-    (h : List.exchange l n m = some l') : l'.length = l.length := by
-  unfold List.exchange at h
-  cases hn : l[n]? <;> cases hm : l[m]? <;> simp_all [bind, Option.bind] <;> cases h <;> simp
 
 theorem Inv.withStack {c n : Nat} {d : Devm} {l : List U256} (h : Inv c n d)
     (hl : l.length = d.stack.length) : Inv c n (d.withStack l) :=

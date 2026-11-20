@@ -391,13 +391,6 @@ theorem historyStorageCall_canonical {rules : ForkRules} {benv : Benv}
 
 /-! ### The body -/
 
-/-- Crediting balances in turn keeps a state canonical. -/
-theorem State.Canonical.creditAll {state : State} (h : state.Canonical)
-    (credits : List (Address × Nat)) : (Jaune.creditAll credits state).Canonical := by
-  unfold Jaune.creditAll
-  induction credits generalizing state with
-  | nil => exact h
-  | cons c cs ih => exact ih (State.Canonical.addBal h _ _)
 
 /-- **One body operation keeps the prefix's state canonical.** The step reads the prefix's state
 in place of the block environment's, so of the environment only its original state is asked:

@@ -712,14 +712,7 @@ because a warm access alone costs 100 and a value-bearing call pays
 This single lemma discharges all three call outcomes: the depth-0 refund, the
 insufficient-balance refund, and the spawn itself. -/
 
-theorem access_cost_pos (x : Address) (a : AdrSet) : 0 < accessCost x a := by
-  unfold accessCost Gas.warmStorageReadCost Gas.coldAccountAccessCost
-  split <;> omega
 
-theorem Gas.warmStorageReadCost_le_access_cost (x : Address) (a : AdrSet) :
-    Gas.warmStorageReadCost ≤ accessCost x a := by
-  unfold accessCost Gas.warmStorageReadCost Gas.coldAccountAccessCost
-  split <;> omega
 
 /-! ### The same two facts, of the schedule the interpreter reads
 
@@ -739,29 +732,8 @@ theorem GasSchedule.warmStorageReadCost_le_access_cost {gas : GasSchedule}
     Gas.warmStorageReadCost ≤ gas.accessCost x a :=
   hv.warmAccess_le_accessCost x a
 
-/-- Under the flat (pre-EIP-2929) schedule every family's price is positive:
-the termination argument's one need of that shape, from `ForkRules.Valid`. -/
-theorem ForkRules.Valid.flatAccess {r : ForkRules} (hv : r.Valid)
-    {g : FlatAccessGas} (h : r.access = .flat g) : g.Valid := by
-  have ha := hv.access
-  rw [h] at ha
-  exact ha
 
-theorem calculateMsgCallGas_stipend_lt
-    {value gas gasLeft memoryCost extraGas cs : Nat}
-    (hstip : (if value = 0 then 0 else cs) < extraGas + memoryCost) :
-    (calculateMsgCallGas value gas gasLeft memoryCost extraGas cs).2 <
-      (calculateMsgCallGas value gas gasLeft memoryCost extraGas cs).1 + memoryCost := by
-  unfold calculateMsgCallGas
-  split <;> split <;> simp_all <;> omega
 
-theorem calculateMsgCallGas_zero_cost
-    (value gas gasLeft cs : Nat) :
-    (calculateMsgCallGas value gas gasLeft 0 0 cs).2 =
-      (calculateMsgCallGas value gas gasLeft 0 0 cs).1 +
-        (if value = 0 then 0 else cs) := by
-  unfold calculateMsgCallGas
-  split <;> split <;> simp_all
 
 /-! ## Pilot
 
@@ -848,7 +820,7 @@ theorem call_charge_stipend_lt
     d'.gasMeasure + (calculateMsgCallGas value gas gasLeft memoryCost extraGas cs).2
       < devm.gasMeasure := by
   have e := chargeGas_gasMeasure hcharge
-  have s := calculateMsgCallGas_stipend_lt (value := value) (gas := gas)
+  have s := calculateMessageCallGas_stipend_lt (value := value) (gas := gas)
     (gasLeft := gasLeft) (memoryCost := memoryCost) (extraGas := extraGas)
     (cs := cs) hstip
   omega
@@ -1587,9 +1559,6 @@ theorem JumpOp.runCore_gasLt (pc : Nat) (devm : Devm) (sevm : Sevm)
       unfold Gas.high at e3
       omega
 
-theorem except64th_le (n : Nat) : except64th n ≤ n := by
-  unfold except64th
-  omega
 
 theorem executePrecompile_gasLe (evm : Evm) (adr : Address) :
     (executePrecompile evm adr).gasMeasure ≤ evm.dyna.gasMeasure := by
@@ -2819,13 +2788,6 @@ theorem NextOp.step_push_gasLt {xs : Bytes} {evm : Evm} {devm : Devm}
 
 /-! ## Inversions for the transaction layer's lifts -/
 
-/-- Inversion for the `Option.toExcept` lifts that thread the transaction
-chain: a successful lift pins the option. -/
-theorem Option.toExcept_eq_ok {ξ : Type u} {υ : Type v} {x : ξ} {o : Option υ}
-    {v : υ} (h : Option.toExcept x o = .ok v) : o = some v := by
-  cases o with
-  | none => nomatch h
-  | some w => cases h; rfl
 
 /-- Inversion for the `bimap Prod.fst id` error erasure. -/
 theorem Except.bimap_id_eq_ok {ε : Type u0} {δ : Type u1} {ξ : Type u2}

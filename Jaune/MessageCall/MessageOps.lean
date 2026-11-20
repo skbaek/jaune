@@ -29,12 +29,6 @@ open Jaune
 
 /-! ### What a message operation hands the driver -/
 
-/-- What the caller waits with while its child runs, besides the saved caller itself. -/
-structure Pending : Type where
-  /-- Where the child's result goes. -/
-  target : ReturnTarget
-  /-- Whether the spawn charged a new account's state gas, which a failed child refunds. -/
-  newAccountCharged : Bool
 
 /-- The result of a message operation: finished in place, or a child frame to run. -/
 inductive MessageOp.Outcome : Type

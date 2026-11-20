@@ -56,9 +56,6 @@ abbrev creditSelfdestructRefund (rules : ForkRules) (alreadyScheduled : Prop)
 
 end Frame.State
 
-/-- `SELFDESTRUCT`'s fault: the donor's balance could not be debited by itself. -/
-def insufficientBalanceFault : Fault :=
-  .internal (.invariant (.text "InsufficientBalanceError"))
 
 namespace Staging
 

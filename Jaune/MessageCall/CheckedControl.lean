@@ -1,5 +1,4 @@
 import Jaune.MessageCall.CheckedState
-import Jaune.MessageCall.Control
 import Jaune.PrecompileInput
 import Jaune.MessageCall.Records
 

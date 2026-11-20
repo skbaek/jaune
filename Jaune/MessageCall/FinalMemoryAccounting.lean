@@ -583,7 +583,7 @@ private theorem call_reply_fixed
     · exact refund_call_reply _ _ _
     · apply genericCall_reply
       · exact hn
-      · exact calculateMsgCallGas_word_child_lt_with_stipend ..
+      · exact calculateMessageCallGas_word_child_lt_with_stipend ..
       · exact bound
 
 private theorem call_reply_paid
@@ -639,7 +639,7 @@ private theorem zero_call_step_cost {s charged : Frame.State} {gas : U256} {extr
     (calculateMsgCallGas 0 gas.toNat s.gasLeft (s.extCost [(ii, il), (oi, ol)]) extra cs).1
     (Nat.le_refl (Machine.memoryPotential s.machine))
   rw [hc] at hp
-  have hg := calculateMsgCallGas_zero_value_cost gas.toNat s.gasLeft (s.extCost [(ii, il), (oi, ol)]) extra cs
+  have hg := calculateMessageCallGas_zero_value_cost gas.toNat s.gasLeft (s.extCost [(ii, il), (oi, ol)]) extra cs
   simp only [Walk.ok_iff] at hp
   rw [Nat.add_assoc, ← hg]
   exact hp
@@ -659,7 +659,7 @@ private theorem zero_call_resume_aux
     r.gasMeasure ≤ gas.toNat ∧ post.memory.size = memExtsSize before.memory.size [(ii, il), (oi, ol)] ∧
       Machine.memoryPotential post.machine + extra ≤ Machine.memoryPotential before.machine := by
   obtain ⟨grant, checkpoint, pending⟩ := genericCall.step_spawn_call hspawn
-  have hcap := calculateMsgCallGas_zero_child_le gas.toNat before.gasLeft
+  have hcap := calculateMessageCallGas_zero_child_le gas.toNat before.gasLeft
     (before.extCost [(ii, il), (oi, ol)]) extra cs
   rw [grant] at hr
   have hwin : ReturnTarget.MemoryPaid p.target child.checkpoint.memory.size := by
@@ -714,7 +714,7 @@ theorem call_spawn_native_reply_bound
   · rw [genericCall.step_spawn_data_length hs]
     exact hsource.elim (charged_call_input_length_lt_two_pow_160 _ _ _ _ _ hc) id
   · rw [(genericCall.step_spawn_call hs).1]
-    exact calculateMsgCallGas_word_child_lt_with_stipend ..
+    exact calculateMessageCallGas_word_child_lt_with_stipend ..
 
 private theorem zero_call_resume_size {ctx : CallContext} {before charged post : Frame.State}
     {gas value : U256} {extra cs ii il oi ol : Nat} {caller target codeAddress : Address}

@@ -23,10 +23,6 @@ open Jaune
 
 /-! ## Settling a finished frame -/
 
-/-- A frame result's gas measure: what its caller can absorb, its execution gas and its
-state-gas spill. -/
-def Frame.Result.gasMeasure (r : Frame.Result) : Nat :=
-  r.gasLeft + r.stateGas.spilled + r.stateGas.committedSpill
 
 /-- The measure of the state a halt-typed computation ends in, on either branch. -/
 def haltGas : Except (ExceptionalHalt × Devm) Devm → Nat

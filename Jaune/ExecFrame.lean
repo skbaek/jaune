@@ -186,11 +186,6 @@ theorem Devm.Burn.eq_setMach {d d' : Devm} (h : Devm.Burn d d') :
   Devm.Rel.eq_setMach h
 
 
-def HaltOp.At (code : ByteArray) (pc : Nat) (l : HaltOp) : Prop := code.getOp pc = some (.halt l)
-def NextOp.At (code : ByteArray) (pc : Nat) (n : NextOp) : Prop := code.getOp pc = some (.next n)
-def JumpOp.At (code : ByteArray) (pc : Nat) (j : JumpOp) : Prop := code.getOp pc = some (.jump j)
-def PlainOp.At (code : ByteArray) (pc : Nat) (r : PlainOp) : Prop := code.getOp pc = some (.next (.plain r))
-def MessageOp.At (code : ByteArray) (pc : Nat) (x : MessageOp) : Prop := code.getOp pc = some (.next (.message x))
 
 /-! ### The value transfer at message entry -/
 

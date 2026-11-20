@@ -24,13 +24,7 @@ unfolding the interpreter.
 
 namespace Jaune
 
-/-- A failed child's meter as settlement leaves it: no committed or outstanding spill, and the
-reservoir at its baseline. -/
-def StateGasMeter.Settled (m : StateGasMeter) : Prop :=
-  m.committedSpill = 0 ∧ m.spilled = 0 ∧ m.left = m.baseline
 
-instance (m : StateGasMeter) : Decidable m.Settled := by
-  unfold StateGasMeter.Settled; infer_instance
 
 /-- The caller's machine after its child returns and the calling opcode's push and output write:
 `resume`'s machine when the push fits. -/

@@ -492,34 +492,9 @@ theorem Evm.step_canonical {evm : Evm} (h : evm.Canonical) :
 theorem World.Canonical.clearStorageWritesIfEmpty {w : World} (h : w.Canonical) (a : Address) :
     (w.clearStorageWritesIfEmpty a).Canonical := h
 
-theorem World.Canonical.createSetUp {w : World} (h : w.Canonical) (a : Address) :
-    (w.createSetUp a).Canonical :=
-  ⟨State.Canonical.incrNonce (State.Canonical.setStor h.1 a Storage.canonical_empty) a, h.2⟩
 
-theorem World.Canonical.subtractBalance {w w' : World} (h : w.Canonical) {a : Address} {v : U256}
-    (hw : w.subtractBalance a v = some w') : w'.Canonical := by
-  unfold World.subtractBalance at hw
-  cases hs : w.state.subBal a v with
-  | none => rw [hs] at hw; nomatch hw
-  | some st =>
-    rw [hs] at hw
-    cases hw
-    exact ⟨State.Canonical.subBal h.1 hs, h.2⟩
 
-theorem World.Canonical.addBalance {w : World} (h : w.Canonical) (a : Address) (v : U256) :
-    (w.addBalance a v).Canonical :=
-  ⟨State.Canonical.addBal h.1 a v, h.2⟩
 
-theorem Message.transfer_canonical {m : Message} {w w' : World} (h : w.Canonical)
-    (hw : m.transfer w = .ok w') : w'.Canonical := by
-  unfold Message.transfer at hw
-  split at hw
-  · split at hw
-    · nomatch hw
-    · rename_i w1 h1
-      cases hw
-      exact World.Canonical.addBalance (World.Canonical.subtractBalance h h1) _ _
-  · cases hw; exact h
 
 theorem Frame.enteredWorld_canonical {f : Frame} (hf : f.Canonical) : f.enteredWorld.Canonical := by
   unfold Frame.enteredWorld
@@ -527,10 +502,6 @@ theorem Frame.enteredWorld_canonical {f : Frame} (hf : f.Canonical) : f.enteredW
   · exact hf.1
   · exact World.Canonical.createSetUp hf.1 _
 
-/-- What a frame result must preserve: a successful frame's world is canonical. -/
-def Frame.Result.Canonical : Frame.Result → Prop
-  | .success _ _ _ world _ _ => world.Canonical
-  | _ => True
 
 theorem Devm.chargeGas_world {cost : Nat} {d e : Devm} (h : Devm.chargeGas cost d = .ok e) :
     e.world = d.world := by

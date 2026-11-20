@@ -33,17 +33,8 @@ namespace Jaune
 
 The defaults agree with `default : BenvStat`, `default : TenvStat` and `default : Sevm`. -/
 
-instance : Inhabited BlockContext := ⟨
-  { fork := .prague, chainId := 0, gasLimit := 0, blockHashes := [], coinbase := 0, number := 0
-    baseFeePerGas := 0, timestamp := 0, prevRandao := 0, excessBlobGas := 0
-    parentBeaconBlockRoot := 0 }⟩
 
-instance : Inhabited TransactionContext := ⟨
-  { origin := 0, gasPrice := 0, blobVersionedHashes := [], originalState := .empty }⟩
 
-instance : Inhabited CallContext := ⟨
-  { caller := 0, recipient := 0, value := 0, calldata := [], code := .empty, depthLeft := 1024
-    isStatic := false, tx := default, block := default }⟩
 
 /-! ### The running frame and its exit -/
 
@@ -402,24 +393,10 @@ end Machine
 
 /-! ### Substate and trail operations -/
 
-/-- Append a log. -/
-def Substate.addLog (u : Substate) (log : Log) : Substate := { u with logs := u.logs ++ [log] }
 
-/-- Warm an address (EIP-2929). -/
-def Substate.addAccessedAddress (u : Substate) (a : Address) : Substate :=
-  { u with accessedAddresses := u.accessedAddresses.insert a }
 
-/-- Warm a storage key (EIP-2929). -/
-def Substate.addAccessedStorageKey (u : Substate) (a : Address) (k : U256) : Substate :=
-  { u with accessedStorageKeys := u.accessedStorageKeys.insert (a, k) }
 
-/-- Record an account read (EIP-7928), whatever the rules. -/
-def Trail.readAccount (t : Trail) (a : Address) : Trail :=
-  { t with accountReads := t.accountReads.insert a }
 
-/-- Record a storage read (EIP-7928), whatever the rules. -/
-def Trail.readStorage (t : Trail) (a : Address) (k : U256) : Trail :=
-  { t with storageReads := t.storageReads.insert (a, k) }
 
 /-! ### State operations and lifts -/
 

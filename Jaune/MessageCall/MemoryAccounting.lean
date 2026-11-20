@@ -2691,7 +2691,7 @@ theorem zero_call_spawn_resume_accounting
   change resume rules pending child.checkpoint r = .ok (.ok resumed) at hresume
   have hchild := settle_exec_gasLe henter hsettle
   rw [hf] at hchild
-  have hcap := calculateMsgCallGas_zero_child_le gas.toNat before.gasLeft
+  have hcap := calculateMessageCallGas_zero_child_le gas.toNat before.gasLeft
     (before.extCost pairs) extraGas cs
   have hmem := resume_call_ok_memory (by rw [hpending]) hresume
   rw [hcheck] at hmem
@@ -2719,7 +2719,7 @@ theorem zero_call_spawn_resume_accounting
     change memExtsSize charged.memory.size pairs = _
     rw [hcharged]
   have hc : costs.1 = costs.2 + extraGas :=
-    calculateMsgCallGas_zero_value_cost _ _ _ _ _
+    calculateMessageCallGas_zero_value_cost _ _ _ _ _
   have hcharge' : chargeGas ((costs.2 + extraGas) + before.extCost pairs) before =
       .ok charged := by
     rw [← hc]
@@ -2791,7 +2791,7 @@ theorem zero_call_spawn_resume_raw_accounting
       (memExtSize charged.memory.size inputIndex inputSize) outputIndex outputSize hs
     exact hw
   have hc : costs.1 = costs.2 + extraGas :=
-    calculateMsgCallGas_zero_value_cost _ _ _ _ _
+    calculateMessageCallGas_zero_value_cost _ _ _ _ _
   have hcharge' : chargeGas ((costs.2 + extraGas) + before.extCost pairs) before =
       .ok charged := by
     rw [← hc]
@@ -2938,7 +2938,7 @@ theorem call_spawn_code_reply_bound
   have hblock := (genericCall.step_spawn_context hspawn).1
   have hcost : calculateMemoryGasCost (rawOutputLength (exec childEvm)) ≤ child.message.gas :=
     entered_code_output_cost henter (by rw [hblock]; exact hstate)
-  have hgrant := calculateMsgCallGas_word_child_lt_with_stipend value gas gasLeft
+  have hgrant := calculateMessageCallGas_word_child_lt_with_stipend value gas gasLeft
     memoryCost extraGas
   have hlength : rawOutputLength (exec childEvm) < 2 ^ 160 := by
     apply output_length_lt_two_pow_160_with_stipend hcost
@@ -3148,7 +3148,7 @@ private theorem call_spawn_native_enter_success_input_or_potential
     · exact hinput
   have hgas : child.message.gas < 2 ^ 256 + Gas.callStipend := by
     rw [(genericCall.step_spawn_call hspawn).1]
-    exact calculateMsgCallGas_word_child_lt_with_stipend value gas before.gasLeft
+    exact calculateMessageCallGas_word_child_lt_with_stipend value gas before.gasLeft
       (before.extCost [(inputIndex, inputSize), (outputIndex, outputSize)]) extraGas
   have hraw := enter_native_ok_output_length_lt_two_pow_160 hrun hdata hgas
   have hpending := (genericCall.step_spawn_call hspawn).2.2
