@@ -1,8 +1,6 @@
 import Jaune.MessageCall.CheckedParts
 import Jaune.MessageCall.CheckedMemoryAccounting
 import Jaune.CheckedSufficiencyWalk
-import Jaune.MessageCall.SpawnFacts
-import Jaune.Run.Message
 
 /-! Native spawn checkpoints and the child's call or creation kind. -/
 namespace Jaune.Checked

@@ -1,4 +1,3 @@
-import Jaune.MessageCall.Canonical
 import Jaune.MessageCall.CheckedTotality
 import Jaune.Instructions.LogFacts
 import Jaune.Instructions.ReadFacts

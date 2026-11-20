@@ -1,4 +1,3 @@
-import Jaune.MessageCall.State
 import Jaune.MessageCall.Records
 
 /-!

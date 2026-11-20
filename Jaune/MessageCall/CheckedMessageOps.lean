@@ -1,5 +1,4 @@
 import Jaune.MessageCall.CheckedState
-import Jaune.MessageCall.MessageOps
 import Jaune.MessageCall.Records
 
 /-! Message instructions and their frame checkpoints with checked memory. -/

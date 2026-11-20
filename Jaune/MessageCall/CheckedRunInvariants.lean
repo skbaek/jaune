@@ -1,5 +1,4 @@
 import Jaune.CheckedSufficiencyWalk
-import Jaune.MessageCall.RunInvariants
 import Jaune.Instructions.ReadFacts
 import Jaune.Instructions.StoreFacts
 import Jaune.Instructions.Log

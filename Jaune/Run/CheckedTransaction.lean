@@ -1,5 +1,4 @@
 import Jaune.Run.CheckedMessage
-import Jaune.Run.Block
 import Jaune.Run.Prefix
 
 namespace Jaune.Checked
