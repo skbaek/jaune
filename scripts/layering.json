@@ -84,6 +84,8 @@
   "TraceMain": "adapter",
   "Jaune.Run.CheckedMessage": "specification",
   "Jaune.Run.CheckedTransaction": "specification",
+  "Jaune.Run.Transaction": "specification",
+  "Jaune.Run.Body": "specification",
   "Jaune.Run.BodyFactsRlp": "proof",
   "Jaune.Run.BodyFactsT8n": "adapter",
   "Jaune.CheckedSufficiencyWalk": "specification",
