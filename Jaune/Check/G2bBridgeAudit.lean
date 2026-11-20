@@ -9,9 +9,9 @@ import Jaune.Transaction
 /-! # The G2b bridge-ledger audit (goal `jaune-shape-and-names-v1`, X1)
 
 One `#expect_axioms` row for every theorem the G2b entries of `scripts/bridge-ledger.json` cite,
-and one `#check_bridge` row per entry.
+and one `checkBridge` row (`run_cmd`) per entry.
 
-`#check_bridge T [o₁, …] [n₁, …]` reads the kernel type of the exact constant `T`, strips its
+``checkBridge `T #[`o₁, …] #[`n₁, …]`` reads the kernel type of the exact constant `T`, strips its
 leading binders and `let`s, and requires an `Eq` or an `Iff` with one side naming every `nᵢ` and
 none of the `oⱼ`, and the other side naming every `oⱼ` and none of the `nᵢ`. The names are
 the ledger entry's `old.at_tag` and `new.names`, resolved exactly. The ledger checker's Mode A
@@ -37,21 +37,21 @@ def statementSides (thm : Name) : MetaM (Array Name × Array Name) := do
       return (l.getUsedConstants, r.getUsedConstants)
     if let some (l, r) := body.iff? then
       return (l.getUsedConstants, r.getUsedConstants)
-    throwError "#check_bridge: the statement of {thm} is neither an equation nor an iff"
+    throwError "checkBridge: the statement of {thm} is neither an equation nor an iff"
 
 /-- One orientation of the bridge: `here` names every name of `want` and none of `avoid`. -/
 def sideHolds (here : Array Name) (want avoid : Array Name) : Bool :=
   want.all here.contains && !avoid.any here.contains
 
-elab "#check_bridge " thm:ident " [" olds:ident,* "]" " [" news:ident,* "]" : command => do
+/-- One bridge row: the statement of `name` relates exactly `olds` (the entry's `old.at_tag`) and
+`news` (its `new.names`). Rows call it through `run_cmd`, a command form the N4 capture records;
+the capture refuses unregistered `#` commands. -/
+def checkBridge (name : Name) (olds news : Array Name) : CommandElabM Unit := do
   let env ← getEnv
-  let name := thm.getId
-  let olds := olds.getElems.map (·.getId)
-  let news := news.getElems.map (·.getId)
   for n in #[name] ++ olds ++ news do
-    unless env.contains n do throwError "#check_bridge: unknown declaration {n}"
+    unless env.contains n do throwError "checkBridge: unknown declaration {n}"
   if olds.isEmpty || news.isEmpty then
-    throwError "#check_bridge: {name} needs at least one old and one new name"
+    throwError "checkBridge: {name} needs at least one old and one new name"
   let (l, r) ← liftTermElabM (statementSides name)
   let ok := (sideHolds l news olds && sideHolds r olds news) ||
     (sideHolds r news olds && sideHolds l olds news)
@@ -123,28 +123,28 @@ allows a subset of the standard axioms; their exact sets are stated below as wel
 
 /-! ## Bridge rows: each entry's theorem relates exactly its old side at the tag and its new names -/
 
-#check_bridge Jaune.Checked.stateTransitionCoreE_observe [Jaune.stateTransitionCoreE] [Jaune.Checked.stateTransitionCoreE]
-#check_bridge Jaune.Checked.applyBody_initBlockEnvironment [Jaune.applyBody] [Jaune.Checked.applyBody]
-#check_bridge Jaune.Checked.applyBody_observe [Jaune.applyBody] [Jaune.Checked.applyBody]
-#check_bridge Jaune.Checked.Transaction.run_observe [Jaune.Transaction.run] [Jaune.Checked.Transaction.run]
-#check_bridge Jaune.Checked.TopLevel.runNative_observe_waiting [Jaune.TopLevel.run] [Jaune.Checked.TopLevel.runNative]
-#check_bridge Jaune.Checked.processSystemTransaction_observe [Jaune.processSystemTransaction] [Jaune.Checked.processSystemTransaction]
-#check_bridge Jaune.Checked.processCheckedSystemTransaction_observe [Jaune.processCheckedSystemTransaction] [Jaune.Checked.processCheckedSystemTransaction]
-#check_bridge Jaune.Checked.Body.step_observe [Jaune.Body.step] [Jaune.Checked.Body.step]
-#check_bridge Jaune.Checked.Body.importer_observe [Jaune.Body.importer] [Jaune.Checked.Body.importer]
-#check_bridge Jaune.Checked.Frame.runTop_square [Jaune.Frame.runTop] [Jaune.Checked.Frame.runTop]
-#check_bridge Jaune.Checked.exec_square [Jaune.exec] [Jaune.Checked.exec]
-#check_bridge Jaune.Checked.step_ofEvm [Jaune.Evm.step] [Jaune.Checked.step]
-#check_bridge Jaune.Checked.initBlockContext_observe [Jaune.initBlockEnvironment] [Jaune.Checked.initBlockContext]
-#check_bridge Jaune.Memory.write_toMem [Jaune.Mem.write] [Jaune.Memory.write]
-#check_bridge Jaune.Memory.read_toMem [Jaune.Mem.read] [Jaune.Memory.read]
-#check_bridge Jaune.Memory.extend_toMem [Jaune.Mem.extend] [Jaune.Memory.extend]
-#check_bridge Jaune.Precompile.run_ofEvm [Jaune.precompileRun] [Jaune.Precompile.run]
-#check_bridge Jaune.Checked.Frame.Run.rawNodes_w1 [Jaune.Exec.rawNodes] [Jaune.Checked.Frame.Run.rawNodes]
-#check_bridge Jaune.Checked.Frame.Run.retainedNodes_w1 [Jaune.Exec.retainedNodes] [Jaune.Checked.Frame.Run.retainedNodes]
-#check_bridge Jaune.Checked.Frame.Run.committedFrames_w1 [Jaune.Exec.committedFrames] [Jaune.Checked.Frame.Run.committedFrames]
-#check_bridge Jaune.Checked.Frame.Run.prefix_w1_iff [Jaune.Exec.Deriv.ParentPrefix] [Jaune.Checked.Frame.Run.Node.Prefix]
-#check_bridge Jaune.Bridge.G2b.CheckedTrace.runFrame_nativeJson [Jaune.Trace.runFrame, Jaune.TraceJson.sink] [Jaune.Checked.Trace.runFrame]
-#check_bridge Jaune.Bridge.G2b.CheckedTrace.runDirectFrame_nativeJson [Jaune.Trace.runFrame, Jaune.TraceJson.sink] [Jaune.Checked.Trace.runFrame]
-#check_bridge Jaune.Bridge.G2b.CheckedTrace.runNativeTransaction_nativeJson [Jaune.TraceTransaction.runTransaction, Jaune.TraceJson.sink] [Jaune.Checked.Trace.runTransaction]
-#check_bridge Jaune.stateTransitionCanonical_eq [Jaune.stateTransitionCanonical] [Jaune.stateTransitionE]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.stateTransitionCoreE_observe #[`Jaune.stateTransitionCoreE] #[`Jaune.Checked.stateTransitionCoreE]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.applyBody_initBlockEnvironment #[`Jaune.applyBody] #[`Jaune.Checked.applyBody]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.applyBody_observe #[`Jaune.applyBody] #[`Jaune.Checked.applyBody]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.Transaction.run_observe #[`Jaune.Transaction.run] #[`Jaune.Checked.Transaction.run]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.TopLevel.runNative_observe_waiting #[`Jaune.TopLevel.run] #[`Jaune.Checked.TopLevel.runNative]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.processSystemTransaction_observe #[`Jaune.processSystemTransaction] #[`Jaune.Checked.processSystemTransaction]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.processCheckedSystemTransaction_observe #[`Jaune.processCheckedSystemTransaction] #[`Jaune.Checked.processCheckedSystemTransaction]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.Body.step_observe #[`Jaune.Body.step] #[`Jaune.Checked.Body.step]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.Body.importer_observe #[`Jaune.Body.importer] #[`Jaune.Checked.Body.importer]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.Frame.runTop_square #[`Jaune.Frame.runTop] #[`Jaune.Checked.Frame.runTop]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.exec_square #[`Jaune.exec] #[`Jaune.Checked.exec]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.step_ofEvm #[`Jaune.Evm.step] #[`Jaune.Checked.step]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.initBlockContext_observe #[`Jaune.initBlockEnvironment] #[`Jaune.Checked.initBlockContext]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Memory.write_toMem #[`Jaune.Mem.write] #[`Jaune.Memory.write]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Memory.read_toMem #[`Jaune.Mem.read] #[`Jaune.Memory.read]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Memory.extend_toMem #[`Jaune.Mem.extend] #[`Jaune.Memory.extend]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Precompile.run_ofEvm #[`Jaune.precompileRun] #[`Jaune.Precompile.run]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.Frame.Run.rawNodes_w1 #[`Jaune.Exec.rawNodes] #[`Jaune.Checked.Frame.Run.rawNodes]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.Frame.Run.retainedNodes_w1 #[`Jaune.Exec.retainedNodes] #[`Jaune.Checked.Frame.Run.retainedNodes]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.Frame.Run.committedFrames_w1 #[`Jaune.Exec.committedFrames] #[`Jaune.Checked.Frame.Run.committedFrames]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Checked.Frame.Run.prefix_w1_iff #[`Jaune.Exec.Deriv.ParentPrefix] #[`Jaune.Checked.Frame.Run.Node.Prefix]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Bridge.G2b.CheckedTrace.runFrame_nativeJson #[`Jaune.Trace.runFrame, `Jaune.TraceJson.sink] #[`Jaune.Checked.Trace.runFrame]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Bridge.G2b.CheckedTrace.runDirectFrame_nativeJson #[`Jaune.Trace.runFrame, `Jaune.TraceJson.sink] #[`Jaune.Checked.Trace.runFrame]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.Bridge.G2b.CheckedTrace.runNativeTransaction_nativeJson #[`Jaune.TraceTransaction.runTransaction, `Jaune.TraceJson.sink] #[`Jaune.Checked.Trace.runTransaction]
+run_cmd Jaune.Check.G2bBridgeAudit.checkBridge `Jaune.stateTransitionCanonical_eq #[`Jaune.stateTransitionCanonical] #[`Jaune.stateTransitionE]

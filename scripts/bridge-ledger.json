@@ -3806,7 +3806,7 @@
       "notes": [
         "Gate anchor. Inputs: every error embedding, Fork, BlockChain, Block and ommer check. Observation: the whole Except result, plain Eq, unconditional.",
         "Production: stateTransitionE and stateTransitionScheduledE run Checked.stateTransitionCoreE since 146f468d (jsn-u91); the native facts are Run/CheckedCanonical.lean.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -3866,7 +3866,7 @@
       "notes": [
         "Inputs: every Fork, BlockChain, Header and body (transactions, ommers, withdrawals) on the block context the consensus engine builds. Observation: the whole Except TransitionError (State x BlockOutput), plain Eq, unconditional.",
         "Checked.applyBody takes BlockContext and the prefix state, not Benv (decision 13; jsn-u82); consumers JauneConsensus Engine/JointGloas call it since 146f468d.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -3926,7 +3926,7 @@
       "notes": [
         "Every fresh Benv through the named map benv -> (benv.stat.toBlockContext, benv.state). Observation: the whole result, plain Eq.",
         "Premise benv.Fresh (createdAccounts empty), established by initBlockEnvironment_fresh and kept by Fresh.withState/beginTransaction, so every block run satisfies it; the block anchor G2b-block is unconditional.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -3986,7 +3986,7 @@
       "notes": [
         "Inputs: every fresh Benv, BlockOutput, Transaction and index. Observation: the post-state and the block output of the whole Except result (rejection text included); the frame lists by Transaction.run_frames_observe, the settlement by Transaction.run_settlement_observe.",
         "Premise benv.Fresh (createdAccounts empty), established by initBlockEnvironment_fresh and kept by Fresh.withState/beginTransaction, so every block run satisfies it; the block anchor G2b-block is unconditional.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4046,7 +4046,7 @@
       "notes": [
         "Composed in the audit module from runNative_observe (CheckedTop) and run_observe (CheckedTop) through the bridge-side Checked.TopLevel.run. Inputs: every Msg with a successful waiting preparation, on its native input Input.ofLegacy msg. Observation: the whole TopLevelRun through the waiting observation of that preparation, plain Eq.",
         "Preparation faults: Checked.TopLevel.runNative_of_prepare_error (same module) returns the same fault on both sides. Kept frames: TopLevel.runNative_frames_observe.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4106,7 +4106,7 @@
       "notes": [
         "Inputs: every fresh Benv, target, code and calldata. Observation: the whole Except result through Settlement.ofLegacy (all twelve settlement fields).",
         "Premise benv.Fresh (createdAccounts empty), established by initBlockEnvironment_fresh and kept by Fresh.withState/beginTransaction, so every block run satisfies it; the block anchor G2b-block is unconditional.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4166,7 +4166,7 @@
       "notes": [
         "Inputs: every fresh Benv, target and calldata. Observation: the whole Except result (system-contract failure text included) through Settlement.ofLegacy.",
         "Premise benv.Fresh (createdAccounts empty), established by initBlockEnvironment_fresh and kept by Fresh.withState/beginTransaction, so every block run satisfies it; the block anchor G2b-block is unconditional.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4226,7 +4226,7 @@
       "notes": [
         "Inputs: every fresh Benv, body prefix and body operation. Observation: the whole Except result (the new prefix; the waiting Benv component is dropped by Prod.snd).",
         "Premise benv.Fresh (createdAccounts empty), established by initBlockEnvironment_fresh and kept by Fresh.withState/beginTransaction, so every block run satisfies it; the block anchor G2b-block is unconditional.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4286,7 +4286,7 @@
       "notes": [
         "Inputs: every fresh Benv and body. Observation: the whole Except result, plain Eq.",
         "Premise benv.Fresh (createdAccounts empty), established by initBlockEnvironment_fresh and kept by Fresh.withState/beginTransaction, so every block run satisfies it; the block anchor G2b-block is unconditional.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4346,7 +4346,7 @@
       "notes": [
         "Inputs: every checked Frame under every LegacyTransaction projection. Observation: the whole frame result, plain Eq against the W1 run of f.toLegacy (lossless; Frame.toLegacy_ofLegacy).",
         "Memory well-formedness of prepared frames: Staging.TopLevel.prepare_frame_memory_wf, prepared_reached_memory_wf.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4406,7 +4406,7 @@
       "notes": [
         "Inputs: every Evm with well-formed memory and empty output (the reached starts: prepared_reached_memory_wf). Observation: the whole exit through Frame.Exit.toLegacy / Frame.Exit.ofExecution.",
         "The compiled Checked.exec runs the cached driver by @[csimp] Checked.execFueled_eq_cached (jsn-u81; temporary second hygiene row approved, decision jsn-g2b-protocol-user). Mode B does not visit @[csimp] theorems (review finding 7); W1 execFueled_eq_cached stays byte-identical.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4466,7 +4466,7 @@
       "notes": [
         "W4 family dispatch anchored on the W1 Evm.step (review finding 4.3). Inputs: every Evm with well-formed memory and empty output. Observation: the whole step result through Step.toLegacy / Evm.step observe.",
         "Supporting proofs (cited, not Mode B rows; they are anchored at 9ce48608): Checked.PlainOp.runCore_arms, run_arms, NextOp.step_arms (Bridge/G2b/CheckedDispatch.lean), the Arms.*Row?_runCore_eq family agreements (CheckedRowAgreement.lean) and SstoreRow/TstoreRow.ofRules_lift_eq (CheckedStoreAgreement.lean), audited in Check/InstructionFamiliesAudit.lean.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4526,7 +4526,7 @@
       "notes": [
         "Contexts (decision 13): the block record the Checked run layer builds is the named map of the block environment W1 builds, for every Fork, BlockChain and Header (rfl).",
         "Call contexts: CallContext.toChecked is the forgetful map; its read squares toChecked_* and toChecked_eq_of_reads (Bridge/G2b/CheckedContext.lean) are audited in Check/CheckedSpecAudit.lean. Every step and run bridge above passes contexts through these maps.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4585,7 +4585,7 @@
       "gaps": [],
       "notes": [
         "W6a. Inputs: every Memory (well-formedness in its type), index and bytes. Observation: the whole memory through Memory.toMem.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4644,7 +4644,7 @@
       "gaps": [],
       "notes": [
         "W6a. Inputs: every Memory, index and size. Observation: the read bytes and the memory through Memory.toMem (rfl).",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4703,7 +4703,7 @@
       "gaps": [],
       "notes": [
         "W6a. Inputs: every Memory, index and size. Observation: the memory through Memory.toMem (rfl).",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4762,7 +4762,7 @@
       "gaps": [],
       "notes": [
         "Inputs: every Evm and address. Observation: the whole precompile result, plain Eq, on the input projected from the Evm; the 18 per-precompile *_ofEvm lemmas are in the same module.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4822,7 +4822,7 @@
       "notes": [
         "S5 view composed to W1 (review finding 4.3). Inputs: every Frame.Run and W1 Exec from a common start with empty output. Observation: the list of every reached node, node by node through legacyObservation / frameObservation.",
         "Adequacy: Checked.Frame.Run.exec_iff (FrameRun/CheckedAdequacy.lean).",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4881,7 +4881,7 @@
       "gaps": [],
       "notes": [
         "Inputs as G2b-view-raw. Observation: the nodes kept after settlement, in order.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4940,7 +4940,7 @@
       "gaps": [],
       "notes": [
         "Inputs as G2b-view-raw. Observation: the kept frames with output bytes and complete post-state.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -4999,7 +4999,7 @@
       "gaps": [],
       "notes": [
         "Inputs: every checked derivation and W1 derivation from a common start with empty output. Observation: the same-frame continuations reached, as an iff over staged nodes.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -5069,7 +5069,7 @@
       "notes": [
         "Serialized stream, frame scope (jsn-u88): for every checked frame, the native tracer through the native serializer (Legacy.nativeSink := Checked.TraceJson.sinkWith over the old IO.Ref through jsonState/ofJsonState) makes the same row writes and returns the same result and next frame as the W1 tracer through the W1 serializer on the projected frame.",
         "Remainder not stated by any theorem (u88): TraceMain keeps a native IO.Ref Checked.TraceJson.State and passes ref.get/ref.set (Checked.TraceJson.sink), not the old reference through the representation map; that the two placements write the same bytes is representation independence of a state touched only by get and set, covered by check-trace.py (30 tests) and the u88 byte comparison (38 requests, 0 differences). Accepted as check-trace-only (decision jsn-g2b-n4-0-accept, accepted row covers trace; precedent jsn-w1-u29-accept).",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -5138,7 +5138,7 @@
       "gaps": [],
       "notes": [
         "Serialized stream, message scope (the scope TraceMain uses): every Msg, its native input against Frame.ofTop. Same remainder as G2b-trace-frame.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -5208,7 +5208,7 @@
       "notes": [
         "Serialized stream, signed-transaction scope: every fresh Benv, BlockOutput, Transaction and index; the same row writes and the observations the transaction summary consumes (final state, block output, return bytes, halt, settlement). Same remainder as G2b-trace-frame.",
         "Premise benv.Fresh (createdAccounts empty), established by initBlockEnvironment_fresh and kept by Fresh.withState/beginTransaction, so every block run satisfies it; the block anchor G2b-block is unconditional.",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
     {
@@ -5273,7 +5273,7 @@
       "gaps": [],
       "notes": [
         "S6c (folded into G2b): stateTransitionCanonical f ch cb = stateTransitionE f ch cb.block for every input (rfl). Both sides reach stateTransitionE, which U5 (146f468d) switched to Checked.stateTransitionCoreE; the exempt row makes Mode B compare the closure up to that bridged swap (review finding 4.2).",
-        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
+        "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     }
   ],
