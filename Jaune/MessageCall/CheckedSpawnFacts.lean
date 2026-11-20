@@ -279,6 +279,347 @@ theorem step_spawn_create_warm {r : Frame.Running} {child : Frame} {p : Staging.
   · rw [hk] at hcall; cases hcall
   · exact hw
 
+/-! ### Accessed-address growth through spawns and frame entry -/
+
+private def AccGrow (pre post : Frame.State) : Prop :=
+  ∀ a, a ∈ pre.accessedAddresses → a ∈ post.accessedAddresses
+
+private theorem AccGrow.rfl {s : Frame.State} : AccGrow s s := fun _ h => h
+
+private theorem AccGrow.trans {s₁ s₂ s₃ : Frame.State}
+    (h₁ : AccGrow s₁ s₂) (h₂ : AccGrow s₂ s₃) : AccGrow s₁ s₃ :=
+  fun a ha => h₂ a (h₁ a ha)
+
+private theorem AccGrow.of_substate_eq {s₁ s₂ : Frame.State}
+    (h : s₂.substate = s₁.substate) : AccGrow s₁ s₂ := by
+  intro a ha
+  change a ∈ s₂.substate.accessedAddresses
+  rw [h]
+  exact ha
+
+private theorem AccGrow.addAccessedAddress (s : Frame.State) (x : Address) :
+    AccGrow s (s.addAccessedAddress x) := by
+  intro a ha
+  exact Std.HashSet.mem_insert.2 (Or.inr ha)
+
+private theorem AccGrow.accessDelegation (rules : ForkRules) (s : Frame.State) (x : Address) :
+    AccGrow s (ForkRules.accessDelegation rules s x).2.2.2.2 := by
+  unfold ForkRules.accessDelegation
+  cases rules.delegationEnabled with
+  | false => simp only [Bool.false_eq_true, ↓reduceIte]; exact AccGrow.rfl
+  | true =>
+    unfold GasSchedule.accessDelegation
+    dsimp only
+    cases getDelegatedCodeAddress (s.code x) with
+    | none => exact AccGrow.rfl
+    | some adr => exact AccGrow.addAccessedAddress s adr
+
+private theorem AccGrow.completeDelegation (s : Frame.State) (d : Bool) (x : Address) :
+    AccGrow s (completeDelegationAccess s d x).2 := by
+  cases d with
+  | false => exact AccGrow.rfl
+  | true => exact AccGrow.addAccessedAddress s x
+
+private theorem AccGrow.accessRule (acc : AccessSchedule) (s : Frame.State) (x : Address) :
+    AccGrow s (match acc with | .eip2929 => s.addAccessedAddress x | .flat _ => s) := by
+  cases acc with
+  | flat _ => exact AccGrow.rfl
+  | eip2929 => exact AccGrow.addAccessedAddress s x
+
+private theorem AccGrow.trans_substate {s0 s1 s2 : Frame.State}
+    (h1 : AccGrow s0 s1) (h2 : s2.substate = s1.substate) : AccGrow s0 s2 :=
+  h1.trans (AccGrow.of_substate_eq h2)
+
+private theorem AccGrow.trans_substate_add {s0 s1 s2 : Frame.State} {x : Address}
+    (h1 : AccGrow s0 s1) (h2 : s2.substate = (s1.addAccessedAddress x).substate) :
+    AccGrow s0 s2 :=
+  (h1.trans (AccGrow.addAccessedAddress _ _)).trans (AccGrow.of_substate_eq h2)
+
+private theorem AccGrow.trans_accessDelegation {s0 s : Frame.State} {rules : ForkRules}
+    {x : Address} (h : AccGrow s0 s) :
+    AccGrow s0 (ForkRules.accessDelegation rules s x).2.2.2.2 :=
+  h.trans (AccGrow.accessDelegation _ _ _)
+
+private theorem AccGrow.trans_completeDelegation {s0 s : Frame.State} {d : Bool} {x : Address}
+    (h : AccGrow s0 s) : AccGrow s0 (completeDelegationAccess s d x).2 :=
+  h.trans (AccGrow.completeDelegation _ _ _)
+
+private theorem AccGrow.trans_accessRule {s0 s : Frame.State} {acc : AccessSchedule}
+    {x : Address} (h : AccGrow s0 s) :
+    AccGrow s0 (match acc with | .eip2929 => s.addAccessedAddress x | .flat _ => s) :=
+  h.trans (AccGrow.accessRule _ _ _)
+
+private theorem callAccGrow {ctx s gas value caller target addr transfer static ii il oi ol code
+    disabled f p}
+    (h : genericCall.step ctx s gas value caller target addr transfer static ii il oi ol code
+      disabled = .spawn f p) : AccGrow s f.checkpoint := by
+  obtain ⟨hcp, _, _⟩ := genericCall.step_spawn_checkpoint h
+  exact AccGrow.of_substate_eq (by rw [hcp]; rfl)
+
+private theorem callStateAccGrow {ctx rules s gas reservoir value caller target addr transfer static
+    ii il oi ol code disabled charged insufficient f p}
+    (h : genericCallAmsterdam.step ctx rules s gas reservoir value caller target addr transfer static
+      ii il oi ol code disabled charged insufficient = .spawn f p) : AccGrow s f.checkpoint := by
+  obtain ⟨hcp, _, _⟩ := genericCallAmsterdam.step_spawn_checkpoint h
+  exact AccGrow.of_substate_eq (by rw [hcp]; rfl)
+
+private theorem createAccGrow {ctx s value a i len f p}
+    (h : genericCreate.step ctx s value a i len = .spawn f p) : AccGrow s f.checkpoint := by
+  obtain ⟨hcp, _, _⟩ := genericCreate.step_spawn_checkpoint h
+  have h1 : AccGrow s (((s.withGasLeft (s.gasLeft - except64th s.gasLeft)).withReturnData
+      []).incrNonce ctx.recipient) := AccGrow.of_substate_eq rfl
+  have h2 := h1.trans (AccGrow.addAccessedAddress _ a)
+  rw [← hcp] at h2
+  exact h2
+
+private theorem createStateAccGrow {ctx rules s value a i len f p}
+    (h : genericCreateAmsterdam.step ctx rules s value a i len = .spawn f p) :
+    AccGrow s f.checkpoint := by
+  obtain ⟨⟨t, hif, hcp⟩, _⟩ := genericCreateAmsterdam.step_spawn_checkpoint h
+  let caller := (s.withReturnData []).recordAccountRead ctx.block.rules ctx.recipient
+  let accessed := (caller.addAccessedAddress a).recordAccountRead ctx.block.rules a
+  have h1 : AccGrow s caller := AccGrow.of_substate_eq rfl
+  have h2 : AccGrow caller accessed :=
+    (AccGrow.addAccessedAddress caller a).trans (AccGrow.of_substate_eq rfl)
+  have hsub : t.substate = accessed.substate := by
+    split at hif
+    · exact chargeStateGas_substate hif
+    · cases hif; rfl
+  exact (h1.trans h2).trans (AccGrow.of_substate_eq (by rw [hcp]; exact hsub))
+
+private def spawnAccPost (s0 : Frame.State) : MessageOp.Outcome → Prop
+  | .done _ => True
+  | .spawn f _ => AccGrow s0 f.checkpoint
+
+private theorem ofExcept_spawnAccPost {s0 : Frame.State}
+    {x : Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hx : Walk (fun _ => True) (spawnAccPost s0) x) :
+    spawnAccPost s0 (MessageOp.Outcome.ofExcept x) := by
+  cases x with
+  | error _ => trivial
+  | ok _ => exact hx
+
+private theorem tail_spawnAccPost {s0 : Frame.State} {o : MessageOp.Outcome}
+    (h : ∀ f p, o = .spawn f p → AccGrow s0 f.checkpoint) : spawnAccPost s0 o := by
+  cases o with
+  | done _ => trivial
+  | spawn f p => exact h f p rfl
+
+private theorem pureAccPost {s0 : Frame.State} {o : MessageOp.Outcome} (h : spawnAccPost s0 o) :
+    Walk (ε := ExceptionalHalt) (fun _ => True) (spawnAccPost s0) (pure o) := h
+
+private theorem walk_liftMachineValue {α : Type} {s0 s : Frame.State}
+    {core : Machine → Except (ExceptionalHalt × Machine) (α × Machine)}
+    {k : α × Frame.State → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hs : AccGrow s0 s)
+    (hk : ∀ a s', AccGrow s0 s' → Walk (fun _ => True) (spawnAccPost s0) (k (a, s'))) :
+    Walk (fun _ => True) (spawnAccPost s0) (s.liftMachineValue core >>= k) := by
+  unfold Frame.State.liftMachineValue
+  cases hc : core s.machine with
+  | error _ => trivial
+  | ok p => exact hk p.1 (s.withMachine p.2) hs
+
+private theorem walk_liftMachine {s0 s : Frame.State}
+    {core : Machine → Except (ExceptionalHalt × Machine) Machine}
+    {k : Frame.State → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hs : AccGrow s0 s)
+    (hk : ∀ s', AccGrow s0 s' → Walk (fun _ => True) (spawnAccPost s0) (k s')) :
+    Walk (fun _ => True) (spawnAccPost s0) (s.liftMachine core >>= k) := by
+  unfold Frame.State.liftMachine
+  cases hc : core s.machine with
+  | error _ => trivial
+  | ok m => exact hk (s.withMachine m) hs
+
+private theorem walk_pop {s0 s : Frame.State}
+    {k : U256 × Frame.State → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hs : AccGrow s0 s)
+    (hk : ∀ a s', AccGrow s0 s' → Walk (fun _ => True) (spawnAccPost s0) (k (a, s'))) :
+    Walk (fun _ => True) (spawnAccPost s0) (s.pop >>= k) :=
+  walk_liftMachineValue hs hk
+
+private theorem walk_popToNat {s0 s : Frame.State}
+    {k : Nat × Frame.State → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hs : AccGrow s0 s)
+    (hk : ∀ a s', AccGrow s0 s' → Walk (fun _ => True) (spawnAccPost s0) (k (a, s'))) :
+    Walk (fun _ => True) (spawnAccPost s0) (s.popToNat >>= k) :=
+  walk_liftMachineValue hs hk
+
+private theorem walk_popToAddress {s0 s : Frame.State}
+    {k : Address × Frame.State → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hs : AccGrow s0 s)
+    (hk : ∀ a s', AccGrow s0 s' → Walk (fun _ => True) (spawnAccPost s0) (k (a, s'))) :
+    Walk (fun _ => True) (spawnAccPost s0) (s.popToAddress >>= k) :=
+  walk_liftMachineValue hs hk
+
+private theorem walk_chargeGas {s0 s : Frame.State} {cost : Nat}
+    {k : Frame.State → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hs : AccGrow s0 s)
+    (hk : ∀ s', AccGrow s0 s' → Walk (fun _ => True) (spawnAccPost s0) (k s')) :
+    Walk (fun _ => True) (spawnAccPost s0) (s.chargeGas cost >>= k) :=
+  walk_liftMachine hs hk
+
+private theorem walk_chargeStateGas {s0 s : Frame.State} {amount : Nat}
+    {k : Frame.State → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hs : AccGrow s0 s)
+    (hk : ∀ s', AccGrow s0 s' → Walk (fun _ => True) (spawnAccPost s0) (k s')) :
+    Walk (fun _ => True) (spawnAccPost s0) (s.chargeStateGas amount >>= k) :=
+  walk_liftMachine hs hk
+
+private theorem walk_push {s0 s : Frame.State} {x : U256}
+    {k : Frame.State → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hs : AccGrow s0 s)
+    (hk : ∀ s', AccGrow s0 s' → Walk (fun _ => True) (spawnAccPost s0) (k s')) :
+    Walk (fun _ => True) (spawnAccPost s0) (s.push x >>= k) :=
+  walk_liftMachine hs hk
+
+private theorem walk_assert {s0 : Frame.State} {p : Prop} [Decidable p]
+    {e : ExceptionalHalt × Frame.State}
+    {k : Unit → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hk : Walk (fun _ => True) (spawnAccPost s0) (k ())) :
+    Walk (fun _ => True) (spawnAccPost s0) (Except.assert p e >>= k) := by
+  unfold Except.assert
+  split
+  · exact hk
+  · trivial
+
+private theorem walk_assertDynamic {s0 s : Frame.State} {ctx : CallContext}
+    {k : Unit → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hk : Walk (fun _ => True) (spawnAccPost s0) (k ())) :
+    Walk (fun _ => True) (spawnAccPost s0) (s.assertDynamic ctx >>= k) :=
+  walk_assert hk
+
+private theorem walk_ok {s0 s : Frame.State}
+    {k : Frame.State → Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (hs : AccGrow s0 s)
+    (hk : ∀ s', AccGrow s0 s' → Walk (fun _ => True) (spawnAccPost s0) (k s')) :
+    Walk (fun _ => True) (spawnAccPost s0) (Except.ok s >>= k) :=
+  hk s hs
+
+private theorem walk_ite {s0 : Frame.State} {c : Prop} [Decidable c]
+    {t e : Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (ht : Walk (fun _ => True) (spawnAccPost s0) t)
+    (he : Walk (fun _ => True) (spawnAccPost s0) e) :
+    Walk (fun _ => True) (spawnAccPost s0) (if c then t else e) := by
+  split
+  · exact ht
+  · exact he
+
+local macro "spawn_acc_tail" : tactic => `(tactic| first
+  | (apply tail_spawnAccPost;
+     exact fun _ _ h => AccGrow.trans (AccGrow.trans_substate (by assumption) _root_.rfl) (callAccGrow h))
+  | (apply tail_spawnAccPost;
+     exact fun _ _ h => AccGrow.trans (AccGrow.trans_substate (by assumption) _root_.rfl) (callStateAccGrow h))
+  | (apply tail_spawnAccPost;
+     exact fun _ _ h => AccGrow.trans (AccGrow.trans_substate (by assumption) _root_.rfl) (createAccGrow h))
+  | (apply tail_spawnAccPost;
+     exact fun _ _ h => AccGrow.trans (AccGrow.trans_substate (by assumption) _root_.rfl) (createStateAccGrow h)))
+
+local macro "spawn_acc_walk" : tactic => `(tactic| repeat' (first
+  | apply walk_ite
+  | (apply walk_pop; (solve | exact AccGrow.rfl | assumption); intro _ _ _; try dsimp only)
+  | (apply walk_popToNat; (solve | exact AccGrow.rfl | assumption); intro _ _ _; try dsimp only)
+  | (apply walk_popToAddress; (solve | exact AccGrow.rfl | assumption); intro _ _ _; try dsimp only)
+  | (apply walk_chargeGas; (solve
+      | exact AccGrow.rfl
+      | assumption
+      | (with_reducible apply AccGrow.trans_completeDelegation;
+         exact AccGrow.trans_substate_add (by assumption) _root_.rfl)
+      | (apply AccGrow.trans_accessDelegation;
+         apply AccGrow.trans_accessRule;
+         assumption)); intro _ _; try dsimp only)
+  | (apply walk_chargeStateGas; (solve | exact AccGrow.rfl | assumption); intro _ _; try dsimp only)
+  | (apply walk_ok; (solve | exact AccGrow.rfl | assumption); intro _ _; try dsimp only)
+  | (apply walk_push; (solve
+      | exact AccGrow.rfl
+      | assumption
+      | exact AccGrow.trans_substate (by assumption) _root_.rfl); intro _ _; try dsimp only)
+  | (apply walk_assert; try dsimp only)
+  | (apply walk_assertDynamic; try dsimp only)
+  | (apply pureAccPost; first | exact True.intro | spawn_acc_tail)
+  | (apply (Walk.error_iff _).mpr; trivial)
+  | trivial))
+
+private theorem op_spawn_accGrow (ctx : CallContext) (s0 : Frame.State) (op : Jaune.MessageOp) :
+    spawnAccPost s0 (MessageOp.step ctx s0 op) := by
+  cases op with
+  | create2 =>
+    simp only [MessageOp.step]
+    cases ctx.block.rules.opcodes.create2 with
+    | false => simp only [Bool.false_eq_true, ↓reduceIte]; trivial
+    | true =>
+      simp only [↓reduceIte]
+      split <;> apply ofExcept_spawnAccPost <;> spawn_acc_walk
+  | _ =>
+    simp only [MessageOp.step]
+    split <;> apply ofExcept_spawnAccPost <;> spawn_acc_walk
+
+/-- A child frame's start state inherits the checkpoint's accessed addresses. -/
+theorem Frame.startState_accessedAddresses (f : Frame) :
+    f.startState.accessedAddresses = f.checkpoint.accessedAddresses := rfl
+
+/-- Entering a frame preserves the checkpoint's accessed addresses on the running child. -/
+theorem Frame.enter_run_accessedAddresses {f : Frame} {r : Frame.Running} (h : enter f = .run r) :
+    r.state.accessedAddresses = f.checkpoint.accessedAddresses := by
+  unfold enter enterWith at h
+  rcases ht : f.message.transfer f.enteredWorld with fault | world <;> simp only [ht] at h
+  · cases h
+  · rcases hc : f.message.codeAddress with _ | address <;> simp only [hc] at h
+    · cases h; rfl
+    · split at h
+      · cases h
+      · cases h; rfl
+
+/-- Any spawned message operation (call or creation, on every fork) preserves the caller's
+accessed addresses into the child checkpoint. -/
+theorem MessageOp.step_spawn_accessedAddresses {ctx : CallContext} {s : Frame.State}
+    {x : Jaune.MessageOp} {child : Frame} {p : Staging.Pending} {a : Address}
+    (h : MessageOp.step ctx s x = .spawn child p) (ha : a ∈ s.accessedAddresses) :
+    a ∈ child.checkpoint.accessedAddresses := by
+  have hg := op_spawn_accGrow ctx s x
+  rw [h] at hg
+  exact hg a ha
+
+/-- A spawning step preserves the parent's accessed addresses into the child checkpoint. -/
+theorem step_spawn_accessedAddresses {r : Frame.Running} {child : Frame} {p : Staging.Pending}
+    {pc : Nat} {a : Address} (h : step r = .ok (.spawn child p pc))
+    (ha : a ∈ r.state.accessedAddresses) : a ∈ child.checkpoint.accessedAddresses := by
+  obtain ⟨_, hx⟩ := step_spawn_message h
+  exact MessageOp.step_spawn_accessedAddresses hx ha
+
+/-- A spawning step preserves the parent's accessed addresses into the child's start state. -/
+theorem step_spawn_start_warm {r : Frame.Running} {child : Frame} {p : Staging.Pending}
+    {pc : Nat} {a : Address} (h : step r = .ok (.spawn child p pc))
+    (ha : a ∈ r.state.accessedAddresses) : a ∈ child.startState.accessedAddresses := by
+  rw [Frame.startState_accessedAddresses]
+  exact step_spawn_accessedAddresses h ha
+
+/-- A child entered from a spawning step starts with every address warm in its parent
+(call and create, all forks). -/
+theorem step_spawn_child_warm {r childRunning : Frame.Running} {child : Frame}
+    {p : Staging.Pending} {pc : Nat} {a : Address}
+    (hstep : step r = .ok (.spawn child p pc)) (henter : enter child = .run childRunning)
+    (ha : a ∈ r.state.accessedAddresses) : a ∈ childRunning.state.accessedAddresses := by
+  rw [Frame.enter_run_accessedAddresses henter]
+  exact step_spawn_accessedAddresses hstep ha
+
+/-- A creation child entered from a spawning step starts with its recipient address warm. -/
+theorem step_spawn_create_enter_warm {r childRunning : Frame.Running} {child : Frame}
+    {p : Staging.Pending} {pc : Nat}
+    (hstep : step r = .ok (.spawn child p pc)) (hk : child.message.kind = .create)
+    (henter : enter child = .run childRunning) :
+    childRunning.context.recipient ∈ childRunning.state.accessedAddresses := by
+  rw [Frame.enter_run_context henter, Frame.enter_run_accessedAddresses henter]
+  exact step_spawn_create_warm hstep hk
+
+/-- A child entered from a spawning step inherits the parent's block and transaction context. -/
+theorem step_spawn_enter_context {r childRunning : Frame.Running} {child : Frame}
+    {p : Staging.Pending} {pc : Nat}
+    (hstep : step r = .ok (.spawn child p pc)) (henter : enter child = .run childRunning) :
+    childRunning.context.block = r.context.block ∧ childRunning.context.tx = r.context.tx := by
+  obtain ⟨_, hx⟩ := step_spawn_message hstep
+  rw [Frame.enter_run_context henter]
+  exact MessageOp.step_spawn_context hx
+
 /-! ### The prepared transaction frame -/
 
 
