@@ -38,7 +38,7 @@ Jaune/Check/Machine.lean #guard pragueGas.callValue = Gas.callValue
 Jaune/Check/Machine.lean #guard pragueGas.createAccess = Gas.create
 # --- the retained schedule-free `accessCost`, which is Prague's function ---
 Jaune/Machine.lean if x ∈ a then Gas.warmStorageReadCost else Gas.coldAccountAccessCost
-Jaune/Sufficiency.lean unfold accessCost Gas.warmStorageReadCost Gas.coldAccountAccessCost
+Jaune/GasFacts.lean unfold accessCost Gas.warmStorageReadCost Gas.coldAccountAccessCost
 # --- prose ---
 Jaune/Machine.lean interpreter) rewrites to `gasCallValue` and meets the arithmetic it already
 Jaune/Sufficiency.lean `gasCallValue = 9000` against a `gCallStipend = 2300` stipend.
