@@ -37,6 +37,31 @@
     "vbytes",
     "wds"
   ],
+  "retired_names": [
+    "executeCode",
+    "processMessage.settle",
+    "processCreateMessage.settle",
+    "liftToExecution",
+    "Frame.outer",
+    "Frame.inner",
+    "RunFrame",
+    "ExecuteCode",
+    "ProcessMessage",
+    "ProcessCreateMessage",
+    "GenericCall",
+    "GenericCreate",
+    "XStep.Run",
+    "Step.Run",
+    "Xinst.Run",
+    "Ninst.StepRun",
+    "MessageOp.Run",
+    "NextOp.StepRun"
+  ],
+  "pending_retired_names": [
+    "genericCall",
+    "genericCreate",
+    "incorporateChild"
+  ],
   "allowed_abbreviations": [
     "API",
     "BLAKE2",

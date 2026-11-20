@@ -35,7 +35,8 @@ Every identifier in Jaune follows these seven rules in priority order:
    (section 2). Private contractions such as `Adr`, `Acct`, `Stor`, `Tra`,
    `B256`, `B128`, `BLT`, `NTB`, `hp`, `Devm`, `Sevm`, `Benv`, `Tenv`, `Rinst`,
    `Xinst`, `Ninst`, `Linst`, `Jinst`, `bal`, `txsRoot`, `wds`, `Ctx`, `CFork`,
-   `Gated`, `vbytes`, `Pres`, `WQ` are retired.
+   `Gated`, `vbytes`, `Pres`, `WQ` are retired. Whole names retired with the
+   definitions they named are listed under "Retired names" below.
 6. **One word, one meaning; one concept, one name.** No token carries two
    meanings across declarations or layers (`bal` must not mean both `balance`
    and `blockAccessList`). A community name is used only when Jaune's
@@ -55,6 +56,28 @@ Every identifier in Jaune follows these seven rules in priority order:
      own names in `JauneConsensus/` (`Facts`, glue, and harness) follow rules
      4–7 (`UpperCamelCase` types, `lowerCamelCase` definitions, `snake_case`
      theorems).
+
+### Retired names
+
+A message call is `step`, `enter`, `settle`, `resume` and one driver (goal
+`jaune-shape-and-names-v1`, S1). The layers Jaune inherited before that shape
+are retired as names, so that none comes back under its old name:
+
+- functions: `executeCode*`, `processMessage.settle`,
+  `processCreateMessage.settle`, `genericCall*`, `genericCreate*`,
+  `incorporateChild*`, `liftToExecution`;
+- the frame fields `Frame.outer` and `Frame.inner`;
+- relations: `RunFrame`, `ExecuteCode`, `ProcessMessage`,
+  `ProcessCreateMessage`, `GenericCall*`, `GenericCreate*`, `XStep.Run`,
+  `Step.Run`, `Xinst.Run`, `Ninst.StepRun`, and the last two under the names
+  the map gave them before their cut, `MessageOp.Run` and `NextOp.StepRun`.
+
+These are not short forms: `generic`, `call` and `outer` stay ordinary words,
+and the consensus pyspec name `ssz_generic` is untouched. A retired name is
+the whole spelling, registered in the map's `retired_names` (section 3) and
+rejected by the lint (section 5). `genericCall*`, `genericCreate*` and
+`incorporateChild*` are registered as pending until the commit that removes
+their last declarations.
 
 ## 2. Allowed abbreviations
 
@@ -91,6 +114,23 @@ Top-level object fields:
 - `schema_version`: integer `1`.
 - `retired_tokens`: list of retired private short-form tokens enforced by the
   name lint (`N3`).
+- `retired_names` (optional): list of retired names enforced by the name
+  lint. A retired name is a dotted sequence of one or more components
+  (`genericCall`, `Frame.outer`). A declared name holds it when consecutive
+  segments of the name match its components one by one, each by the
+  retired-token rule: the segment is the component, or contains the
+  component's tokens as a run at camelCase/snake_case boundaries, in the same
+  case. So `genericCall` rejects `genericCall.step`,
+  `genericCallAmsterdam_bound` and `step_genericCall`, but not `ssz_generic`,
+  `sszGenericCase` or `GenericCall`; `Frame.outer` rejects
+  `Checked.Frame.outer` and `Frame.outer_eq`, but not `θ.outer` or
+  `Frame.Run`. A one-component retired name behaves as a retired token.
+- `pending_retired_names` (optional): retired names in the same form that
+  declarations in the tree still hold while their old definitions wait for a
+  gate tag. The lint reports their holders without failing. A name is listed
+  in at most one of the two lists. The list is empty at a landing that claims
+  the names gone: the commit that removes the last holder moves the name to
+  `retired_names`, and the `--final` runs below fail until it has.
 - `allowed_abbreviations`: list of allowed abbreviation tokens (`section 2`).
 - `entries`: list of rename entries.
 
@@ -167,6 +207,12 @@ Validation invariants enforced by `scripts/check-naming-map.py`:
    every descendant) is checked by N4's authored-constant comparison.
 4. No `new` identifier segment introduces a token from `retired_tokens` (exact
    camelCase/snake_case token match).
+5. `retired_names` and `pending_retired_names`, when present, are lists of
+   distinct dotted identifiers, disjoint from each other. With `--final`
+   (`python3 scripts/check-naming-map.py --final`) a nonempty
+   `pending_retired_names` fails. Rows are not checked against retired names:
+   a name is retired at its cut, and the map may record an earlier rename to
+   it (`Xinst.Run` -> `MessageOp.Run`). The lint is what rejects it in a tree.
 
 ## 4. Compiler-resolved apply tooling
 
@@ -445,6 +491,17 @@ canonical map's retired tokens directly, including compound tokens inside
 longer camelCase or snake_case names. A registered source cannot exempt a
 retired token.
 
+The map's `retired_names` are checked the same way on every name (finding
+`retired name`, listing the names held); no source binding or policy word
+exempts one. A holder of a `pending_retired_names` entry is not a finding: it
+is listed under `pending` in the report (`pending retired name`), and the
+report repeats the registered pending names as `pending_retired_names`, so a
+run made while names are pending cannot be read as the landing verdict. With
+`--final` the pending names are enforced like the others, and each name the
+map still registers as pending is a finding of its own (`retired name still
+registered as pending`), whatever the tree holds. The landing run of N3 uses
+`--final`.
+
 The checker requires a reviewed JSON policy; it never guesses a dictionary
 from the current identifiers or silently accepts an unknown token. The policy
 has `schema_version: 1`, `words` (distinct lowercase whole English words),
@@ -481,7 +538,7 @@ retired token or disguise a private contraction as an English word.
 With current compiler bundles for every file, run:
 
 ```sh
-python3 scripts/check-naming.py --tree . --policy POLICY.json --source-root SOURCE_ROOT --root Jaune --root JauneConsensus --file Jaune/FILE.lean FILE.references.json
+python3 scripts/check-naming.py --tree . --policy POLICY.json --source-root SOURCE_ROOT --root Jaune --root JauneConsensus --file Jaune/FILE.lean FILE.references.json [--final]
 ```
 
 Repeat `--file` for every Lean file under both roots. Missing, extra or duplicate
@@ -499,7 +556,12 @@ reintroduces `bal` in execution and `Ctx` in consensus. Both mutations still
 elaborate and fail the retired-name control. Restoring the baseline bytes is
 the restoration evidence; it is not recompiled. The command needs the built
 reference exporter and host Lean admission. The ordinary Python unit suite
-does not launch Lean.
+does not launch Lean. Its control for retired names
+(`scripts/tests/test_naming_lint.py`) runs the tracked map, with its pending
+names enforced, over a synthetic two-layer tree: planting `genericCall`,
+`genericCreateAmsterdam`, `incorporateChild`, `executeCode` or `Devm` in a
+green source fails at that declaration, restoring the bytes restores green,
+and with only `genericCall`'s registration removed its plant passes.
 
 ## 6. Compiler fidelity comparison
 
