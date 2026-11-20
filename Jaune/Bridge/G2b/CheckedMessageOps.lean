@@ -1,5 +1,6 @@
 import Jaune.MessageCall.CheckedMessageOps
 import Jaune.Bridge.G2b.CheckedWalk
+import Jaune.MessageCall.MessageOps
 
 namespace Jaune.Checked
 

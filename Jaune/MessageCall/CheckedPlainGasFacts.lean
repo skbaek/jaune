@@ -6,6 +6,7 @@ import Jaune.Instructions.LogFacts
 import Jaune.Instructions.MemoryFacts
 import Jaune.Instructions.ReadFacts
 import Jaune.Instructions.StoreFacts
+import Jaune.GasFacts
 
 /-! Gas bounds for the plain instructions over the lifetime-grouped state. A successful
 step strictly decreases the machine's measure. An exceptional halt stays within the bound

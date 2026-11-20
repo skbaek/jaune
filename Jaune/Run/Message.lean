@@ -1,4 +1,5 @@
 import Jaune.Transaction.Parts
+import Jaune.MessageCall.Canonical
 
 /-!
 # The top-level message run

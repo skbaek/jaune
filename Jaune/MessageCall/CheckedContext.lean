@@ -1,4 +1,5 @@
 import Jaune.MessageCall.State
+import Jaune.MessageCall.Records
 
 /-!
 # What a checked step reads of its message (goal `jaune-shape-and-names-v1`, G2b, decision 13)

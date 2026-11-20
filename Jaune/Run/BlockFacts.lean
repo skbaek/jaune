@@ -1,4 +1,5 @@
 import Jaune.Run.Block
+import Jaune.Run.Prefix
 
 /-!
 # What a block transition establishes

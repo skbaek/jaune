@@ -1,5 +1,6 @@
 import Jaune.Exec
 import Jaune.Memory
+import Jaune.GasFacts
 
 namespace Jaune
 

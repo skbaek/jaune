@@ -1,6 +1,7 @@
 import Jaune.Transaction
 import Jaune.MessageCall.ResumeFacts
 import Jaune.MessageCall.DriverInvariants
+import Jaune.Run.Canonical
 
 /-!
 # The shape pilot's two executions, on the four-part message call

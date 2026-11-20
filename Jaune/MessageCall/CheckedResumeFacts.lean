@@ -1,5 +1,7 @@
 import Jaune.MessageCall.CheckedParts
 import Jaune.MessageCall.ResumeFacts
+import Jaune.MessageCall.Measures
+import Jaune.MessageCall.Records
 
 /-! Resuming a checkpoint with its child's result, by lifetime group. -/
 namespace Jaune.Checked

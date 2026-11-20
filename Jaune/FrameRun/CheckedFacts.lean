@@ -3,6 +3,8 @@ import Jaune.FrameRun.CheckedAdequacy
 import Jaune.Run.BodyFacts
 import Jaune.Run.CheckedTransaction
 import Jaune.Transaction
+import Jaune.Run.Prefix
+import Jaune.Run.PrefixFacts
 
 /-!
 # `Exec`-free restatements over the checked frame sequence (goal `jaune-shape-and-names-v1`, G2b)

@@ -1,5 +1,6 @@
 import Jaune.Bridge.G2b.CheckedWalk
 import Jaune.MessageCall.CheckedControl
+import Jaune.MessageCall.Control
 
 namespace Jaune.MemorySimulation
 

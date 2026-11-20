@@ -3,6 +3,7 @@ import Jaune.MessageCall.RunInvariants
 import Jaune.Instructions.ReadFacts
 import Jaune.Instructions.StoreFacts
 import Jaune.Instructions.Log
+import Jaune.MessageCall.Measures
 
 /-! A running machine preserves its committed spill and has room for the caller's return push
 after a spawning opcode pops its arguments. -/

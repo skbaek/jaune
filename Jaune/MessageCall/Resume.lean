@@ -1,4 +1,5 @@
 import Jaune.MessageCall
+import Jaune.MessageCall.Records
 
 /-!
 # The four-part message call: `resume` (goal `jaune-shape-and-names-v1`, W1 unit E)

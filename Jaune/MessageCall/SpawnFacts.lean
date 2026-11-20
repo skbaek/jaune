@@ -1,4 +1,5 @@
 import Jaune.Transaction
+import Jaune.Run.Canonical
 
 /-!
 # What a spawn and a top-level frame carry (goal `jaune-shape-and-names-v1`, W1; Blanc ledger rows 5

@@ -1,5 +1,6 @@
 import Jaune.MessageCall.CheckedFrame
 import Jaune.MessageCall.State
+import Jaune.MessageCall.Records
 
 /-! The machine, field operations and frame exits for checked memory. -/
 namespace Jaune.Checked

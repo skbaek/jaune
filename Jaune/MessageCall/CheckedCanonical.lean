@@ -2,6 +2,8 @@ import Jaune.MessageCall.Canonical
 import Jaune.MessageCall.CheckedTotality
 import Jaune.Instructions.LogFacts
 import Jaune.Instructions.ReadFacts
+import Jaune.MessageCall.WorldCanonical
+import Jaune.MessageCall.Records
 
 /-! Canonicality of the world and original state through the native grouped frame driver. -/
 namespace Jaune.Checked

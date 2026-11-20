@@ -295,7 +295,14 @@
   "Jaune.FrameRun.CheckedOrder": "proof",
   "Jaune.Bridge.G3.FrameRun": "bridge",
   "Jaune.Bridge.G3.FrameViews": "bridge",
-  "Jaune.Run.Import": "specification"
+  "Jaune.Run.Import": "specification",
+  "Jaune.MessageCall.Records": "specification",
+  "Jaune.MessageCall.WorldCanonical": "specification",
+  "Jaune.MessageCall.Measures": "specification",
+  "Jaune.GasFacts": "specification",
+  "Jaune.Run.Prefix": "specification",
+  "Jaune.Run.PrefixFacts": "proof",
+  "Jaune.Bridge.G2b.CheckedSpawnKind": "bridge"
  },
  "implementation_imports": [
   {

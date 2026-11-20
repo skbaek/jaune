@@ -1,5 +1,6 @@
 import Jaune.Execution
 import Jaune.MessageCall.State
+import Jaune.MessageCall.Records
 
 /-!
 # Message operations over `Frame.State` (goal `jaune-shape-and-names-v1`, W3 unit W3-2c)

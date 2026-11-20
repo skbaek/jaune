@@ -1,5 +1,6 @@
 import Jaune.PrecompileInput
 import Jaune.MemoryAccounting
+import Jaune.GasFacts
 
 /-!
 # Output lengths of the precompiles over `PrecompileInput` (goal `jaune-shape-and-names-v1`, G2b, F1b)

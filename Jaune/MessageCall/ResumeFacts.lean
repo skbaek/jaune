@@ -1,4 +1,5 @@
 import Jaune.MessageCall.Resume
+import Jaune.MessageCall.Measures
 
 /-!
 # What `resume` does with a child's result (goal `jaune-shape-and-names-v1`, S3)

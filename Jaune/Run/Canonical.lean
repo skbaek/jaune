@@ -1,4 +1,5 @@
 import Jaune.Run.Block
+import Jaune.Run.Prefix
 
 /-!
 # Canonicality of message, transaction, and block runs

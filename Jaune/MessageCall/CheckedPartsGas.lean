@@ -1,6 +1,8 @@
 import Jaune.MessageCall.Totality
 import Jaune.MessageCall.CheckedParts
 import Jaune.MessageCall.CheckedStepGasBound
+import Jaune.MessageCall.Measures
+import Jaune.MessageCall.Records
 
 /-! Gas at frame entry, settlement, and resumption. -/
 namespace Jaune.Checked

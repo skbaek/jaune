@@ -1,4 +1,5 @@
 import Jaune.Run.Body
+import Jaune.Run.Prefix
 
 /-!
 # The block is a run with commitments (goal `jaune-shape-and-names-v1`, W2 cut E)

@@ -1,6 +1,7 @@
 import Jaune.Run.Body
 import Jaune.Run.Block
 import Jaune.Run.BodyFactsRlp
+import Jaune.Run.PrefixFacts
 
 /-!
 # Theorems of the body run (goal `jaune-shape-and-names-v1`, W2 cut F)

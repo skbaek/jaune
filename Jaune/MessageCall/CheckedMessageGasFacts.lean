@@ -1,5 +1,6 @@
 import Jaune.CheckedSufficiencyWalk
 import Jaune.Sufficiency
+import Jaune.GasFacts
 
 /-! Gas at a message operation, on the continuation, spawn and exceptional-halt paths. -/
 namespace Jaune.Checked

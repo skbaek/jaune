@@ -1,4 +1,5 @@
 import Jaune.MessageCall.Top
+import Jaune.MessageCall.WorldCanonical
 
 /-!
 # Canonicality through the four-part message call

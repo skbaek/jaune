@@ -13,6 +13,7 @@ import Jaune.MessageCall.CheckedSpawnFacts
 import Jaune.MessageCall.CheckedResumeFacts
 import Jaune.MessageCall.CheckedCanonical
 import Examples.CheckedShapePilot
+import Jaune.Bridge.G2b.CheckedSpawnKind
 
 /-! Axiom audit for the u65 Checked ports (gas, totality, invariants, S3, spawn, canonicality,
 pilot): each module's constants reach only the three standard axioms. -/
