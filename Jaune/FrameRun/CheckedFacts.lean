@@ -152,13 +152,13 @@ def TransactionRun.frames (transaction : TransactionRun) : List Frame.Run.Kept :
   transaction.message.frames
 
 /-- The transaction's sender, final observations and roots come from the same run. -/
-def TransactionRoots (benv : Benv) (input : BlockOutput) (tx : Jaune.Transaction) (index : Nat)
-    (state : State) (output : BlockOutput) (sender : Address) (roots : List Root) : Prop :=
-  ∃ run, Transaction.run benv input tx index = .ok (run, output) ∧ run.state = state ∧
+def TransactionRoots (block : BlockContext) (start : State) (input : BlockOutput) (tx : Jaune.Transaction)
+    (index : Nat) (state : State) (output : BlockOutput) (sender : Address) (roots : List Root) : Prop :=
+  ∃ run, Transaction.run block start input tx index = .ok (run, output) ∧ run.state = state ∧
     run.sender = sender ∧ MessageRoots run.entry run.message roots
 
-theorem Transaction.run_messageRoots {benv input tx index run output}
-    (accepted : Transaction.run benv input tx index = .ok (run, output)) :
+theorem Transaction.run_messageRoots {block start input tx index run output}
+    (accepted : Transaction.run block start input tx index = .ok (run, output)) :
     MessageRoots run.entry run.message run.message.enteredRoot.toList := by
   unfold Transaction.run at accepted
   obtain ⟨_, _, accepted⟩ := Except.bind_eq_ok accepted
@@ -169,10 +169,11 @@ theorem Transaction.run_messageRoots {benv input tx index run output}
   cases settled
   exact ⟨Except.mapError_eq_ok_iff.mp executed, rfl⟩
 
-theorem exists_transactionRoots {benv input tx index state output}
-    (accepted : (Transaction.run benv input tx index).map (fun (run, next) => (run.state, next)) =
-      .ok (state, output)) : ∃ sender roots, TransactionRoots benv input tx index state output sender roots := by
-  cases executed : Transaction.run benv input tx index with
+theorem exists_transactionRoots {block start input tx index state output}
+    (accepted : (Transaction.run block start input tx index).map (fun (run, next) => (run.state, next)) =
+      .ok (state, output)) :
+    ∃ sender roots, TransactionRoots block start input tx index state output sender roots := by
+  cases executed : Transaction.run block start input tx index with
   | error => simp [executed, Except.map] at accepted
   | ok pair =>
     rcases pair with ⟨run, next⟩
@@ -191,7 +192,7 @@ def BlockRun.frames (run : BlockRun) : List Frame.Run.Kept := run.roots.flatMap 
 
 /-- The sender refund and coinbase fee are credited before self-destruct settlement. The
 touched-account sweep runs on the resulting world. -/
-theorem Transaction.settleRun_state (admitted : Jaune.Transaction.Admitted) (prepared : Transaction.Prepared)
+theorem Transaction.settleRun_state (admitted : Transaction.Admitted) (prepared : Transaction.Prepared)
     (tx : Jaune.Transaction) (index : Nat) (message : TopLevel.Run)
     {record : TransactionRun} {output : BlockOutput}
     (accepted : settleRun admitted prepared tx index message = .ok (record, output)) :
@@ -208,15 +209,23 @@ theorem Transaction.settleRun_state (admitted : Jaune.Transaction.Admitted) (pre
   cases accepted
   rfl
 
+/-- Admission reads only the block output's gas counters. -/
+theorem checkTransaction_congr {block : BlockContext} {state : State} {b b' : BlockOutput}
+    (tx : Jaune.Transaction) (hg : b.blockGasUsed = b'.blockGasUsed)
+    (hs : b.blockStateGasUsed = b'.blockStateGasUsed) (hb : b.blobGasUsed = b'.blobGasUsed) :
+    checkTransaction block state b tx = checkTransaction block state b' tx := by
+  unfold checkTransaction checkTransactionGasLimits
+  rw [hg, hs, hb]
+
 /-- Admission and execution use the starting world and the output summary. The signed
 record is independent of the other accumulated block output. -/
-theorem Transaction.run_summary {benv : Benv} {b b' : BlockOutput} (tx : Jaune.Transaction)
-    (index : Nat) (summary : outputSummary b = outputSummary b') :
-    (fun (record, next) => (record, outputSummary next)) <$> run benv b tx index =
-      (fun (record, next) => (record, outputSummary next)) <$> run benv b' tx index := by
+theorem Transaction.run_summary {block : BlockContext} {state : State} {b b' : BlockOutput}
+    (tx : Jaune.Transaction) (index : Nat) (summary : outputSummary b = outputSummary b') :
+    (fun (record, next) => (record, outputSummary next)) <$> run block state b tx index =
+      (fun (record, next) => (record, outputSummary next)) <$> run block state b' tx index := by
   simp only [outputSummary, Prod.mk.injEq] at summary
   obtain ⟨hg, hs, hc, hb, hr⟩ := summary
-  unfold run Jaune.Transaction.admit Transaction.prepare Transaction.settleRun
+  unfold run Transaction.admit Transaction.prepare Transaction.settleRun
   simp only [map_bind, bind_assoc, Except.ok_bind', pure_bind]
   rw [checkTransaction_congr (b := {b with
     transactionsTrie := b.transactionsTrie.insert (Rlp.Item.bytes (Jaune.Nat.toBytes index)).toBytes tx})
@@ -227,13 +236,182 @@ theorem Transaction.run_summary {benv : Benv} {b b' : BlockOutput} (tx : Jaune.T
   simp only [Functor.map, pure, Except.pure, Except.map, outputSummary, BlockOutput.withGasSettlement,
     receiptsRead_insert, hg, hs, hc, hb, hr]
 
+/-- A signed transaction's block output: its gas settlement, its trie entries at its index and
+its logs, beside the rebuilt access-list builder. -/
+theorem Transaction.run_output {block : BlockContext} {state : State} {bout : BlockOutput}
+    {tx : Jaune.Transaction} {index : Nat} {run : TransactionRun} {out : BlockOutput}
+    (h : Transaction.run block state bout tx index = .ok (run, out)) :
+    out = { bout.withGasSettlement run.gasSettlement run.blobGasUsed with
+      transactionsTrie := bout.transactionsTrie.insert (rlpKey index) tx
+      receiptKeys := bout.receiptKeys ++ [rlpKey index]
+      receiptsTrie := bout.receiptsTrie.insert (rlpKey index) run.receipt
+      blockLogs := bout.blockLogs ++ run.receipt.2.logs
+      blockAccessListBuilder := out.blockAccessListBuilder } := by
+  unfold Transaction.run at h
+  obtain ⟨admitted, ha, h⟩ := Except.bind_eq_ok h
+  obtain ⟨prepared, hp, h⟩ := Except.bind_eq_ok h
+  obtain ⟨message, _, hs⟩ := Except.bind_eq_ok h
+  have hab : admitted.bout = {bout with
+      transactionsTrie := bout.transactionsTrie.insert (rlpKey index) tx} := by
+    unfold Transaction.admit at ha
+    obtain ⟨_, hb, ha⟩ := Except.bind_eq_ok ha
+    obtain ⟨_, _, ha⟩ := Except.bind_eq_ok ha
+    obtain ⟨⟨_, _⟩, _, ha⟩ := Except.bind_eq_ok ha
+    obtain ⟨⟨_, _, _, _⟩, _, ha⟩ := Except.bind_eq_ok ha
+    cases hb
+    cases ha
+    rfl
+  have hpb : prepared.bout = admitted.bout := by
+    unfold Transaction.prepare at hp
+    obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+    cases target : tx.type.to? <;> simp only [target, pure, Except.pure] at hp <;> cases hp <;> rfl
+  unfold Transaction.settleRun at hs
+  obtain ⟨_, _, hs⟩ := Except.bind_eq_ok hs
+  cases hs
+  simp only [hpb, hab]
+  rfl
+
+/-- A transaction at the next index adds its receipt at that index, appends its logs and enters
+the transaction under the same key. -/
+theorem Body.Prefix.Receipts.step_transaction {block : BlockContext} {p q : Jaune.Body.Prefix}
+    {tx : Jaune.Transaction} {n : Nat} {rcpts : List (Fin 5 × Receipt)} (hp : p.Receipts n rcpts)
+    (h : Body.step block p (.transaction tx n) = .ok q) :
+    ∃ receipt, q.Receipts (n + 1) (rcpts ++ [receipt]) ∧ q.logs = p.logs ++ receipt.2.logs ∧
+      q.transactionsTrie = p.transactionsTrie.insert (rlpKey n) tx := by
+  simp only [Body.step, Body.stepWith] at h
+  obtain ⟨⟨run, out⟩, ht, h⟩ := Except.bind_eq_ok h
+  cases h
+  have hq := Transaction.run_output ht
+  have hk : out.receiptKeys = p.receiptKeys ++ [rlpKey n] := congrArg BlockOutput.receiptKeys hq
+  have htr : out.receiptsTrie = p.receiptsTrie.insert (rlpKey n) run.receipt :=
+    congrArg BlockOutput.receiptsTrie hq
+  refine ⟨run.receipt, ⟨?_, ?_, ?_⟩, congrArg BlockOutput.blockLogs hq,
+    congrArg BlockOutput.transactionsTrie hq⟩
+  · change out.receiptKeys = _
+    rw [hk, hp.keys, List.range_succ, List.map_append]
+    rfl
+  · simp [hp.length]
+  · intro i hi
+    change out.receiptsTrie[rlpKey i]? = _
+    rw [htr]
+    simp only [Std.TreeMap.getElem?_insert, Std.compare_eq_iff_eq]
+    have hlen := hp.length
+    simp only [List.length_append, List.length_singleton] at hi
+    by_cases hin : i = n
+    · subst hin
+      simp only [↓reduceIte]
+      rw [List.getElem_append_right (by omega)]
+      simp [hlen]
+    · have hne : rlpKey n ≠ rlpKey i := fun e => hin (rlpKey_injective e).symm
+      simp only [hne, ↓reduceIte]
+      rw [List.getElem_append_left (by omega)]
+      exact hp.get i (by omega)
+
+/-! ### Legacy gas accounting -/
+
+/-- Under rules without state gas, a signed transaction's settlement charges the block what it
+charges the sender, and no state gas. -/
+theorem Transaction.run_legacyGas {block : BlockContext} {state : State} {bout : BlockOutput}
+    {tx : Jaune.Transaction} {index : Nat} {run : TransactionRun} {out : BlockOutput}
+    (hnone : block.rules.stateGas = none)
+    (h : Transaction.run block state bout tx index = .ok (run, out)) :
+    run.gasSettlement.executionGasUsed = run.gasSettlement.gasUsed ∧
+      run.gasSettlement.stateGasUsed = 0 := by
+  unfold Transaction.run at h
+  obtain ⟨admitted, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨prepared, hp, h⟩ := Except.bind_eq_ok h
+  obtain ⟨message, _, hs⟩ := Except.bind_eq_ok h
+  have hb : prepared.input.message.context.block = block := by
+    unfold Transaction.prepare at hp
+    obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+    cases target : tx.type.to? <;> simp only [target, pure, Except.pure] at hp <;> cases hp <;> rfl
+  unfold Transaction.settleRun at hs
+  obtain ⟨_, _, hs⟩ := Except.bind_eq_ok hs
+  cases hs
+  dsimp only
+  rw [hb]
+  exact settleTransactionGas_none_invariants hnone _ _ _ _ _ _
+
+/-- Under rules without state gas every operation keeps the legacy relation between the block
+counters. -/
+theorem Body.step_legacyGasAccounting {block : BlockContext} {p q : Jaune.Body.Prefix} {op : BodyOp}
+    (hnone : block.rules.stateGas = none) (hp : p.toBlockOutput.LegacyGasAccounting)
+    (h : Body.step block p op = .ok q) : q.toBlockOutput.LegacyGasAccounting := by
+  cases op with
+  | transaction tx index =>
+    simp only [Body.step, Body.stepWith] at h
+    obtain ⟨⟨run, out⟩, ht, h⟩ := Except.bind_eq_ok h
+    cases h
+    change out.LegacyGasAccounting
+    rw [Transaction.run_output ht]
+    exact BlockOutput.LegacyGasAccounting.withGasSettlement hp (Transaction.run_legacyGas hnone ht) run.blobGasUsed
+  | systemCall address data index =>
+    simp only [Body.step, Body.stepWith] at h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h; exact hp
+  | withdrawals ws index =>
+    simp only [Body.step, Body.stepWith] at h
+    cases h; exact hp
+  | depositRequests =>
+    simp only [Body.step, Body.stepWith] at h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h; exact hp
+  | requestCall type address index =>
+    simp only [Body.step, Body.stepWith] at h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h; exact hp
+  | rewards coinbase minerReward credits =>
+    simp only [Body.step, Body.stepWith] at h
+    cases h; exact hp
+  | buildAccessList =>
+    simp only [Body.step, Body.stepWith] at h
+    cases h; exact hp
+  | checkAccessListLimit =>
+    simp only [Body.step, Body.stepWith] at h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h; exact hp
+
+theorem Body.fold_legacyGasAccounting {block : BlockContext} (hnone : block.rules.stateGas = none) :
+    ∀ (ops : List BodyOp) (p q : Jaune.Body.Prefix), p.toBlockOutput.LegacyGasAccounting →
+      ops.foldlM (Body.step block) p = .ok q → q.toBlockOutput.LegacyGasAccounting
+  | [], p, q, hp, h => by cases h; exact hp
+  | op :: ops, p, q, hp, h => by
+    rw [List.foldlM_cons] at h
+    obtain ⟨p', hs, h⟩ := Except.bind_eq_ok h
+    exact Body.fold_legacyGasAccounting hnone ops p' q (Body.step_legacyGasAccounting hnone hp hs) h
+
+theorem Body.importer_legacyGasAccounting {block : BlockContext} {state : State}
+    (hnone : block.rules.stateGas = none)
+    {txs : List (Bytes ⊕ Jaune.Transaction)} {ommers : List Header} {wds : List Withdrawal}
+    {q : Jaune.Body.Prefix} (h : Body.importer block state txs ommers wds = .ok q) :
+    q.toBlockOutput.LegacyGasAccounting := by
+  unfold Body.importer at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  exact Body.fold_legacyGasAccounting hnone _ (Jaune.Body.Prefix.init state) _
+    BlockOutput.init_legacyGasAccounting h
+
+/-- **Legacy gas accounting in the block body.** A successful body under rules without state
+gas keeps the legacy block-counter relation: every step does. -/
+theorem applyBody_legacyGasAccounting {block : BlockContext} {state : State}
+    (hnone : block.rules.stateGas = none)
+    {txs : List (Bytes ⊕ Jaune.Transaction)} {ommers : List Header} {wds : List Withdrawal} {p}
+    (hp : applyBody block state txs ommers wds = .ok p) : p.2.LegacyGasAccounting := by
+  unfold applyBody at hp
+  cases h : Body.importer block state txs ommers wds with
+  | error e => simp [h, Functor.map, Except.map] at hp
+  | ok q =>
+    simp only [h, Functor.map, Except.map, Except.ok.injEq] at hp
+    subst hp
+    exact Body.importer_legacyGasAccounting hnone h
+
 /-- Every operation except the access-list build and its limit check reads only the summary
 for its operation record and the next summary. -/
-theorem Body.stepRun_summary (benv : Benv) {p p' : Jaune.Body.Prefix} {op : BodyOp}
+theorem Body.stepRun_summary (block : BlockContext) {p p' : Jaune.Body.Prefix} {op : BodyOp}
     (noBuild : op ≠ .buildAccessList) (noLimit : op ≠ .checkAccessListLimit)
     (summary : p.summary = p'.summary) :
-    (stepRun benv p op).map (fun (record, next) => (record, next.summary)) =
-      (stepRun benv p' op).map (fun (record, next) => (record, next.summary)) := by
+    (stepRun block p op).map (fun (record, next) => (record, next.summary)) =
+      (stepRun block p' op).map (fun (record, next) => (record, next.summary)) := by
   have out : outputSummary p.toBlockOutput = outputSummary p'.toBlockOutput := congrArg Prod.snd summary
   have state : p.state = p'.state := congrArg Prod.fst summary
   simp only [Jaune.Body.Prefix.summary, outputSummary, Jaune.Body.Prefix.toBlockOutput, Prod.mk.injEq] at summary
@@ -242,11 +420,11 @@ theorem Body.stepRun_summary (benv : Benv) {p p' : Jaune.Body.Prefix} {op : Body
   | buildAccessList => exact absurd rfl noBuild
   | checkAccessListLimit => exact absurd rfl noLimit
   | transaction tx index =>
-    have same := Transaction.run_summary (benv := benv.withState p'.state) tx index out
+    have same := Transaction.run_summary (block := block) (state := p'.state) tx index out
     simp only [stepRun, stepWith, state]
     revert same
-    cases Transaction.run (benv.withState p'.state) p.toBlockOutput tx index <;>
-      cases Transaction.run (benv.withState p'.state) p'.toBlockOutput tx index <;>
+    cases Transaction.run block p'.state p.toBlockOutput tx index <;>
+      cases Transaction.run block p'.state p'.toBlockOutput tx index <;>
       intro same <;>
       simp_all [Except.map, bind, Except.bind, pure, Except.pure, Jaune.Body.Prefix.summary]
   | systemCall address data index =>
@@ -255,8 +433,7 @@ theorem Body.stepRun_summary (benv : Benv) {p p' : Jaune.Body.Prefix} {op : Body
     | error => rfl
     | ok bytes =>
       simp only [bind, Except.bind]
-      cases processSystemRun benv.stat.toBlockContext p'.state benv.createdAccounts address
-        (p'.state.getCode address) bytes with
+      cases processSystemRun block p'.state address (p'.state.getCode address) bytes with
       | error => rfl
       | ok run =>
         simp only [Except.mapError, Except.map, pure, Except.pure, Jaune.Body.Prefix.summary, outputSummary,
@@ -275,7 +452,7 @@ theorem Body.stepRun_summary (benv : Benv) {p p' : Jaune.Body.Prefix} {op : Body
         outputSummary, Jaune.Body.Prefix.toBlockOutput, state, hg, hs, hc, hb, hr]
   | requestCall kind address index =>
     simp only [stepRun, stepWith, state]
-    cases processCheckedSystemRun benv.stat.toBlockContext p'.state benv.createdAccounts address [] with
+    cases processCheckedSystemRun block p'.state address [] with
     | error => rfl
     | ok run =>
       simp only [bind, Except.bind, Except.map, pure, Except.pure, Jaune.Body.Prefix.summary,
@@ -286,19 +463,19 @@ theorem Body.stepRun_summary (benv : Benv) {p p' : Jaune.Body.Prefix} {op : Body
 
 /-- Starting summaries determine the recorded operations and the final summary when the
 schedule omits the two operations that read the accumulated access list. -/
-theorem Body.run_summary (benv : Benv) (ops : List BodyOp) (p p' : Jaune.Body.Prefix)
+theorem Body.run_summary (block : BlockContext) (ops : List BodyOp) (p p' : Jaune.Body.Prefix)
     (schedule : ∀ op ∈ ops, op ≠ .buildAccessList ∧ op ≠ .checkAccessListLimit)
     (summary : p.summary = p'.summary) :
-    (run benv p ops).map (fun (records, final) => (records, final.summary)) =
-      (run benv p' ops).map (fun (records, final) => (records, final.summary)) := by
+    (run block p ops).map (fun (records, final) => (records, final.summary)) =
+      (run block p' ops).map (fun (records, final) => (records, final.summary)) := by
   induction ops generalizing p p' with
   | nil => simp only [run, Except.map, summary]
   | cons op ops ih =>
     obtain ⟨noBuild, noLimit⟩ := schedule op (List.mem_cons_self ..)
-    have same := stepRun_summary benv noBuild noLimit summary
+    have same := stepRun_summary block noBuild noLimit summary
     simp only [run]
-    generalize stepRun benv p op = left at same ⊢
-    generalize stepRun benv p' op = right at same ⊢
+    generalize stepRun block p op = left at same ⊢
+    generalize stepRun block p' op = right at same ⊢
     rcases left with err | ⟨record, next⟩ <;> rcases right with err' | ⟨record', next'⟩ <;>
       simp only [Except.map, Except.ok.injEq, Except.error.injEq, Prod.mk.injEq] at same
     · cases same; rfl
@@ -307,8 +484,8 @@ theorem Body.run_summary (benv : Benv) (ops : List BodyOp) (p p' : Jaune.Body.Pr
     · obtain ⟨rfl, sameSummary⟩ := same
       have tail := ih next next' (fun op member => schedule op (List.mem_cons_of_mem _ member)) sameSummary
       simp only [bind, Except.bind]
-      generalize run benv next ops = left at tail ⊢
-      generalize run benv next' ops = right at tail ⊢
+      generalize run block next ops = left at tail ⊢
+      generalize run block next' ops = right at tail ⊢
       rcases left with err | ⟨records, final⟩ <;> rcases right with err' | ⟨records', final'⟩ <;>
         simp only [Except.map, Except.ok.injEq, Except.error.injEq, Prod.mk.injEq] at tail
       · cases tail; rfl
@@ -318,55 +495,55 @@ theorem Body.run_summary (benv : Benv) (ops : List BodyOp) (p p' : Jaune.Body.Pr
         simp only [Except.map, pure, Except.pure, finalEq]
 
 /-- The streaming fold preserves the recording run's final prefix and its first failure. -/
-theorem Body.run_prefix (benv : Benv) (p : Jaune.Body.Prefix) (ops : List BodyOp) :
-    (run benv p ops).map Prod.snd = ops.foldlM (step benv) p := by
+theorem Body.run_prefix (block : BlockContext) (p : Jaune.Body.Prefix) (ops : List BodyOp) :
+    (run block p ops).map Prod.snd = ops.foldlM (step block) p := by
   induction ops generalizing p with
   | nil => rfl
   | cons op ops ih =>
     rw [run, List.foldlM_cons, ← stepRun_prefix]
-    rcases stepRun benv p op with err | ⟨record, next⟩
+    rcases stepRun block p op with err | ⟨record, next⟩
     · rfl
-    · change _ = ops.foldlM (step benv) next
+    · change _ = ops.foldlM (step block) next
       rw [← ih next]
       simp only [bind, Except.bind]
-      cases run benv next ops <;> rfl
+      cases run block next ops <;> rfl
 
 /-- Run the second part of a schedule from the prefix that the first part produced. -/
-theorem Body.run_append (benv : Benv) (p : Jaune.Body.Prefix) (xs ys : List BodyOp) :
-    run benv p (xs ++ ys) = (do
-      let (left, mid) ← run benv p xs
-      let (right, final) ← run benv mid ys
+theorem Body.run_append (block : BlockContext) (p : Jaune.Body.Prefix) (xs ys : List BodyOp) :
+    run block p (xs ++ ys) = (do
+      let (left, mid) ← run block p xs
+      let (right, final) ← run block mid ys
       pure (left ++ right, final)) := by
   induction xs generalizing p with
   | nil =>
     simp only [List.nil_append, run, bind, Except.bind]
-    cases run benv p ys <;> rfl
+    cases run block p ys <;> rfl
   | cons op xs ih =>
     rw [List.cons_append, run, run]
-    rcases stepRun benv p op with err | ⟨record, next⟩
+    rcases stepRun block p op with err | ⟨record, next⟩
     · rfl
     · simp only [bind, Except.bind]
       rw [ih next]
-      rcases run benv next xs with err | ⟨records, mid⟩
+      rcases run block next xs with err | ⟨records, mid⟩
       · rfl
       · simp only [bind, Except.bind, pure, Except.pure]
-        cases run benv mid ys <;> rfl
+        cases run block mid ys <;> rfl
 
 /-- A recorded phase and the prefix consumed by the following phase. -/
 structure BodyPhase where
   records : List OpRun
   final : Jaune.Body.Prefix
 
-def BodyPhase.Ran (phase : BodyPhase) (benv : Benv) (start : Jaune.Body.Prefix)
-    (ops : List BodyOp) : Prop := Body.run benv start ops = .ok (phase.records, phase.final)
+def BodyPhase.Ran (phase : BodyPhase) (block : BlockContext) (start : Jaune.Body.Prefix)
+    (ops : List BodyOp) : Prop := Body.run block start ops = .ok (phase.records, phase.final)
 
 def BodyPhase.roots (phase : BodyPhase) : List Root := phase.records.filterMap OpRun.enteredRoot
 
 def BodyPhase.frames (phase : BodyPhase) : List Frame.Run.Kept := phase.roots.flatMap Root.frames
 
-theorem Body.run_split {benv start opsLeft opsRight records final}
-    (accepted : run benv start (opsLeft ++ opsRight) = .ok (records, final)) :
-    ∃ left right : BodyPhase, left.Ran benv start opsLeft ∧ right.Ran benv left.final opsRight ∧
+theorem Body.run_split {block start opsLeft opsRight records final}
+    (accepted : run block start (opsLeft ++ opsRight) = .ok (records, final)) :
+    ∃ left right : BodyPhase, left.Ran block start opsLeft ∧ right.Ran block left.final opsRight ∧
       records = left.records ++ right.records ∧ final = right.final := by
   rw [run_append] at accepted
   obtain ⟨⟨left, mid⟩, hleft, accepted⟩ := Except.bind_eq_ok accepted
@@ -374,53 +551,29 @@ theorem Body.run_split {benv start opsLeft opsRight records final}
   cases accepted
   exact ⟨⟨left, mid⟩, ⟨right, final⟩, hleft, hright, rfl, rfl⟩
 
-theorem BodyPhase.exists_of_fold {benv start ops final}
-    (accepted : ops.foldlM (Body.step benv) start = .ok final) :
-    ∃ phase : BodyPhase, phase.Ran benv start ops ∧ phase.final = final := by
+theorem BodyPhase.exists_of_fold {block start ops final}
+    (accepted : ops.foldlM (Body.step block) start = .ok final) :
+    ∃ phase : BodyPhase, phase.Ran block start ops ∧ phase.final = final := by
   rw [← Body.run_prefix] at accepted
-  cases execution : Body.run benv start ops with
+  cases execution : Body.run block start ops with
   | error => rw [execution] at accepted; cases accepted
   | ok pair =>
     rw [execution] at accepted
     exact ⟨⟨pair.1, pair.2⟩, execution, Except.ok.inj accepted⟩
 
-def Body.withdrawalOps (benv : Benv) (index : Nat) (withdrawals : List Withdrawal) : List BodyOp :=
-  if benv.stat.rules.header.withdrawalsRoot then [.withdrawals withdrawals index] else []
+def PreRoots (block : BlockContext) (state : State) (phase : BodyPhase) : Prop :=
+  phase.Ran block (.init state) (Body.preOps block)
 
-/-- Deposit requests follow the receipts, followed by configured request-producing calls. -/
-def Body.requestOps (benv : Benv) (index : Nat) : List BodyOp :=
-  if benv.stat.rules.header.requestsHash then
-    .depositRequests :: benv.stat.rules.requests.map fun ⟨kind, address⟩ => .requestCall kind address index
-  else []
+def RequestRoots (block : BlockContext) (index : Nat) (start : Jaune.Body.Prefix) (phase : BodyPhase) : Prop :=
+  phase.Ran block start (Body.requestOps block index)
 
-def Body.finishOps (benv : Benv) (ommers : List Header) : List BodyOp :=
-  (match benv.stat.rules.proofOfWork with
-   | none => []
-   | some pow =>
-     [.rewards benv.stat.coinbase (pow.blockReward + ommers.length * (pow.blockReward / 32))
-       (ommers.map fun ommer =>
-         (ommer.coinbase, (8 + ommer.number - benv.stat.number) * pow.blockReward / 8))]) ++
-  [.buildAccessList, .checkAccessListLimit]
+theorem exists_preRoots {block state final}
+    (accepted : (Body.preOps block).foldlM (Body.step block) (.init state) = .ok final) :
+    ∃ phase, PreRoots block state phase ∧ phase.final = final := BodyPhase.exists_of_fold accepted
 
-theorem Body.postOps_phases (benv : Benv) (n : Nat) (ommers : List Header) (wds : List Withdrawal) :
-    Jaune.Body.postOps benv n ommers wds = Body.withdrawalOps benv (n + 1) wds ++
-      (Body.requestOps benv (n + 1) ++ Body.finishOps benv ommers) := by
-  simp only [Jaune.Body.postOps, Body.withdrawalOps, Body.requestOps, Body.finishOps, List.append_assoc]
-  rfl
-
-def PreRoots (benv : Benv) (phase : BodyPhase) : Prop :=
-  phase.Ran benv (.init benv.state) (Jaune.Body.preOps benv)
-
-def RequestRoots (benv : Benv) (index : Nat) (start : Jaune.Body.Prefix) (phase : BodyPhase) : Prop :=
-  phase.Ran benv start (Body.requestOps benv index)
-
-theorem exists_preRoots {benv final}
-    (accepted : (Jaune.Body.preOps benv).foldlM (Body.step benv) (.init benv.state) = .ok final) :
-    ∃ phase, PreRoots benv phase ∧ phase.final = final := BodyPhase.exists_of_fold accepted
-
-theorem exists_requestRoots {benv index start final}
-    (accepted : (Body.requestOps benv index).foldlM (Body.step benv) start = .ok final) :
-    ∃ phase, RequestRoots benv index start phase ∧ phase.final = final := BodyPhase.exists_of_fold accepted
+theorem exists_requestRoots {block index start final}
+    (accepted : (Body.requestOps block index).foldlM (Body.step block) start = .ok final) :
+    ∃ phase, RequestRoots block index start phase ∧ phase.final = final := BodyPhase.exists_of_fold accepted
 
 structure BodyRun where
   decoded : List Jaune.Transaction
@@ -438,22 +591,22 @@ def BodyRun.roots (run : BodyRun) : List Root := run.records.filterMap OpRun.ent
 def BodyRun.frames (run : BodyRun) : List Frame.Run.Kept := run.roots.flatMap Root.frames
 
 /-- Every phase reads the previous phase's final prefix, for every configured fork. -/
-structure BodyRoots (benv : Benv) (txs : List (Bytes ⊕ Jaune.Transaction)) (ommers : List Header)
-    (wds : List Withdrawal) (final : Jaune.Body.Prefix) (run : BodyRun) : Prop where
-  decoded : txs.mapM (decodeTransaction benv.stat.rules) = .ok run.decoded
-  pre : PreRoots benv run.pre
-  transactions : run.transactions.Ran benv run.pre.final (Jaune.Body.transactionOps run.decoded)
-  withdrawals : run.withdrawals.Ran benv run.transactions.final
-    (Body.withdrawalOps benv (run.decoded.length + 1) wds)
-  requests : RequestRoots benv (run.decoded.length + 1) run.withdrawals.final run.requests
-  finish : run.finish.Ran benv run.requests.final (Body.finishOps benv ommers)
+structure BodyRoots (block : BlockContext) (state : State) (txs : List (Bytes ⊕ Jaune.Transaction))
+    (ommers : List Header) (wds : List Withdrawal) (final : Jaune.Body.Prefix) (run : BodyRun) : Prop where
+  decoded : txs.mapM (decodeTransaction block.rules) = .ok run.decoded
+  pre : PreRoots block state run.pre
+  transactions : run.transactions.Ran block run.pre.final (Jaune.Body.transactionOps run.decoded)
+  withdrawals : run.withdrawals.Ran block run.transactions.final
+    (Body.withdrawalOps block (run.decoded.length + 1) wds)
+  requests : RequestRoots block (run.decoded.length + 1) run.withdrawals.final run.requests
+  finish : run.finish.Ran block run.requests.final (Body.finishOps block ommers)
   final_eq : run.finish.final = final
 
-theorem BodyRoots.of_run {benv txs decoded ommers wds records final}
-    (decodedAll : txs.mapM (decodeTransaction benv.stat.rules) = .ok decoded)
-    (executed : Body.run benv (.init benv.state) (Jaune.Body.ops benv decoded ommers wds) =
-      .ok (records, final)) : ∃ run, BodyRoots benv txs ommers wds final run ∧ run.records = records := by
-  rw [Jaune.Body.ops, Body.postOps_phases, List.append_assoc] at executed
+theorem BodyRoots.of_run {block state txs decoded ommers wds records final}
+    (decodedAll : txs.mapM (decodeTransaction block.rules) = .ok decoded)
+    (executed : Body.run block (.init state) (Body.ops block decoded ommers wds) =
+      .ok (records, final)) : ∃ run, BodyRoots block state txs ommers wds final run ∧ run.records = records := by
+  rw [Body.ops, Body.postOps, List.append_assoc] at executed
   obtain ⟨pre, afterPre, hp, afterPreRun, recordsEq, finalEq⟩ := Body.run_split executed
   obtain ⟨txs, afterTxs, ht, afterTxsRun, txRecords, preFinal⟩ := Body.run_split afterPreRun
   obtain ⟨wds, afterWds, hw, afterWdsRun, wdRecords, txFinal⟩ := Body.run_split afterTxsRun
@@ -463,9 +616,9 @@ theorem BodyRoots.of_run {benv txs decoded ommers wds records final}
     by simp only [BodyRun.records, recordsEq, txRecords, wdRecords, requestRecords, List.append_assoc]⟩
 
 /-- The actual streaming importer is represented by the five ordered Checked phases. -/
-theorem exists_bodyRoots {benv txs ommers wds final}
-    (accepted : Body.importer benv txs ommers wds = .ok final) :
-    ∃ run, BodyRoots benv txs ommers wds final run := by
+theorem exists_bodyRoots {block state txs ommers wds final}
+    (accepted : Body.importer block state txs ommers wds = .ok final) :
+    ∃ run, BodyRoots block state txs ommers wds final run := by
   unfold Body.importer at accepted
   obtain ⟨decoded, hd, folded⟩ := Except.bind_eq_ok accepted
   obtain ⟨phase, executed, last⟩ := BodyPhase.exists_of_fold folded
@@ -475,7 +628,8 @@ theorem exists_bodyRoots {benv txs ommers wds final}
 /-- A block's recorded phases retain exactly its ordered roots and kept frames. -/
 theorem BlockRun.exists_bodyRoots {fork parent block run}
     (executed : BlockRun.run fork parent block = .ok run) :
-    ∃ body, BodyRoots run.benv block.transactions block.ommers block.withdrawals run.final body ∧
+    ∃ body, BodyRoots run.context run.parent.state block.transactions block.ommers block.withdrawals
+      run.final body ∧
       body.roots = run.roots ∧ body.frames = run.frames := by
   unfold BlockRun.run at executed
   obtain ⟨decoded, hd, executed⟩ := Except.bind_eq_ok executed
@@ -487,17 +641,17 @@ theorem BlockRun.exists_bodyRoots {fork parent block run}
 
 theorem BlockRun.run_prefix (fork : Fork) (parent : BlockChain) (block : Block) :
     (BlockRun.run fork parent block).map BlockRun.final =
-      Body.importer (initBlockEnvironment fork parent block.header) block.transactions block.ommers block.withdrawals := by
+      Body.importer (initBlockContext fork parent block.header) parent.state block.transactions block.ommers
+        block.withdrawals := by
   unfold BlockRun.run Body.importer
   dsimp only
-  cases block.transactions.mapM (decodeTransaction (initBlockEnvironment fork parent block.header).stat.rules) with
+  cases block.transactions.mapM (decodeTransaction (initBlockContext fork parent block.header).rules) with
   | error => rfl
   | ok decoded =>
     simp only [bind, Except.bind]
     rw [← Body.run_prefix]
-    cases Body.run (initBlockEnvironment fork parent block.header)
-      (.init (initBlockEnvironment fork parent block.header).state)
-      (Jaune.Body.ops (initBlockEnvironment fork parent block.header) decoded block.ommers block.withdrawals) <;> rfl
+    cases Body.run (initBlockContext fork parent block.header) (.init parent.state)
+      (Body.ops (initBlockContext fork parent block.header) decoded block.ommers block.withdrawals) <;> rfl
 
 /-- An accepted block has a Checked run whose final prefix supplied the accepted post-state. -/
 theorem exists_blockRun {ε : Type} {embed : TransitionError → ε} {fork : Fork}

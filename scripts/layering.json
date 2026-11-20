@@ -238,6 +238,7 @@
   "Examples.CheckedExecution": "check",
   "Examples.CheckedArithmetic": "check",
   "Jaune.FrameRun.CheckedFacts": "proof",
+  "Jaune.Run.CheckedCanonical": "proof",
   "Jaune.FrameRun.CheckedMemory": "proof",
   "Jaune.MessageCall.CheckedAuditedRows": "proof",
   "Jaune.CheckedSymbolicPush": "proof",

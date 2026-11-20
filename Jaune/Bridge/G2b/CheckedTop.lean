@@ -17,6 +17,34 @@ import Jaune.Run.SystemCall
 
 namespace Jaune.Checked
 
+/-! ### The named map from the block environment
+
+The Checked run layer reads a `BlockContext` and the prefix state. A waiting `Benv` maps to them
+by `benv.stat.toBlockContext` and `benv.state`; the transaction's original state is the state it
+starts on (`Benv.beginTransaction`). The map forgets `createdAccounts`, which is empty at every
+transaction boundary: `Benv.Fresh` is that invariant, established by `initBlockEnvironment` and
+kept by `Benv.withState` and `Benv.beginTransaction`. -/
+
+/-- No account has been created at a transaction boundary. -/
+def _root_.Jaune.Benv.Fresh (benv : Benv) : Prop := benv.createdAccounts = .emptyWithCapacity
+
+theorem _root_.Jaune.Benv.Fresh.withState {benv : Benv} (h : benv.Fresh) (state : State) :
+    (benv.withState state).Fresh := h
+
+theorem _root_.Jaune.Benv.Fresh.beginTransaction {benv : Benv} (h : benv.Fresh) :
+    benv.beginTransaction.Fresh := h
+
+/-- The block environment's construction establishes the invariant. -/
+theorem initBlockEnvironment_fresh (fork : Fork) (chain : BlockChain) (header : Header) :
+    (initBlockEnvironment fork chain header).Fresh := rfl
+
+/-- The named map takes the block environment's construction to the block record's. -/
+theorem initBlockContext_observe (fork : Fork) (chain : BlockChain) (header : Header) :
+    (initBlockEnvironment fork chain header).stat.toBlockContext = initBlockContext fork chain header := rfl
+
+theorem initBlockEnvironment_state (fork : Fork) (chain : BlockChain) (header : Header) :
+    (initBlockEnvironment fork chain header).state = chain.state := rfl
+
 /-- A raw running machine can be grouped exactly when its backing memory lies within its logical size. -/
 def Frame.Running.ofEvm (evm : Evm) (hw : evm.dyna.memory.Wf) : Frame.Running :=
   Frame.Running.ofLegacy (Jaune.Frame.Running.ofEvm evm) hw
@@ -993,20 +1021,23 @@ theorem runNative_observe (msg : Msg) : runNative (Input.ofLegacy msg) = run msg
   | ok prepared => cases prepared <;> rfl
 
 /-- The shared system-call entry preserves its own start world, gas grant, and access sets. -/
-theorem systemInput_observe (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :
-    systemInput benv.stat.toBlockContext benv.state benv.createdAccounts target code data =
+theorem systemInput_observe {benv : Benv} (fresh : benv.Fresh) (target : Address) (code : ByteArray)
+    (data : Bytes) :
+    systemInput benv.stat.toBlockContext benv.state target code data =
       Input.ofLegacy (systemCallMessage benv target code data) := by
   have rules : benv.stat.toBlockContext.rules = benv.stat.rules := rfl
+  unfold Benv.Fresh at fresh
   cases h : benv.stat.fork.ruleSet.stateGas <;>
     simp only [systemInput, systemCallMessage, systemTransactionEnvironment, systemTransactionMessage,
       Benv.beginTransaction, Input.ofLegacy, legacyInput, Message.ofLegacy, Jaune.Message.ofTop,
-      Option.isNone, Bool.false_eq_true, ↓reduceIte, rules, BenvStat.rules, h] <;> rfl
+      Option.isNone, Bool.false_eq_true, ↓reduceIte, rules, BenvStat.rules, h, fresh] <;> rfl
 
 /-- Every protocol system call prepares through the same Checked entry and Amsterdam rules. -/
-theorem prepareSystem_observe (benv : Benv) (target : Address) (code : ByteArray) (data : Bytes) :
-    prepareNative (systemInput benv.stat.toBlockContext benv.state benv.createdAccounts target code data) =
+theorem prepareSystem_observe {benv : Benv} (fresh : benv.Fresh) (target : Address) (code : ByteArray)
+    (data : Bytes) :
+    prepareNative (systemInput benv.stat.toBlockContext benv.state target code data) =
       (prepare (systemCallMessage benv target code data)).map Prepared.ofWaiting := by
-  rw [systemInput_observe]
+  rw [systemInput_observe fresh]
   exact prepareNative_observe _
 
 /-- Read the complete settlement interface from a waiting top-level run. -/
@@ -1051,14 +1082,84 @@ def Transaction.Prepared.ofLegacy (prepared : Jaune.Transaction.Prepared) : Tran
   ⟨prepared.bout, prepared.sender, prepared.effectiveGasPrice, prepared.txBlobGasUsed,
     prepared.calldataFloorGasCost, .ofLegacy prepared.msg⟩
 
+/-- Project the current admission onto the Checked admission record. -/
+def Transaction.Admitted.ofLegacy (admitted : Jaune.Transaction.Admitted) : Transaction.Admitted :=
+  ⟨admitted.bout, admitted.sender, admitted.effectiveGasPrice, admitted.blobVersionedHashes,
+    admitted.txBlobGasUsed, admitted.intrinsicGas, admitted.calldataFloorGasCost⟩
+
+/-- The beginTransaction invariant of an admitted environment: nothing created, nothing written,
+and the original state is the state the transaction starts on. -/
+structure _root_.Jaune.Transaction.Admitted.Begun (admitted : Jaune.Transaction.Admitted) : Prop where
+  fresh : admitted.benv.Fresh
+  storageWrites : admitted.benv.storageWrites = .emptyWithCapacity
+  originalState : admitted.benv.stat.origState = admitted.benv.state
+
+theorem checkTransaction_observe (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction) :
+    checkTransaction benv.stat.toBlockContext benv.state bout tx = Jaune.checkTransaction benv bout tx := rfl
+
+theorem recoverValidationSender_observe (benv : Benv) (tx : Jaune.Transaction) :
+    recoverValidationSender benv.stat.toBlockContext tx = Jaune.recoverValidationSender benv tx := rfl
+
+/-- Admission over the named map agrees with the waiting admission, including every rejection. -/
+theorem Transaction.admit_observe (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction) (index : Nat) :
+    admit benv.stat.toBlockContext benv.state bout tx index =
+      (Jaune.Transaction.admit benv bout tx index).map Admitted.ofLegacy := by
+  unfold admit Jaune.Transaction.admit
+  simp only [bind, Except.bind]
+  rw [show Jaune.recoverValidationSender benv.beginTransaction tx =
+    recoverValidationSender benv.stat.toBlockContext tx from rfl]
+  cases recoverValidationSender benv.stat.toBlockContext tx with
+  | error => rfl
+  | ok sender =>
+    dsimp only
+    rw [show validateTransaction benv.beginTransaction.stat.rules tx sender =
+      validateTransaction benv.stat.toBlockContext.rules tx sender from rfl,
+      show ∀ b, Jaune.checkTransaction benv.beginTransaction b tx =
+        checkTransaction benv.stat.toBlockContext benv.state b tx from fun _ => rfl]
+    cases validateTransaction benv.stat.toBlockContext.rules tx sender with
+    | error => rfl
+    | ok gas =>
+      dsimp only [Except.mapError]
+      cases checkTransaction benv.stat.toBlockContext benv.state _ tx <;> rfl
+
+/-- An accepted admission begins the transaction on the environment it was given. -/
+theorem _root_.Jaune.Transaction.admit_benv {benv : Benv} {bout : BlockOutput}
+    {tx : Jaune.Transaction} {index : Nat} {admitted : Jaune.Transaction.Admitted}
+    (h : Jaune.Transaction.admit benv bout tx index = .ok admitted) :
+    admitted.benv = benv.beginTransaction := by
+  unfold Jaune.Transaction.admit at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨_, _⟩, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨⟨_, _, _, _⟩, _, h⟩ := Except.bind_eq_ok h
+  cases h
+  rfl
+
+theorem _root_.Jaune.Transaction.admit_originalState {benv : Benv} {bout : BlockOutput}
+    {tx : Jaune.Transaction} {index : Nat} {admitted : Jaune.Transaction.Admitted}
+    (h : Jaune.Transaction.admit benv bout tx index = .ok admitted) :
+    admitted.benv.stat.origState = benv.state := by
+  rw [Jaune.Transaction.admit_benv h]
+  rfl
+
+/-- A fresh environment's admission establishes the beginTransaction invariant. -/
+theorem _root_.Jaune.Transaction.admit_begun {benv : Benv} {bout : BlockOutput}
+    {tx : Jaune.Transaction} {index : Nat} {admitted : Jaune.Transaction.Admitted}
+    (fresh : benv.Fresh) (h : Jaune.Transaction.admit benv bout tx index = .ok admitted) :
+    admitted.Begun := by
+  have hb := Jaune.Transaction.admit_benv h
+  exact ⟨by rw [hb]; exact fresh.beginTransaction, by rw [hb]; rfl, by rw [hb]; rfl⟩
+
 /-- On the admitted block and transaction snapshot, native preparation produces the full
 Checked input observed from the waiting preparation, including fee failures. -/
-theorem Transaction.prepare_observe (admitted : Jaune.Transaction.Admitted) (tx : Jaune.Transaction)
-    (index : Nat) :
-    prepare admitted.benv.stat.toBlockContext admitted.benv.stat.origState admitted tx =
+theorem Transaction.prepare_observe {admitted : Jaune.Transaction.Admitted} (begun : admitted.Begun)
+    (tx : Jaune.Transaction) (index : Nat) :
+    prepare admitted.benv.stat.toBlockContext admitted.benv.state (.ofLegacy admitted) tx =
       (Jaune.Transaction.prepare admitted tx index).map Prepared.ofLegacy := by
+  obtain ⟨fresh, writes, original⟩ := begun
+  unfold Benv.Fresh at fresh
   unfold prepare Jaune.Transaction.prepare
-  simp only [BenvStat.toBlockContext, BlockContext.rules, BenvStat.rules]
+  simp only [BenvStat.toBlockContext, BlockContext.rules, BenvStat.rules, Admitted.ofLegacy]
   let fee := if tx.isEip4844 then
     calculateDataFee (Fork.ruleSet admitted.benv.stat.fork).blob admitted.benv.stat.excessBlobGas tx else 0
   let charged := (admitted.benv.state.incrNonce admitted.sender).subBal admitted.sender
@@ -1072,55 +1173,42 @@ theorem Transaction.prepare_observe (admitted : Jaune.Transaction.Admitted) (tx 
     unfold prepareMessage
     cases tx.type.to? <;>
       simp only [Option.isNone, ↓reduceIte, pure, Except.pure, Except.map,
-        Prepared.ofLegacy, TopLevel.Input.ofLegacy, legacyInput] <;> rfl
+        Prepared.ofLegacy, TopLevel.Input.ofLegacy, legacyInput, fresh, writes] <;>
+      (rw [← original]; rfl)
 
 /-- Signed transaction preparation followed by native top-level preparation preserves the
 observed refusal, fault, or frame of the waiting signed path. -/
-theorem Transaction.prepareFrame_observe (admitted : Jaune.Transaction.Admitted) (tx : Jaune.Transaction)
-    (index : Nat) :
-    (prepare admitted.benv.stat.toBlockContext admitted.benv.stat.origState admitted tx >>= fun prepared =>
+theorem Transaction.prepareFrame_observe {admitted : Jaune.Transaction.Admitted} (begun : admitted.Begun)
+    (tx : Jaune.Transaction) (index : Nat) :
+    (prepare admitted.benv.stat.toBlockContext admitted.benv.state (.ofLegacy admitted) tx >>= fun prepared =>
       (TopLevel.prepareNative prepared.input).mapError (fun fault => TransitionError.vm fault.toEvmError)) =
     (Jaune.Transaction.prepare admitted tx index >>= fun prepared =>
       ((TopLevel.prepare prepared.msg).map TopLevel.Prepared.ofWaiting).mapError
         (fun fault => TransitionError.vm fault.toEvmError)) := by
-  rw [Transaction.prepare_observe admitted tx index]
+  rw [Transaction.prepare_observe begun tx index]
   cases Jaune.Transaction.prepare admitted tx index with
   | error => rfl
   | ok prepared =>
     exact congrArg (Except.mapError (fun fault => TransitionError.vm fault.toEvmError))
       (TopLevel.prepareNative_observe prepared.msg)
 
-theorem _root_.Jaune.Transaction.admit_originalState {benv : Benv} {bout : BlockOutput}
-    {tx : Jaune.Transaction} {index : Nat} {admitted : Jaune.Transaction.Admitted}
-    (h : Jaune.Transaction.admit benv bout tx index = .ok admitted) :
-    admitted.benv.stat.origState = benv.state := by
-  unfold Jaune.Transaction.admit at h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨⟨_, _⟩, _, h⟩ := Except.bind_eq_ok h
-  obtain ⟨⟨_, _, _, _⟩, _, h⟩ := Except.bind_eq_ok h
-  cases h
-  rfl
-
-/-- At the signed transaction boundary, the native message retains the world at admission. -/
-theorem Transaction.prepare_originalState {benv : Benv} {bout : BlockOutput} {tx : Jaune.Transaction}
-    {index : Nat} {admitted : Jaune.Transaction.Admitted} {prepared : Transaction.Prepared}
-    (ha : Jaune.Transaction.admit benv bout tx index = .ok admitted)
-    (hp : prepare admitted.benv.stat.toBlockContext admitted.benv.stat.origState admitted tx = .ok prepared) :
-    prepared.input.message.context.tx.originalState = benv.state := by
+/-- Native preparation records the state the transaction starts on as its original state. -/
+theorem Transaction.prepare_originalState {block : BlockContext} {state : State}
+    {admitted : Transaction.Admitted} {tx : Jaune.Transaction} {prepared : Transaction.Prepared}
+    (hp : prepare block state admitted tx = .ok prepared) :
+    prepared.input.message.context.tx.originalState = state := by
   unfold prepare at hp
   obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
-  cases target : tx.type.to? <;> simp only [target, pure, Except.pure] at hp <;> cases hp <;>
-    exact Jaune.Transaction.admit_originalState ha
+  cases target : tx.type.to? <;> simp only [target, pure, Except.pure] at hp <;> cases hp <;> rfl
 
 /-- Native system calls observe the same refund faults, final world, output and access records. -/
-theorem processSystemTransaction_observe (benv : Benv) (target : Address) (code : ByteArray)
-    (data : Bytes) :
-    processSystemTransaction benv.stat.toBlockContext benv.state benv.createdAccounts target code data =
+theorem processSystemTransaction_observe {benv : Benv} (fresh : benv.Fresh) (target : Address)
+    (code : ByteArray) (data : Bytes) :
+    processSystemTransaction benv.stat.toBlockContext benv.state target code data =
       (Jaune.processSystemTransaction benv target code data).map TopLevel.Settlement.ofLegacy := by
   unfold processSystemTransaction processSystemRun
   dsimp only
-  rw [TopLevel.systemInput_observe, TopLevel.runNative_observe]
+  rw [TopLevel.systemInput_observe fresh, TopLevel.runNative_observe]
   let msg := TopLevel.systemCallMessage benv target code data
   change (do
     let checked ← TopLevel.run msg
@@ -1162,26 +1250,30 @@ def TransactionRun.toLegacy (run : TransactionRun) (message : TopLevelRun) : Jau
 
 /-- Native settlement preserves the complete waiting result, including receipt, block access
 list, fee effects, account sweep, and any refund fault. -/
-theorem Transaction.settleRun_observe {admitted : Jaune.Transaction.Admitted} {tx : Jaune.Transaction}
+theorem Transaction.settleRun_observe {admitted : Jaune.Transaction.Admitted} (begun : admitted.Begun)
+    {tx : Jaune.Transaction}
     {index : Nat} {prepared : Jaune.Transaction.Prepared} {preparation : Jaune.TopLevel.Preparation}
     {checked : TopLevel.Run} (hp : Jaune.Transaction.prepare admitted tx index = .ok prepared)
     (hm : Jaune.TopLevel.prepare prepared.msg = .ok preparation)
     (hr : (TopLevel.ofPreparation prepared.msg preparation hm).run = .ok checked) :
     let observed := TopLevel.observe prepared.msg preparation checked
-    (settleRun admitted (.ofLegacy prepared) tx index checked).map
+    (settleRun (.ofLegacy admitted) (.ofLegacy prepared) tx index checked).map
       (fun (run, bout) => (run.toLegacy observed, bout)) =
       Jaune.Transaction.settleRun admitted prepared tx index observed := by
   have ⟨env, block⟩ := Transaction.prepare_environment hp
   have hblock : (TopLevel.Input.ofLegacy prepared.msg).message.context.block =
       prepared.benv.stat.toBlockContext :=
     congrArg BenvStat.toBlockContext (block.trans (congrArg Benv.stat env).symm)
+  have horiginal : (TopLevel.Input.ofLegacy prepared.msg).message.context.tx.originalState =
+      admitted.benv.state :=
+    (congrArg BenvStat.origState block).trans begun.originalState
   dsimp only
   unfold settleRun Jaune.Transaction.settleRun
-  simp only [Prepared.ofLegacy, hblock, env, BenvStat.toBlockContext, BlockContext.rules, BenvStat.rules,
-    TopLevel.settlement_observe hm hr, TopLevel.refundCounter_observe hm hr]
+  simp only [Prepared.ofLegacy, Admitted.ofLegacy, hblock, horiginal, env, BenvStat.toBlockContext,
+    BlockContext.rules, BenvStat.rules, TopLevel.settlement_observe hm hr, TopLevel.refundCounter_observe hm hr]
   cases (TopLevel.observe prepared.msg preparation checked).refundCounter <;> rfl
 
-private theorem Transaction.settleRun_effects {admitted : Jaune.Transaction.Admitted}
+private theorem Transaction.settleRun_effects {admitted : Transaction.Admitted}
     {prepared : Transaction.Prepared} {tx : Jaune.Transaction} {index : Nat}
     {checked : TopLevel.Run} {result : TransactionRun} {output : BlockOutput}
     (h : settleRun admitted prepared tx index checked = .ok (result, output)) :
@@ -1191,20 +1283,31 @@ private theorem Transaction.settleRun_effects {admitted : Jaune.Transaction.Admi
   cases h
   rfl
 
+/-- Native preparation over the named map, from an accepted waiting admission. -/
+private theorem Transaction.prepare_admitted {benv : Benv} {bout : BlockOutput} {tx : Jaune.Transaction}
+    {index : Nat} {admitted : Jaune.Transaction.Admitted}
+    (ha : Jaune.Transaction.admit benv bout tx index = .ok admitted) :
+    prepare benv.stat.toBlockContext benv.state (.ofLegacy admitted) tx =
+      prepare admitted.benv.stat.toBlockContext admitted.benv.state (.ofLegacy admitted) tx := by
+  rw [Jaune.Transaction.admit_benv ha]
+  rfl
+
 /-- The signed runners agree on the final world, block output and settled message effects.
 Errors agree at admission, preparation, execution and settlement. -/
-theorem Transaction.run_settlement_observe (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction)
-    (index : Nat) :
-    (run benv bout tx index).map
+theorem Transaction.run_settlement_observe {benv : Benv} (fresh : benv.Fresh) (bout : BlockOutput)
+    (tx : Jaune.Transaction) (index : Nat) :
+    (run benv.stat.toBlockContext benv.state bout tx index).map
       (fun (result, output) => ((result.state, output), result.message.settlement result.entry)) =
     (Jaune.Transaction.run benv bout tx index).map
       (fun (result, output) => ((result.state, output), TopLevel.Settlement.ofLegacy result.message)) := by
   unfold run Jaune.Transaction.run
+  rw [Transaction.admit_observe]
   cases ha : Jaune.Transaction.admit benv bout tx index with
   | error => rfl
   | ok admitted =>
-    simp only [bind, Except.bind]
-    rw [Transaction.prepare_observe admitted tx index]
+    have begun := Jaune.Transaction.admit_begun fresh ha
+    simp only [bind, Except.bind, Except.map]
+    rw [Transaction.prepare_admitted ha, Transaction.prepare_observe begun tx index]
     cases hp : Jaune.Transaction.prepare admitted tx index with
     | error => rfl
     | ok prepared =>
@@ -1221,8 +1324,8 @@ theorem Transaction.run_settlement_observe (benv : Benv) (bout : BlockOutput) (t
         | error => rfl
         | ok checked =>
           simp only [Except.mapError, Except.map, bind, Except.bind]
-          rw [← Transaction.settleRun_observe hp hm hr]
-          cases hs : settleRun admitted (Prepared.ofLegacy prepared) tx index checked with
+          rw [← Transaction.settleRun_observe begun hp hm hr]
+          cases hs : settleRun (.ofLegacy admitted) (Prepared.ofLegacy prepared) tx index checked with
           | error => rfl
           | ok output =>
             rcases output with ⟨result, out⟩
@@ -1230,21 +1333,21 @@ theorem Transaction.run_settlement_observe (benv : Benv) (bout : BlockOutput) (t
             exact congrArg (fun x => Except.ok ((result.state, out), x)) effects
 
 /-- Both signed runners produce the same final world and block output, with identical errors. -/
-theorem Transaction.run_observe (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction)
-    (index : Nat) :
-    (run benv bout tx index).map (fun (result, output) => (result.state, output)) =
+theorem Transaction.run_observe {benv : Benv} (fresh : benv.Fresh) (bout : BlockOutput)
+    (tx : Jaune.Transaction) (index : Nat) :
+    (run benv.stat.toBlockContext benv.state bout tx index).map (fun (result, output) => (result.state, output)) =
       (Jaune.Transaction.run benv bout tx index).map (fun (result, output) => (result.state, output)) := by
-  have h := congrArg (Except.map Prod.fst) (Transaction.run_settlement_observe benv bout tx index)
-  generalize run benv bout tx index = checked at h ⊢
+  have h := congrArg (Except.map Prod.fst) (Transaction.run_settlement_observe fresh bout tx index)
+  generalize run benv.stat.toBlockContext benv.state bout tx index = checked at h ⊢
   generalize Jaune.Transaction.run benv bout tx index = waiting at h ⊢
   rcases checked with e | ⟨r, b⟩ <;> rcases waiting with e | ⟨r, b⟩ <;> exact h
 
 /-- The original state extracted from a successful signed transaction is the world before
 admission. Any entered frame therefore sees the block prefix that led to this transaction. -/
-theorem Transaction.run_frame_originalState {benv : Benv} {bout : BlockOutput} {tx : Jaune.Transaction}
-    {index : Nat} {result : TransactionRun} {output : BlockOutput} {f : Frame}
+theorem Transaction.run_frame_originalState {benv : Benv} (fresh : benv.Fresh) {bout : BlockOutput}
+    {tx : Jaune.Transaction} {index : Nat} {result : TransactionRun} {output : BlockOutput} {f : Frame}
     {refund : Nat} {frameRun : Frame.TopRun}
-    (h : run benv bout tx index = .ok (result, output))
+    (h : run benv.stat.toBlockContext benv.state bout tx index = .ok (result, output))
     (hf : result.message = .frame f refund frameRun) :
     f.message.context.tx.originalState = benv.state := by
   unfold run at h
@@ -1255,30 +1358,39 @@ theorem Transaction.run_frame_originalState {benv : Benv} {bout : BlockOutput} {
   obtain ⟨_, _, hs⟩ := Except.bind_eq_ok hs
   cases hs
   change checked = .frame f refund frameRun at hf
-  rw [Transaction.prepare_observe admitted tx index] at hp
-  cases hl : Jaune.Transaction.prepare admitted tx index with
-  | error => rw [hl] at hp; cases hp
-  | ok waiting =>
-    rw [hl] at hp
-    cases hp
-    rw [show (Prepared.ofLegacy waiting).input = TopLevel.Input.ofLegacy waiting.msg from rfl,
-      TopLevel.runNative_observe, hf] at hm
-    have hrun : TopLevel.run waiting.msg = .ok (.frame f refund frameRun) := by
-      cases h : TopLevel.run waiting.msg <;> rw [h] at hm <;> cases hm <;> rfl
-    rw [TopLevel.run_frame_originalState hrun, (Transaction.prepare_environment hl).2]
-    exact Jaune.Transaction.admit_originalState ha
+  rw [Transaction.admit_observe] at ha
+  cases ha0 : Jaune.Transaction.admit benv bout tx index with
+  | error => rw [ha0] at ha; cases ha
+  | ok legacyAdmitted =>
+    rw [ha0] at ha
+    simp only [Except.map, Except.ok.injEq] at ha
+    subst ha
+    have begun := Jaune.Transaction.admit_begun fresh ha0
+    rw [Transaction.prepare_admitted ha0, Transaction.prepare_observe begun tx index] at hp
+    cases hl : Jaune.Transaction.prepare legacyAdmitted tx index with
+    | error => rw [hl] at hp; cases hp
+    | ok waiting =>
+      rw [hl] at hp
+      cases hp
+      rw [show (Prepared.ofLegacy waiting).input = TopLevel.Input.ofLegacy waiting.msg from rfl,
+        TopLevel.runNative_observe, hf] at hm
+      have hrun : TopLevel.run waiting.msg = .ok (.frame f refund frameRun) := by
+        cases h : TopLevel.run waiting.msg <;> rw [h] at hm <;> cases hm <;> rfl
+      rw [TopLevel.run_frame_originalState hrun, (Transaction.prepare_environment hl).2]
+      exact Jaune.Transaction.admit_originalState ha0
 
 /-- Request producers preserve rejection for missing code and for either settled failure. -/
-theorem processCheckedSystemTransaction_observe (benv : Benv) (target : Address) (data : Bytes) :
-    processCheckedSystemTransaction benv.stat.toBlockContext benv.state benv.createdAccounts target data =
+theorem processCheckedSystemTransaction_observe {benv : Benv} (fresh : benv.Fresh) (target : Address)
+    (data : Bytes) :
+    processCheckedSystemTransaction benv.stat.toBlockContext benv.state target data =
       (Jaune.processCheckedSystemTransaction benv target data).map TopLevel.Settlement.ofLegacy := by
   unfold processCheckedSystemTransaction processCheckedSystemRun Jaune.processCheckedSystemTransaction
   by_cases code : (benv.state.getCode target).isEmpty = true
   · simp [code, bind, Except.bind, Except.map]
   · simp only [code, Bool.false_eq_true, ↓reduceIte, bind, Except.bind]
-    have observed := processSystemTransaction_observe benv target (benv.state.getCode target) data
+    have observed := processSystemTransaction_observe fresh target (benv.state.getCode target) data
     unfold processSystemTransaction at observed
-    generalize processSystemRun benv.stat.toBlockContext benv.state benv.createdAccounts target
+    generalize processSystemRun benv.stat.toBlockContext benv.state target
       (benv.state.getCode target) data = checked at observed ⊢
     generalize Jaune.processSystemTransaction benv target (benv.state.getCode target) data = waiting at observed ⊢
     cases checked <;> cases waiting <;> simp only [Except.map, Except.ok.injEq, Except.error.injEq] at observed
@@ -1293,8 +1405,8 @@ theorem processCheckedSystemTransaction_observe (benv : Benv) (target : Address)
       cases halt : legacy.error <;> simp only [Except.mapError, Except.map, halt, observed]
 
 /-- Every single Checked operation produces the same prefix and errors as the waiting body. -/
-theorem Body.step_observe (benv : Benv) (p : Jaune.Body.Prefix) (op : BodyOp) :
-    step benv p op = (Jaune.Body.step benv p op).map Prod.snd := by
+theorem Body.step_observe {benv : Benv} (fresh : benv.Fresh) (p : Jaune.Body.Prefix) (op : BodyOp) :
+    step benv.stat.toBlockContext p op = (Jaune.Body.step benv p op).map Prod.snd := by
   cases op
   case systemCall address data index =>
     simp only [step, stepWith, Jaune.Body.step, Jaune.processUncheckedSystemTransaction]
@@ -1303,10 +1415,11 @@ theorem Body.step_observe (benv : Benv) (p : Jaune.Body.Prefix) (op : BodyOp) :
     | ok bytes =>
       simp only [bind, Except.bind]
       rw [show (benv.withState p.state).state.getCode address = p.state.getCode address from rfl]
-      have observed := processSystemTransaction_observe (benv.withState p.state) address (p.state.getCode address) bytes
-      change (processSystemRun benv.stat.toBlockContext p.state benv.createdAccounts address
+      have observed := processSystemTransaction_observe (fresh.withState p.state) address
+        (p.state.getCode address) bytes
+      change (processSystemRun benv.stat.toBlockContext p.state address
         (p.state.getCode address) bytes).map SystemRun.settlement = _ at observed
-      generalize processSystemRun benv.stat.toBlockContext p.state benv.createdAccounts address
+      generalize processSystemRun benv.stat.toBlockContext p.state address
         (p.state.getCode address) bytes = checked at observed ⊢
       generalize Jaune.processSystemTransaction (benv.withState p.state) address (p.state.getCode address)
         bytes = waiting at observed ⊢
@@ -1315,19 +1428,22 @@ theorem Body.step_observe (benv : Benv) (p : Jaune.Body.Prefix) (op : BodyOp) :
       · cases observed
       · cases observed
       · simp only [Except.mapError, Except.map, pure, Except.pure, observed, TopLevel.Settlement.ofLegacy]
+        rfl
   case transaction tx index =>
     have h := congrArg (Except.map fun (state, out) => Jaune.Body.Prefix.ofBlockOutput state out)
-      (Transaction.run_observe (benv.withState p.state) p.toBlockOutput tx index)
+      (Transaction.run_observe (fresh.withState p.state) p.toBlockOutput tx index)
     simp only [step, stepWith, Jaune.Body.step]
-    generalize Checked.Transaction.run (benv.withState p.state) p.toBlockOutput tx index = native at h ⊢
+    change Except.map _ (Except.map _
+      (Checked.Transaction.run benv.stat.toBlockContext p.state p.toBlockOutput tx index)) = _ at h
+    generalize Checked.Transaction.run benv.stat.toBlockContext p.state p.toBlockOutput tx index = native at h ⊢
     generalize Jaune.Transaction.run (benv.withState p.state) p.toBlockOutput tx index = waiting at h ⊢
     rcases native with fault | ⟨run, out⟩ <;> rcases waiting with fault | ⟨run, out⟩ <;> exact h
   case requestCall type address index =>
     simp only [step, stepWith, Jaune.Body.step]
-    have observed := processCheckedSystemTransaction_observe (benv.withState p.state) address []
-    change (processCheckedSystemRun benv.stat.toBlockContext p.state benv.createdAccounts address
+    have observed := processCheckedSystemTransaction_observe (fresh.withState p.state) address []
+    change (processCheckedSystemRun benv.stat.toBlockContext p.state address
       []).map SystemRun.settlement = _ at observed
-    generalize processCheckedSystemRun benv.stat.toBlockContext p.state benv.createdAccounts address
+    generalize processCheckedSystemRun benv.stat.toBlockContext p.state address
       [] = checked at observed ⊢
     generalize Jaune.processCheckedSystemTransaction (benv.withState p.state) address [] = waiting at observed ⊢
     cases checked <;> cases waiting <;> simp only [Except.map, Except.ok.injEq, Except.error.injEq] at observed
@@ -1340,26 +1456,49 @@ theorem Body.step_observe (benv : Benv) (p : Jaune.Body.Prefix) (op : BodyOp) :
     cases parseDepositRequests p.toBlockOutput <;> rfl
   case checkAccessListLimit =>
     simp only [step, stepWith, Jaune.Body.step]
+    change (do checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit p.blockAccessList; pure p) = _
     cases checkBlockAccessListGasLimit benv.stat.rules benv.stat.blockGasLimit p.blockAccessList <;> rfl
   all_goals rfl
 
 /-- A sequence of Checked operations preserves the full waiting fold. -/
-theorem Body.fold_observe (benv : Benv) (p : Jaune.Body.Prefix) (ops : List BodyOp) :
-    ops.foldlM (step benv) p = Jaune.Body.fold benv p ops := by
+theorem Body.fold_observe {benv : Benv} (fresh : benv.Fresh) (p : Jaune.Body.Prefix) (ops : List BodyOp) :
+    ops.foldlM (step benv.stat.toBlockContext) p = Jaune.Body.fold benv p ops := by
   induction ops generalizing p with
   | nil => rfl
   | cons op ops ih =>
-    rw [List.foldlM_cons, step_observe, Jaune.Body.fold]
+    rw [List.foldlM_cons, step_observe fresh, Jaune.Body.fold]
     cases Jaune.Body.step benv p op with
     | error => rfl
     | ok pair => exact ih pair.2
 
+/-- The importer's schedule over the named map is the waiting schedule. -/
+theorem Body.ops_observe (benv : Benv) (txs : List Jaune.Transaction) (ommers : List Header)
+    (wds : List Withdrawal) : ops benv.stat.toBlockContext txs ommers wds = Jaune.Body.ops benv txs ommers wds := by
+  simp only [ops, Jaune.Body.ops, postOps, Jaune.Body.postOps, withdrawalOps, requestOps, finishOps,
+    List.append_assoc]
+  rfl
+
 /-- The Checked importer preserves the final prefix and the ordering of all body errors. -/
-theorem Body.importer_observe (benv : Benv) (txs : List (Bytes ⊕ Jaune.Transaction))
+theorem Body.importer_observe {benv : Benv} (fresh : benv.Fresh) (txs : List (Bytes ⊕ Jaune.Transaction))
     (ommers : List Header) (wds : List Withdrawal) :
-    importer benv txs ommers wds = Jaune.Body.importer benv txs ommers wds := by
+    importer benv.stat.toBlockContext benv.state txs ommers wds = Jaune.Body.importer benv txs ommers wds := by
   unfold importer Jaune.Body.importer
-  simp only [fold_observe]
+  simp only [ops_observe, fold_observe fresh]
+  rfl
+
+/-- The Checked body with `applyBody`'s result type preserves the waiting result and errors. -/
+theorem applyBody_observe {benv : Benv} (fresh : benv.Fresh) (txs : List (Bytes ⊕ Jaune.Transaction))
+    (ommers : List Header) (wds : List Withdrawal) :
+    applyBody benv.stat.toBlockContext benv.state txs ommers wds = Jaune.applyBody benv txs ommers wds := by
+  unfold applyBody Jaune.applyBody
+  rw [Body.importer_observe fresh]
+
+/-- At the importer's own environment the body bridge is unconditional. -/
+theorem applyBody_initBlockEnvironment (fork : Fork) (chain : BlockChain) (header : Header)
+    (txs : List (Bytes ⊕ Jaune.Transaction)) (ommers : List Header) (wds : List Withdrawal) :
+    applyBody (initBlockContext fork chain header) chain.state txs ommers wds =
+      Jaune.applyBody (initBlockEnvironment fork chain header) txs ommers wds :=
+  applyBody_observe (initBlockEnvironment_fresh fork chain header) txs ommers wds
 
 /-- The Checked transition preserves the complete block transition, including every commitment
 and the first validation or execution error. -/
@@ -1368,7 +1507,8 @@ theorem stateTransitionCoreE_observe {ε : Type} (embed : TransitionError → ε
     stateTransitionCoreE embed f ch block checkOmmers =
       Jaune.stateTransitionCoreE embed f ch block checkOmmers := by
   unfold stateTransitionCoreE Jaune.stateTransitionCoreE
-  simp only [Body.importer_observe]
+  rw [← initBlockContext_observe, ← initBlockEnvironment_state f ch block.header,
+    Body.importer_observe (initBlockEnvironment_fresh f ch block.header)]
 
 private theorem TopLevel.runNative_frames_of_prepare (msg : Msg) {prepared : Jaune.TopLevel.Preparation}
     (hp : Jaune.TopLevel.prepare msg = .ok prepared) :
@@ -1446,9 +1586,9 @@ theorem TopLevel.runNative_frames_observe (msg : Msg) :
 
 /-- A successful signed run and its waiting counterpart retain the same frames. The
 receipt and block output come from the very message whose frame list is observed. -/
-theorem Transaction.run_frames_observe {benv : Benv} {bout : BlockOutput} {tx : Jaune.Transaction}
-    {index : Nat} {result : TransactionRun} {output : BlockOutput}
-    (accepted : run benv bout tx index = .ok (result, output)) :
+theorem Transaction.run_frames_observe {benv : Benv} (fresh : benv.Fresh) {bout : BlockOutput}
+    {tx : Jaune.Transaction} {index : Nat} {result : TransactionRun} {output : BlockOutput}
+    (accepted : run benv.stat.toBlockContext benv.state bout tx index = .ok (result, output)) :
     ∃ waiting, Jaune.Transaction.run benv bout tx index = .ok (waiting, output) ∧
       letI : LegacyTransaction := ⟨match waiting.message.preparation with
         | .refused .. => waiting.message.entry.tenv.stat
@@ -1456,47 +1596,55 @@ theorem Transaction.run_frames_observe {benv : Benv} {bout : BlockOutput} {tx : 
       result.frames.map Frame.Run.Kept.legacyObservation =
         waiting.frames.map Staging.Exec.Frame.observation := by
   unfold run at accepted
-  obtain ⟨admitted, ha, accepted⟩ := Except.bind_eq_ok accepted
+  obtain ⟨nativeAdmitted, hna, accepted⟩ := Except.bind_eq_ok accepted
   obtain ⟨prepared, hp, accepted⟩ := Except.bind_eq_ok accepted
-  rw [Transaction.prepare_observe admitted tx index] at hp
-  cases legacyPrep : Jaune.Transaction.prepare admitted tx index with
-  | error fault => rw [legacyPrep] at hp; cases hp
-  | ok legacy =>
-    rw [legacyPrep] at hp
-    cases hp
-    obtain ⟨checked, executed, settled⟩ := Except.bind_eq_ok accepted
-    have native := Except.mapError_eq_ok_iff.mp executed
-    change TopLevel.runNative (.ofLegacy legacy.msg) = .ok checked at native
-    have waitingPrep : ∃ preparation, Jaune.TopLevel.prepare legacy.msg = .ok preparation := by
-      cases preparedTop : Jaune.TopLevel.prepare legacy.msg with
-      | error fault =>
-        rw [TopLevel.runNative_observe, TopLevel.run_of_prepare_error preparedTop] at native
-        cases native
-      | ok preparation => exact ⟨preparation, rfl⟩
-    obtain ⟨preparation, hm⟩ := waitingPrep
-    have hr : (TopLevel.ofPreparation legacy.msg preparation hm).run = .ok checked := by
-      rwa [TopLevel.runNative_observe, TopLevel.run_of_prepare_ok hm] at native
-    let message := TopLevel.observe legacy.msg preparation checked
-    have ran : Jaune.TopLevel.run legacy.msg = .ok message := by
-      rw [← TopLevel.run_observe _ _ hm, hr]
-      rfl
-    refine ⟨result.toLegacy message, ?_, ?_⟩
-    · unfold Jaune.Transaction.run
-      rw [ha]
-      simp only [bind, Except.bind, legacyPrep]
-      rw [ran]
-      simp only [Except.mapError]
-      rw [← Transaction.settleRun_observe legacyPrep hm hr, settled]
-      rfl
-    · have frames := TopLevel.runNative_frames_of_prepare legacy.msg hm
-      rw [native, ran] at frames
-      have actual : result.message = checked := by
-        unfold settleRun at settled
-        obtain ⟨_, _, settled⟩ := Except.bind_eq_ok settled
-        cases settled
+  rw [Transaction.admit_observe] at hna
+  cases ha : Jaune.Transaction.admit benv bout tx index with
+  | error => rw [ha] at hna; cases hna
+  | ok admitted =>
+    rw [ha] at hna
+    simp only [Except.map, Except.ok.injEq] at hna
+    subst hna
+    have begun := Jaune.Transaction.admit_begun fresh ha
+    rw [Transaction.prepare_admitted ha, Transaction.prepare_observe begun tx index] at hp
+    cases legacyPrep : Jaune.Transaction.prepare admitted tx index with
+    | error fault => rw [legacyPrep] at hp; cases hp
+    | ok legacy =>
+      rw [legacyPrep] at hp
+      cases hp
+      obtain ⟨checked, executed, settled⟩ := Except.bind_eq_ok accepted
+      have native := Except.mapError_eq_ok_iff.mp executed
+      change TopLevel.runNative (.ofLegacy legacy.msg) = .ok checked at native
+      have waitingPrep : ∃ preparation, Jaune.TopLevel.prepare legacy.msg = .ok preparation := by
+        cases preparedTop : Jaune.TopLevel.prepare legacy.msg with
+        | error fault =>
+          rw [TopLevel.runNative_observe, TopLevel.run_of_prepare_error preparedTop] at native
+          cases native
+        | ok preparation => exact ⟨preparation, rfl⟩
+      obtain ⟨preparation, hm⟩ := waitingPrep
+      have hr : (TopLevel.ofPreparation legacy.msg preparation hm).run = .ok checked := by
+        rwa [TopLevel.runNative_observe, TopLevel.run_of_prepare_ok hm] at native
+      let message := TopLevel.observe legacy.msg preparation checked
+      have ran : Jaune.TopLevel.run legacy.msg = .ok message := by
+        rw [← TopLevel.run_observe _ _ hm, hr]
         rfl
-      rw [TransactionRun.frames, actual]
-      cases checked <;> cases preparation <;> exact Except.ok.inj frames
+      refine ⟨result.toLegacy message, ?_, ?_⟩
+      · unfold Jaune.Transaction.run
+        rw [ha]
+        simp only [bind, Except.bind, legacyPrep]
+        rw [ran]
+        simp only [Except.mapError]
+        rw [← Transaction.settleRun_observe begun legacyPrep hm hr, settled]
+        rfl
+      · have frames := TopLevel.runNative_frames_of_prepare legacy.msg hm
+        rw [native, ran] at frames
+        have actual : result.message = checked := by
+          unfold settleRun at settled
+          obtain ⟨_, _, settled⟩ := Except.bind_eq_ok settled
+          cases settled
+          rfl
+        rw [TransactionRun.frames, actual]
+        cases checked <;> cases preparation <;> exact Except.ok.inj frames
 
 /-- The configured importer witnesses a Checked step, including each scheduled ommer lookup. -/
 theorem KeptStep.of_transition {cfg : ChainConfig} {parent post : BlockChain} {block : Block}

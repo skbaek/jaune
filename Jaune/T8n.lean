@@ -12,9 +12,9 @@
 -- `conformance_target` in `scripts/sources.json`; that revision owns every
 -- field spelling, presence condition and ordering reproduced here.
 --
--- `stateTransitionE` validates the sealed header, derives the `Benv` from
+-- `stateTransitionE` validates the sealed header, derives the block context from
 -- the chain and header, runs the body, and checks the header's commitments.
--- The transition tool builds its `Benv` from `env` and runs the Checked
+-- The transition tool builds its `BlockContext` from `env` and runs the Checked
 -- body operations. It emits the resulting state and commitments for the caller.
 --
 -- The one genuinely new piece of control flow is the reject-and-continue
@@ -396,7 +396,7 @@ structure T8nOmmer : Type where
   address : Address
 deriving DecidableEq
 
-/-- Everything `env` contributes to a `BenvStat`, after the target's two
+/-- Everything `env` contributes to a `BlockContext`, after the target's two
 derivations have been applied. Fields no lane consumes -- `extraData`, the
 block-access-list pair -- are accepted and dropped, exactly as the target
 accepts and does not consume them. `difficulty` is the target's resolved block
@@ -464,7 +464,7 @@ Two shapes, both the target's. An **absent or empty** `blockHashes` yields the
 empty window whatever the block number says -- its `_resolve_block_hashes`
 returns early before it looks at the number, and that is the shape every state
 test arrives in. A **non-empty** one is expanded over the window; the target
-represents a gap in it as a `None` placeholder, and `BenvStat.blockHashes` has
+represents a gap in it as a `None` placeholder, and `BlockContext.blockHashes` has
 no placeholder, so a gap is refused here rather than silently read as some
 other block's hash. Every corpus case and every `fill` invocation that
 supplies the map at all supplies it dense. -/
@@ -527,7 +527,7 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
   let timestamp ← natOr j "currentTimestamp" defaultTimestamp
   requireBits "env.currentTimestamp" 256 timestamp
   -- `GASLIMIT` and `NUMBER` push these. The target fails only when a transaction
-  -- runs one, which a frontend cannot know before executing; `Benv` keeps them as
+  -- runs one, which a frontend cannot know before executing; `BlockContext` keeps them as
   -- `Nat`, so refusing here is the only way they are never pushed reduced.
   requireBits "env.currentGasLimit" 256 gasLimit
   requireBits "env.currentNumber" 256 number
@@ -935,14 +935,14 @@ def foldTransactionsWith (step : Body.Prefix → BodyOp → Except TransitionErr
       else foldTransactionsWith step rest p (rej ++ [⟨i, .execution err⟩]) inc
 
 /-- The transition tool's signed-transaction fold uses the Checked body step. -/
-def foldTransactions (benv : Benv) := foldTransactionsWith (Checked.Body.step benv)
+def foldTransactions (block : BlockContext) := foldTransactionsWith (Checked.Body.step block)
 
 /-- State-test mode: exactly one transaction from the empty prefix, no system
 operations, no withdrawals, no requests. -/
-def runStateTest (benv : Benv) (txs : List (TransactionParse Transaction)) :
+def runStateTest (block : BlockContext) (state : State) (txs : List (TransactionParse Transaction)) :
     Except TransitionError Outcome := do
   let selected := match txs with | [] => [] | t :: _ => [⟨0, t⟩]
-  let ⟨p, rej, inc⟩ ← foldTransactions benv selected (Body.Prefix.init benv.state) [] []
+  let ⟨p, rej, inc⟩ ← foldTransactions block selected (Body.Prefix.init state) [] []
   .ok ⟨p.state, p.toBlockOutput, rej, none, inc⟩
 
 /-- The reward `--state.reward` asks for, as the target resolves it
@@ -986,28 +986,28 @@ def ommerAgesOk (ommers : List T8nOmmer) : Bool :=
 
 /-- t8n's pre-execution system calls, in its order: history storage (with the last window hash,
 or zero for an empty window), then beacon roots. -/
-def preOps (benv : Benv) : List BodyOp :=
-  (if benv.stat.rules.systemCalls.historyStorage then
-    [.systemCall historyStorageAddress (.ok (benv.stat.blockHashes.getLast?.getD 0).toBytes) 0]
+def preOps (block : BlockContext) : List BodyOp :=
+  (if block.rules.systemCalls.historyStorage then
+    [.systemCall historyStorageAddress (.ok (block.blockHashes.getLast?.getD 0).toBytes) 0]
   else []) ++
-  (if benv.stat.rules.systemCalls.beaconRoots then
-    [.systemCall beaconRootsAddress (.ok benv.stat.parentBeaconBlockRoot.toBytes) 0]
+  (if block.rules.systemCalls.beaconRoots then
+    [.systemCall beaconRootsAddress (.ok block.parentBeaconBlockRoot.toBytes) 0]
   else [])
 
 /-- The rewards (when resolved, `payT8nRewards`' amounts), then the withdrawals at the accepted
 count plus one. -/
-def postOps (benv : Benv) (accepted : Nat) (wds : List Withdrawal) (reward : Option Nat)
+def postOps (block : BlockContext) (accepted : Nat) (wds : List Withdrawal) (reward : Option Nat)
     (ommers : List T8nOmmer) : List BodyOp :=
   (match reward with
     | none => []
     | some r =>
-      [.rewards benv.stat.coinbase (r + ommers.length * (r / 32))
+      [.rewards block.coinbase (r + ommers.length * (r / 32))
         (ommers.map fun ommer => (ommer.address, (8 - ommer.delta) * r / 8))]) ++
-  (if benv.stat.rules.header.withdrawalsRoot then [.withdrawals wds (accepted + 1)] else [])
+  (if block.rules.header.withdrawalsRoot then [.withdrawals wds (accepted + 1)] else [])
 
 /-- The request group at the accepted count plus one. -/
-def requestOps (benv : Benv) (accepted : Nat) : List BodyOp :=
-  .depositRequests :: benv.stat.rules.requests.map fun ⟨type, address⟩ =>
+def requestOps (block : BlockContext) (accepted : Nat) : List BodyOp :=
+  .depositRequests :: block.rules.requests.map fun ⟨type, address⟩ =>
     .requestCall type address (accepted + 1)
 
 /-- Blockchain mode: the target's `_run_blockchain_test`, step for step, each
@@ -1031,13 +1031,13 @@ after the requests and the item rule is applied to it; a violation is the
 `blockException` of a result that still carries the list, as the target
 assigns `block_output.block_access_list` before validating it. -/
 def runBlockchainWith (step : Body.Prefix → BodyOp → Except TransitionError Body.Prefix)
-    (benv : Benv) (txs : List (TransactionParse Transaction)) (wds : List Withdrawal)
+    (block : BlockContext) (state : State) (txs : List (TransactionParse Transaction)) (wds : List Withdrawal)
     (reward : Option Nat) (ommers : List T8nOmmer) : Except TransitionError Outcome := do
-  let p ← (preOps benv).foldlM step (Body.Prefix.init benv.state)
+  let p ← (preOps block).foldlM step (Body.Prefix.init state)
   let ⟨p, rej, inc⟩ ← foldTransactionsWith step txs.putIndex p [] []
-  let p ← (postOps benv inc.length wds reward ommers).foldlM step p
+  let p ← (postOps block inc.length wds reward ommers).foldlM step p
   let requests :=
-    if benv.stat.rules.header.requestsHash then (requestOps benv inc.length).foldlM step p
+    if block.rules.header.requestsHash then (requestOps block inc.length).foldlM step p
     else .ok p
   match requests with
   | .ok q => do
@@ -1050,10 +1050,10 @@ def runBlockchainWith (step : Body.Prefix → BodyOp → Except TransitionError 
   | .error err => .error err
 
 /-- Run the blockchain-mode operation sequence through the Checked body. -/
-def runBlockchain (benv : Benv) (txs : List (TransactionParse Transaction))
+def runBlockchain (block : BlockContext) (state : State) (txs : List (TransactionParse Transaction))
     (wds : List Withdrawal) (reward : Option Nat := none) (ommers : List T8nOmmer := []) :
     Except TransitionError Outcome :=
-  runBlockchainWith (Checked.Body.step benv) benv txs wds reward ommers
+  runBlockchainWith (Checked.Body.step block) block state txs wds reward ommers
 
 -- Focused EIP-7928 carry tests for the two block frontends. The request
 -- addresses are the first two pinned Amsterdam request contracts; their test
@@ -1097,23 +1097,19 @@ private def blockAccessListPipelineForwardCode (address : Address) (half : Bool)
     (if half then [0x60, 0x02, 0x47, 0x04] else [0x47]) ++ [0x73] ++ address.toBytes ++
       [0x61, 0xff, 0xff, 0xf1, 0x00]))
 
-private def balPipelineBenv (state : State) : Benv :=
-  { state := state
-    createdAccounts := .emptyWithCapacity
-    stat := {
-      fork := .amsterdam
-      chainId := 1
-      origState := state
-      blockGasLimit := 30000000
-      blockHashes := [0]
-      coinbase := 0
-      number := 1
-      baseFeePerGas := 1
-      time := 0
-      prevRandao := 0
-      excessBlobGas := 0
-      parentBeaconBlockRoot := 0
-      slotNumber := 0 } }
+private def balPipelineBlock : BlockContext :=
+  { fork := .amsterdam
+    chainId := 1
+    gasLimit := 30000000
+    blockHashes := [0]
+    coinbase := 0
+    number := 1
+    baseFeePerGas := 1
+    timestamp := 0
+    prevRandao := 0
+    excessBlobGas := 0
+    parentBeaconBlockRoot := 0
+    slotNumber := 0 }
 
 private def blockAccessListPipelineToggleState : State :=
   let state := State.setCode .empty blockAccessListPipelineHelper blockAccessListPipelineToggleCode
@@ -1156,25 +1152,25 @@ private def blockAccessListPipelineBalances (list : BlockAccessList) (address : 
   | none => false
 
 private def blockAccessListPipelineRequestNetApplyBody : Bool :=
-  match applyBody (balPipelineBenv blockAccessListPipelineToggleState) [] [] [] with
+  match Checked.applyBody balPipelineBlock blockAccessListPipelineToggleState [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineHelper).storage.get 0 == 0 && blockAccessListPipelineHelperNoNet bout.blockAccessList
   | .error _ => false
 
 private def blockAccessListPipelineRequestOneWriteApplyBody : Bool :=
-  match applyBody (balPipelineBenv blockAccessListPipelineOneCallState) [] [] [] with
+  match Checked.applyBody balPipelineBlock blockAccessListPipelineOneCallState [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineHelper).storage.get 0 == 1 && blockAccessListPipelineHelperOneWrite bout.blockAccessList
   | .error _ => false
 
 private def blockAccessListPipelineRequestNetT8n : Bool :=
-  match runBlockchain (balPipelineBenv blockAccessListPipelineToggleState) [] [] with
+  match runBlockchain balPipelineBlock blockAccessListPipelineToggleState [] [] with
   | .ok out => out.blockException.isNone &&
     (out.state.get blockAccessListPipelineHelper).storage.get 0 == 0 && blockAccessListPipelineHelperNoNet out.bout.blockAccessList
   | .error _ => false
 
 private def blockAccessListPipelineRequestOneWriteT8n : Bool :=
-  match runBlockchain (balPipelineBenv blockAccessListPipelineOneCallState) [] [] with
+  match runBlockchain balPipelineBlock blockAccessListPipelineOneCallState [] [] with
   | .ok out => out.blockException.isNone &&
     (out.state.get blockAccessListPipelineHelper).storage.get 0 == 1 && blockAccessListPipelineHelperOneWrite out.bout.blockAccessList
   | .error _ => false
@@ -1185,7 +1181,7 @@ private def blockAccessListPipelineForwardApplyBody (half : Bool) : Bool :=
   let forwarded := if half then amount / 2 else amount
   let wds : List Withdrawal :=
     [{ index := 0, validatorIndex := 0, address := blockAccessListPipelineWithdrawalRequestsAddress, amount := 2 }]
-  match applyBody (balPipelineBenv (blockAccessListPipelineForwardState half)) [] [] wds with
+  match Checked.applyBody balPipelineBlock (blockAccessListPipelineForwardState half) [] [] wds with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineWithdrawalRequestsAddress).balance == retained &&
       (state.get blockAccessListPipelineBeneficiary).balance == forwarded &&
@@ -1200,7 +1196,7 @@ private def blockAccessListPipelineForwardT8n (half : Bool) : Bool :=
   let forwarded := if half then amount / 2 else amount
   let wds : List Withdrawal :=
     [{ index := 0, validatorIndex := 0, address := blockAccessListPipelineWithdrawalRequestsAddress, amount := 2 }]
-  match runBlockchain (balPipelineBenv (blockAccessListPipelineForwardState half)) [] wds with
+  match runBlockchain balPipelineBlock (blockAccessListPipelineForwardState half) [] wds with
   | .ok out => out.blockException.isNone &&
     (out.state.get blockAccessListPipelineWithdrawalRequestsAddress).balance == retained &&
       (out.state.get blockAccessListPipelineBeneficiary).balance == forwarded &&
@@ -1228,16 +1224,15 @@ private def rewardCoinbase : Address := 0xc0
 private def rewardOmmerA : Address := 0xa1
 private def rewardOmmerB : Address := 0xa2
 
-private def rewardBenv (fork : Fork) : Benv :=
-  let b := balPipelineBenv .empty
-  { b with stat := { b.stat with fork := fork, coinbase := rewardCoinbase } }
+private def rewardBlock (fork : Fork) : BlockContext :=
+  { balPipelineBlock with fork := fork, coinbase := rewardCoinbase }
 
 private def rewardOmmers : List T8nOmmer :=
   [⟨1, rewardOmmerA⟩, ⟨2, rewardOmmerB⟩]
 
 private def rewardBalances (fork : Fork) (reward : Option Nat) :
     Option (U256 × U256 × U256) :=
-  match runBlockchain (rewardBenv fork) [] [] reward rewardOmmers with
+  match runBlockchain (rewardBlock fork) .empty [] [] reward rewardOmmers with
   | .ok out =>
     if out.blockException.isNone then
       some ((out.state.get rewardCoinbase).balance, (out.state.get rewardOmmerA).balance,
@@ -1744,37 +1739,32 @@ def run (args : List String) : IO Unit := do
        computes 8 - delta in U256 and fails"
   let txs ← decodeTransactions txsJsonIn
   refuseOutOfRange (if o.stateTest then txs.take 1 else txs)
-  let benv : Benv := {
-    state := preState,
-    createdAccounts := .emptyWithCapacity,
-    stat := {
-      fork := f,
-      chainId := o.chainId,
-      origState := preState,
-      blockGasLimit := env.gasLimit,
-      blockHashes := env.blockHashes,
-      coinbase := env.coinbase,
-      number := env.number,
-      baseFeePerGas := env.baseFeePerGas,
-      time := env.timestamp.toU256,
-      -- Before the merge `DIFFICULTY` (0x44) reads the block's difficulty,
-      -- exactly as the block path's `initBlockEnvironment` selects it (unit U5); the
-      -- target's pre-merge block environment carries `difficulty` and no
-      -- `prev_randao`. Post-merge (`pow = none`) it is `currentRandom` as
-      -- before. U11d.
-      prevRandao :=
-        match rules.proofOfWork with
-        | some _ => Nat.toU256 env.difficulty
-        | none => env.prevRandao,
-      excessBlobGas := env.excessBlobGas,
-      parentBeaconBlockRoot := env.parentBeaconBlockRoot,
-      slotNumber := env.slotNumber
-    }
+  let block : BlockContext := {
+    fork := f,
+    chainId := o.chainId,
+    gasLimit := env.gasLimit,
+    blockHashes := env.blockHashes,
+    coinbase := env.coinbase,
+    number := env.number,
+    baseFeePerGas := env.baseFeePerGas,
+    timestamp := env.timestamp.toU256,
+    -- Before the merge `DIFFICULTY` (0x44) reads the block's difficulty,
+    -- exactly as the block path's `initBlockContext` selects it (unit U5); the
+    -- target's pre-merge block environment carries `difficulty` and no
+    -- `prev_randao`. Post-merge (`pow = none`) it is `currentRandom` as
+    -- before. U11d.
+    prevRandao :=
+      match rules.proofOfWork with
+      | some _ => Nat.toU256 env.difficulty
+      | none => env.prevRandao,
+    excessBlobGas := env.excessBlobGas,
+    parentBeaconBlockRoot := env.parentBeaconBlockRoot,
+    slotNumber := env.slotNumber
   }
   let outcome ←
     IO.ofExcept <|
-      (if o.stateTest then runStateTest benv txs
-        else runBlockchain benv txs env.withdrawals reward env.ommers).mapError
+      (if o.stateTest then runStateTest block preState txs
+        else runBlockchain block preState txs env.withdrawals reward env.ommers).mapError
           TransitionError.render
   let resultText := (resultJson rules env outcome).toString
   let allocText := (allocJson outcome.state).toString

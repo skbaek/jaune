@@ -344,21 +344,22 @@ def runInput {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m)
     pure ⟨result.run, by rw [result.erases, TopLevel.runNative, h]; rfl⟩
 
 /-- The traced transaction settles through the same Checked runner as an untraced one. -/
-structure TransactionResult (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction)
-    (index : Nat) where
+structure TransactionResult (block : BlockContext) (state : State) (bout : BlockOutput)
+    (tx : Jaune.Transaction) (index : Nat) where
   value : Except TransitionError (TransactionRun × BlockOutput)
-  erases : value = Transaction.run benv bout tx index
+  erases : value = Transaction.run block state bout tx index
 
 /-- Trace an admitted signed transaction once, then settle the typed message. Ordinary calls
 report the authorization refund before entry. A preparation refusal emits no frame events. -/
 def runTransaction {m : Type → Type} [Monad m] (sink : Jaune.Trace.Sink m)
-    (authorizationRefund : Nat → m Unit) (benv : Benv) (bout : BlockOutput) (tx : Jaune.Transaction)
-    (index : Nat) (runId : String) : m (TransactionResult benv bout tx index) := do
-  match ha : Jaune.Transaction.admit benv bout tx index with
+    (authorizationRefund : Nat → m Unit) (block : BlockContext) (state : State) (bout : BlockOutput)
+    (tx : Jaune.Transaction) (index : Nat) (runId : String) :
+    m (TransactionResult block state bout tx index) := do
+  match ha : Transaction.admit block state bout tx index with
   | .error error =>
     pure ⟨.error error, by simp only [Transaction.run, ha, bind, Except.bind]⟩
   | .ok admitted =>
-    match hp : Transaction.prepare admitted.benv.stat.toBlockContext admitted.benv.stat.origState admitted tx with
+    match hp : Transaction.prepare block state admitted tx with
     | .error error =>
       pure ⟨.error error, by simp only [Transaction.run, ha, hp, bind, Except.bind]⟩
     | .ok prepared =>
