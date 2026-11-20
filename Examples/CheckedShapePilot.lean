@@ -1,55 +1,101 @@
-import Examples.ShapePilot
 import Jaune.MessageCall.CheckedDriverInvariants
-import Jaune.Run.Message
+import Jaune.Run.CheckedMessage
 
-/-! The Prague and Amsterdam programs of the shape pilot run on the checked frame driver. -/
+/-!
+# The shape pilot's two executions, on the landed Checked definitions
+
+The pilot of goal `jaune-shape-and-names-v1` (WP) ran two programs on a prototype that never
+landed (`Examples/ShapePilot/` on `wsl/jsn-pilot`). Here they run natively on the Checked
+message call: `Checked.enter`, `Checked.exec`, `Checked.settle`, `Checked.Frame.runTop`, and the
+top-level run `TopLevel.runNative` with its settlement, from a `TopLevel.Input` built directly
+(no `Msg`, no `Frame.ofTop`), with the pilot's expected values (S1 and S3: "the pilot's two
+executions restated over the landed definitions").
+
+* A Prague caller CALLs a child that writes storage and a log, then reverts with the byte
+  `0xAA`. The caller pushes 42 and goes on; it receives the byte in its output window and its
+  return data, and keeps neither the child's slot nor its log.
+* An Amsterdam caller CREATEs a child whose initcode returns one STOP byte; the code deposit
+  runs out of gas. The caller pushes 42 and goes on, keeps its incremented nonce and the warmed
+  new address, loses the deployment and receives the new-account state-gas refund.
+
+The observations name the raw child (before settlement) apart from the settled result, so a
+preflight refusal cannot pass for either execution. The caller's final stack comes from its
+raw result, since a settled result carries no machine.
+-/
 namespace Examples.ShapePilot.Checked
 
 open Jaune
-open Examples.ShapePilot
+open Jaune.Checked
 
-/-- A frame built by the shared top-level constructors (`Jaune.Frame.ofTop`, the run layer's
-`TopLevel.prepare`) on the checked machine: the same message and checkpoint, with the
-checkpoint's memory carried over when its backing array lies within its logical size, and
-refused otherwise. -/
-def checkedFrame (f : Jaune.Frame) : Option Checked.Frame :=
-  let m := f.checkpoint.machine
-  if h : m.memory.data.size ≤ m.memory.size then
-    some ⟨Checked.Message.ofLegacy f.message,
-      { machine :=
-          { stack := m.stack, memory := ⟨m.memory.data, m.memory.size, h⟩, gasLeft := m.gasLeft
-            stateGas := m.stateGas, returnData := m.returnData }
-        world := f.checkpoint.world
-        substate := f.checkpoint.substate
-        trail := f.checkpoint.trail }⟩
-  else none
+def parentAddress : Address := 0x1000
+def childAddress : Address := 0x20
 
-/-- A frame whose checkpoint memory is empty converts. -/
-theorem checkedFrame_isSome_of_empty {f : Jaune.Frame} (h : f.checkpoint.machine.memory = Mem.empty) :
-    (checkedFrame f).isSome := by
-  unfold checkedFrame
-  dsimp only
-  split
-  · rfl
-  · rename_i hn; exact absurd (by rw [h]; exact Nat.le_refl 0) hn
+/-- Write slot zero and a log, then revert with the byte 0xAA. -/
+def revertingChild : ByteArray := ⟨#[
+  0x60, 0x07, 0x60, 0x00, 0x55,
+  0x60, 0x00, 0x60, 0x00, 0xA0,
+  0x60, 0xAA, 0x60, 0x00, 0x53,
+  0x60, 0x01, 0x60, 0x00, 0xFD]⟩
 
-/-- The top-level frame always converts: its checkpoint starts with empty memory. -/
-theorem checkedFrame_ofTop_isSome (msg : Msg) (isCreate : Bool) :
-    (checkedFrame (Jaune.Frame.ofTop msg isCreate)).isSome :=
-  checkedFrame_isSome_of_empty rfl
+/-- CALL with a one-byte output window, then push 42 to witness continuation. -/
+def callingParent : ByteArray := ⟨#[
+  0x60, 0x01, 0x60, 0x00, 0x60, 0x00, 0x60, 0x00,
+  0x60, 0x00, 0x60, 0x20, 0x61, 0xFF, 0xFF, 0xF1,
+  0x60, 0x2A, 0x00]⟩
 
-theorem checkedFrame_machine {f : Jaune.Frame} {g : Checked.Frame} (h : checkedFrame f = some g) :
-    g.checkpoint.machine.stack = f.checkpoint.machine.stack ∧
-      g.checkpoint.machine.stateGas = f.checkpoint.machine.stateGas := by
-  unfold checkedFrame at h
-  dsimp only at h
-  split at h
-  · cases h; exact ⟨rfl, rfl⟩
-  · cases h
+/-- Initcode returns one STOP byte. It does not revert or halt exceptionally. -/
+def initcode : ByteArray := ⟨#[
+  0x60, 0x00, 0x60, 0x00, 0x53, 0x60, 0x01, 0x60, 0x00, 0xF3]⟩
 
-/-- A top-level frame on the checked machine (`Jaune.Frame.ofTop` with its empty memory). -/
-def ofTop (msg : Msg) (isCreate : Bool) : Checked.Frame :=
-  (checkedFrame (Jaune.Frame.ofTop msg isCreate)).get (checkedFrame_ofTop_isSome msg isCreate)
+/-- Copy the trailing initcode into memory, CREATE, then continue. -/
+def creatingParent : ByteArray := ⟨#[
+  0x60, 0x0A, 0x60, 0x11, 0x60, 0x00, 0x39,
+  0x60, 0x0A, 0x60, 0x00, 0x60, 0x00, 0xF0,
+  0x60, 0x2A, 0x00] ++ initcode.data⟩
+
+/-- The top-level input of a pilot program: a call of the parent at depth left 8, with the
+parent's account (nonce 1, the program as code) added to `extraState`, which is also the
+transaction's original state. Nothing is warm and no value moves. -/
+def input (fork : Fork) (code : ByteArray) (gas stateGas : Nat)
+    (extraState : State := .empty) : TopLevel.Input :=
+  let state := extraState.set parentAddress
+    { nonce := 1, balance := 0, storage := .empty, code := code }
+  let message : Checked.Message := {
+    context := {
+      caller := parentAddress, recipient := parentAddress, value := 0, calldata := [], code
+      depthLeft := 8, isStatic := false
+      tx := { origin := 0, gasPrice := 0, blobVersionedHashes := [], originalState := state }
+      block := { (default : BlockContext) with fork } }
+    kind := .call
+    codeAddress := some parentAddress
+    target := some parentAddress
+    gas
+    stateGasGrant := stateGas
+    transfersValue := false
+    disablePrecompiles := false }
+  ⟨message, message.initialCheckpoint ⟨state, .empty, .emptyWithCapacity⟩ .emptyWithCapacity
+    .emptyWithCapacity .emptyWithCapacity .emptyWithCapacity, []⟩
+
+def callInput : TopLevel.Input :=
+  input .prague callingParent 100000 0 (State.setCode .empty childAddress revertingChild)
+
+def createInput : TopLevel.Input :=
+  input .amsterdam creatingParent 13000 amsterdamStateGasRules.newAccount
+
+def newAddress : Address := computeContractAddress parentAddress 1
+
+/-- The top-level frame of an input: its message on the checkpoint it is prepared from. -/
+def topFrame (input : TopLevel.Input) : Checked.Frame := ⟨input.message, input.checkpoint⟩
+
+/-- A frame whose checkpoint is the one a top-level message starts on. -/
+def IsTop (f : Checked.Frame) : Prop :=
+  ∃ world accessedAddresses accessedStorageKeys createdAccounts selfDestructs,
+    f.checkpoint = f.message.initialCheckpoint world accessedAddresses accessedStorageKeys
+      createdAccounts selfDestructs
+
+theorem topFrame_isTop (fork : Fork) (code : ByteArray) (gas stateGas : Nat) (extraState : State) :
+    IsTop (topFrame (input fork code gas stateGas extraState)) :=
+  ⟨_, _, _, _, _, rfl⟩
 
 def entered (f : Checked.Frame) : Option Checked.Frame.Running :=
   match Checked.enterWith f f.checkpoint with
@@ -65,19 +111,52 @@ private def firstSpawn : Nat → Checked.Frame.Running → Option (Checked.Frame
     | .ok (.spawn child pending _) => some (child, pending)
     | _ => none
 
-/-- What the transaction reads of the native top-level frame: the world after it and the logs it
-keeps (a failed frame keeps none). Both pilot preparations are frames. -/
-private def rendered (msg : Msg) : Option (State × List Log) := do
-  let .ok (.frame f _) := TopLevel.prepare msg | none
-  let cf ← checkedFrame f
-  let .ok result := Checked.Frame.runTop cf | none
-  let logs := match result with
-    | .success _ _ _ _ substate _ => substate.logs
-    | _ => []
-  pure ((f.worldAfter result).state, logs)
+/-- What the transaction reads of the native top-level run: the world after it and the logs it
+keeps (a failed frame keeps none), from the top-level settlement. Both pilot preparations are
+frames. -/
+private def rendered (input : TopLevel.Input) : Option (State × List Log) := do
+  let .ok run := TopLevel.runNative input | none
+  let .frame .. := run | none
+  let settled := run.settlement input
+  pure (settled.state, settled.logs)
+
+structure CallObservation where
+  isCall : Bool
+  codeAddress : Option Nat
+  childReverted : Bool
+  childOutput : Bytes
+  childSlot : Nat
+  childLogs : Nat
+  resultReverted : Bool
+  resultOutput : Bytes
+  callerStack : List Nat
+  callerOutputWindow : Bytes
+  callerReturnData : Bytes
+  settledSlot : Nat
+  settledLogs : Nat
+  topLevelSlot : Nat
+  topLevelLogs : Nat
+  deriving Repr, BEq
+
+structure CreateObservation where
+  isCreate : Bool
+  codeAddress : Option Nat
+  childFinished : Bool
+  childOutput : Bytes
+  childNonce : Nat
+  depositHalted : Bool
+  callerStack : List Nat
+  creatorNonce : Nat
+  destinationWarm : Bool
+  deployedNonce : Nat
+  deployedCodeSize : Nat
+  refundedStateGas : Nat
+  topLevelCreatorNonce : Nat
+  topLevelDeployedCodeSize : Nat
+  deriving Repr, BEq
 
 def observeCall : Option CallObservation := do
-  let f := ofTop callMessage false
+  let f := topFrame callInput
   let start ← entered f
   let (child, _) ← firstSpawn 100 start
   let .run childStart := Checked.enter child | none
@@ -85,7 +164,7 @@ def observeCall : Option CallObservation := do
   let .ok result := Checked.settle child raw | none
   let .ok callerRaw := Checked.exec start | none
   let .ok (.success _ _ _ world substate _) := Checked.Frame.runTop f | none
-  let (state, logs) ← rendered callMessage
+  let (state, logs) ← rendered callInput
   pure {
     isCall := child.message.kind == .call
     codeAddress := child.message.codeAddress.map Address.toNat
@@ -104,7 +183,7 @@ def observeCall : Option CallObservation := do
     topLevelLogs := logs.length }
 
 def observeCreate : Option CreateObservation := do
-  let f := ofTop createMessage false
+  let f := topFrame createInput
   let start ← entered f
   let (child, _) ← firstSpawn 100 start
   let .run childStart := Checked.enter child | none
@@ -112,7 +191,7 @@ def observeCreate : Option CreateObservation := do
   let .ok result := Checked.settle child raw | none
   let .ok callerRaw := Checked.exec start | none
   let .ok (.success _ _ meter world substate _) := Checked.Frame.runTop f | none
-  let (state, _) ← rendered createMessage
+  let (state, _) ← rendered createInput
   pure {
     isCreate := child.message.kind == .create
     codeAddress := child.message.codeAddress.map Address.toNat
@@ -144,29 +223,25 @@ def observeCreate : Option CreateObservation := do
   refundedStateGas := 183600, topLevelCreatorNonce := 2, topLevelDeployedCodeSize := 0 }
 
 /-- A top-level frame starts with an empty stack. -/
-theorem entered_stack {msg : Msg} {isCreate : Bool} {start : Checked.Frame.Running}
-    (h : entered (ofTop msg isCreate) = some start) : start.state.stack.length ≤ 1024 := by
+theorem entered_stack {f : Checked.Frame} (top : IsTop f) {start : Checked.Frame.Running}
+    (h : entered f = some start) : start.state.stack.length ≤ 1024 := by
   unfold entered at h
   split at h
   · rename_i r he
     cases h
-    have hi := Checked.RunInvariants.enterWith_run_inv (c := 0) (f := ofTop msg isCreate)
-      (start := (ofTop msg isCreate).checkpoint) (h := he)
-    have hm : (ofTop msg isCreate).checkpoint.machine.stack =
-          (Jaune.Frame.ofTop msg isCreate).checkpoint.machine.stack ∧
-        (ofTop msg isCreate).checkpoint.machine.stateGas =
-          (Jaune.Frame.ofTop msg isCreate).checkpoint.machine.stateGas :=
-      checkedFrame_machine (Option.some_get (checkedFrame_ofTop_isSome msg isCreate)).symm
+    obtain ⟨_, _, _, _, _, hc⟩ := top
+    have hi := Checked.RunInvariants.enterWith_run_inv (c := 0) (f := f)
+      (start := f.checkpoint) (h := he)
     refine (hi ⟨?_, ?_⟩).2
-    · rw [hm.2]; rfl
-    · rw [hm.1]; exact Nat.zero_le _
+    · rw [hc]; rfl
+    · rw [hc]; exact Nat.zero_le _
   · cases h
 
 /-- The call execution's return: a Prague caller resumed after a reverted child keeps its own
 world and substate (with the child's RIPEMD-160 touch), pushes 0, receives the output in its
 window and its return data, and takes back the child's remaining gas. -/
-theorem call_return_survival {msg : Msg} {start run : Checked.Frame.Running}
-    (hstart : entered (ofTop msg false) = some start) (hrun : Checked.Frame.Running.Reaches start run)
+theorem call_return_survival {f : Checked.Frame} (top : IsTop f) {start run : Checked.Frame.Running}
+    (hstart : entered f = some start) (hrun : Checked.Frame.Running.Reaches start run)
     {child : Checked.Frame} {p : Staging.Pending} {pc : Nat} (hspawn : Checked.step run = .ok (.spawn child p pc))
     {outputIndex outputSize : Nat} (target : p.target = .call outputIndex outputSize)
     (prague : run.context.block.rules.stateGas = none)
@@ -183,7 +258,7 @@ theorem call_return_survival {msg : Msg} {start run : Checked.Frame.Running}
           world := child.checkpoint.world
           substate := child.checkpoint.substate.keepTouch trail
           trail := child.checkpoint.trail.absorb trail }) := by
-  rw [Checked.Frame.Running.Reaches.resume_failed (entered_stack hstart) hrun hspawn childRan rfl,
+  rw [Checked.Frame.Running.Reaches.resume_failed (entered_stack top hstart) hrun hspawn childRan rfl,
     Checked.returnedMachine_failed_call _ _ _ _ target rfl]
   simp only [prague]
   rfl
@@ -192,8 +267,8 @@ theorem call_return_survival {msg : Msg} {start run : Checked.Frame.Running}
 halted keeps its own world and substate, pushes 0, keeps its memory, takes the child's output
 as return data, takes back the child's reservoir and spill, and is refunded a charged new
 account's state gas. -/
-theorem create_return_survival {msg : Msg} {start run : Checked.Frame.Running}
-    (hstart : entered (ofTop msg false) = some start) (hrun : Checked.Frame.Running.Reaches start run)
+theorem create_return_survival {f : Checked.Frame} (top : IsTop f) {start run : Checked.Frame.Running}
+    (hstart : entered f = some start) (hrun : Checked.Frame.Running.Reaches start run)
     {child : Checked.Frame} {p : Staging.Pending} {pc : Nat} (hspawn : Checked.step run = .ok (.spawn child p pc))
     {address : Address} (target : p.target = .create address)
     {state : StateGasRules} (amsterdam : run.context.block.rules.stateGas = some state)
@@ -215,7 +290,7 @@ theorem create_return_survival {msg : Msg} {start run : Checked.Frame.Running}
           world := child.checkpoint.world
           substate := child.checkpoint.substate
           trail := child.checkpoint.trail.absorb trail }) := by
-  rw [Checked.Frame.Running.Reaches.resume_failed (entered_stack hstart) hrun hspawn childRan rfl,
+  rw [Checked.Frame.Running.Reaches.resume_failed (entered_stack top hstart) hrun hspawn childRan rfl,
     Checked.returnedMachine_failed_create _ _ _ _ target rfl]
   simp only [amsterdam]
   rfl
