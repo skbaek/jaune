@@ -89,7 +89,15 @@ def CallContext.toChecked (c : CallContext) : Checked.CallContext :=
     code := c.code, depthLeft := c.depthLeft, isStatic := c.isStatic
     tx := c.tx.toTransactionContext c.block.origState, block := c.block.toBlockContext }
 
-instance : Inhabited Checked.CallContext := ⟨(default : CallContext).toChecked⟩
+/-- The default checked context, over the checked fields: no caller, recipient, value, input or
+code, the full call depth, not static, and the default transaction and block records. -/
+instance : Inhabited Checked.CallContext := ⟨
+  { caller := 0, recipient := 0, value := 0, calldata := [], code := .empty, depthLeft := 1024
+    isStatic := false, tx := default, block := default }⟩
+
+/-- The native default agrees with the default shared context's checked projection. -/
+theorem CallContext.toChecked_default :
+    (default : CallContext).toChecked = (default : Checked.CallContext) := rfl
 
 end Jaune
 
