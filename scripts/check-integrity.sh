@@ -255,14 +255,15 @@ RULES = [
                 r'(?![A-Za-z0-9_])'
                 r'|\]!')),
     # R4: stringly-typed semantic carriers and string-driven semantic branches.
-    # `String × Devm` is the VM carrier; `Option String` catches Meta.error and
-    # MsgCallOutput.error; hasErrorType/isExceptionalHalt/isBlockException are
+    # `String × Frame.State` (or a running frame) is the VM carrier, as
+    # `String × Devm` was before G2b; `Option String` catches a stringly error
+    # field; hasErrorType/isExceptionalHalt/isBlockException are
     # the prefix-match branch primitives; String.isPrefixOf and an exact
     # comparison against a quoted literal cover the hand-rolled variants.
     ("R4", r4_files,
      re.compile(r'Except\s+String'
                 r'|Except\s*\(\s*String\s*×'
-                r'|String\s*×\s*Devm'
+                r'|String\s*×\s*(?:Checked\.)?Frame\.(?:State|Running)'
                 r'|Option\s+String'
                 r'|(?<![A-Za-z0-9_])hasErrorType(?![A-Za-z0-9_])'
                 r'|(?<![A-Za-z0-9_])isExceptionalHalt(?![A-Za-z0-9_])'

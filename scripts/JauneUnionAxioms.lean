@@ -22,10 +22,8 @@ import Jaune.Check.CheckedMachine
 import Jaune.Check.CheckedPortAuditA
 import Jaune.Check.CheckedPortAuditB
 import Jaune.Check.CheckedFactPorts
-import Jaune.Check.CheckedRowsAudit
+import Jaune.Check.FrameRunAudit
 import Jaune.Check.CheckedSpecAudit
-import Jaune.Check.FrameBridgeAudit
-import Jaune.Check.G2bBridgeAudit
 import Jaune.Check.InstructionFamiliesAudit
 import Jaune.Check.Hash
 import Jaune.Check.InstructionsAudit
@@ -34,19 +32,13 @@ import Jaune.Check.Machine
 import Jaune.Check.Precompiles
 import Jaune.Check.RIPEMD160Spec
 import Jaune.Check.RlpEval
-import Jaune.Check.Sufficiency
 import Jaune.Check.Transaction
 import Jaune.Check.Types
-import Jaune.Check.MessageCall
 -- Standalone proof facts, outside the production umbrella.
-import Jaune.StaticcallEffects
 -- Standalone tracer modules, outside the production umbrella.
-import Jaune.TraceTransaction
-import Jaune.MessageCall.TraceJson
-import Jaune.Run.Trace
-import Jaune.Bridge.G2b.CheckedTrace
-import Jaune.Bridge.G2b.CheckedTraceJson
 import Jaune.Run.BodyFactsT8n
+import Jaune.MessageCall.CheckedTrace
+import Jaune.MessageCall.CheckedTraceJson
 
 /-!
 # Whole-library axiom union for `Jaune`

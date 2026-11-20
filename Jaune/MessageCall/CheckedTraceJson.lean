@@ -16,8 +16,9 @@ Where each value is read:
 * the root summary reads the settled `Frame.Result`: its output and gas, the world after the
   frame, and whether it failed; a root fault renders through `EvmError.render`.
 
-`Jaune.Bridge.G2b.CheckedTrace` proves that these rows are byte for byte the rows the `Devm`
-tracer's serialiser writes for the projected events. This module sits outside `Jaune.lean`'s
+At the `gate/g2b` tag the bridge `Jaune.Bridge.G2b.CheckedTraceJson` proved that these rows are
+byte for byte the rows the `Devm` tracer's serialiser wrote for the projected events; the bridge
+was deleted with the `Devm` tracer after the tag (bridge ledger, gate G2b). This module sits outside `Jaune.lean`'s
 import closure.
 -/
 

@@ -20,24 +20,6 @@ driver with admission, settlement, and commitment checks.
 -- history storage, withdrawal requests, consolidation requests), so each takes
 -- its own input state as the original state.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 --------------- RETAINED HISTORY ---------------
 
 -- P0.2's history half. `getLast256BlockHashes` recomputes only the tip's own
@@ -484,7 +466,6 @@ theorem BlockChain.retainedHistoryValid_appendBlock {chain chain' : BlockChain}
         List.length_cons, List.length_nil]
       omega
 
-
 theorem transition_mapError_id {α : Type} (r : Except TransitionError α) :
     r.mapError id = r := by
   cases r <;> rfl
@@ -517,7 +498,6 @@ private theorem validateOmmersWith_mapError {ε : Type}
   unfold validateOmmersWith
   split <;> simp only [bind, transition_mapError_bind, transition_mapError_id,
     validateOmmerHeadersE_mapError]
-
 
 /-- The static transition uses one explicitly named fork for both the block
 and every ommer. It does not consult an activation schedule. -/
@@ -625,8 +605,6 @@ theorem stateTransitionScheduledE_eq_ok_iff {cfg : ChainConfig} {f : Fork}
       (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers) with
   | error e => cases e <;> simp [splitScheduled]
   | ok a => simp [splitScheduled]
-
-
 
 /-- Legacy renderer adapter over `stateTransitionE`, byte-identical on every
 input, and the entry point for static fixture suites, which state their fork
@@ -1181,22 +1159,6 @@ theorem CanonicalBlock.decodeTx_inr {cb : CanonicalBlock} {tx : Transaction}
     decodeTransaction rules (.inr tx) = .ok tx ∧
       Transaction.WireWellFormed tx ∧ tx.type.isLegacy = true :=
   ⟨rfl, cb.rlpCanonical.2.2.2 _ h⟩
-
-/-- The state transition on a canonical outer block.
-
-Definitionally the typed core applied to the envelope's block, so every result
-about `stateTransitionE` transfers to it by `rfl` and no proof has to be
-restated. What it adds is at the type level: a caller of this entry point
-cannot supply a block that no strict decode ever produced. -/
-def stateTransitionCanonical (f : Fork) (ch : BlockChain)
-    (cb : CanonicalBlock) :
-    Except TransitionError BlockChain :=
-  stateTransitionE f ch cb.block
-
-theorem stateTransitionCanonical_eq (f : Fork) (ch : BlockChain)
-    (cb : CanonicalBlock) :
-    stateTransitionCanonical f ch cb = stateTransitionE f ch cb.block :=
-  rfl
 
 --------------- THE CHECKED CHAIN SNAPSHOT ---------------
 
@@ -1814,260 +1776,6 @@ theorem addBlockToChainUsing_preserves_chainId
 
 /-! ### The prepared top-level state -/
 
-private theorem liftMachExecution_ok_meta {core : Mach → Footprint.Outcome Mach Unit} {d d' : Devm}
-    (h : liftMachExecution core d = .ok d') : d'.meta = d.meta := by
-  simp only [liftMachExecution, liftMach, Footprint.toExecution, Footprint.liftOutcome] at h
-  rcases hc : core d.mach with ⟨err, view⟩ | ⟨u, view⟩ <;> rw [hc] at h <;>
-    simp only [Except.ok.injEq, reduceCtorEq] at h
-  · cases h; rfl
-
-/-- A machine whose output and stored error are a fresh frame's. -/
-private def Fresh (d : Devm) : Prop := d.meta.output = [] ∧ d.meta.error = none
-
-private theorem Fresh.of_meta {d d' : Devm} (h : Fresh d) (hm : d'.meta = d.meta) : Fresh d' := by
-  unfold Fresh; rw [hm]; exact h
-
-private theorem Fresh.chargeStateGas {a : Nat} {d d' : Devm} (h : Fresh d)
-    (hc : Jaune.chargeStateGas a d = .ok d') : Fresh d' := h.of_meta (liftMachExecution_ok_meta hc)
-
-private theorem Fresh.chargeGas {a : Nat} {d d' : Devm} (h : Fresh d)
-    (hc : Jaune.chargeGas a d = .ok d') : Fresh d' := h.of_meta (liftMachExecution_ok_meta hc)
-
-private theorem Fresh.balReadAccount {d : Devm} (h : Fresh d) (r : ForkRules) (a : Address) :
-    Fresh (d.balReadAccount r a) := by
-  unfold Devm.balReadAccount; split <;> exact h
-
-private theorem Fresh.addAccessedAddress {d : Devm} (h : Fresh d) (a : Address) :
-    Fresh (addAccessedAddress d a) := h
-
-private theorem Fresh.setCode {d : Devm} (h : Fresh d) (a : Address) (c : ByteArray) :
-    Fresh (d.setCode a c) := h
-
-private theorem Fresh.incrNonce {d : Devm} (h : Fresh d) (a : Address) : Fresh (d.incrNonce a) := h
-
-private theorem Fresh.commitStateGas {d : Devm} (h : Fresh d) : Fresh d.commitStateGas := h
-
-private theorem chargeNewAuthorityAmsterdam_fresh {state : StateGasRules} {a : Address} {d d' : Devm}
-    (h : Fresh d) (hc : chargeNewAuthorityAmsterdam state a d = .ok d') : Fresh d' := by
-  unfold chargeNewAuthorityAmsterdam at hc
-  split at hc
-  · exact h.chargeStateGas hc
-  · cases hc; exact h
-
-private theorem chargePaidAccountWriteAmsterdam_fresh {state : StateGasRules} {a : Address} {d : Devm}
-    {s : AdrSet} {p : Devm × AdrSet} (h : Fresh d)
-    (hc : chargePaidAccountWriteAmsterdam state a d s = .ok p) : Fresh p.1 := by
-  unfold chargePaidAccountWriteAmsterdam at hc
-  split at hc
-  · cases hc; exact h
-  · obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
-    cases hc; exact h.chargeGas h1
-
-private theorem chargeAuthBaseAmsterdam_fresh {state : StateGasRules} {msg : Msg} {a t : Address}
-    {d : Devm} {s : AdrSet} {p : Devm × AdrSet × ByteArray} (h : Fresh d)
-    (hc : chargeAuthBaseAmsterdam state msg a t d s = .ok p) : Fresh p.1 := by
-  unfold chargeAuthBaseAmsterdam at hc
-  split at hc
-  · cases hc; exact h
-  · dsimp only at hc
-    split at hc
-    · obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
-      cases hc; exact h.chargeStateGas h1
-    · obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
-      cases h1; cases hc; exact h
-
-private theorem applyValidatedDelegationAmsterdam_fresh {state : StateGasRules} {msg : Msg}
-    {a t : Address} {d : Devm} {s1 s2 : AdrSet} {p : AmsterdamDelegationResult} (h : Fresh d)
-    (hc : applyValidatedDelegationAmsterdam state msg a t d s1 s2 = .ok p) : Fresh p.1 := by
-  unfold applyValidatedDelegationAmsterdam at hc
-  obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
-  obtain ⟨⟨d2, w2⟩, h2, hc⟩ := Except.bind_eq_ok hc
-  obtain ⟨⟨d3, w3, c3⟩, h3, hc⟩ := Except.bind_eq_ok hc
-  cases hc
-  exact (((chargeAuthBaseAmsterdam_fresh (chargePaidAccountWriteAmsterdam_fresh
-    (chargeNewAuthorityAmsterdam_fresh h h1) h2) h3).setCode _ _).incrNonce _)
-
-private theorem setDelegationAmsterdamStep_fresh {state : StateGasRules} {msg : Msg}
-    {auth : Authorization} {d : Devm} {s1 s2 : AdrSet} {p : AmsterdamDelegationResult}
-    (h : Fresh d) (hc : setDelegationAmsterdamStep state msg auth d s1 s2 = .ok p) :
-    Fresh p.1 := by
-  unfold setDelegationAmsterdamStep at hc
-  split at hc
-  · cases hc; exact h
-  · split at hc
-    · cases hc; exact h
-    · split at hc
-      · cases hc; exact h
-      · simp only [reduceCtorEq] at hc
-      · rename_i authority _
-        have hD := (h.addAccessedAddress authority).balReadAccount msg.benv.stat.rules authority
-        dsimp only at hc
-        generalize Devm.balReadAccount msg.benv.stat.rules authority
-          (addAccessedAddress d authority) = D at hD hc
-        split at hc
-        · cases hc; exact hD
-        · split at hc
-          · cases hc; exact hD
-          · exact applyValidatedDelegationAmsterdam_fresh hD hc
-
-private theorem setDelegationAmsterdamLoop_fresh {state : StateGasRules} {msg : Msg} :
-    ∀ (auths : List Authorization) {d : Devm} {s1 s2 : AdrSet} {p : AmsterdamDelegationResult},
-      Fresh d → setDelegationAmsterdamLoop state msg auths d s1 s2 = .ok p → Fresh p.1
-  | [], _, _, _, _, h, hc => by cases hc; exact h
-  | auth :: auths, d, s1, s2, p, h, hc => by
-    unfold setDelegationAmsterdamLoop at hc
-    obtain ⟨⟨d1, w1, w2⟩, h1, hc⟩ := Except.bind_eq_ok hc
-    exact setDelegationAmsterdamLoop_fresh auths (setDelegationAmsterdamStep_fresh h h1) hc
-
-private theorem resolveTopLevelCallAmsterdam_fresh {msg : Msg} {d : Devm} {p : Msg × Devm} (h : Fresh d)
-    (hc : resolveTopLevelCallAmsterdam msg d = .ok p) : Fresh p.2 := by
-  unfold resolveTopLevelCallAmsterdam at hc
-  obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
-  cases hc
-  show Fresh (Devm.balReadAccount _ _ _)
-  refine Fresh.balReadAccount ?_ _ _
-  show Fresh (completeDelegationAccess _ _ _).2
-  unfold completeDelegationAccess
-  dsimp only
-  split
-  · exact (h.chargeGas h1).addAccessedAddress _
-  · exact h.chargeGas h1
-
-private theorem prepared_fresh {state : StateGasRules} {msg : Msg} {p : Msg × Devm}
-    (h : prepareTopLevelAmsterdam state msg = .ok p) : Fresh p.2 := by
-  have key : ∀ d1, Fresh d1 → finishTopLevelAmsterdam state msg d1 = .ok p → Fresh p.2 := by
-    intro d1 hd1 h
-    unfold finishTopLevelAmsterdam dispatchTopLevelAmsterdam at h
-    have hd2 : Fresh (if msg.tenv.stat.auths.isEmpty then d1 else d1.commitStateGas) := by
-      split
-      · exact hd1
-      · exact hd1.commitStateGas
-    generalize (if msg.tenv.stat.auths.isEmpty then d1 else d1.commitStateGas) = d2 at hd2 h
-    have hd3 := hd2.balReadAccount msg.benv.stat.rules msg.currentTarget
-    dsimp only at h
-    split at h
-    · split at h
-      · simp only [reduceCtorEq] at h
-      · split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;> cases h
-        · exact hd3.chargeStateGas h4
-        · cases h4; exact hd3
-    · split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h
-      · exact resolveTopLevelCallAmsterdam_fresh (hd3.chargeStateGas h4) h
-      · cases h4; exact resolveTopLevelCallAmsterdam_fresh hd3 h
-  have h0 : Fresh (initDevm msg) := ⟨rfl, rfl⟩
-  unfold prepareTopLevelAmsterdam at h
-  dsimp only at h
-  split at h
-  · obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
-    cases h1
-    exact key _ h0 h
-  · obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h
-    unfold setDelegationAmsterdam at h1
-    obtain ⟨⟨d2, w1, w2⟩, h2, h1⟩ := Except.bind_eq_ok h1
-    cases h1
-    exact key _ (setDelegationAmsterdamLoop_fresh _ h0 h2) h
-
-
-/-- The prepared message carries its machine's world, created accounts and accessed sets. -/
-private def Coh (m : Msg) (d : Devm) : Prop :=
-  m.benv.state = d.state ∧ m.benv.storageWrites = d.world.storageWrites ∧
-    m.tenv.transientStorage = d.transientStorage ∧ m.benv.createdAccounts = d.createdAccounts ∧
-    m.accessedAddresses = d.accessedAddresses ∧ m.accessedStorageKeys = d.accessedStorageKeys
-
-private theorem prepared_coh {state : StateGasRules} {msg : Msg} {p : Msg × Devm}
-    (h : prepareTopLevelAmsterdam state msg = .ok p) : Coh p.1 p.2 := by
-  have hcall : ∀ {d : Devm} {p : Msg × Devm}, resolveTopLevelCallAmsterdam msg d = .ok p →
-      Coh p.1 p.2 := by
-    intro d p hc
-    unfold resolveTopLevelCallAmsterdam at hc
-    obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
-    cases hc
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-  have key : ∀ d1, finishTopLevelAmsterdam state msg d1 = .ok p → Coh p.1 p.2 := by
-    intro d1 h
-    unfold finishTopLevelAmsterdam dispatchTopLevelAmsterdam at h
-    generalize (if msg.tenv.stat.auths.isEmpty then d1 else d1.commitStateGas) = d2 at h
-    dsimp only at h
-    split at h
-    · split at h
-      · simp only [reduceCtorEq] at h
-      · split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;> cases h <;>
-          exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;> exact hcall h
-  unfold prepareTopLevelAmsterdam at h
-  dsimp only at h
-  split at h <;> obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h <;> exact key _ h
-
-/-- **The prepared top-level state.** What Amsterdam's preparation hands the top frame stores no
-output and no settled error, and the prepared message carries its world, created accounts and
-accessed sets. So the top frame over it, whose checkpoint is this state, starts from it exactly
-(`Frame.State.toDevm_ofDevm`), and the prepared message is coherent with it. -/
-theorem prepareTopLevelAmsterdam_prepared {state : StateGasRules} {msg : Msg} {p : Msg × Devm}
-    (h : prepareTopLevelAmsterdam state msg = .ok p) :
-    p.2.output = [] ∧ p.2.error = none ∧ p.1.benv.state = p.2.state ∧
-      p.1.benv.storageWrites = p.2.world.storageWrites ∧
-      p.1.tenv.transientStorage = p.2.transientStorage ∧
-      p.1.benv.createdAccounts = p.2.createdAccounts ∧
-      p.1.accessedAddresses = p.2.accessedAddresses ∧
-      p.1.accessedStorageKeys = p.2.accessedStorageKeys :=
-  ⟨(prepared_fresh h).1, (prepared_fresh h).2, prepared_coh h⟩
-
-/-- **The prepared top-level message.** Amsterdam's preparation keeps the message's target; a
-creation keeps its code address, and a call leaves with one (`resolveTopLevelCallAmsterdam`). -/
-theorem prepareTopLevelAmsterdam_message {state : StateGasRules} {msg : Msg} {p : Msg × Devm}
-    (h : prepareTopLevelAmsterdam state msg = .ok p) :
-    p.1.target = msg.target ∧ (msg.target = none → p.1.codeAddress = msg.codeAddress) ∧
-      (msg.target ≠ none → p.1.codeAddress ≠ none) := by
-  have hcall : ∀ {d : Devm} {p : Msg × Devm}, resolveTopLevelCallAmsterdam msg d = .ok p →
-      p.1.target = msg.target ∧ p.1.codeAddress ≠ none := by
-    intro d p hc
-    unfold resolveTopLevelCallAmsterdam at hc
-    obtain ⟨d1, h1, hc⟩ := Except.bind_eq_ok hc
-    cases hc
-    exact ⟨rfl, by simp⟩
-  have key : ∀ d1, finishTopLevelAmsterdam state msg d1 = .ok p →
-      p.1.target = msg.target ∧ (msg.target = none → p.1.codeAddress = msg.codeAddress) ∧
-        (msg.target ≠ none → p.1.codeAddress ≠ none) := by
-    intro d1 h
-    unfold finishTopLevelAmsterdam dispatchTopLevelAmsterdam at h
-    generalize (if msg.tenv.stat.auths.isEmpty then d1 else d1.commitStateGas) = d2 at h
-    dsimp only at h
-    split at h
-    · rename_i hnone
-      have ht : msg.target = none := Option.isNone_iff_eq_none.mp hnone
-      split at h
-      · simp only [reduceCtorEq] at h
-      · split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;> cases h <;>
-          exact ⟨rfl, fun _ => rfl, fun hne => absurd ht hne⟩
-    · rename_i hsome
-      have ht : msg.target ≠ none := fun e => hsome (by simp [e])
-      split at h <;> obtain ⟨d4, h4, h⟩ := Except.bind_eq_ok h <;>
-        exact ⟨(hcall h).1, fun e => absurd e ht, fun _ => (hcall h).2⟩
-  unfold prepareTopLevelAmsterdam at h
-  dsimp only at h
-  split at h <;> obtain ⟨d1, h1, h⟩ := Except.bind_eq_ok h <;> exact key _ h
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /-- **Raw successful block transition preserves canonicality.** The output
 chain's execution state is the body's final state, and its original state is
 the input chain's. -/
@@ -2210,7 +1918,6 @@ theorem stateTransitionChecks_stateRoot {bout : BlockOutput} {header : Header}
     obtain ⟨_, hb, _⟩ := Except.bind_eq_ok h
     exact absurd hb (by simp)
   · simpa using h3
-
 
 /-- The checked output witness is derived from checks already performed by
 the common algorithm, with no second root computation. -/
@@ -2420,11 +2127,6 @@ def CheckedBlockChain.ofScheduledImport {cfg : ChainConfig} {f : Fork}
 -- Stated so a downstream proof client can move between the raw names its
 -- theorems are written about and the checked ones, without unfolding either
 -- structure.
-
-theorem stateTransitionChecked_eq_raw (f : Fork) (cc : CheckedBlockChain)
-    (cb : CanonicalBlock) :
-    stateTransitionChecked f cc cb
-      = stateTransitionCanonical f cc.val cb := rfl
 
 theorem addBlockToChainChecked_eq_raw (f : Fork) (cc : CheckedBlockChain)
     (cb : CanonicalBlock) :

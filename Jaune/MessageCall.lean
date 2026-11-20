@@ -55,21 +55,6 @@ namespace Jaune
 
 /-! ### Lifetime records -/
 
-/-- A frame's machine: the part of its state that is local to the frame. When a child fails its
-machine is discarded and its two meters come back in the result. The program counter is not
-here, so that only a jump returns one. -/
-structure Machine : Type where
-  /-- The operand stack, top first. -/
-  stack : List U256
-  /-- The frame's memory. -/
-  memory : Mem
-  /-- Execution gas left. -/
-  gasLeft : Nat
-  /-- EIP-8037's state-gas meter; `StateGasMeter.zero` under rules without state gas. -/
-  stateGas : StateGasMeter := .zero
-  /-- The output of the last child frame (`RETURNDATASIZE`, `RETURNDATACOPY`). -/
-  returnData : Bytes
-
 /-- The accrued substate a frame drops when it fails: the caller keeps its own. -/
 structure Substate : Type where
   /-- Logs emitted so far. -/
@@ -99,50 +84,10 @@ structure Trail : Type where
   `settle` in a failed result and read only by `resume`. -/
   touchedRIPEMD160 : Bool := false
 
-/-- A frame's dynamic state, grouped by lifetime. -/
-structure Frame.State : Type where
-  /-- Frame-local. -/
-  machine : Machine
-  /-- Dropped on failure. -/
-  world : World
-  /-- Dropped on failure. -/
-  substate : Substate
-  /-- Kept on failure. -/
-  trail : Trail
-
 /-! ### `Devm` and the lifetime groups
 
 The bodies of `enter`, `settle` and `resume` run over `Devm`, so they convert between it and
 `Frame.State`. Both maps go at W3's unit N, when `Devm` becomes `Frame.State`. -/
-
-/-- A `Devm` grouped by lifetime. It forgets `output` and `error`; the trail's
-RIPEMD-160 flag is `false`, as in every running frame. -/
-def Frame.State.ofDevm (d : Devm) : Frame.State :=
-  { machine :=
-      { stack := d.stack, memory := d.memory, gasLeft := d.gasLeft, stateGas := d.stateGas
-        returnData := d.returnData }
-    world := d.world
-    substate :=
-      { logs := d.logs, refund := d.refundCounter, selfDestructs := d.accountsToDelete
-        accessedAddresses := d.accessedAddresses, accessedStorageKeys := d.accessedStorageKeys
-        touchedAccounts := d.meta.touchedAccounts }
-    trail :=
-      { createdAccounts := d.createdAccounts, accountReads := d.meta.accountReads
-        storageReads := d.meta.storageReads, touchedRIPEMD160 := false } }
-
-/-- A lifetime-grouped state as a `Devm`, with no output and no stored error. -/
-def Frame.State.toDevm (s : Frame.State) : Devm :=
-  { mach :=
-      { stack := s.machine.stack, memory := s.machine.memory, gasLeft := s.machine.gasLeft
-        stateGas := s.machine.stateGas }
-    «meta» :=
-      { logs := s.substate.logs, refundCounter := s.substate.refund, output := []
-        accountsToDelete := s.substate.selfDestructs, returnData := s.machine.returnData
-        error := none, accessedAddresses := s.substate.accessedAddresses
-        accessedStorageKeys := s.substate.accessedStorageKeys
-        createdAccounts := s.trail.createdAccounts, accountReads := s.trail.accountReads
-        storageReads := s.trail.storageReads, touchedAccounts := s.substate.touchedAccounts }
-    world := s.world }
 
 /-! ### Static records -/
 
@@ -191,31 +136,6 @@ structure TransactionContext : Type where
   `BenvStat.origState`. -/
   originalState : State
 
-/-- What `step` reads of the message a frame runs. The other fields of `Sevm` (`target`,
-`gas`, `codeAddress`, `disablePrecompiles`, the value-transfer flag) are read only at `enter`
-and stay on the `Message`. -/
-structure CallContext : Type where
-  /-- The sender (`CALLER`). -/
-  caller : Address
-  /-- The account whose storage and balance the frame acts on (`ADDRESS`); EVMC's
-  `recipient`, `Sevm.currentTarget`. -/
-  recipient : Address
-  /-- The value (`CALLVALUE`). -/
-  value : U256
-  /-- The input (`CALLDATA*`); `Sevm.data`. -/
-  calldata : Bytes
-  /-- The code the frame runs. -/
-  code : ByteArray
-  /-- The call depth left: 1024 at the top, one less in each child, no call at zero (decision
-  12). The community's depth is the limit minus this. -/
-  depthLeft : Nat
-  /-- Whether state changes are forbidden (`STATICCALL`). -/
-  isStatic : Bool
-  /-- The transaction's static record; cut down to `TransactionContext` at W3's unit P. -/
-  tx : TenvStat
-  /-- The block's static record; cut down to `BlockContext` at W3's unit P. -/
-  block : BenvStat
-
 /-! ### Message and frame -/
 
 /-- Whether a message is a call or a creation. -/
@@ -225,34 +145,6 @@ inductive Message.Kind : Type
   /-- A contract creation. -/
   | create
 deriving DecidableEq, Repr
-
-/-- A message: what a frame is asked to run. It holds no saved world; the world a frame falls
-back to is its `Frame`'s checkpoint. -/
-structure Message : Type where
-  /-- What `step` reads. -/
-  context : CallContext
-  /-- Call or creation. -/
-  kind : Message.Kind
-  /-- The account whose code is run, if any; a precompile is dispatched on it at `enter`. -/
-  codeAddress : Option Address
-  /-- The transaction's `to`, read only by top-level dispatch. -/
-  target : Option Address
-  /-- The execution gas the frame starts with. -/
-  gas : Nat
-  /-- EIP-8037's state-gas grant. -/
-  stateGasGrant : Nat
-  /-- Whether the value is transferred at `enter`, or only apparent (`DELEGATECALL`). -/
-  transfersValue : Bool
-  /-- Whether precompile dispatch is off for this message. -/
-  disablePrecompiles : Bool
-
-/-- A frame: one message and the one state it falls back to. The checkpoint is the saved caller
-after call preparation, or for a top-level frame the state its message was prepared on. -/
-structure Frame : Type where
-  /-- The message the frame runs. -/
-  message : Message
-  /-- The state a failed frame falls back to. -/
-  checkpoint : Frame.State
 
 /-- A fault: a cryptographic or internal error. It is not a frame result; it ends the run
 through the error channel. -/
@@ -321,11 +213,6 @@ def error? : Frame.Result → Option SettledHalt
 
 end Frame.Result
 
-/-- The world after the frame: the result's on success, the checkpoint's otherwise. -/
-def Frame.worldAfter (f : Frame) : Frame.Result → World
-  | .success _ _ _ world _ _ => world
-  | _ => f.checkpoint.world
-
 /-! ### What `step` hands the driver -/
 
 /-- Where a child's result goes in its caller. -/
@@ -335,79 +222,7 @@ inductive ReturnTarget : Type
   /-- A creation: the new address, pushed on success. -/
   | create (address : Address)
 
-/-- What the caller waits with while its child runs, besides the saved caller itself. -/
-structure Pending : Type where
-  /-- Where the child's result goes. -/
-  target : ReturnTarget
-  /-- Whether the spawn charged a new account's state gas, which a failed child refunds. -/
-  newAccountCharged : Bool
-  /-- Until `Devm` is replaced: the caller's `Meta.output`, passed through so `resume` can
-  rebuild its `Devm`. -/
-  legacyOutput : Bytes
-  /-- Until `Devm` is replaced: the caller's `Meta.error`, passed through so `resume` can
-  rebuild its `Devm`. -/
-  legacyError : Option SettledHalt
-
-/-- The result of a message opcode: finished in place, or a child frame to run. -/
-inductive MessageOp.Outcome : Type
-  /-- The opcode finished without opening a frame. -/
-  | done (ex : Execution)
-  /-- The opcode opens a child frame. -/
-  | spawn (child : Frame) (pending : Pending)
-
-/-- One step of a running frame. -/
-inductive Step : Type
-  /-- The frame stopped, with its raw result. -/
-  | halt (ex : Execution)
-  /-- The frame goes on at `pc`. -/
-  | next (pc : Nat) (devm : Devm)
-  /-- The frame opens a child, and goes on at `pc` when the child is resumed. -/
-  | spawn (child : Frame) (pending : Pending) (pc : Nat)
-
-/-- What entering a frame gives: code to run, or a result already (a precompile, or a failed
-value transfer). -/
-inductive Frame.Entry : Type
-  /-- Run this machine. -/
-  | run (evm : Evm)
-  /-- The frame finished at entry, or faulted. -/
-  | done (result : Except Fault Frame.Result)
-
 /-! ### Entry helpers -/
-
-/-- The value transfer at entry: `Msg.benvAfterTransfer` on the world. A balance too
-small to pay is an internal fault: call preparation has already checked it. -/
-def Message.transfer (m : Message) (w : World) : Except Fault World :=
-  if m.transfersValue ∧ m.context.value ≠ 0 then
-    match w.subtractBalance m.context.caller m.context.value with
-    | none => .error (.internal (.assertion .none))
-    | some w => .ok (w.addBalance m.context.recipient m.context.value)
-  else .ok w
-
-/-- The world the frame's code is entered on, before the value transfer. It is recomputed from
-the checkpoint; for a creation it includes the set-up at the new address. -/
-def Frame.enteredWorld (f : Frame) : World :=
-  match f.message.kind with
-  | .call => f.checkpoint.world
-  | .create => f.checkpoint.world.createSetUp f.message.context.recipient
-
-/-- The logs a frame starts with: under rules with state gas, EIP-7708's transfer log for a
-value-transferring frame (none for a self transfer or a zero value); otherwise none. -/
-def transferLogs (rules : ForkRules) (m : Message) : List Log :=
-  match rules.stateGas with
-  | none => []
-  | some _ =>
-    if m.transfersValue ∧ m.context.caller ≠ m.context.recipient ∧ m.context.value ≠ 0 then
-      [transferLog m.context.caller m.context.recipient m.context.value]
-    else []
-
-/-- The static machine record of a message: `initSevm`'s counterpart. -/
-def Message.sevm (m : Message) : Sevm :=
-  { caller := m.context.caller, target := m.target, currentTarget := m.context.recipient
-    gas := m.gas, value := m.context.value, data := m.context.calldata
-    codeAddress := m.codeAddress, code := m.context.code, depth := m.context.depthLeft
-    shouldTransferValue := m.transfersValue, isStatic := m.context.isStatic
-    disablePrecompiles := m.disablePrecompiles
-    benvStat := m.context.block, tenvStat := m.context.tx }
 
 /-! ### Resume helpers -/
 

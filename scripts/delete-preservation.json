@@ -1,0 +1,961 @@
+{
+ "schema_version": 1,
+ "notes": "G2b delete commit (goal jaune-shape-and-names-v1, U7). old_side.constants: the W1 carrier types, the W1 Pending, the S6c entry point stateTransitionCanonical and the retired Checked.Exec derivation. old_side.namespaces: the G2b bridge and Staging scaffolding, the W1 tracer, the bridge audit helpers and the W1 examples. Everything else deleted is replaced (counterpart named) or retired (reason); retired rows are for the master's Blanc-ledger check.",
+ "old_side": {
+  "constants": [
+   "Jaune.Mem",
+   "Jaune.BenvStat",
+   "Jaune.Benv",
+   "Jaune.TenvStat",
+   "Jaune.Tenv",
+   "Jaune.Msg",
+   "Jaune.Mach",
+   "Jaune.Meta",
+   "Jaune.Devm",
+   "Jaune.Sevm",
+   "Jaune.Evm",
+   "Jaune.Execution",
+   "Jaune.Pending",
+   "Jaune.stateTransitionCanonical",
+   "Jaune.Checked.Exec"
+  ],
+  "namespaces": [
+   "Jaune.Bridge",
+   "Jaune.MemorySimulation",
+   "Jaune.Checked.Arms",
+   "Jaune.Staging",
+   "Jaune.TraceJson",
+   "Jaune.Trace",
+   "Jaune.TraceTransaction",
+   "Jaune.Check.G2bBridgeAudit",
+   "Jaune.OutputWalk",
+   "Jaune.MessageOpSim",
+   "Examples.Arithmetic",
+   "Examples.Execution",
+   "Examples.ShapePilot",
+   "Examples.Prefix"
+  ]
+ },
+ "replaced": [
+  {
+   "module": "Jaune.CheckedSymbolicPush",
+   "name": "Jaune.Checked.step_of_halt",
+   "by": "Jaune.Checked.step_of_halt",
+   "note": "moved unchanged to Jaune.FrameRun.CheckedBasic (Q4)"
+  },
+  {
+   "module": "Jaune.CheckedSymbolicPush",
+   "name": "Jaune.Checked.step_of_next",
+   "by": "Jaune.Checked.step_of_next",
+   "note": "moved unchanged to Jaune.FrameRun.CheckedBasic so the coverage modules hold only the 9 audited rules (user decision jsn-g2b-u78-accept, Q4)"
+  },
+  {
+   "module": "Jaune.Implementation.CachedDriver",
+   "name": "Jaune.instDecidableEqCalldataCacheKey",
+   "by": "Jaune.Checked.instDecidableEqCalldataCacheKey",
+   "note": "same derived instance in the checked cached driver"
+  },
+  {
+   "module": "Jaune.Implementation.CachedDriver",
+   "name": "_private.Jaune.Implementation.CachedDriver.0.Jaune.CalldataCache",
+   "by": "_private.Jaune.Implementation.CheckedCachedDriver.0.Jaune.Checked.CalldataCache",
+   "note": "the checked cached driver carries the same proof-carrying cache",
+   "with_dependents": true
+  },
+  {
+   "module": "Jaune.Implementation.CachedDriver",
+   "name": "_private.Jaune.Implementation.CachedDriver.0.Jaune.CalldataCache.get",
+   "by": "_private.Jaune.Implementation.CheckedCachedDriver.0.Jaune.Checked.CalldataCache.get",
+   "note": "same cache lookup"
+  },
+  {
+   "module": "Jaune.Implementation.CachedDriver",
+   "name": "_private.Jaune.Implementation.CachedDriver.0.Jaune.CalldataCache.get_fst",
+   "by": "_private.Jaune.Implementation.CheckedCachedDriver.0.Jaune.Checked.CalldataCache.get_fst",
+   "note": "same lookup lemma"
+  },
+  {
+   "module": "Jaune.Implementation.CachedDriver",
+   "name": "_private.Jaune.Implementation.CachedDriver.0.Jaune.CalldataCacheKey",
+   "by": "_private.Jaune.Implementation.CheckedCachedDriver.0.Jaune.Checked.CalldataCacheKey",
+   "note": "same cache key in the checked cached driver",
+   "with_dependents": true
+  },
+  {
+   "module": "Jaune.Implementation.CachedDriver",
+   "name": "_private.Jaune.Implementation.CachedDriver.0.Jaune.Except.map_bind'",
+   "by": "_private.Jaune.Implementation.CheckedCachedDriver.0.Jaune.Checked.Except.map_bind'",
+   "note": "same private helper"
+  },
+  {
+   "module": "Jaune.Implementation.CachedDriver",
+   "name": "_private.Jaune.Implementation.CachedDriver.0.Jaune.Except.map_pure'",
+   "by": "_private.Jaune.Implementation.CheckedCachedDriver.0.Jaune.Checked.Except.map_pure'",
+   "note": "same private helper"
+  },
+  {
+   "module": "Jaune.Implementation.CheckedCachedDriver",
+   "name": "Jaune.Checked.execFueled_eq_cached",
+   "by": "_private.Jaune.Implementation.CheckedCachedDriver.0.Jaune.Checked.execFueled_eq_cached",
+   "note": "made private once its last public user (Bridge/G2b/CheckedTop) is deleted; hygiene-allow.txt back to one row (packet section 1a, approved)"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedAuditedRows",
+   "name": "Jaune.Checked.Frame.enter_run_benvStat",
+   "by": "Jaune.Checked.Frame.enter_run_context",
+   "note": "first conjunct of the context theorem that replaces destination row 39"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedAuditedRows",
+   "name": "Jaune.Checked.MessageOp.step_spawn_benvStat",
+   "by": "Jaune.Checked.MessageOp.step_spawn_context",
+   "note": "first conjunct of the row-42 replacement"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedAuditedRows",
+   "name": "Jaune.Checked.genericCall.step_spawn_benvStat",
+   "by": "Jaune.Checked.genericCall.step_spawn_context",
+   "note": "first conjunct of the row-40 replacement"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedAuditedRows",
+   "name": "Jaune.Checked.genericCreate.step_spawn_benvStat",
+   "by": "Jaune.Checked.genericCreate.step_spawn_context",
+   "note": "first conjunct of the row-41 replacement"
+  },
+  {
+   "module": "Jaune.MessageCall.DriverInvariants",
+   "name": "Jaune.RunInvariants.ResultInv",
+   "by": "Jaune.Checked.RunInvariants.ResultInv",
+   "note": "the checked driver invariants state the same result invariant"
+  },
+  {
+   "module": "Jaune.SymbolicArith",
+   "name": "Jaune.SymbolicArith.Op",
+   "by": "Jaune.Checked.SymbolicArith.Op",
+   "note": "the checked symbolic rules use the same operation type",
+   "with_dependents": true
+  },
+  {
+   "module": "Jaune.SymbolicArith",
+   "name": "Jaune.SymbolicArith.Op.cost",
+   "by": "Jaune.Checked.SymbolicArith.Op.cost",
+   "note": "same"
+  },
+  {
+   "module": "Jaune.SymbolicArith",
+   "name": "Jaune.SymbolicArith.Op.eval",
+   "by": "Jaune.Checked.SymbolicArith.Op.eval",
+   "note": "same"
+  },
+  {
+   "module": "Jaune.SymbolicArith",
+   "name": "Jaune.SymbolicArith.Op.rinst",
+   "by": "Jaune.Checked.SymbolicArith.Op.rinst",
+   "note": "same"
+  },
+  {
+   "module": "Jaune.SymbolicPush",
+   "name": "Jaune.SymbolicPush.cost",
+   "by": "Jaune.Checked.SymbolicPush.cost",
+   "note": "same PUSH cost selector"
+  }
+ ],
+ "retired": [
+  {
+   "module": "Jaune.Bridge.G2b.CheckedParts",
+   "name": "_private.Jaune.Bridge.G2b.CheckedParts.0.Jaune.Checked._aux_Jaune_Bridge_G2b_CheckedParts___macroRules__private_Jaune_Bridge_G2b_CheckedParts_0_Jaune_Checked_tacticFrame_fields_1",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedParts, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedParts",
+   "name": "_private.Jaune.Bridge.G2b.CheckedParts.0.Jaune.Checked.tacticFrame_fields",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedParts, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedTop",
+   "name": "Jaune.Checked.KeptHistory.of_configured_fold",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedTop, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedTop",
+   "name": "Jaune.Checked.KeptStep.of_transition",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedTop, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedTop",
+   "name": "Jaune.Checked.TopLevel.Prepared.ofWaiting",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedTop, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedTop",
+   "name": "Jaune.Checked.Transaction.prepare_originalState",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedTop, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedTop",
+   "name": "_private.Jaune.Bridge.G2b.CheckedTop.0.Jaune.Checked.TopLevel.PreparationFailure.toEvmError",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedTop, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedTop",
+   "name": "_private.Jaune.Bridge.G2b.CheckedTop.0.Jaune.Checked.Transaction.settleRun_effects",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedTop, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.descendant?",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.descendant_not_frameStart",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.descendant_not_kept",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.filterMap_cons_opt",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.observe",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.observe_exit",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.observe_visit",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.observe_visits",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.retained?",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.retained_filter",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.retained_visit_false",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.CheckedViews",
+   "name": "_private.Jaune.Bridge.G2b.CheckedViews.0.Jaune.Checked.Frame.Run.retained_visit_true",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.CheckedViews, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.Control",
+   "name": "_private.Jaune.Bridge.G2b.Control.0.Jaune.ok_bind",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.Control, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.FinalOutput",
+   "name": "Jaune.OutputWalk.tacticOut_close",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.FinalOutput, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.FinalOutput",
+   "name": "Jaune.OutputWalk.tacticOut_close'",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.FinalOutput, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.FinalOutput",
+   "name": "Jaune.OutputWalk.tacticOut_deleg",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.FinalOutput, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.FinalOutput",
+   "name": "Jaune.OutputWalk.tacticOut_error",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.FinalOutput, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.FinalOutput",
+   "name": "Jaune.OutputWalk.tacticOut_prim",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.FinalOutput, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.FinalOutput",
+   "name": "Jaune.OutputWalk.tacticOut_tail",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.FinalOutput, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.FinalOutput",
+   "name": "Jaune.OutputWalk.tacticOut_walk",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.FinalOutput, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.FinalParts",
+   "name": "Jaune.Except.mapResultState_bind",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.FinalParts, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.MessageOps",
+   "name": "Jaune.MessageOpSim.tacticOfdevm_eq",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.MessageOps, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.MessageOps",
+   "name": "Jaune.MessageOpSim.tacticSim_accessDelegation",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.MessageOps, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.MessageOps",
+   "name": "Jaune.MessageOpSim.tacticSim_completeDelegationAccess",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.MessageOps, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.MessageOps",
+   "name": "Jaune.MessageOpSim.tacticSim_delegationCost",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.MessageOps, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.State",
+   "name": "Jaune.Except.mapResultState",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.State, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.State",
+   "name": "Jaune.Except.mapState",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.State, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Bridge.G2b.State",
+   "name": "Jaune.Except.ofHalt",
+   "reason": "G2b bridge scaffolding in Jaune.Bridge.G2b.State, deleted with the bridges after gate/g2b (no counterpart needed: the bridge theorems are recorded in the bridge ledger, gate G2b)"
+  },
+  {
+   "module": "Jaune.Check.Sufficiency",
+   "name": "_private.Jaune.Check.Sufficiency.0.Jaune.totalGuardCode",
+   "reason": "private guard helper of the W1 check Check/Sufficiency, whose 7 guards are restated in Jaune/Check/CheckedSufficiency.lean"
+  },
+  {
+   "module": "Jaune.Check.Sufficiency",
+   "name": "_private.Jaune.Check.Sufficiency.0.Jaune.totalGuardCreateCollisionCreator",
+   "reason": "private guard helper of the W1 check Check/Sufficiency, whose 7 guards are restated in Jaune/Check/CheckedSufficiency.lean"
+  },
+  {
+   "module": "Jaune.ExecDeriv",
+   "name": "Jaune._aux_Jaune_ExecDeriv___unexpand_Jaune_Exec_Deriv_Fa_1",
+   "reason": "notation of the W1 derivation Exec.Deriv (Fa/Prec/imp); Frame.Run declares no notation (API.md P15)"
+  },
+  {
+   "module": "Jaune.ExecDeriv",
+   "name": "Jaune._aux_Jaune_ExecDeriv___unexpand_Jaune_Exec_Deriv_Prec_1",
+   "reason": "notation of the W1 derivation Exec.Deriv (Fa/Prec/imp); Frame.Run declares no notation (API.md P15)"
+  },
+  {
+   "module": "Jaune.ExecDeriv",
+   "name": "Jaune._aux_Jaune_ExecDeriv___unexpand_Jaune_Exec_Deriv_imp_1",
+   "reason": "notation of the W1 derivation Exec.Deriv (Fa/Prec/imp); Frame.Run declares no notation (API.md P15)"
+  },
+  {
+   "module": "Jaune.ExecDeriv",
+   "name": "Jaune.«term_→p_»",
+   "reason": "notation of the W1 derivation Exec.Deriv (Fa/Prec/imp); Frame.Run declares no notation (API.md P15)"
+  },
+  {
+   "module": "Jaune.ExecDeriv",
+   "name": "Jaune.«term_≺_»",
+   "reason": "notation of the W1 derivation Exec.Deriv (Fa/Prec/imp); Frame.Run declares no notation (API.md P15)"
+  },
+  {
+   "module": "Jaune.ExecDeriv",
+   "name": "Jaune.«term□p»",
+   "reason": "notation of the W1 derivation Exec.Deriv (Fa/Prec/imp); Frame.Run declares no notation (API.md P15)"
+  },
+  {
+   "module": "Jaune.ExecFrame",
+   "name": "Jaune.ReflexiveRel",
+   "reason": "generic relation helper of the W1 frame relations (ExecFrame); unused by the new side"
+  },
+  {
+   "module": "Jaune.ExecFrame",
+   "name": "Jaune.TransitiveRel",
+   "reason": "generic relation helper of the W1 frame relations (ExecFrame); unused by the new side"
+  },
+  {
+   "module": "Jaune.ExecSettlement",
+   "name": "Jaune.State.incrNonce_bal",
+   "reason": "survivor-shaped State balance lemma of the W1 settlement module, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.ExecSettlement",
+   "name": "Jaune.State.setCode_bal",
+   "reason": "survivor-shaped State balance lemma of the W1 settlement module, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.ExecSettlement",
+   "name": "Jaune.State.setPresent_bal",
+   "reason": "survivor-shaped State balance lemma of the W1 settlement module, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.ExecSettlement",
+   "name": "Jaune.State.setStor_bal",
+   "reason": "survivor-shaped State balance lemma of the W1 settlement module, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.ExecSettlement",
+   "name": "Jaune.State.set_bal",
+   "reason": "survivor-shaped State balance lemma of the W1 settlement module, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "Jaune.calculateMsgCallGas_zero_word_child_lt",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.bCompress_ok_output_length",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.blsf2_serialized_length",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.blsp2_serialized_length",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.blsp_serialized_length",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.bnp_serialized_length",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.eight_byte_chunks_length",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.executeBls12PairingInner_ok_output_length",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.executePairingCheckInner_ok_output_length",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.memory_slice_length",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.osaka_modexp_modulus_le",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MemoryAccounting",
+   "name": "_private.Jaune.MemoryAccounting.0.Jaune.output_length_lt_two_pow_160",
+   "reason": "survivor-shaped W1 memory-accounting helper, unused by the new side (u89 lost-facts inventory); the checked counterparts are in CheckedMemoryAccounting/CheckedMemoryCosts/PrecompileInputFacts where needed"
+  },
+  {
+   "module": "Jaune.MessageCall.Canonical",
+   "name": "Jaune.World.Canonical.clearStorageWritesIfEmpty",
+   "reason": "survivor-shaped W1 canonicality lemma, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.MessageCall.DriverInvariants",
+   "name": "Jaune.RunInvariants._aux_Jaune_MessageCall_DriverInvariants___macroRules_Jaune_RunInvariants_tacticInv_close_1",
+   "reason": "W1 proof tactic (inv_walk family); Checked proofs use their own local macro in CheckedRunInvariants"
+  },
+  {
+   "module": "Jaune.MessageCall.DriverInvariants",
+   "name": "Jaune.RunInvariants.tacticInv_close_msg",
+   "reason": "W1 proof tactic (inv_walk family); Checked proofs use their own local macro in CheckedRunInvariants"
+  },
+  {
+   "module": "Jaune.MessageCall.MemoryAccounting",
+   "name": "_private.Jaune.MessageCall.MemoryAccounting.0.Jaune.calculateMsgCallGas_refund_le_base",
+   "reason": "private W1 helper; the checked memory-accounting modules carry their own copies"
+  },
+  {
+   "module": "Jaune.MessageCall.MemoryAccounting",
+   "name": "_private.Jaune.MessageCall.MemoryAccounting.0.Jaune.ceil32_eq_ceilDiv32",
+   "reason": "private W1 helper; the checked memory-accounting modules carry their own copies"
+  },
+  {
+   "module": "Jaune.MessageCall.MemoryAccounting",
+   "name": "_private.Jaune.MessageCall.MemoryAccounting.0.Jaune.list_slice_length",
+   "reason": "private W1 helper; the checked memory-accounting modules carry their own copies"
+  },
+  {
+   "module": "Jaune.MessageCall.MemoryAccounting",
+   "name": "_private.Jaune.MessageCall.MemoryAccounting.0.Jaune.memory_slice_length",
+   "reason": "private W1 helper; the checked memory-accounting modules carry their own copies"
+  },
+  {
+   "module": "Jaune.MessageCall.MemoryAccounting",
+   "name": "_private.Jaune.MessageCall.MemoryAccounting.0.Jaune.output_length_lt_two_pow_160",
+   "reason": "private W1 helper; the checked memory-accounting modules carry their own copies"
+  },
+  {
+   "module": "Jaune.MessageCall.MemoryAccounting",
+   "name": "_private.Jaune.MessageCall.MemoryAccounting.0.Jaune.output_length_lt_two_pow_160_with_stipend",
+   "reason": "private W1 helper; the checked memory-accounting modules carry their own copies"
+  },
+  {
+   "module": "Jaune.MessageCall.RunInvariants",
+   "name": "Jaune.RunInvariants._aux_Jaune_MessageCall_RunInvariants___macroRules_Jaune_RunInvariants_tacticInv_walk_1",
+   "reason": "W1 proof tactic (inv_walk family); Checked proofs use their own local macro in CheckedRunInvariants"
+  },
+  {
+   "module": "Jaune.MessageCall.RunInvariants",
+   "name": "Jaune.RunInvariants.tacticInv_close",
+   "reason": "W1 proof tactic (inv_walk family); Checked proofs use their own local macro in CheckedRunInvariants"
+  },
+  {
+   "module": "Jaune.MessageCall.RunInvariants",
+   "name": "Jaune.RunInvariants.tacticInv_close_core",
+   "reason": "W1 proof tactic (inv_walk family); Checked proofs use their own local macro in CheckedRunInvariants"
+  },
+  {
+   "module": "Jaune.MessageCall.RunInvariants",
+   "name": "Jaune.RunInvariants.tacticInv_prim",
+   "reason": "W1 proof tactic (inv_walk family); Checked proofs use their own local macro in CheckedRunInvariants"
+  },
+  {
+   "module": "Jaune.MessageCall.RunInvariants",
+   "name": "Jaune.RunInvariants.tacticInv_step",
+   "reason": "W1 proof tactic (inv_walk family); Checked proofs use their own local macro in CheckedRunInvariants"
+  },
+  {
+   "module": "Jaune.MessageCall.RunInvariants",
+   "name": "Jaune.RunInvariants.tacticInv_walk",
+   "reason": "W1 proof tactic (inv_walk family); Checked proofs use their own local macro in CheckedRunInvariants"
+  },
+  {
+   "module": "Jaune.MessageCall.StateGasZero",
+   "name": "Jaune.Frame.Result.StateGasZero",
+   "reason": "W1 result predicate; the checked state-gas-zero facts are stated on Checked.Frame.State/Running/Entry"
+  },
+  {
+   "module": "Jaune.Run.BlockFacts",
+   "name": "_private.Jaune.Run.BlockFacts.0.Jaune.except_mapError_bind",
+   "reason": "private helper of the W1 block facts"
+  },
+  {
+   "module": "Jaune.Run.BlockFacts",
+   "name": "_private.Jaune.Run.BlockFacts.0.Jaune.except_mapError_comp",
+   "reason": "private helper of the W1 block facts"
+  },
+  {
+   "module": "Jaune.Run.BlockFacts",
+   "name": "_private.Jaune.Run.BlockFacts.0.Jaune.except_mapError_id",
+   "reason": "private helper of the W1 block facts"
+  },
+  {
+   "module": "Jaune.Run.Body",
+   "name": "Jaune.Body.Prefix.output_injective",
+   "reason": "survivor-shaped W1 body lemma, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.Run.BodyFacts",
+   "name": "Jaune.IsDepositLog",
+   "reason": "W1 body-fact helper (deposit-log reading over the waiting body), unused by the new side; the tolerant t8n loop keeps the receipts through FrameRun.CheckedFacts (BodyFactsT8n.foldTransactions_receipts)"
+  },
+  {
+   "module": "Jaune.Run.BodyFacts",
+   "name": "Jaune.forIn_filter_mapM",
+   "reason": "W1 body-fact helper (deposit-log reading over the waiting body), unused by the new side; the tolerant t8n loop keeps the receipts through FrameRun.CheckedFacts (BodyFactsT8n.foldTransactions_receipts)"
+  },
+  {
+   "module": "Jaune.Run.BodyFacts",
+   "name": "Jaune.forIn_lookup_flatMap",
+   "reason": "W1 body-fact helper (deposit-log reading over the waiting body), unused by the new side; the tolerant t8n loop keeps the receipts through FrameRun.CheckedFacts (BodyFactsT8n.foldTransactions_receipts)"
+  },
+  {
+   "module": "Jaune.Run.BodyFacts",
+   "name": "Jaune.length_putIndex",
+   "reason": "W1 body-fact helper (deposit-log reading over the waiting body), unused by the new side; the tolerant t8n loop keeps the receipts through FrameRun.CheckedFacts (BodyFactsT8n.foldTransactions_receipts)"
+  },
+  {
+   "module": "Jaune.Run.BodyFacts",
+   "name": "Jaune.length_putIndex_aux",
+   "reason": "W1 body-fact helper (deposit-log reading over the waiting body), unused by the new side; the tolerant t8n loop keeps the receipts through FrameRun.CheckedFacts (BodyFactsT8n.foldTransactions_receipts)"
+  },
+  {
+   "module": "Jaune.Run.BodyFacts",
+   "name": "Jaune.parseDepositRequests_of_receipts",
+   "reason": "W1 body-fact helper (deposit-log reading over the waiting body), unused by the new side; the tolerant t8n loop keeps the receipts through FrameRun.CheckedFacts (BodyFactsT8n.foldTransactions_receipts)"
+  },
+  {
+   "module": "Jaune.Run.BodyFacts",
+   "name": "Jaune.putIndex_aux_fst",
+   "reason": "W1 body-fact helper (deposit-log reading over the waiting body), unused by the new side; the tolerant t8n loop keeps the receipts through FrameRun.CheckedFacts (BodyFactsT8n.foldTransactions_receipts)"
+  },
+  {
+   "module": "Jaune.Run.Message",
+   "name": "Jaune.EvmError.IsFault",
+   "reason": "W1 preparation error vocabulary of the waiting TopLevel.run; the checked preparation uses Fault and PreparationFailure"
+  },
+  {
+   "module": "Jaune.Run.Message",
+   "name": "Jaune.EvmError.toFault",
+   "reason": "W1 preparation error vocabulary of the waiting TopLevel.run; the checked preparation uses Fault and PreparationFailure"
+  },
+  {
+   "module": "Jaune.Run.Message",
+   "name": "Jaune.EvmError.toFault_toEvmError",
+   "reason": "W1 preparation error vocabulary of the waiting TopLevel.run; the checked preparation uses Fault and PreparationFailure"
+  },
+  {
+   "module": "Jaune.Run.Message",
+   "name": "Jaune.PreparationError",
+   "reason": "W1 preparation error vocabulary of the waiting TopLevel.run; the checked preparation uses Fault and PreparationFailure"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.Meter",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.Meter.committedSpill",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.Meter.execution",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.Meter.measure",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.Meter.spilled",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.Meter.state",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.Spawn",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.Spawn.child",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.Spawn.parent",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.call_site_spawn_settle_measure_decreases",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.chargeExecution",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.chargeExecution_measure",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.chargeState",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.chargeState_measure",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.executionGas_alone_can_increase",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.incorporateChild",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.incorporateChild_measure",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.refundState",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.refundState_measure",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.spawn",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.spawn_measure",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.DualGasProbe.sstore_site_measure_decreases",
+   "reason": "DualGasProbe: the bounded design probe for the dual-gas measure that preceded the W1 migration (cited in Machine.lean prose); historical, no user"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.Except.assert_eq_ok",
+   "reason": "survivor-shaped W1 sufficiency helper, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.Except.bimap_id_eq_ok",
+   "reason": "survivor-shaped W1 sufficiency helper, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.GasSchedule.access_cost_pos",
+   "reason": "survivor-shaped W1 sufficiency helper, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.GasSchedule.warmStorageReadCost_le_access_cost",
+   "reason": "survivor-shaped W1 sufficiency helper, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.Sufficiency",
+   "name": "Jaune.sstoreAmsterdamGasCost_pos",
+   "reason": "survivor-shaped W1 sufficiency helper, unused by the new side (u89 lost-facts inventory)"
+  },
+  {
+   "module": "Jaune.SymbolicArith",
+   "name": "Jaune.SymbolicArith.instDecidableEqOp",
+   "reason": "deleted with the old side (Jaune.SymbolicArith); unused by the new side"
+  },
+  {
+   "module": "Jaune.SymbolicArith",
+   "name": "Jaune.SymbolicArith.instReprOp",
+   "reason": "deleted with the old side (Jaune.SymbolicArith); unused by the new side"
+  }
+ ],
+ "rewritten": [
+  {
+   "module": "Jaune.Machine",
+   "name": "_private.Jaune.Machine.0.Jaune.keccakReadRun",
+   "reason": "its auxiliary _proof_3 was abstracted while elaborating the deleted W1 PlainOp.runCore and is used only by it; the rehearsal without this row compared the definition itself unchanged (type, value, attributes)"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedCanonical",
+   "name": "Jaune.Checked.enterWith_canonical",
+   "reason": "proof only: the transfer step used the W1 Message.transfer_canonical through Message.toLegacy and is now inlined over Checked.Message.transfer; the statement is unchanged"
+  }
+ ],
+ "added": [
+  {
+   "module": "Jaune.Implementation.CheckedCachedDriver",
+   "name": "_private.Jaune.Implementation.CheckedCachedDriver.0.Jaune.Checked.execFueled_eq_cached",
+   "reason": "execFueled_eq_cached made private (hygiene one-row form, packet 1a)"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedCanonical",
+   "name": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+   "reason": "macro auxiliary renamed by Lean because the module import closure lost the W1 modules (the same N4 limit as jsn-u93 decision 2); the macro and its users are unchanged"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedCanonical",
+   "name": "Jaune.Checked.enterWith_canonical.match_3",
+   "reason": "auxiliary of the inlined transfer-canonicality step in enterWith_canonical (rewritten row), which replaced the W1 Message.transfer_canonical"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedCanonical",
+   "name": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.Message.transfer.match_1.splitter",
+   "reason": "auxiliary of the inlined transfer-canonicality step in enterWith_canonical (rewritten row), which replaced the W1 Message.transfer_canonical"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedCanonical",
+   "name": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___macroRules__private_Jaune_MessageCall_CheckedCanonical_0_Jaune_Checked_commandCanonical_message_For__1",
+   "reason": "macro auxiliary renamed by Lean because the module import closure lost the W1 modules (the same N4 limit as jsn-u93 decision 2); the macro and its users are unchanged"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedRunInvariants",
+   "name": "Jaune.Checked.RunInvariants._aux_Jaune_MessageCall_CheckedRunInvariants___elabRules_Jaune_Checked_RunInvariants_tacticInv_primitive_1",
+   "reason": "macro auxiliary renamed by Lean because the module import closure lost the W1 modules (the same N4 limit as jsn-u93 decision 2); the macro and its users are unchanged"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedMessageMemory",
+   "name": "_private.Jaune.MessageCall.CheckedMessageMemory.0.Jaune.Checked._aux_Jaune_MessageCall_CheckedMessageMemory___macroRules__private_Jaune_MessageCall_CheckedMessageMemory_0_Jaune_Checked_commandCall_memory_fact_For__1",
+   "reason": "macro auxiliary renamed by Lean because the module import closure lost the W1 modules (the same N4 limit as jsn-u93 decision 2); the macro and its users are unchanged"
+  },
+  {
+   "module": "Jaune.FrameRun.CheckedBasic",
+   "name": "Jaune.Checked.step_of_halt",
+   "reason": "moved from CheckedSymbolicPush (coverage rule, Q4)"
+  },
+  {
+   "module": "Jaune.FrameRun.CheckedBasic",
+   "name": "Jaune.Checked.step_of_next",
+   "reason": "moved from CheckedSymbolicPush (coverage rule, Q4)"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedAccountWriteFacts",
+   "name": "Jaune.Checked.Frame.State.creditBeneficiary_storage_of_protected",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.MessageCall.CheckedAccountWriteFacts",
+   "name": "Jaune.Checked.State.Protected.creditBeneficiary",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "Jaune.Checked.TopLevel.prepare_kindCoherent",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.applyAuthorizations_message",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.authorizationLoop_message",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.authorizationStep_message",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.dispatchAmsterdam_kindCoherent",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.resolveCodeDelegation_kindCoherent",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.applyAuthorizations.match_1.splitter",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.authorizationLoop.match_1.splitter",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.authorizationLoop.match_3.splitter",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.authorizationLoop_message._f",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.authorizationLoop_message.match_1_1",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.authorizationStep.match_1.splitter",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.authorizationStep.match_1.splitter._sparseCasesOn_2",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.prepareNative.match_1.splitter",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.prepareWithoutStateGas.match_3.splitter",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "Jaune.Run.CheckedPrepareFacts",
+   "name": "_private.Jaune.Run.CheckedPrepareFacts.0.Jaune.Checked.TopLevel.systemInput.match_1.splitter",
+   "reason": "native port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d), replacing a W1 form"
+  },
+  {
+   "module": "RealSharedField",
+   "name": "NamingRealField.checkedMessageGas",
+   "reason": "naming-pilot fixture moved off the W1 Msg onto Checked.Message (packet Appendix A.4); renamed so no kept name changes type"
+  },
+  {
+   "module": "RealSharedField",
+   "name": "NamingRealField.checkedMessage_update",
+   "reason": "naming-pilot fixture moved off the W1 Msg onto Checked.Message (packet Appendix A.4); renamed so no kept name changes type"
+  },
+  {
+   "module": "RealSharedField",
+   "name": "NamingRealField.updateCheckedMessage",
+   "reason": "naming-pilot fixture moved off the W1 Msg onto Checked.Message (packet Appendix A.4); renamed so no kept name changes type"
+  },
+  {
+   "module": "consumer.Consumer",
+   "name": "Consumer.interpreter_outOfGasRun",
+   "reason": "external-consumer smoke source moved off Exec/Sevm/Devm onto Frame.Run (packet Appendix A.4); renamed so no kept name changes type"
+  },
+  {
+   "module": "consumer.Consumer",
+   "name": "Consumer.outOfGasRun",
+   "reason": "external-consumer smoke source moved off Exec/Sevm/Devm onto Frame.Run (packet Appendix A.4); renamed so no kept name changes type"
+  },
+  {
+   "module": "consumer.Consumer",
+   "name": "Consumer.outOfGasRun._proof_1",
+   "reason": "external-consumer smoke source moved off Exec/Sevm/Devm onto Frame.Run (packet Appendix A.4); renamed so no kept name changes type"
+  }
+ ],
+ "matcher_reducibility": []
+}

@@ -1,0 +1,2862 @@
+{
+ "schema_version": 1,
+ "deleted": [
+  {
+   "module": "Jaune.Check.CheckedPortAuditA",
+   "kind": "check",
+   "digest": "e3758df8faf175727184fd48c8ab876ad603eaed77b8b65206eef34a6761000d",
+   "disposition": "restated",
+   "replacement": "the native port Jaune.Checked.TopLevel.prepare_kindCoherent (Run/CheckedPrepareFacts.lean), audited in Jaune/Check/CheckedFactPorts.lean",
+   "replacement_module": "Jaune.Check.CheckedFactPorts"
+  },
+  {
+   "module": "Jaune.Check.CheckedPortAuditB",
+   "kind": "check",
+   "digest": "fdb8407f87df8df70b7166f7053f1ab5b49bba8ead9e28f7479e30cb6f0ce44e",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.MessageCall.CheckedDerivationMemory)"
+  },
+  {
+   "module": "Jaune.Check.CheckedPortAuditB",
+   "kind": "check",
+   "digest": "eae865a641b3328332a5937be2c7dd20831d49cde14a39e77977e9b51b3012b7",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.MessageCall.CheckedDerivation)"
+  },
+  {
+   "module": "Jaune.Check.CheckedPortAuditB",
+   "kind": "check",
+   "digest": "c8b702c64a5db8507dc2e0c3364806787cfb1490a0709fc0a31f84082f1dae71",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.MessageCall.CheckedAdequacy)"
+  },
+  {
+   "module": "Jaune.Check.CheckedPortAuditB",
+   "kind": "check",
+   "digest": "3ca5b57d2b0614d2b97230dbaa5411d4098c90592d90b2255b2703c68cd5a36f",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.MessageCall.CheckedChronology)"
+  },
+  {
+   "module": "Jaune.Check.CheckedPortAuditB",
+   "kind": "check",
+   "digest": "c8acc9543f4fd3a06fdee6d901815065be617065c990ba293c7c0938aab6cb79",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.MessageCall.CheckedDerivOrder)"
+  },
+  {
+   "module": "Jaune.Check.CheckedSpecAudit",
+   "kind": "check",
+   "digest": "2080839f7fdf21d65bcf49cfc561baf07bc161f16db7512ad6c65b992b210ebf",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.Bridge.G2b.PrecompileInput)"
+  },
+  {
+   "module": "Jaune.Check.CheckedSpecAudit",
+   "kind": "check",
+   "digest": "2baca84af6cedb9e87722ed85dc7ef319a6fdbb0f381ac0d1f7f2177b0703233",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.Bridge.G2b.CheckedContext)"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "833da625436e7fc974ce366fb26ecd8e486376b528a7d8d14b3c2861556fc69f",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "2da91be7256860a9fa3ce34aa74b58b50053c1698c5a510bc19fa576d1a8186d",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "168b91978a3fb68aa3a11b7fb9b322e1f28a9661b3ffc4d1321c3338cc2e4be1",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "2da1959fb2dea0cce8102f11afbfc9be4c3038ace2d7f6a3d1613d4655da7f97",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "dcbad82e0b198b21441345422584a713e433c740b6f6cb2bba011c96e27a176c",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "49f608354099f46a7db77d4ad6f693ef52fd3e6758dc3aaa088352f2a70a72c3",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "15e7a806cff43cb9207f7a5ed12103bba69a40804c1624ee6c9c45002c71cfa5",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "90eee0196856a6d27f853f26809e22c2453afc99c5a5906bda96a40b1171bc05",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "926b46f519d6ba0180e183746907103c847e54f4fe025706c134106148826ab2",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "de09570ef031ec3e59987936d6857ff86f2e628a854dd35e1784d59d0b341b1b",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "f0831cd03679dae91104c2fbef516c43865d181848eba43be07d4fdfb14f9d30",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "a005301490b73be2de3528d0620edea542e0444fcbf222c8127405b70eedb27e",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "e1c943c2012976bd6f8707f020b1be468c40c042922f26edd017cf96e7cb7857",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "cba84a0fdf58b39abf4e9bdb21e6c0ed4c483f8aa3d886447686e700995b860f",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "33a5b2889484308bf869e20d3c742ffb9ef5652da8ec1b02b0ef4a1aa456cdce",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "c2a9c4f4bbd9b1d88bb49bd9c5ea8b61dd1a749df8dd8b5ea5ea56e30b76a99a",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "9f495bc86da81042cc362e73720929bedfd50b43ecdd2ec591102ff0d9df055b",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "f6c1d72ff75f22f48e206f2b22911292193b76e6ca654a073c5e1db0df7ffd70",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "313e218627a9d1716917f95e5c791e6e5e8a89072ef6e5699ad49518d88d84ea",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "1da95a5b3102d653bae9019cdaf09e3d847d49c1b5a8c10c58e3106486017abb",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "ced5ed36d40b809043a96e2c22aac702beecf309a9eb847bfa150745d3090b2e",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "b2177343554ef01198c633f8d8d4169b0fa12564904d44cf99cec97303fd29bd",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "c3c12d2161f21288277ea6c6fdb8c07060c2fb3334b5178b7ef95e33de610a70",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "13c7d4ca6f7289eca91d12d39c3bdbad3356457a7ed4ca9a080e5d7e5415ea34",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "5b29c0c27f1935fb1b57e6c6eb833e32fd710a80caf377a2d14c93903cbd299c",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "ca1a34a54ec638800f267057a8e24c56cddf3f69fc08c80ef1ae22aec5770b5b",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "a3ef6f433c1dd2daef3a91d45cb70c808e0cdac7957c91f7029c9ba1c82bc0e2",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "f445d002a9aaeb365a0d6fa97e4db6fd720215d41616aaa0906f689cfc2d4b7d",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "860084cf176cdff95da823e009066d5c7625ebc1e915501b908da4fd554c4741",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "137d89c12c4b37558bf72e7ce40147070648326503f273e0e625af13c56f28f0",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "28aa0944f1ad39b8ffc26143991ddd77a1693f0ae9fd08f1c1b08773e93100ce",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "28d90c15ac7e40326f5ae4571b5b284a899f74610f1e312650256fa8ddb80d91",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "074eb3350d65c4a44d1b3a719072997b8908f9e6ee5b9caba79a05894f90b670",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "9d29f22d22b15beb1cb90e51950e752a066ca49b06c5aabb7d7391e6a11b4f9f",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "bf06ff64bb781d4a78b5f8ce299585f06812163c31086a978cd57b3f04842963",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "59838718c0cf43eacf584b0d1db86d4a2f9f4f639ec57bd0084b1ef400dda549",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "fb7b743d6ac4553eb97dc8dddb60a19b110332c781b8207ed4151ab52b00cdc2",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "5b7a58c20a0f51ddb662f11b6e76d0a8c294dab441a5d698e00f568abad847d0",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "d423749f4ece8535a76ee08f46c81eee20154cf3711bc9928d66a857f916ed32",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "2ae0e5ad107e0e85c12d1d140bb1af5f57247dc193c8d586da03d5b85ccb521a",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "0033a004df0e87e66a589bce6c7cb1d75d8f72e330690ea1cb4a92f241d04d29",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "a97547e681cdf45b35d58a2c4f114f4d7ccc1985e9168bc10ddaaa52b6169935",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "854bc5118d3652d303f20e3d91f9488dcadb4315b27e21c16200709a600c50be",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "ff111e634ccf2241c8cba5cf028a99367725e3c46e0b786fb68058cf6e94cf2b",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "59dfebd07ace3a6a32c03a1a38ca9560a651b0a2962427a65f58ee234423e35e",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "422255f2410b6d34082a3f4d80710ae9d0b2f9c05ed7b3d2ece5037e127634c4",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "7767ee980334231e4106b58dcd1fb59244a077ae2f70199805291216fc0f2b05",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "01d79f76a90147a8d3d99ab981e53d1d0553509b88eed8cca2a73f0aaaaf77e8",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "737a62f74bfc5a73af86bec0de855fff66d880521d2b59731093853c07fc0dab",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "b8baefb27b3e97bd83de4a10069d75a427fa7418278131f33ae9008cf963bbda",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "e7a60bdde6057502d2e524879dc2e1c6e6f95820912cd3fd66671427813885e6",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "49b339109c751024a34897830ae4297cc24a33886e16a127566bef1f105abc4e",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "0f9506fff21c3e3c32fb6ff0b6a290a7f1436eba9720214036e02a250c4d1b39",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "4dcf3ce467f667ebe8949e1e38547c9fec1c1003c7df2b5e56102a997dae7c66",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "7e2ffb84bf07a6ad31bf8a081b5bc45f4b4e4e3e0c7e0699b31bce53d31ffd39",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "b5033189b1f79afe7af7556b6665778f0aca05a12cd16d0f45de757d125f2d8d",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "e3cddf001d7831342266d0366710cdf37d39c10d8e337b7d80623e16745fba1d",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "924e867d29728040f43a7681d8ee490997339a44519fe1fb727be515cde4a99d",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "7f9e782bb4d34d2e447004a7788a9f3f847367f65634e096215aa8e01b29a534",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "edfcf782d933b40a00c7a358e46048b97eda918fdc987b6221be25d2aa148ae5",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "797ceb0a9f081a86d298054e13ddd628bd8fa84270afbdc72e86aa5ad6d4affe",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "8237dfcff58bf5fdecd3f56248d64935c2f76c2d6d2f09dd89bd1a0c6dcf70e1",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "eb509ae90314d98c74b3100b88880738d4c6894c0b52eb20ea6a650c8bfa15dd",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "53f0aafa6acdefb56b925aa11482113933fd52a0062b9d4219ce465dd048726b",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "2fd49575058432d9c8a815652f4999c8fcdeec29e8ed45a227e4377f296620a0",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "4a25aabc3cce76012f6457098c7825147d6137686559bf78b2b114f58722d037",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "db607038c84ae99ca81dd8e4499ddc32bcdcd8eb887d0efe7a2aa3af457f7b06",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "99dbf1c846ed57c857c78322ea0c79a23f866ef7cc1b0eaba5ebac0b60607a0c",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "bbe089789141eba6f9ef52448a2aec7db83cd6fba42135f58fa9b06ab514e714",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "630768104f85850cf7598c962c158f2e2193030b43f1cae4c9c4f2609b67e858",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "c0da05add357d55b398778ddffa3d0caa3b0152ac3f6c14ff810c9cc14ea9fff",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "432df7a5b0566a632a4ae2a1c2eb5d22ec0b30945610dad072427f4cf4d7d107",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "b69431a73f735d3a6eed7c823e227b7f56e0ec42c1f30931bf7040e494face63",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "c2595306fc85b567a4d477a89844c63f2528134ecc2afd8d07bdee1d198be95f",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "53859e5f3f88d01538b6addb980e8132fc449f464a0f4e63170ab1037ff64c94",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "a9a1f574009d5e705a6eab67e46addf0d67330857d7d721c814f405c16f994f4",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "c17aeaee6a51880d1d39660ea585de7011d2b512ba68c4edf8e8050346c32532",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "c0cb69bd03178b6be8f346345bb268d93e29921159760e3cb300b3693181cdc4",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "fa3c0d01b79df8d89afc0291ca4bcc3611b23a4f40e039c6e908321f63d5d72c",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "f0ef78d18f3974753bf163757beff812a626456cdde4cca447ab8fc2616a3ad2",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "54ad53905768699a0c1bcc66219e8f8001e4a4b6b770195e9850e6da33aba164",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "73d30d8aaa25b8f7de235fd6c0f05a4cb47f0c7a6db586d9abda29a519171413",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "4f6250eb984c9607aa10fed2e108eb96cb76bc9454adf8fa0531426d6c80ef08",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "6353c06d6d806513c5159721d4afd31ae766b5b7fb9420bc988dd42323f71dd4",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Execution",
+   "kind": "guard",
+   "digest": "eaa704d186fa530a11f28b377611a821d7fc3ca385feb6d220f333a0f5f74d1f",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked interpreter in Jaune/Check/CheckedExecution.lean (jsn-u85 S0 guard ledger: 85 retargeted)",
+   "replacement_module": "Jaune.Check.CheckedExecution"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "4b3eda87d8ccf1a38145f395e01b3fce120389d0958e4e24ce39d0b0a40f4a0c",
+   "disposition": "restated",
+   "replacement": "original-state regression over Checked.Transaction.prepare, Jaune/Check/CheckedBody.lean:22-67 (jsn-u87)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "27934ac57545b4e1bc73ff07ac819759b6deb51c6f84c83e3c6debb8b1215691",
+   "disposition": "restated",
+   "replacement": "original-state regression over Checked.Transaction.prepare, Jaune/Check/CheckedBody.lean:22-67 (jsn-u87)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "f60adef4be1d042ecdd2d5bdc9dc34c96a717185e9529ca202caec4bfe1254a7",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "c095b34b0c76e8df02057e1c14055af1ce7a5142529dac6e8ef299dc384f7711",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "a71c2a01dada566dea44e52abc82669f1804b1cd3b82714fa98986628c5bebe9",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "73bce93bdd6f0b8bfa07c5c9f5b2abacd0e9eaabff9cf9448e08e901eb67040f",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "785b272537f817295cd9c4705c37a410dedaa7fd066f332a4c86bb89aeb4cbba",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "860a71f0a06f2298e1df210e69875dacf4cb9e42bd7ce3563947a33976d2ec23",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "9a9ad6a4345467c858f9eeb5ca1de81413470c1554fa6b8c7855d3a3138c1430",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "5057a1a940af35b23524be72ca5dcb88c1248c15548d9acb0dd8d7e18e0dd940",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "e6c80e6b1de614c932e77054b5289204b5209dbc40fc76ee67409ca6586d1536",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "de6f9e3ec170abb806ba031b517521139361524ab1817b8507baf8c544ad5d13",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "13cc005b185caa853e358c84692f9cc6f959de2671d8b6103fd266536b4464b0",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "72d37179206e850ab5aaba5668ed4e0a946279cf24906f1e4475365c6e6c5a4b",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "823e4d8b1557fa2a553de599a869f4717869ae35662bbdc78507b71d19c5e440",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "e8d0e6623fd5bec1da56559cb9b97be9a3b31bed01ca0a722b15aa375e78573b",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "5cb810ff93dc3ddceeb15ad422179ed47c3499c5fe0af272afd00caaf978e179",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "36e4b7272d41e88a152856f4cf9f1ecc045923ff7423bded3e46f85ddf4e1e88",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "f4c0a1ab307a6fb864a03d797b0f0e2db3d2f75bc6d11feae682a1dd97e0784d",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "0b417cb78166276150fabf3b02c5a2165b2948d847638091c926b0291e9181b4",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "d068864be2b367f040ec53b157e7d316259a73d4c01a475f4da12321456ea511",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "db31aae9eaad6417bbff3c5f65f1c0136c9045bb1017cae75d188395bb4d0e09",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "83df7a3430910e557874b41dfdb87c30b26ef06596e5e8f0f8ac888bf86cc03a",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "b884b909665976641d5de73a87df9d72ce40c2170beeba0dd1211063874ccc05",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "005313def3e8245341fc1bf990de04e054ba5c435537cc5ff57ffca114681799",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "5a374c9c49c64be65ab597e5c8e078ec292246a90fbe6d182303f269b646b156",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "df2e3a45aca13dd65730c15dd8f1696aa3c810cb96bcc2ebede3727991ffefe7",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "7377381ffeb3e17474de14d979abe637cbb57878f6b5a5ac3e996dac134b4195",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "38da728f5579b1f06f2dcd3651e5672447a084344c89589695536730897beffc",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "01f522e9f25b54be05ec121a1e45573ba60c30fe6753d34feea172c5af116684",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "4e5dd902a5748bf58fa6b840ff2895f63883e5304ab92d3d01df662bf4af8ad1",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "b11bacf46645c012bcd5a7a860ce4bda92af5d1b5affb29270253d8313955be4",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "60cb7b305f10f3ce47049cc68a6318dee42c042ffae5bd4d22dfa1f34f1ce139",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "9de4ed1c69bcb0a34c1d1a3e752226d2e3b6acfc1a9be734832e7e02bd6b720f",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "508203df939a9ad794dab00f53eb7d6477ef240d62cfc01c398f73d41ba711b8",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "541c60e920eb56a931a9077de57800047cd05ecd2597af1360b964ac8c8cf8ce",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "4422d8e91499680b1d648a072fcacd79e24b8a310586c2839e756c197ea391f6",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "0a5eb300692304d8b77b8bd420956224a22dbc551b1844857ee38d8d3efe13c0",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "cd9e7de03a6f17c2a12799f0a289ae0e92a837f9d2683f831108cdccbd869d5c",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "9915f533773b3039a02f1ebd5b41421d47cbef0ae8f053318b61db9cbfcafba1",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "a4f4a9d5100ebe42fa1f88f8d0d6ef624977f071209fd30d199a711e7593d8c6",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "dcde55ade75e8c7f7c822d8b3583dc9110ab1ad31f80527e85f0bf2068fa8ab6",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "8e79a88c5337d1a7c3fcd16d7c290e69eca7c1227b9555689f7e8fa6345b14a5",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "e7b730473fa8f01707e3a7fdb1432d073dd4773fd4013b43fcb21326623d7e1a",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "2ffb1dff9e76942be7e517268c770661f3c9833b60aee47c785d27a27e9bfa0c",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "699d13d14066d0446a4929abb6f95a4a787eeb9d63a3647332336e7995a595fb",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "35aba5bcd395af9c6f8ed35e90567387e9ffb6a0ccf21a0142b1388a6464e7d0",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "b5aa4d7cd04d9e007526c263669d07c50186a53affbb74c93cc0093dc21d99e0",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "31c9db5d24f2f0cecb3f3d669dc7daa1d50d3e0298604590b037bf5d6503d41b",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "8748702cd5ed261d50f5e832c2c55478b7cbe70cd76cce97f33cfcc95794937c",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "a07a5d89ece83881576d9171b2c85567653fd0f198d94002df312562245939f6",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "18aa08fc676418ffd2b17d57e28c5a37c0edfdb232cb194f9d7f95130dfad22e",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "02acaf67911dc70f9b86dff8869b362748df907f5c3c81101ffd3085b21c3ad6",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "30ce361a9ec835517342af67977a3798b0fd82b0994779c34cc942b0cfac4ef6",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "71d4be6146a2aaa2a51813dbeceef03264a28635431d8269e3941822a2da164e",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "502f92ad4f65509f6ed936794501a10bf870892dc2cc5b85fa0909c3306e01d1",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "76f224c17faaadf5052d2070f0827a6412a40032338949b477997ffd948f7586",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "9227927480e4076434a1e73ce4bcca2359c4043ab0df33cf06f46eacd5f6c858",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "f24d83962eae0f1216bec05c32561832291ab1f77da57f4a3f04a7f0729bcf5e",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "232b207ff9a945dc2175edd5ce6c83f973a5ef8e25b4fa310ef085210d5e9985",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "589d8762caefe234a0d95e2eea886a852a7b28a7dd22eb04bac6c57761c206d1",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "0b882b0509f0df7df7fa4b2af77c320e69179bb970f68bbed5320a2fa29dda94",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "acb33b2807dd58a7705dcd6ea6fe82aeef565d1f9de62f634e9ba08d6007c410",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "c92140277eb512a09c017555e73cacc0dbcd4e4a22fc6490f4e57fc52dc767ee",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "96b90025c733002cab6b7184752f669b0d2fa408d32ad76c19ada2514c49ca07",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "9196bac1f07b7f93e3d4ccac010a94db21153cac70bcd3e8db057395377e5cf3",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "9ffe2f184aff8eb316eff85cfd45a2af34689b58a6c28f762900283683143e3c",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "97e334bb7a5491c8524991244124b924529547d6985d56ab1602abb4d9376031",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "56a84bb2d240cf2e4fe371b660728f2c077ca927773731d92a6f43ad609e231d",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Machine",
+   "kind": "guard",
+   "digest": "eb9fbb28045df3ce3a285f5fb25947158b03de2f8fb08850da017a15b1cac28c",
+   "disposition": "restated",
+   "replacement": "CLZ/SLOTNUM/access/S8 availability over Checked.PlainOp.runCore, Jaune/Check/CheckedMachine.lean:60-175 (jsn-u87, 68 guards)",
+   "replacement_module": "Jaune.Check.CheckedMachine"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "bd8c4b7438eb975ed4f8dde90e91c6f1e1c9ee6cb301ae53de15f27945c85e2c",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "49089cf938e768c6e0f17324d0ed56fee794022e1c8e6fd6738b3efae14b6c36",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "1febd3a326ba34cf970ae557c1ec743f65ae57c0517d90a703fd30114d6160ac",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "724acd85da961111076e32ee30dd7f31a2349239191c367092bd30789318c420",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "4254b575bf6ff3345927be3a62bd7883bdfe424342b9631242cd5feaaa92ef19",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "1454d77353cb2e52de71d8651e917a3ee7a2d69ea39d9504352d723be3569cdd",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "0d5529c8ff2312af3f81e3fcee9d72837ba0e48182ccc88d5c46ae759c039aa6",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "1512e80200e20731364453fca04960ce802df6804fdfc057ce4408e49f6e360d",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "5b60d62a2cf25688ccd783403b160631555e20d4a19c0ad989178512796c4c2c",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "2d6396fef3993cc9cf49a418ca97b2dd9223c4f159b1d83391e72b53b4878663",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "258d9ba22a70d37d9239782710c666a310af33f35d1d6a700c21343b8ad06621",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "4f0f187f7b552382d918d9fc254f501ace177c01c5132be039b84246c52c7028",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "908be0e7eb3670d12d9282a8634836e068f2269a4417c6680b97a34a6d2fb73a",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "f3fef7638cbae63051de5418a3d9f1ab9901d68015a6861e5b4583436992af73",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "48ac49c9c523f77a1623b01550c3d45b1312edd5b74ef63d74f72d5111139fa1",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "5093084907835dfeea67392843ceaffffe3e0446aae6fb3ae1e26919ba3325cf",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "fd5c7970301db673aafccae652b34bbc218e27ce90b2d39974d286acf1af3c09",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "13f745e67dc96fa9d19ed7480930530ea1a7e99d1b652b536bd47e6352f9eaa8",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "54527b1141bde542ccfa3fac58d8e8bb76a4621a338594a95d289af79ec26167",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "90c0a4bb2772409c534d73104e363da52492cb29bd62998545295c2447abd534",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "23ead1e7d241b856bf6daa7435ccd434d19793614eaf30628475c19c00b4676d",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "96d5b31a1bf07f8312b1c1209fcd982e96a67728707d128afd1f4c0b621bbd98",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "f8845da040a5e29ec11a1aad941ae647d5459fa41930c4686c0f1aea1f55e6c0",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "0b7af31ee902ce9f69c474c8006c54400bd3e7887010132cffeba5f7f9b09b90",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "8f0adf88fe9e85c65d2cde1b039f40c6a3974f62f94a575f566dc0b0b831e480",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "faf8c03bc7476ba5fa470ee53950cd7cde4aa80c32051d3ea8a4ec904844ab53",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "f4f78768c5e8f220871722f12f8733b2faa9689825b28ef55cd8df125b414e10",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "0b01c1743fbee0c72979f8ca33ff1972a1b872300215f5f97357393df471c23a",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "98d6ade1d6ae1edfdb0bb5cb9264238f3833cf912ef5fb8d3ae5582fa76ca831",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "3a664e4e09cbd644a2540880b9284ae2c9a58eac274ab938a32c6741fef123fd",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "9c1267d74d5db891bf097c3d6c50c9f58d35299d1a759bca3b401f5a67d5b792",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "ec0ec108547d98e802547d4d64d6796295880de667929f8e704920c42b66e91f",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "fa0f799f7254eab3288fae1df6cce6fc2b265c4e969ea426deb3cc0f5271f646",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "1d05380c366df7c570101708f421682ffe5157da36c22ccb0356aae87a5018c0",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "0f04008818a147bcbb025c8e18b20ce2fd678bbc05136b8d0252a743dd78d1e5",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedBody.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedBody"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "a131e433da5ca1e1d90f0e11ff00f9b69cb15c2b7136c77076e001c11dfcc2bb",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "253c1e1b3f6c59038754ead9f4bc4b69a8253b97a8091f0aea0c813049d581b5",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "9c82a1e889e3fb9380cda08bd04ef56880099c33f807e17430c33a67494524f2",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "89907c01299c477bf0044b0c4650c18fa93056f01d104501ef8497ca41937d49",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "eff15f5a691ad54e45afa7285da9c33b10bad904c777851c5c90804997961ef0",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "76a3b9c126f49e9909d1aeae7945a64b1fbb15767e533072103c89d75f16edd9",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "556a85ba09caa13616b7fd5f584dd3356c96250677e54de6a8a2027c78832714",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "f770d99853c8b04ddb73e9f1f564a53729b4b58fce6060c7d3d5915c1e00b75c",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "403b652f01b34d4a2703db1cbb888edbe4d02eea9320ccf13c8c01ddc6bbd43a",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "34298e9f94a55a1fb4fced6ff4a8c55bb11077b2e5319ddcbc6fba61903c94e8",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "0c80332841fb13c98a41729cc484caff7250cce51ab0ee537b0913a3d03f1d08",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "323c4e011461489b167ba6cb2eacf479469e6963863f570ed2c947692fee6d48",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "bbb074066dda31c0dad703b1ddc474d089b0ea1288ec6cd1f40092318d7e96a2",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "66f417af65460afbbb1c782e2843915bdd36546dedd251cdf78729f3576ee0f1",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "eaa667f4024e31d0d07c383d9272f8b889bf079b0aee46aa5c0136de11e3436b",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "4442a9711abb60d901befb5c82baeab4b396444b9e8b6bc6c0c34c40007ec84e",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "bbcddfba67a22d354188bc53319512baa66902fb3a34b00c35456b3d9f4a6c47",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "4512fe57d87bb733a606f0dd8648ee0d3c1a638a52cca4c9e54b6c7421512bc0",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "133a2f6c837585e75c4b114de103f6a418eca2139deb2e3ffa55fd90430c65c1",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "72ca6b63f2cccc95eecef1313fcf74b4cbf1e30fd288dea27d02c9ede2e959ac",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "21fb1d59cd47ac18da16646291ec136220df2e9caaa9c31dae53527e67bd8f80",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "3945209cf26cef5d29eec530ffc3057869c491cdf3c93ee735d083e8ff30ac28",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "76037e6f5a15fd10d20e7e51a21ec7ad4960ccc5248437714474afa793123b19",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "d1a10629f4d8b832583009a85bba52083fb3db23878360d9e36529d98076ecc6",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "6cd868709aea792c034775e5270e79f4b024833238e1107f7d312f9108e71cba",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "62f86e3d387706340b14651430a538eac24231aaf57bc830da18c71e843799c4",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "6b57f1d9b3bf96eda12d7d48cb443880a94195e59add83c9b86c4a54c9e76481",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Jaune.Check.Transaction",
+   "kind": "guard",
+   "digest": "a5895004d55f9fad7a2e068db670f2bfb354a95e6a87ac8841425aefe83c06be",
+   "disposition": "restated",
+   "replacement": "retargeted to the checked run layer in Jaune/Check/CheckedTransaction.lean (jsn-u85/u87 S0 guard ledger)",
+   "replacement_module": "Jaune.Check.CheckedTransaction"
+  },
+  {
+   "module": "Examples.ShapePilot",
+   "kind": "guard",
+   "digest": "72e092922931afd84ad3ea154e022791bc514e84a637b31f2a252098b5724a81",
+   "disposition": "restated",
+   "replacement": "the same observation over the checked interpreter in Examples/CheckedShapePilot.lean (jsn-u85)",
+   "replacement_module": "Examples.CheckedShapePilot"
+  },
+  {
+   "module": "Examples.ShapePilot",
+   "kind": "guard",
+   "digest": "21cf3935d8a4bb4cf9e32d5cb4ec6b0418a632cbe25cb21a7ccc552426589ba1",
+   "disposition": "restated",
+   "replacement": "the same observation over the checked interpreter in Examples/CheckedShapePilot.lean (jsn-u85)",
+   "replacement_module": "Examples.CheckedShapePilot"
+  },
+  {
+   "module": "Examples.FinalShapePilot",
+   "kind": "guard",
+   "digest": "10d97fb2427d0af5eee2c0101bfaa5cb34ac6d911be2e8d1f2777468d9f0a5ca",
+   "disposition": "restated",
+   "replacement": "the same observation over the checked interpreter in Examples/CheckedShapePilot.lean (jsn-u85)",
+   "replacement_module": "Examples.CheckedShapePilot"
+  },
+  {
+   "module": "Examples.FinalShapePilot",
+   "kind": "guard",
+   "digest": "c55a0cc79f9cc0fea7bee86f0fd555b3732eb665d423c70b13c91df0e423bbb2",
+   "disposition": "restated",
+   "replacement": "the same observation over the checked interpreter in Examples/CheckedShapePilot.lean (jsn-u85)",
+   "replacement_module": "Examples.CheckedShapePilot"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "d1060841deb4347ed2f1fa2121ed0a96a5e1d77a4c559e06da735ead18c520bd",
+   "disposition": "deleted-with-old-side",
+   "reason": "audits a module deleted with the old side (Jaune.Bridge.G2b.CheckedViews)"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "ac765340f304162c63bc85d7d5ef09e1c6e4e98501309468cbd9de4e9a453371",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "899cd99d5dc93fffef33deeae48fe955715e665e3417b6d475dd69e8f4c60428",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "722516f74cdd7cbc7936e2ebc0a40f8a7b860c72e3788d992b3b107c092578bd",
+   "disposition": "deleted-with-old-side",
+   "reason": "audits a module deleted with the old side (Jaune.MessageCall.CheckedAuditedRows)"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "db2a240b3b1e825e900862489c11478fe7a154379ebb5b352d92bdea95e4a6fa",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "20ae174fcbc56874f961c5e4a5c7c5c6ff5701cc3d14a491fdcd58e173e357ab",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "d4ee5e61114a3062495241799c4f1d37b25f852d78bd069a3ea518f9a7d50f93",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "51ba9a2f39e06e8c6c975e2c9c5351c029665336510d633e56c3734690113272",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "e66643a1b33f8f00cd5038ce9444a6c69b3b9d106b1f418354c81338e02a5822",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "9dec497a6678962fa705dadd45dd5182d45461ba6be4e491b1f8a057e056fc7c",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "6f693d660690f60b5adbea26a96990a8912bd7a150a879c764cc01905cf59b24",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "f55a6f30dd50b8d6026f2461fde6b8f1eb54698a4e73877ca3b1587267a9acad",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "da8e26ecd817612611ab0578b90cf0fdf33a8c8e8ca579605ec4c456c267d44b",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "7909e8802e2bde57d6b9f6189c958bb8af53324b90a21aab45f07d10505675ba",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "6d882dfab473dac404a32d5d3c17f0c507ab5bd45ac1c09b142129dea44e1360",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "e885be4bcec2b1643dbff111f6986cc001962cd675bb269c772eb6acddd72b3b",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "8ca03f4e6399fb8ed218fa50c8bfbb6ed8f532a8d6ac187ddd819bef0410e05f",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "65d9298a6354836c8ecec3440b20046b276270a1e7ddd909ee40fe5d98478889",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "c6bc83ab01e616fd04898cde1947c8953573d6470b465913cbe1208960eab29a",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "7ab7f52ebb736416cbb78c0d8d66e6b64e1c9fa8b95a1e7141b523cc9636a6be",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "241fc10141d5b31c31b87653a5a137ea675fbd68fec55932ff4e7ea31dc4bc24",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "f1b7ac2b6dfff148d03839574d70cedb597db4fd5786ee774ade07cb4a366258",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "bba56bd8bd4140913756b2a99832b44fd1571394605f154fce8cbd8fba0449c0",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "c9a4c5061e94bc6aee60d1ff9d46509077a602ad10c44ccca8c318ae1cf2e898",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "fbba2a969beb81e6c210f201e7f5f406d8d87bae0f16529a702721b4e1c0d215",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "7dc97bdd11905549668886400c90db6b9628c06e66dae7e99519e348ec0e7871",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "e05c19e032d6109bcf3cb20b860803611e63e9879d057c670906b93aca42e51f",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "b69ecbbcd68b055c530d10f524ea6ce6ba8dd5dfe476c3d9d8138743fc6d7e9e",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "b8c8100f479ca57bd9eebb9b1c60acb2a4dd078c9afdeba2bfb07b7969c7cc72",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "6f2ee455b8d2b0fbe9adc4a2655ad1a57cb0ba2282ccf612f098088fe63e5bec",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "9d085165ad4e07a9d181f54f40a37b69043bbfaa15fedfb5b07d3ea92cec9220",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "65a39e3c40802c522a29ef8013d7681886ce6230aa29a70c2fe77c183364f8c3",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "c86dcc69b793e43c415ded9b7ecbe88f730451a796b9ea0adf3e005514660531",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "e9cd7b4d1d06688cae04826413926bc4928f3fb5905efaab6bf54dcf1f6e8794",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "f4063bf47542261b2d8a4e5e99760dabdce749b468a795e8a7e01613dafcf06d",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "4a81c814d762e119a326afc46c8b5c2f5c54baf09e30463b8fe01c66670cd48d",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "0eab438ce3732288245b113509ab9783e3f25a3268b2e372d5efd4c6f2c3e475",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "3992df42ddb3b9b2a00f911915d34bb419996e4c520f50e27ef227f49f2bb112",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "a1ab24afcdfe5225b922885318dfdb07b3ce74c2fd9b33d6e170f9d7e7cb3331",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "45223ae9482f0eab16246a0bf0629d89c92e984c0cc0d6b74a25c8cf6add2ac2",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "c45501a9ec0299c7e1b0b988d1937979880fa451a1d2d82c41c6acff2bebe15b",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "70a083910bdaf20b02ef7b5cda9c56a7f94611b2ffa51358fe41760cade0509e",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "4c2659f757856f2cc82cfa9b65cb86e27c5880deba72e9dc3d216c30dfa8b041",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "03c7f2a472337b3869f9b649ab6d9cedd5347406d1e9dc33b328ec3e3ec7ad59",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "b8c0fb06e840181eeff7c65bc5b052df2149e687a7eb564e1c3f454d8e1b27d2",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "c692beecc0f5b23417417f2208f314b9525e6923057a43b41f7f6e01cb5474e1",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "962a4d8a86c4cd8aa17b059b0ad47a3f8d17f89c4488de7d40cefe70698b9073",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "e43f9f104bcb912b379f63794bf518015cabe233948a11cb28693aa332b6089b",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "9851149c1db059b9dcc8901763a050d46582cf4afefc16be29f3f44618e1f343",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "f5d66bd19504c2463e9543d681c037d08d7f9907aad0c5f736aff247fd034d20",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "ea0d4d71898cc13ffd0303703bedbafd69a522e674ef810ec66c6155a4e674d3",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "016fbf0ab91091d4721b1bce1f544d1c936a112b7f5e3e91143c02a909ea0b23",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "b3af4933a055159d0a629954afaa048eafd103cff85711d8b45cea932c2cf036",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "932caa12c0367dbc2b7be695b611d40639049e0c15606dccfb991324e3a468aa",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "25be000e5a2ab98b96cc73672abdedc4892cf4838ce3d29dd61f8d5e72fca763",
+   "disposition": "restated",
+   "replacement": "row of scripts/ExecutionAxioms.lean after the 52-row re-point",
+   "replacement_module": "ExecutionAxioms"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "102cd85eb21275a7b5084344b037609f37a4e29634305dcd585bc5a32cb32740",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "6a7c848fad3187d511325dc31898447ce744fe61f35cd9f6e3afba773d8e292f",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "25d7fcb58c33e7fb2e21fdf3529919f4833ae6921d86ea6aeaf475ce6fc2eaf1",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.CheckedRowsAudit",
+   "kind": "check",
+   "digest": "9662cefedcedcc983747c28806affec8232c76bcf9eb77452595bcca2bfc995c",
+   "disposition": "restated",
+   "replacement": "moved to Jaune/Check/FrameRunAudit.lean (jsn-u87 proposal)",
+   "replacement_module": "Jaune.Check.FrameRunAudit"
+  },
+  {
+   "module": "Jaune.Check.FrameBridgeAudit",
+   "kind": "check",
+   "digest": "94b620e30986f3c0a31abc4c9c22b9b3b79bd9b1eb4fd4eb91137f670ebd6305",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.Bridge.G2b)"
+  },
+  {
+   "module": "Jaune.Check.FrameBridgeAudit",
+   "kind": "check",
+   "digest": "07ef9c53eb57701463042a22b0a563932a650c4ec2c3b7a3d33b39d85b90b74e",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.Run.Root)"
+  },
+  {
+   "module": "Jaune.Check.FrameBridgeAudit",
+   "kind": "check",
+   "digest": "3cb3470e3f3c70f52d2e9bc49d0abd32b641a3a415d6feab51fd291da2da812c",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.MessageCall.FinalAdequacy)"
+  },
+  {
+   "module": "Jaune.Check.G2bBridgeAudit",
+   "kind": "check",
+   "digest": "2247899864188ca619a297fc14ee5b61baf6ada48253c3ecfe967792f335672d",
+   "disposition": "deleted-with-old-side",
+   "reason": "union audit of a module or namespace deleted with the old side (Jaune.Bridge.Memory)"
+  },
+  {
+   "module": "Jaune.Check.MessageCall",
+   "kind": "guard",
+   "digest": "63143f844346b8dbc1a54c27acff23234ab5e421524debbad9f0c628af97c998",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedMessageCall.lean (jsn-u85: 6 of 6)",
+   "replacement_module": "Jaune.Check.CheckedMessageCall"
+  },
+  {
+   "module": "Jaune.Check.MessageCall",
+   "kind": "guard",
+   "digest": "6a46fc7527d3bab055eb4f4fbd208d3037823c727155b3df8d09fddc74e4912e",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedMessageCall.lean (jsn-u85: 6 of 6)",
+   "replacement_module": "Jaune.Check.CheckedMessageCall"
+  },
+  {
+   "module": "Jaune.Check.MessageCall",
+   "kind": "guard",
+   "digest": "c2b4addb8e4836c036f9de0d014801c48847a192321f923712d3c4b2274a3d09",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedMessageCall.lean (jsn-u85: 6 of 6)",
+   "replacement_module": "Jaune.Check.CheckedMessageCall"
+  },
+  {
+   "module": "Jaune.Check.MessageCall",
+   "kind": "guard",
+   "digest": "9e987fa9eadc01691dfbbf7f6d36a6a93e6f4f7e0794b93e08de77028367f834",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedMessageCall.lean (jsn-u85: 6 of 6)",
+   "replacement_module": "Jaune.Check.CheckedMessageCall"
+  },
+  {
+   "module": "Jaune.Check.MessageCall",
+   "kind": "guard",
+   "digest": "ecb57cbb9b5926cd458adb102078f4e8e2c3598df454be9cd032592bea2c5d0a",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedMessageCall.lean (jsn-u85: 6 of 6)",
+   "replacement_module": "Jaune.Check.CheckedMessageCall"
+  },
+  {
+   "module": "Jaune.Check.MessageCall",
+   "kind": "guard",
+   "digest": "a58292573f83e4df4e99d7217b53ca9e23139af5a16d82985176c769760f1bab",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedMessageCall.lean (jsn-u85: 6 of 6)",
+   "replacement_module": "Jaune.Check.CheckedMessageCall"
+  },
+  {
+   "module": "Jaune.Check.Sufficiency",
+   "kind": "guard",
+   "digest": "79ef88967b72695174ce7cec0620e665a9a7d8756632f0c5f49b146a767db34a",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedSufficiency.lean (jsn-u85: 7 of 7)",
+   "replacement_module": "Jaune.Check.CheckedSufficiency"
+  },
+  {
+   "module": "Jaune.Check.Sufficiency",
+   "kind": "guard",
+   "digest": "96ca70cbb501aae735d98fff452a033abd377c9be16bda48173fef5a072316cb",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedSufficiency.lean (jsn-u85: 7 of 7)",
+   "replacement_module": "Jaune.Check.CheckedSufficiency"
+  },
+  {
+   "module": "Jaune.Check.Sufficiency",
+   "kind": "guard",
+   "digest": "58f0302c1ba2c56e78da2eab84d6e0a2511c9522c1cff15cbf83ab497741a9f2",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedSufficiency.lean (jsn-u85: 7 of 7)",
+   "replacement_module": "Jaune.Check.CheckedSufficiency"
+  },
+  {
+   "module": "Jaune.Check.Sufficiency",
+   "kind": "guard",
+   "digest": "a54ad187aa37d251eb322ca0cee2c797c89a54ccd2ab797981b2a9b78c34161e",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedSufficiency.lean (jsn-u85: 7 of 7)",
+   "replacement_module": "Jaune.Check.CheckedSufficiency"
+  },
+  {
+   "module": "Jaune.Check.Sufficiency",
+   "kind": "guard",
+   "digest": "6495fc6dac4eaf6429d86d4ce5be2d9305df2d2f09caddcb69814035107553f8",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedSufficiency.lean (jsn-u85: 7 of 7)",
+   "replacement_module": "Jaune.Check.CheckedSufficiency"
+  },
+  {
+   "module": "Jaune.Check.Sufficiency",
+   "kind": "guard",
+   "digest": "f4010fbce97d49028b3f9fb467c231c4b72a3277658f01a5d4f4dc5c46ef7cf4",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedSufficiency.lean (jsn-u85: 7 of 7)",
+   "replacement_module": "Jaune.Check.CheckedSufficiency"
+  },
+  {
+   "module": "Jaune.Check.Sufficiency",
+   "kind": "guard",
+   "digest": "7227fcb0939a1fb2c1d6106cbe08bc7eab1c6f0a78d5ee2ca66611df5e4bff60",
+   "disposition": "restated",
+   "replacement": "Jaune/Check/CheckedSufficiency.lean (jsn-u85: 7 of 7)",
+   "replacement_module": "Jaune.Check.CheckedSufficiency"
+  }
+ ],
+ "added": [
+  {
+   "module": "Jaune.Implementation.CheckedCachedDriver",
+   "kind": "attribute",
+   "digest": "57985984415a3569b9acafa75991c16080a5bbb16e9e7e3ca0153acb2361c574",
+   "reason": "the @[csimp] attribute of execFueled_eq_cached, now private (hygiene row, packet 1a)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "9dec497a6678962fa705dadd45dd5182d45461ba6be4e491b1f8a057e056fc7c",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "c07d1891e48f2508fefd2a2e7bfc107a2486247d5090fcde19d87783d3ef8577",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "38405ac17f16d9b944061ee8f263764d64fec73a2c28dd93b8858abc60f44619",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "b545e768da83052affcf07ddd1caca3b6dab775a495f42a0515d73089809616b",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "491356e3554a935b8917965cf8daf0e1da702ea78f524ccb9566d8bfa143890a",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "6f693d660690f60b5adbea26a96990a8912bd7a150a879c764cc01905cf59b24",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "f55a6f30dd50b8d6026f2461fde6b8f1eb54698a4e73877ca3b1587267a9acad",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "3e9ad555eafc4a62a1a23fd0330ab0c7900fe792d3fa38750b5652536b368524",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "4d6a144211d6b0d2a7fa757e9daa5cb8a8a94482f7425e52429cc6766bc97e13",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "65d9298a6354836c8ecec3440b20046b276270a1e7ddd909ee40fe5d98478889",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "da8e26ecd817612611ab0578b90cf0fdf33a8c8e8ca579605ec4c456c267d44b",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "7909e8802e2bde57d6b9f6189c958bb8af53324b90a21aab45f07d10505675ba",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "6d882dfab473dac404a32d5d3c17f0c507ab5bd45ac1c09b142129dea44e1360",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "e885be4bcec2b1643dbff111f6986cc001962cd675bb269c772eb6acddd72b3b",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "8ca03f4e6399fb8ed218fa50c8bfbb6ed8f532a8d6ac187ddd819bef0410e05f",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "c6bc83ab01e616fd04898cde1947c8953573d6470b465913cbe1208960eab29a",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "7ab7f52ebb736416cbb78c0d8d66e6b64e1c9fa8b95a1e7141b523cc9636a6be",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "241fc10141d5b31c31b87653a5a137ea675fbd68fec55932ff4e7ea31dc4bc24",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "f1b7ac2b6dfff148d03839574d70cedb597db4fd5786ee774ade07cb4a366258",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "bba56bd8bd4140913756b2a99832b44fd1571394605f154fce8cbd8fba0449c0",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "c9a4c5061e94bc6aee60d1ff9d46509077a602ad10c44ccca8c318ae1cf2e898",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "fbba2a969beb81e6c210f201e7f5f406d8d87bae0f16529a702721b4e1c0d215",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "7dc97bdd11905549668886400c90db6b9628c06e66dae7e99519e348ec0e7871",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "e05c19e032d6109bcf3cb20b860803611e63e9879d057c670906b93aca42e51f",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "64e1e3054946b446929cc6e32ac30dd5967b47c23cf039662dc67a99c579c4f7",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "b8c8100f479ca57bd9eebb9b1c60acb2a4dd078c9afdeba2bfb07b7969c7cc72",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "6f2ee455b8d2b0fbe9adc4a2655ad1a57cb0ba2282ccf612f098088fe63e5bec",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "9d085165ad4e07a9d181f54f40a37b69043bbfaa15fedfb5b07d3ea92cec9220",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "65a39e3c40802c522a29ef8013d7681886ce6230aa29a70c2fe77c183364f8c3",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "c86dcc69b793e43c415ded9b7ecbe88f730451a796b9ea0adf3e005514660531",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "e9cd7b4d1d06688cae04826413926bc4928f3fb5905efaab6bf54dcf1f6e8794",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "f4063bf47542261b2d8a4e5e99760dabdce749b468a795e8a7e01613dafcf06d",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "4a81c814d762e119a326afc46c8b5c2f5c54baf09e30463b8fe01c66670cd48d",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "0eab438ce3732288245b113509ab9783e3f25a3268b2e372d5efd4c6f2c3e475",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "3992df42ddb3b9b2a00f911915d34bb419996e4c520f50e27ef227f49f2bb112",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "a1ab24afcdfe5225b922885318dfdb07b3ce74c2fd9b33d6e170f9d7e7cb3331",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "45223ae9482f0eab16246a0bf0629d89c92e984c0cc0d6b74a25c8cf6add2ac2",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "c45501a9ec0299c7e1b0b988d1937979880fa451a1d2d82c41c6acff2bebe15b",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "70a083910bdaf20b02ef7b5cda9c56a7f94611b2ffa51358fe41760cade0509e",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "4c2659f757856f2cc82cfa9b65cb86e27c5880deba72e9dc3d216c30dfa8b041",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "03c7f2a472337b3869f9b649ab6d9cedd5347406d1e9dc33b328ec3e3ec7ad59",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "b8c0fb06e840181eeff7c65bc5b052df2149e687a7eb564e1c3f454d8e1b27d2",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "c692beecc0f5b23417417f2208f314b9525e6923057a43b41f7f6e01cb5474e1",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "962a4d8a86c4cd8aa17b059b0ad47a3f8d17f89c4488de7d40cefe70698b9073",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "e43f9f104bcb912b379f63794bf518015cabe233948a11cb28693aa332b6089b",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "9851149c1db059b9dcc8901763a050d46582cf4afefc16be29f3f44618e1f343",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "f5d66bd19504c2463e9543d681c037d08d7f9907aad0c5f736aff247fd034d20",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "ea0d4d71898cc13ffd0303703bedbafd69a522e674ef810ec66c6155a4e674d3",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "016fbf0ab91091d4721b1bce1f544d1c936a112b7f5e3e91143c02a909ea0b23",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "b3af4933a055159d0a629954afaa048eafd103cff85711d8b45cea932c2cf036",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "932caa12c0367dbc2b7be695b611d40639049e0c15606dccfb991324e3a468aa",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "ExecutionAxioms",
+   "kind": "check",
+   "digest": "25be000e5a2ab98b96cc73672abdedc4892cf4838ce3d29dd61f8d5e72fca763",
+   "reason": "destination row re-pointed per user decision jsn-g2b-u78-accept (u94 packet section 2)"
+  },
+  {
+   "module": "Jaune.Check.CheckedFactPorts",
+   "kind": "check",
+   "digest": "d9eb962793bc1ff92d441ecff2a7d62db18af4d5518762f40b213ebe28704b32",
+   "reason": "axiom row of a G2b port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d)"
+  },
+  {
+   "module": "Jaune.Check.CheckedFactPorts",
+   "kind": "check",
+   "digest": "b786c5bf2ef99aee52909e35ef59af9d8b6cd768f431666c437837ae49acdd69",
+   "reason": "axiom row of a G2b port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d)"
+  },
+  {
+   "module": "Jaune.Check.CheckedFactPorts",
+   "kind": "check",
+   "digest": "c6361e9e3abd0d83d4f152a50d6b703986f387d705419ce5f642e2e070461028",
+   "reason": "axiom row of a G2b port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d)"
+  },
+  {
+   "module": "Jaune.Check.CheckedFactPorts",
+   "kind": "check",
+   "digest": "69e3afc938df148ef76a1af6ebffa538df9893c686417fc0822e121cabf75d4d",
+   "reason": "axiom row of a G2b port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d)"
+  },
+  {
+   "module": "Jaune.Check.CheckedFactPorts",
+   "kind": "check",
+   "digest": "e3758df8faf175727184fd48c8ab876ad603eaed77b8b65206eef34a6761000d",
+   "reason": "axiom row of a G2b port requested by the M1 Blanc-ledger re-cite (commit f00b9c9d)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "ac765340f304162c63bc85d7d5ef09e1c6e4e98501309468cbd9de4e9a453371",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "899cd99d5dc93fffef33deeae48fe955715e665e3417b6d475dd69e8f4c60428",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "db2a240b3b1e825e900862489c11478fe7a154379ebb5b352d92bdea95e4a6fa",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "20ae174fcbc56874f961c5e4a5c7c5c6ff5701cc3d14a491fdcd58e173e357ab",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "d4ee5e61114a3062495241799c4f1d37b25f852d78bd069a3ea518f9a7d50f93",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "51ba9a2f39e06e8c6c975e2c9c5351c029665336510d633e56c3734690113272",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "e66643a1b33f8f00cd5038ce9444a6c69b3b9d106b1f418354c81338e02a5822",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "b69ecbbcd68b055c530d10f524ea6ce6ba8dd5dfe476c3d9d8138743fc6d7e9e",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "102cd85eb21275a7b5084344b037609f37a4e29634305dcd585bc5a32cb32740",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "6a7c848fad3187d511325dc31898447ce744fe61f35cd9f6e3afba773d8e292f",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "25d7fcb58c33e7fb2e21fdf3529919f4833ae6921d86ea6aeaf475ce6fc2eaf1",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  },
+  {
+   "module": "Jaune.Check.FrameRunAudit",
+   "kind": "check",
+   "digest": "9662cefedcedcc983747c28806affec8232c76bcf9eb77452595bcca2bfc995c",
+   "reason": "moved from the deleted Check/CheckedRowsAudit (jsn-u87 proposal)"
+  }
+ ]
+}

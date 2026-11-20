@@ -408,7 +408,7 @@ def execFueledCached (r : Frame.Running) (fuel : Nat) : Fueled Fault Frame.Exit 
 
 /-- The driver is its cached twin, and the compiled-code substitution: code compiled with this
 in scope runs `execFueledCached` wherever it calls `execFueled`. -/
-@[csimp] theorem execFueled_eq_cached :
+@[csimp] private theorem execFueled_eq_cached :
     execFueled = execFueledCached := by
   funext r fuel
   symm

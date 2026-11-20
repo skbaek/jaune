@@ -45,7 +45,7 @@ def rows(path):
 
 
 def public_rules(path):
-    """Fully qualified public theorems/lemmas and Exec-valued defs of a module."""
+    """Fully qualified public theorems/lemmas and Frame.Run-valued defs of a module."""
     text = source_text(path)
     events = sorted([(m.start(), "scope", m) for m in SCOPE.finditer(text)] +
                     [(m.start(), "decl", m) for m in DECL.finditer(text)],
@@ -69,7 +69,7 @@ def public_rules(path):
         end = min(s for s in starts if s > pos)
         header = re.split(r":=|\n\s*\|", text[pos:end], maxsplit=1)[0]
         rule = match["kind"] in ("theorem", "lemma") or (
-            match["kind"] == "def" and re.search(r"\bExec\b", header))
+            match["kind"] == "def" and re.search(r"\bFrame\.Run\b", header))
         if rule:
             prefix = [p for _, parts in stack for p in parts]
             result.append(".".join(prefix + [match["name"]]))

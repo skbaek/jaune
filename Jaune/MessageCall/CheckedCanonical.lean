@@ -560,7 +560,16 @@ theorem enterWith_canonical {f : Frame} (hf : f.Canonical) (start : Frame.State)
   · trivial
   · rename_i world hw
     have hi : Frame.Running.Canonical (Frame.entered f start world) :=
-      ⟨hf.2, Jaune.Message.transfer_canonical (m := f.message.toLegacy) (Frame.enteredWorld_canonical hf) hw⟩
+      ⟨hf.2, by
+        have h := Frame.enteredWorld_canonical hf
+        unfold Message.transfer at hw
+        split at hw
+        · split at hw
+          · nomatch hw
+          · rename_i w1 h1
+            cases hw
+            exact World.Canonical.addBalance (World.Canonical.subtractBalance h h1) _ _
+        · cases hw; exact h⟩
     split
     · split
       · rename_i hp

@@ -8,8 +8,9 @@ the checked interpreter's own types: a running frame and its message, a checked 
 its entry, a frame's exit or fault, a settled frame result, and the caller's resumption after its
 child. The serialiser `Jaune.MessageCall.CheckedTraceJson` reads them.
 
-`Jaune.Bridge.G2b.CheckedTrace` projects each event onto the `Devm` tracer's event vocabulary and
-proves that the serialised stream is unchanged. This module sits outside `Jaune.lean`'s import
+At the `gate/g2b` tag the bridge `Jaune.Bridge.G2b.CheckedTrace` projected each event onto the
+`Devm` tracer's event vocabulary and proved the serialised stream unchanged; the bridge was deleted
+with the `Devm` tracer after the tag (bridge ledger, gate G2b). This module sits outside `Jaune.lean`'s import
 closure.
 -/
 

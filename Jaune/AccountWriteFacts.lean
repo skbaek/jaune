@@ -61,34 +61,4 @@ theorem State.protected_iff_hasCodeOrNonce (w : State) (a : Address) :
   · exact decide_eq_true_iff.symm
   · simp only [ByteArray.isEmpty, beq_eq_false_iff_ne, ne_eq]
 
-theorem State.Protected.creditBeneficiary {d : Devm} {a : Address} (hp : d.state.Protected a)
-    (rules : ForkRules) (donee : Address) (value : U256) :
-    (d.creditBeneficiary rules donee value).state.Protected a := by
-  unfold Devm.creditBeneficiary
-  split
-  · exact hp.setBal donee _
-  · change (d.state.setPresent donee _).Protected a
-    unfold State.Protected at hp ⊢
-    by_cases same : donee = a
-    · subst a
-      rw [State.get_setPresent_self]
-      exact hp
-    · rw [State.get_setPresent_ne _ same]
-      exact hp
-
-theorem Devm.creditBeneficiary_storage_of_protected (rules : ForkRules) (donee : Address)
-    (value : U256) (d : Devm) (a : Address) (hp : d.state.Protected a) :
-    (d.creditBeneficiary rules donee value).getStor a = d.getStor a := by
-  unfold Devm.creditBeneficiary
-  split
-  · exact State.setBal_storage_of_protected hp
-  · change ((d.state.setPresent donee
-      ((d.state.get donee).withBalance (d.state.bal donee + value))).get a).storage =
-        (d.state.get a).storage
-    by_cases same : donee = a
-    · subst a
-      rw [State.get_setPresent_self]
-      rfl
-    · rw [State.get_setPresent_ne _ same]
-
 end Jaune

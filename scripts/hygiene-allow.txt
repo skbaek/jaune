@@ -6,8 +6,7 @@
 # neither a stray dbg_trace or sorry nor a new axiom, opaque, @[extern],
 # @[implemented_by], partial def, unsafe or native_decide can enter unnoticed.
 #
-# This file carries EXACTLY ONE entry (two while G2b of goal
-# `jaune-shape-and-names-v1` keeps both interpreters; see the second entry), and that is the point: TRUSTED.md's
+# This file carries EXACTLY ONE entry, and that is the point: TRUSTED.md's
 # account of what Jaune does not use is a gate rather than a fact about a
 # moment. An entry here is a hole in that account, so adding one is a decision
 # to be argued for, not a way to make the gate quiet. If prose trips the gate,
@@ -21,7 +20,7 @@
 # WHAT IT CARRIES. The proposition is `execFueled = execFueledCached`, a fully
 # proved theorem, not an assertion. Its proof is `execFueledCachedCore_fst`,
 # which chains up from `CalldataCache.get_fst` through `genericCall.stepCached_fst`,
-# `MessageOp.stepCached_fst`, `NextOp.stepCached_fst` and `Evm.stepCached_fst`. The
+# `MessageOp.stepCached_fst`, `NextOp.stepCached_fst` and `stepCached_fst`. The
 # cache structure itself carries a proof field
 # `valid : calldata = key.data.sliceD key.inputIndex key.inputSize 0`, erased by
 # code generation, so a cache hit is definitionally accountable to the ordinary
@@ -40,20 +39,4 @@
 # the trust surface's gate, so this fact belongs on it. Listing it also means a
 # SECOND `@[csimp]` anywhere under the scanned source fails the gate and has to
 # be argued for here.
-Jaune/Implementation/CachedDriver.lean @[csimp] private theorem execFueled_eq_cached :
-
-# `@[csimp] Checked.execFueled_eq_cached` — the same substitution for the
-# checked interpreter (goal `jaune-shape-and-names-v1`, G2b). TEMPORARY SECOND
-# ENTRY: it lives from the commit that wires the checked cached driver into
-# `Jaune.MessageCall.CheckedExec` until the delete commit removes the `Devm`
-# interpreter and the entry above with it; after the rename the remaining row
-# names `Jaune/Implementation/CachedDriver.lean` again.
-#
-# WHAT IT CARRIES. `execFueled = execFueledCached` over `Checked.Frame.Running`,
-# fully proved by `execFueledCachedCore_fst`, with the same proof-carrying cache
-# (`valid : calldata = key.data.sliceD key.inputIndex key.inputSize 0`).
-#
-# WHY IT IS ALLOWED. The production switch moves `scripts/check-memory-probe.sh`
-# onto `Checked.exec`; without this substitution the checked probe runs over the
-# 256 MiB budget at depth 1024 with a one-megabyte input.
-Jaune/Implementation/CheckedCachedDriver.lean @[csimp] theorem execFueled_eq_cached :
+Jaune/Implementation/CheckedCachedDriver.lean @[csimp] private theorem execFueled_eq_cached :

@@ -463,258 +463,6 @@ real top-frame meters and world.  A successful delegation phase commits its
 state gas; a later preparation failure restores the transaction-entry
 reservoir and world. -/
 
-abbrev AmsterdamDelegationResult := Devm × AdrSet × AdrSet
-
-def chargeNewAuthorityAmsterdam (state : StateGasRules)
-    (authority : Address) (devm : Devm) : Execution :=
-  if ¬ AccountExists devm.state authority then
-    chargeStateGas state.newAccount devm
-  else .ok devm
-
-def chargePaidAccountWriteAmsterdam (state : StateGasRules)
-    (authority : Address) (devm : Devm) (paidWrites : AdrSet) :
-    Except (EvmError × Devm) (Devm × AdrSet) :=
-  if paidWrites.contains authority then
-    .ok ⟨devm, paidWrites⟩
-  else do
-    let devm ← chargeGas state.accountWrite devm
-    .ok ⟨devm, paidWrites.insert authority⟩
-
-def chargeAuthBaseAmsterdam (state : StateGasRules) (msg : Msg)
-    (authority target : Address) (devm : Devm) (delegationSetFor : AdrSet) :
-    Except (EvmError × Devm) (Devm × AdrSet × ByteArray) :=
-  if target = 0 then
-    .ok ⟨devm, delegationSetFor, .empty⟩
-  else do
-    let delegatedBeforeTx :=
-      isValidDelegation (msg.benv.stat.origState.getCode authority)
-    let devm ←
-      if ¬ delegatedBeforeTx && ¬ delegationSetFor.contains authority then
-        chargeStateGas state.authBase devm
-      else .ok devm
-    .ok ⟨devm, delegationSetFor.insert authority,
-      (eoaDelegationMarker ++ target.toBytes).toByteArray⟩
-
-def applyValidatedDelegationAmsterdam (state : StateGasRules)
-    (msg : Msg) (authority target : Address) (devm : Devm)
-    (paidWrites delegationSetFor : AdrSet) :
-    Except (EvmError × Devm) AmsterdamDelegationResult := do
-  let devm ← chargeNewAuthorityAmsterdam state authority devm
-  let (⟨devm, paidWrites⟩ : Devm × AdrSet) ←
-    chargePaidAccountWriteAmsterdam state authority devm paidWrites
-  let (⟨devm, delegationSetFor, codeToSet⟩ :
-      Devm × AdrSet × ByteArray) ←
-    chargeAuthBaseAmsterdam state msg authority target devm delegationSetFor
-  let devm := (devm.setCode authority codeToSet).incrNonce authority
-  .ok ⟨devm, paidWrites, delegationSetFor⟩
-
-def setDelegationAmsterdamStep (state : StateGasRules) (msg : Msg)
-    (auth : Authorization) (devm : Devm) (paidWrites delegationSetFor : AdrSet) :
-    Except (EvmError × Devm) AmsterdamDelegationResult := do
-  if auth.chainId != msg.benv.stat.chainId.toU256 && auth.chainId != 0 then
-    .ok ⟨devm, paidWrites, delegationSetFor⟩
-  else if auth.nonce = UInt64.max then
-    .ok ⟨devm, paidWrites, delegationSetFor⟩
-  else
-    match recoverAuthority auth with
-    | .error (.invalidSignature _) =>
-      .ok ⟨devm, paidWrites, delegationSetFor⟩
-    | .error err => .error ⟨.crypto err, devm⟩
-    | .ok authority =>
-      -- Recovery warms the authority even when a later validity check skips
-      -- the tuple, and `get_account(authority)` reads it (EIP-7928).
-      let devm := addAccessedAddress devm authority
-      let devm := devm.balReadAccount msg.benv.stat.rules authority
-      let authorityAccount := devm.state.get authority
-      if ¬ (authorityAccount.code.isEmpty ∨
-          isValidDelegation authorityAccount.code) then
-        .ok ⟨devm, paidWrites, delegationSetFor⟩
-      else if authorityAccount.nonce != auth.nonce then
-        .ok ⟨devm, paidWrites, delegationSetFor⟩
-      else
-        applyValidatedDelegationAmsterdam state msg authority auth.address
-          devm paidWrites delegationSetFor
-
-def setDelegationAmsterdamLoop (state : StateGasRules) (msg : Msg) :
-    List Authorization → Devm → AdrSet → AdrSet →
-      Except (EvmError × Devm) AmsterdamDelegationResult
-  | [], devm, paidWrites, delegationSetFor =>
-    .ok ⟨devm, paidWrites, delegationSetFor⟩
-  | auth :: auths, devm, paidWrites, delegationSetFor => do
-    let ⟨devm, paidWrites, delegationSetFor⟩ ←
-      setDelegationAmsterdamStep state msg auth devm paidWrites delegationSetFor
-    setDelegationAmsterdamLoop state msg auths devm paidWrites delegationSetFor
-
-def setDelegationAmsterdam (state : StateGasRules) (msg : Msg)
-    (devm : Devm) : Execution := do
-  let paidWrites := {msg.caller}
-  let paidWrites :=
-    if msg.target.isNone || msg.value != 0 then
-      paidWrites.insert msg.currentTarget
-    else paidWrites
-  let ⟨devm, _, _⟩ ← setDelegationAmsterdamLoop state msg
-    msg.tenv.stat.auths devm paidWrites .emptyWithCapacity
-  .ok devm
-
-def preparedTopLevelMessage (msg : Msg) (devm : Devm) : Msg :=
-  { msg with
-    benv := {
-      msg.benv with
-      state := devm.state
-      createdAccounts := devm.createdAccounts
-      storageWrites := devm.world.storageWrites
-    }
-    tenv := {msg.tenv with transientStorage := devm.transientStorage}
-    accessedAddresses := devm.accessedAddresses
-    accessedStorageKeys := devm.accessedStorageKeys
-  }
-
-def resolveTopLevelCallAmsterdam (msg : Msg) (devm : Devm) :
-    Except (EvmError × Devm) (Msg × Devm) := do
-  let ⟨delegated, codeAddress, accessCost⟩ :=
-    msg.benv.stat.rules.delegationCost devm msg.currentTarget
-  let devm ← chargeGas accessCost devm
-  let ⟨code, devm⟩ := completeDelegationAccess devm delegated codeAddress
-  -- `create_evm`: `get_account(code_address)` is a read (EIP-7928).
-  let devm := devm.balReadAccount msg.benv.stat.rules codeAddress
-  let msg := preparedTopLevelMessage msg devm
-  .ok ⟨{
-    msg with
-    codeAddress := some codeAddress
-    code := code
-    disablePrecompiles := delegated
-  }, devm⟩
-
-def dispatchTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
-    (devm : Devm) : Except (EvmError × Devm) (Msg × Devm) := do
-  -- `create_evm` reads the current target on both branches --
-  -- `account_deployable`/`get_pre_state_account` for a creation,
-  -- `resolve_delegated_code_address`'s `get_account(recipient)` for a call
-  -- (EIP-7928).
-  let devm := devm.balReadAccount msg.benv.stat.rules msg.currentTarget
-  if msg.target.isNone then
-    let isCollision :=
-      accountHasCodeOrNonce devm.state msg.currentTarget
-    if isCollision then
-      .error ⟨.halt (.addressCollision .none), devm⟩
-    else do
-      let devm ←
-        if (msg.benv.stat.origState.get msg.currentTarget).isEmpty then
-          chargeStateGas state.newAccount devm
-        else .ok devm
-      .ok ⟨preparedTopLevelMessage msg devm, devm⟩
-  else do
-    let devm ←
-      if msg.value != 0 && decide (devm.state.get msg.currentTarget).isEmpty then
-        chargeStateGas state.newAccount devm
-      else .ok devm
-    resolveTopLevelCallAmsterdam msg devm
-
-def finishTopLevelAmsterdam (state : StateGasRules) (msg : Msg)
-    (devm : Devm) : Except (EvmError × Devm) (Msg × Devm) :=
-  let devm :=
-    if msg.tenv.stat.auths.isEmpty then devm else devm.commitStateGas
-  dispatchTopLevelAmsterdam state msg devm
-
-/-- Build the machine a top-level Amsterdam message call starts from: the
-initial `Devm`, then the authorization tuples of an EIP-7702 transaction, then
-the state-gas commit and the creation/call dispatch that `create_evm` performs.
-Amsterdam-only: the pre-Amsterdam lane (`rules.stateGas = none`) never reaches
-it, and `processTopLevelAmsterdam` is its only caller outside the guards. -/
-def prepareTopLevelAmsterdam (state : StateGasRules) (msg : Msg) :
-    Except (EvmError × Devm) (Msg × Devm) := do
-  let devm := initDevm msg
-  let devm ←
-    if msg.tenv.stat.auths.isEmpty then .ok devm
-    else setDelegationAmsterdam state msg devm
-  finishTopLevelAmsterdam state msg devm
-
-/-- Top-level resolution warms the delegate without a nested-call surcharge. -/
-def TopLevel.resolveCodeDelegation (msg : Msg) : Msg :=
-  match msg.benv.stat.rules.delegatedCodeAddress msg.code with
-  | none => msg
-  | some address =>
-    { msg with
-      disablePrecompiles := true
-      accessedAddresses := msg.accessedAddresses.insert address
-      code := msg.benv.state.getCode address
-      codeAddress := some address }
-
-theorem TopLevel.resolveCodeDelegation_disabled (msg : Msg)
-    (h : msg.benv.stat.rules.delegationEnabled = false) :
-    (TopLevel.resolveCodeDelegation msg) = msg := by
-  simp only [TopLevel.resolveCodeDelegation, ForkRules.delegatedCodeAddress_disabled h msg.code]
-
-theorem TopLevel.resolveCodeDelegation_enabled (msg : Msg)
-    (h : msg.benv.stat.rules.delegationEnabled = true) :
-    (TopLevel.resolveCodeDelegation msg) =
-      (match getDelegatedCodeAddress msg.code with
-      | none => msg
-      | some address =>
-        { msg with
-          disablePrecompiles := true
-          accessedAddresses := msg.accessedAddresses.insert address
-          code := msg.benv.state.getCode address
-          codeAddress := some address }) := by
-  simp only [TopLevel.resolveCodeDelegation, ForkRules.delegatedCodeAddress_enabled h]
-
-theorem TopLevel.resolveCodeDelegation_canonical {msg : Msg} (h : msg.Canonical) :
-    (TopLevel.resolveCodeDelegation msg).Canonical := by
-  unfold TopLevel.resolveCodeDelegation
-  split <;> exact h
-
-/-- Ordinary top-level authorization follows the active fork's delegation rule. -/
-def TopLevel.applyAuthorizations (msg : Msg) : Except EvmError (Msg × Nat) :=
-  if !msg.benv.stat.rules.delegationEnabled || msg.tenv.stat.auths.isEmpty then
-    .ok ⟨msg, 0⟩
-  else do
-    let ⟨delegated, refund⟩ ← setDelegation msg
-    .ok ⟨delegated, refund.toNat⟩
-
-theorem TopLevel.applyAuthorizations_disabled (msg : Msg)
-    (h : msg.benv.stat.rules.delegationEnabled = false) :
-    applyAuthorizations msg = .ok ⟨msg, 0⟩ := by
-  simp only [applyAuthorizations, h, Bool.not_false, Bool.true_or, ↓reduceIte]
-
-theorem TopLevel.applyAuthorizations_enabled (msg : Msg)
-    (h : msg.benv.stat.rules.delegationEnabled = true) :
-    applyAuthorizations msg =
-      (if msg.tenv.stat.auths.isEmpty then .ok ⟨msg, 0⟩ else do
-        let ⟨delegated, refund⟩ ← setDelegation msg
-        .ok ⟨delegated, refund.toNat⟩) := by
-  simp only [applyAuthorizations, h, Bool.not_true, Bool.false_or]
-
-/-- The ordinary top-level authorization leaves a message with a code address: an
-unchanged message keeps its own, and `setDelegation` fails closed without one. -/
-theorem TopLevel.applyAuthorizations_codeAddress {msg : Msg} {q : Msg × Nat}
-    (h : applyAuthorizations msg = .ok q) (hc : msg.codeAddress ≠ none) :
-    q.1.codeAddress ≠ none := by
-  unfold applyAuthorizations at h
-  split at h
-  · cases h; exact hc
-  · obtain ⟨pair, hpair, h⟩ := Except.bind_eq_ok h
-    cases h
-    unfold setDelegation at hpair
-    obtain ⟨⟨m, r⟩, -, hpair⟩ := Except.bind_eq_ok hpair
-    dsimp only at hpair
-    split at hpair
-    · simp [bind, Except.bind] at hpair
-    · rename_i ca hca
-      simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq] at hpair
-      subst hpair
-      simp [hca]
-
-theorem TopLevel.applyAuthorizations_canonical {msg : Msg}
-    (h : msg.Canonical) {p} (hp : applyAuthorizations msg = .ok p) :
-    p.1.Canonical := by
-  unfold applyAuthorizations at hp
-  split at hp
-  · cases hp; exact h
-  · obtain ⟨pair, hpair, hp⟩ := Except.bind_eq_ok hp
-    cases hp
-    exact setDelegation_canonical h hpair
-
-
 def Transaction.isEip4844 (tx : Transaction) : Bool :=
   match tx.type with
   | .eip4844 _ _ _ _ _ _ _ => true
@@ -992,43 +740,6 @@ instance {bout : BlockOutput} : Decidable bout.LegacyGasAccounting := by
 -- Splitting the executable stages makes successful runs easier to invert in
 -- proofs without unfolding the whole checker at once.
 
-def checkTransactionGasLimits
-    (benv : Benv) (blockOut : BlockOutput) (tx : Transaction) :
-    Except TransactionValidationError Nat :=
-  let executionGasAvailable := benv.stat.blockGasLimit - blockOut.blockGasUsed
-  let blobGasAvailable := benv.stat.rules.blob.max - blockOut.blobGasUsed
-  let executionGasRequired :=
-    match benv.stat.rules.stateGas with
-    | none => tx.gasLimit
-    | some _ => min (benv.stat.rules.tx.maxGas.getD tx.gasLimit) tx.gasLimit
-  if executionGasRequired > executionGasAvailable then
-    .error <| .gasAllowanceExceeded <| .text
-      s!"transaction execution gas = {executionGasRequired} > \
-         block execution gas available = {executionGasAvailable}"
-  else
-    match benv.stat.rules.stateGas with
-    | some _ =>
-      let stateGasAvailable :=
-        benv.stat.blockGasLimit - blockOut.blockStateGasUsed
-      if tx.gasLimit > stateGasAvailable then
-        .error <| .gasAllowanceExceeded <| .text
-          s!"transaction state gas = {tx.gasLimit} > \
-             block state gas available = {stateGasAvailable}"
-      else
-        let txBlobGasUsed := getTotalBlobGas tx
-        if txBlobGasUsed > blobGasAvailable then
-          .error <| .type3BlobCountExceeded <| .text
-            s!"blob gas used = {txBlobGasUsed} > \
-               blob gas available = {blobGasAvailable}"
-        else .ok txBlobGasUsed
-    | none =>
-      let txBlobGasUsed := getTotalBlobGas tx
-      if txBlobGasUsed > blobGasAvailable then
-        .error <| .type3BlobCountExceeded <| .text
-          s!"blob gas used = {txBlobGasUsed} > \
-             blob gas available = {blobGasAvailable}"
-      else .ok txBlobGasUsed
-
 def checkTransactionDynamicGasFee
     (baseFeePerGas gas maxPriorityFee maxFee : Nat) :
     Except TransactionValidationError (Nat × Nat) :=
@@ -1066,23 +777,6 @@ def checkTransactionLegacyGasFee
     else
       .ok ⟨gasPrice, maxGasFee⟩
 
-def checkTransactionGasFee (benv : Benv) (tx : Transaction) :
-    Except TransactionValidationError (Nat × Nat) :=
-  match tx.type with
-  | .legacy gasPrice _ =>
-    checkTransactionLegacyGasFee benv.stat.baseFeePerGas tx.gasLimit gasPrice
-  | .eip2930 _ gasPrice _ _ =>
-    checkTransactionLegacyGasFee benv.stat.baseFeePerGas tx.gasLimit gasPrice
-  | .eip1559 _ maxPriorityFee maxFee _ _ =>
-    checkTransactionDynamicGasFee benv.stat.baseFeePerGas tx.gasLimit
-      maxPriorityFee maxFee
-  | .eip4844 _ maxPriorityFee maxFee _ _ _ _ =>
-    checkTransactionDynamicGasFee benv.stat.baseFeePerGas tx.gasLimit
-      maxPriorityFee maxFee
-  | .eip7702 _ maxPriorityFee maxFee _ _ _ =>
-    checkTransactionDynamicGasFee benv.stat.baseFeePerGas tx.gasLimit
-      maxPriorityFee maxFee
-
 /-- Enforce the fork's per-transaction blob-count limit, when one is active. -/
 def checkTransactionBlobCount (limits : TransactionLimits)
     (blobHashes : List U256) : Except TransactionValidationError Unit :=
@@ -1095,30 +789,6 @@ def checkTransactionBlobCount (limits : TransactionLimits)
            {blobHashes.length} blobs > maximum = {maxBlobCount}"
     else
       .ok ()
-
-def checkTransactionBlobData
-    (benv : Benv) (tx : Transaction) (maxGasFee : Nat) :
-    Except TransactionValidationError (Nat × List U256) :=
-  match tx.type with
-  | .eip4844 _ _ _ _ _ maxBlobFee blobHashes => do
-    if blobHashes.isEmpty then
-      .error <| .type3ZeroBlobs <| .text "no blob hashes in type-3 transaction"
-    checkTransactionBlobCount benv.stat.rules.tx blobHashes
-    -- P0.6 item 3: the version byte is read through the total `head?`, never a
-    -- partial index into the fixed 32-byte hash encoding.
-    if List.any blobHashes (λ bvh => bvh.toBytes.head? ≠ some versionedHashVersionKzg) then
-      .error <| .type3InvalidBlobVersionedHash <| .text
-        s!"a blob versioned hash has \
-           a version byte other than {versionedHashVersionKzg}"
-    else
-      let blobGasPrice :=
-        getBaseFeePerBlobGas benv.stat.rules.blob benv.stat.excessBlobGas
-      if maxBlobFee < blobGasPrice then
-        .error <| .insufficientMaxFeePerBlobGas <|
-          .text "insufficient max fee per blob gas"
-      else
-        .ok ⟨maxGasFee + getTotalBlobGas tx * maxBlobFee, blobHashes⟩
-  | _ => .ok ⟨maxGasFee, []⟩
 
 def checkTransactionReceiver (tx : Transaction) : Except TransactionValidationError Unit :=
   if tx.isEip4844 then
@@ -1156,23 +826,6 @@ theorem recoverSender_error_of_wide_legacy_v (chainId : UInt64) (tx : Transactio
       | none => exact ⟨_, rfl⟩
       | some hash =>
         simp [Option.toExcept, h1, h2, Except.assert]
-
-/-- EIP-155 chain check. A legacy `v` below 35 or encoding a chain identifier
-wider than 64 bits is left to `recoverSender`, which refuses it as a bad
-signature (`recoverSender_error_of_wide_legacy_v`), the pinned `chain_id`'s
-`InvalidSignatureError("bad v")`. -/
-def checkTransactionChainId (benv : Benv) (tx : Transaction) : Except TransactionValidationError Unit :=
-  match tx.type with
-  | .legacy _ _ =>
-    if tx.v < 35 || 2 ^ 64 ≤ (tx.v - 35) / 2 || (tx.v - 35) / 2 = benv.stat.chainId.toNat then .ok ()
-    else .error <| .invalidChainId <| .text
-      s!"transaction chain ID = {(tx.v - 35) / 2}"
-  | .eip2930 chainId _ _ _
-  | .eip1559 chainId _ _ _ _
-  | .eip4844 chainId _ _ _ _ _ _
-  | .eip7702 chainId _ _ _ _ _ =>
-    if chainId = benv.stat.chainId then .ok ()
-    else .error <| .invalidChainId <| .text s!"transaction chain ID = {chainId}"
 
 def checkTransactionSenderCode (senderAccount : Account) :
     Except TransactionValidationError Unit :=
@@ -1249,33 +902,6 @@ theorem checkTransactionSenderAccountFor_error (rules : ForkRules)
     (h : checkTransactionSenderAccount senderAccount tx maxGasFee = .error error) :
     checkTransactionSenderAccountFor rules senderAccount tx maxGasFee = .error error := by
   simp only [checkTransactionSenderAccountFor, h, Bind.bind, Except.bind]
-
-/-- The whole transaction admission check. Its carrier is the transition union
-because it joins two typed channels: every rule above is a
-`TransactionValidationError`, while sender recovery reports on the cryptographic
-channel and is the one reason here that is not a validation rule. -/
-def checkTransaction (benv : Benv) (blockOut : BlockOutput) (tx : Transaction) :
-    Except TransitionError (Address × Nat × List U256 × Nat) := do
-  let txBlobGasUsed ←
-    Except.mapError .transaction (checkTransactionGasLimits benv blockOut tx)
-  Except.mapError TransitionError.transaction (checkTransactionChainId benv tx)
-  let senderAddress ←
-    Except.mapError .senderRecovery (recoverSender benv.stat.chainId tx)
-  let senderAccount := benv.state.get senderAddress
-  let ⟨effectiveGasPrice, maxGasFee⟩ ←
-    Except.mapError .transaction (checkTransactionGasFee benv tx)
-  let ⟨maxGasFee, blobVersionedHashes⟩ ←
-    Except.mapError .transaction (checkTransactionBlobData benv tx maxGasFee)
-  Except.mapError TransitionError.transaction (checkTransactionReceiver tx)
-  Except.mapError TransitionError.transaction (checkTransactionAuthorizationList tx)
-  Except.mapError TransitionError.transaction
-    (checkTransactionSenderAccountFor benv.stat.rules senderAccount tx maxGasFee)
-  .ok ⟨
-    senderAddress,
-    effectiveGasPrice,
-    blobVersionedHashes,
-    txBlobGasUsed
-  ⟩
 
 /-- Prague's intrinsic-cost switches: 16-gas nonzero bytes, calldata floor on,
 coinbase pre-warmed. -/
@@ -1608,51 +1234,6 @@ theorem BlockOutput.LegacyGasAccounting.withGasSettlement
   simp only [BlockOutput.withGasSettlement]
   omega
 
-def prepareMessage (benv: Benv) (tenv: Tenv) (tx: Transaction) :
-  Except TransitionError Msg := do
-  let ⟨currentTarget, msgData, code, codeAddress⟩ :
-    Address × Bytes × ByteArray × Option Address :=
-    match tx.type.to? with
-    | none => ⟨
-        computeContractAddress
-          tenv.stat.origin
-          (benv.state.getNonce tenv.stat.origin - 1),
-        [],
-        .mk (.mk tx.data),
-        none
-      ⟩
-    | some target => ⟨
-        target,
-        tx.data,
-        benv.state.getCode target,
-        target
-      ⟩
-  -- EIP-2929 pre-warms every precompile, so the set comes from the active
-  -- rules rather than from a literal run of addresses: at Osaka that is what
-  -- makes a call to P256VERIFY cost warm access like the other seventeen.
-  let accessedAddresses : AdrSet :=
-    tenv.stat.accessListAddresses.insertMany
-      (benv.stat.rules.precompiles ++ [tenv.stat.origin, currentTarget])
-  .ok {
-    benv := benv,
-    tenv := tenv,
-    caller := tenv.stat.origin,
-    target := tx.type.to?,
-    gas := tenv.stat.gas,
-    value := tx.value.toU256,
-    data := msgData,
-    code := code,
-    depth := 1024,
-    currentTarget := currentTarget,
-    codeAddress := codeAddress
-    shouldTransferValue := true,
-    isStatic := false,
-    accessedAddresses := accessedAddresses,
-    accessedStorageKeys := tenv.stat.accessListStorageKeys,
-    disablePrecompiles := false
-    stateGasGrant := tenv.stat.stateGasReservoir
-  }
-
 def calculateDataFee (blob : BlobSchedule) (excess_blob_gas: Nat) (tx: Transaction) :
     Nat :=
   getTotalBlobGas tx * getBaseFeePerBlobGas blob excess_blob_gas
@@ -1705,28 +1286,6 @@ theorem BlockOutput.init_legacyGasAccounting :
     BlockOutput.init.LegacyGasAccounting := by
   simp [BlockOutput.init, BlockOutput.LegacyGasAccounting]
 
-/-- The sender the Amsterdam intrinsic-cost formula needs before
-`checkTransaction` runs. The pinned `process_transaction` compares the
-transaction's own chain identifier with the block's (`WrongChainIdError`)
-*before* `check_transaction` recovers the sender, so a legacy transaction
-signed for another chain is refused for its chain identifier, not for its
-signature; the check is repeated here ahead of recovery for that reason (the
-`none` lane keeps its own order inside `checkTransaction`). -/
-def recoverValidationSender (benv : Benv) (tx : Transaction) :
-    Except TransitionError Address :=
-  match benv.stat.rules.stateGas with
-  | none => .ok 0
-  | some _ => do
-    Except.mapError TransitionError.transaction (checkTransactionChainId benv tx)
-    Except.mapError (fun e => TransitionError.senderRecovery e)
-      (recoverSender benv.stat.chainId tx)
-
-/-- Without a state-gas dimension the validation sender is not recovered. -/
-theorem recoverValidationSender_of_stateGas_none {benv : Benv} (tx : Transaction)
-    (h : benv.stat.rules.stateGas = none) : recoverValidationSender benv tx = .ok 0 := by
-  unfold recoverValidationSender
-  rw [h]
-
 /-- Amsterdam SELFDESTRUCT settlement clears account data but preserves the
 beneficiary-independent balance retained by EIP-6780. -/
 def clearAccountPreservingBalance (state : State) (address : Address) : State :=
@@ -1762,19 +1321,6 @@ def processWithdrawalsState (st : State) (wds : List Withdrawal) : State :=
     (λ acc wd => acc.addBal wd.address (wd.amount * (10 ^ 9).toU256))
     st
     wds
-
-def processWithdrawals
-  (benv : Benv) (bout : BlockOutput) (wds : List Withdrawal) : State × BlockOutput :=
-  let trie := processWithdrawalsTrie bout.withdrawalsTrie wds
-  let state := processWithdrawalsState benv.state wds
-  ⟨state, bout.withWithdrawalsTrie trie⟩
-
-theorem processWithdrawals_legacyGasAccounting {benv : Benv}
-    {bout : BlockOutput} (hb : bout.LegacyGasAccounting)
-    (wds : List Withdrawal) :
-    (processWithdrawals benv bout wds).2.LegacyGasAccounting := by
-  unfold processWithdrawals
-  exact hb.withWithdrawalsTrie _
 
 -- Access lists, blob hashes, and authorization tuples arrive inside typed
 -- transactions, so their fields are untrusted in exactly the way withdrawal
@@ -2153,53 +1699,6 @@ theorem decodeTransaction_unknown_typeNotSupported (rules : ForkRules) {x : UInt
         (.text s!"type-{x} transactions do not exist (EIP-2718), the block is invalid"))) := by
   simp only [decodeTransaction, Bytes.toExceptTransaction_unknown_typeNotSupported xs hx,
     bind, Except.bind]
-
-def systemTransactionEnvironment (benv : Benv) : Tenv :=
-  {
-    transientStorage := .empty,
-    stat := {
-      origin := systemAddress,
-      gasPrice := benv.stat.baseFeePerGas,
-      gas := systemTransactionGas,
-      stateGasReservoir :=
-        match benv.stat.rules.stateGas with
-        | none => 0
-        | some state => state.systemReservoir
-      accessListAddresses := .emptyWithCapacity
-      accessListStorageKeys := .emptyWithCapacity
-      blobVersionedHashes := [],
-      auths := [],
-      indexInBlock := none,
-      txHash := none
-    }
-  }
-
-def systemTransactionMessage (benv : Benv) (tenv : Tenv)
-    (target : Address) (data : Bytes) (code : ByteArray) : Msg :=
-  {
-    benv := benv,
-    tenv := tenv,
-    caller := systemAddress,
-    target := target,
-    gas := systemTransactionGas,
-    value := 0,
-    data := data,
-    code := code,
-    depth := 1024,
-    currentTarget := target,
-    codeAddress := target,
-    shouldTransferValue := false,
-    isStatic := false,
-    accessedAddresses :=
-      match benv.stat.rules.stateGas with
-      | none => .emptyWithCapacity
-      | some _ =>
-        (.emptyWithCapacity : AdrSet).insertMany
-          (benv.stat.rules.precompiles ++ [systemAddress, target]),
-    accessedStorageKeys := .emptyWithCapacity,
-    disablePrecompiles := false
-    stateGasGrant := tenv.stat.stateGasReservoir
-  }
 
 def extractDepositData (data : Bytes) : Except BlockValidationError Bytes := do
   if data.length != depositEventLength then
@@ -2630,43 +2129,6 @@ def blockAccessListCheck (rules : ForkRules) (bout : BlockOutput) (header : Head
            header block access list hash = {header.blockAccessListHash}"
     else .ok ()
 
-def initBlockContext (fork : Fork) (chain : BlockChain) (header : Header) :
-    BenvStat :=
-  {
-    fork := fork,
-    chainId := chain.chainId,
-    origState := chain.state,
-    blockGasLimit := header.gasLimit,
-    blockHashes := BlockChain.recentBlockHashes chain,
-    coinbase := header.coinbase,
-    number := header.number,
-    -- Absent before London and Cancun respectively, where nothing that reads
-    -- them is reachable: `BASEFEE`, `BLOBBASEFEE` and blob transactions are
-    -- gated off, and base fee 0 is EELS Berlin's fee rule exactly.
-    baseFeePerGas := header.baseFeePerGas.getD 0,
-    time := header.timestamp.toU256,
-    -- S8 0x44 (unit U5): before the merge there is no RANDAO, so `DIFFICULTY`
-    -- reads the header's difficulty instead of `prevRandao`. The opcode keeps
-    -- reading this field unchanged; the selection lives here, at environment
-    -- construction. Post-merge (`pow = none`) it is the header's `prevRandao`
-    -- as before, so every reachable (refused-history) machine is unaffected.
-    prevRandao :=
-      match fork.ruleSet.proofOfWork with
-      | some _ => Nat.toU256 header.difficulty
-      | none => header.prevRandao,
-    excessBlobGas := header.excessBlobGas.getD 0,
-    parentBeaconBlockRoot := header.parentBeaconBlockRoot.getD 0,
-    -- EIP-7843: absent before Amsterdam, where nothing reads it.
-    slotNumber := header.slotNumber.getD 0
-  }
-
-def initBlockEnvironment (fork : Fork) (chain : BlockChain) (header : Header) : Benv :=
-  {
-    state := chain.state,
-    createdAccounts := .emptyWithCapacity,
-    stat := initBlockContext fork chain header
-  }
-
 def getTransactionsRoot (bout : BlockOutput) : U256 :=
   let aux (arg : Bytes × Transaction) : (Bytes × Bytes) :=
     let txPrefix : Bytes :=
@@ -2738,13 +2200,6 @@ legacy decoder, typed-envelope bytes through the strict envelope decoder. -/
 def Rlp.Item.toExceptTransaction : Rlp.Item → Except TransitionError Transaction
   | .list ls => dec (Rlp.Item.toExceptLegacyTransaction ls)
   | .bytes xs => xs.toExceptTransaction
-
-theorem prepareMessage_canonical {benv : Benv} {tenv : Tenv} {tx : Transaction}
-    (hb : benv.Canonical) (ht : tenv.Canonical) {msg : Msg}
-    (hm : prepareMessage benv tenv tx = .ok msg) : msg.Canonical := by
-  unfold prepareMessage at hm
-  cases hm
-  exact ⟨hb, ht⟩
 
 theorem State.Canonical.clearAccountPreservingBalance {state : State}
     (h : state.Canonical) (address : Address) :

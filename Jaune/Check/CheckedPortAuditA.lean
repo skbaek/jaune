@@ -13,7 +13,6 @@ import Jaune.MessageCall.CheckedSpawnFacts
 import Jaune.MessageCall.CheckedResumeFacts
 import Jaune.MessageCall.CheckedCanonical
 import Examples.CheckedShapePilot
-import Jaune.Bridge.G2b.CheckedSpawnKind
 
 /-! Axiom audit for the u65 Checked ports (gas, totality, invariants, S3, spawn, canonicality,
 pilot): each module's constants reach only the three standard axioms. -/
@@ -46,7 +45,6 @@ pilot): each module's constants reach only the three standard axioms. -/
 #expect_axioms Jaune.Checked.returnedMachine_failed_call [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.returnedMachine_failed_create [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.step_spawn_kindCoherent [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.TopLevel.prepare_kindCoherent [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.Frame.runTop_canonical [Classical.choice, Quot.sound, propext]
 #expect_axioms Examples.ShapePilot.Checked.call_return_survival [Classical.choice, Quot.sound, propext]
 #expect_axioms Examples.ShapePilot.Checked.create_return_survival [Classical.choice, Quot.sound, propext]
