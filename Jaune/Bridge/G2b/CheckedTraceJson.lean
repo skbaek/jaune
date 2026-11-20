@@ -285,8 +285,10 @@ end Consume
 
 /-! ### The `IO` sink -/
 
--- `IO`'s monad laws, stated in `Jaune.Bridge.G2b.CheckedTrace`.
-attribute [local instance] instLawfulMonadEST instLawfulMonadEIO
+-- `IO`'s monad laws, stated in `Jaune.Bridge.G2b.CheckedTrace`, made local instances here.
+local instance lawfulMonadEST (ε σ : Type) : LawfulMonad (EST ε σ) := instLawfulMonadEST ε σ
+
+local instance lawfulMonadEIO (ε : Type) : LawfulMonad (EIO ε) := instLawfulMonadEIO ε
 
 /-- The new sink, keeping its state in the old sink's reference through the representation
 map. -/
