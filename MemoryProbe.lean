@@ -1,5 +1,4 @@
-import Jaune.MessageCall.Top
-import Jaune.MessageCall.CheckedTrace
+import Jaune.MessageCall.CheckedExec
 
 /-!
 # Bounded call-depth / calldata-size memory probe
@@ -111,47 +110,42 @@ def ProbeError.render : ProbeError → String
   | .frameSettlement => "frame settlement failed"
   | .settledHalt => "execution ended with a settled halt"
 
-def probeMsg (family : Family) (depth inputSize : Nat) : Msg :=
+/-- The probe's block: Prague rules, every other field zero. -/
+def probeBlock : BlockContext :=
+  { fork := .prague, chainId := 0, gasLimit := 0, blockHashes := [], coinbase := 0, number := 0
+    baseFeePerGas := 0, timestamp := 0, prevRandao := 0, excessBlobGas := 0
+    parentBeaconBlockRoot := 0 }
+
+/-- The probe's transaction: zero origin and gas price, no blobs, the empty original state. -/
+def probeTransaction : TransactionContext :=
+  { origin := 0, gasPrice := 0, blobVersionedHashes := [], originalState := .empty }
+
+/-- The top-level frame: the recursive program installed at its own address, called by itself
+with the full call depth left, no value, no calldata and a large gas grant. Its checkpoint is the
+message's initial one over a world holding only that code. -/
+def probeFrame (family : Family) (depth inputSize : Nat) : Checked.Frame :=
   let target : Address := 0xcbbf5374fce5edbc8e2a8697c15331677e6ebf0b
   let code := recursiveCallCode family target inputSize
-  let state := State.setCode .empty target code
-  let benv : Benv := {(default : Benv) with state := state}
-  {
-    (default : Msg) with
-    benv := benv
-    caller := target
-    target := some target
-    currentTarget := target
-    gas := 1000000000000
-    codeAddress := some target
-    code := code
-    depth := depth
-  }
+  let message : Checked.Message :=
+    { context :=
+        { caller := target, recipient := target, value := 0, calldata := [], code
+          depthLeft := depth, isStatic := false, tx := probeTransaction, block := probeBlock }
+      kind := .call
+      codeAddress := some target
+      target := some target
+      gas := 1000000000000
+      stateGasGrant := 0
+      transfersValue := false
+      disablePrecompiles := false }
+  let world : World := { state := State.setCode .empty target code, transientStorage := .empty }
+  ⟨message, message.initialCheckpoint world .emptyWithCapacity .emptyWithCapacity
+    .emptyWithCapacity .emptyWithCapacity⟩
 
 def run (family : Family) (depth inputSize : Nat) :
     Except ProbeError (Nat × Nat × U256) :=
-  -- The top frame's raw result: enter it from its checkpoint, run `exec`, and read the final
-  -- machine's memory. A settled `Frame.Result` carries no memory.
-  let frame := Frame.ofTop (probeMsg family depth inputSize) false
-  match enterWith frame frame.checkpoint.toDevm with
-  | .done _ => .error .frameSettlement
-  | .run evm =>
-    match exec evm with
-    | .error (.halt _, _) | .error (.revert, _) => .error .settledHalt
-    | .error _ => .error .frameSettlement
-    | .ok devm =>
-      let success := Bytes.toU256 (devm.memory.data.sliceD 32 32 0)
-      .ok (devm.memory.size, devm.memory.data.size, success)
-
-/-- `run` on the checked interpreter: enter the top frame from its checkpoint with
-`Checked.enterWith`, run `Checked.exec` (the total interpreter `Checked.Frame.runTop` settles),
-and read the final frame's memory. Staged and selected by `--checked`; the registered gate does
-not pass it. Until the reserved packet item imports `Jaune.Implementation.CheckedCachedDriver`
-into `Jaune.MessageCall.CheckedExec` with the compiled-code substitution, `Checked.exec` is
-compiled against the uncached driver, and this measures that. -/
-def runChecked (family : Family) (depth inputSize : Nat) :
-    Except ProbeError (Nat × Nat × U256) :=
-  let frame := Checked.Trace.topFrame (probeMsg family depth inputSize) false
+  -- The top frame's raw result: enter it from its checkpoint, run `Checked.exec`, and read the
+  -- final machine's memory. A settled `Frame.Result` carries no memory.
+  let frame := probeFrame family depth inputSize
   match Checked.enterWith frame frame.checkpoint with
   | .done _ => .error .frameSettlement
   | .run r =>
@@ -169,7 +163,7 @@ private def parseFamily (text : String) : Option Family :=
   else none
 
 private def usage : String :=
-  "usage: jaune-memory-probe [--checked] [--staticcall|--call] DEPTH INPUT_SIZE"
+  "usage: jaune-memory-probe [--staticcall|--call] DEPTH INPUT_SIZE"
 
 private def parseSizes (depth inputSize : String) : IO (Nat × Nat) := do
   match depth.toNat?, inputSize.toNat? with
@@ -193,11 +187,8 @@ private def parseArgs (args : List String) : IO (Family × Nat × Nat) := do
   | _ => throw (IO.userError usage)
 
 def main (args : List String) : IO UInt32 := do
-  let (checked, args) := match args with
-    | "--checked" :: rest => (true, rest)
-    | _ => (false, args)
   let (family, depth, inputSize) ← parseArgs args
-  match (if checked then runChecked else run) family depth inputSize with
+  match run family depth inputSize with
   | .error error =>
     IO.eprintln
       s!"FAIL family={family.name} depth={depth} input={inputSize}: {error.render}"

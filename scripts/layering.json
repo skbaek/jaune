@@ -291,6 +291,11 @@
    "importer": "Jaune.MessageCall.Exec",
    "imported": "Jaune.Implementation.CachedDriver",
    "reason": "The compiled-code substitution theorem execFueled_eq_cached rewrites only code compiled after it is in scope; Jaune.MessageCall.Exec defines exec, so it must import the cached driver (3.2). scripts/check-memory-probe.sh fails without it."
+  },
+  {
+   "importer": "Jaune.MessageCall.CheckedExec",
+   "imported": "Jaune.Implementation.CheckedCachedDriver",
+   "reason": "The compiled-code substitution theorem Checked.execFueled_eq_cached rewrites only code compiled after it is in scope; Jaune.MessageCall.CheckedExec defines Checked.exec, so it must import the cached driver (3.2). scripts/check-memory-probe.sh fails without it."
   }
  ],
  "fixture_vocabulary_residue": {
