@@ -1396,32 +1396,46 @@ omit [Checked.LegacyTransaction] in
 waiting tracer, including admission failures, preparation refusals and immediate exits. -/
 theorem runNativeTransaction_json_effects (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
     (trace frames : IO.FS.Handle) (template : Checked.LegacyTransaction)
-    (authorizationRefund : Nat → IO Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction)
-    (index : Nat) (runId : String) :
+    (authorizationRefund : Nat → IO Unit) {benv : Benv} (fresh : benv.Fresh) (bout : BlockOutput)
+    (tx : Transaction) (index : Nat) (runId : String) :
     (fun _ => ()) <$> @Checked.Trace.runTransaction template IO _
-        (TraceJson.sink cfg state trace frames) authorizationRefund benv bout tx index runId =
+        (TraceJson.sink cfg state trace frames) authorizationRefund benv.stat.toBlockContext benv.state
+        bout tx index runId =
       (fun _ => ()) <$> TraceTransaction.runTransaction
         (TraceJson.sink cfg state trace frames) authorizationRefund benv bout tx index runId := by
   unfold Checked.Trace.runTransaction TraceTransaction.runTransaction
+  have hadmit := Checked.Transaction.admit_observe benv bout tx index
   split
-  next error ha =>
-    split <;> rename_i h <;> rw [ha] at h <;> cases h
+  next error hna =>
+    rw [hadmit] at hna
+    split <;> rename_i h <;> rw [h] at hna <;> cases hna
     simp only [map_pure]
-  next admitted ha =>
+  next nativeAdmitted hna =>
+    rw [hadmit] at hna
+    obtain ⟨admitted, ha, rfl⟩ : ∃ a, Transaction.admit benv bout tx index = .ok a ∧
+        Checked.Transaction.Admitted.ofLegacy a = nativeAdmitted := by
+      cases h : Transaction.admit benv bout tx index with
+      | error => rw [h] at hna; cases hna
+      | ok a => rw [h] at hna; cases hna; exact ⟨a, rfl, rfl⟩
+    have begun := Transaction.admit_begun fresh ha
+    have hctx : benv.stat.toBlockContext = admitted.benv.stat.toBlockContext := by
+      rw [Transaction.admit_benv ha]; rfl
+    have hst : benv.state = admitted.benv.state := by
+      rw [Transaction.admit_benv ha]; rfl
     cases hp : Transaction.prepare admitted tx index with
     | error error =>
-      have hn : Checked.Transaction.prepare admitted.benv.stat.toBlockContext
-          admitted.benv.stat.origState admitted tx = .error error := by
-        rw [Checked.Transaction.prepare_observe admitted tx index, hp]
+      have hn : Checked.Transaction.prepare benv.stat.toBlockContext benv.state
+          (.ofLegacy admitted) tx = .error error := by
+        rw [hctx, hst, Checked.Transaction.prepare_observe begun tx index, hp]
         rfl
       split <;> rename_i h <;> rw [hn] at h <;> cases h
       split <;> rename_i h <;> rw [ha] at h <;> cases h
       split <;> rename_i h <;> rw [hp] at h <;> cases h
       simp only [map_pure]
     | ok prepared =>
-      have hn : Checked.Transaction.prepare admitted.benv.stat.toBlockContext
-          admitted.benv.stat.origState admitted tx = .ok (.ofLegacy prepared) := by
-        rw [Checked.Transaction.prepare_observe admitted tx index, hp]
+      have hn : Checked.Transaction.prepare benv.stat.toBlockContext benv.state
+          (.ofLegacy admitted) tx = .ok (.ofLegacy prepared) := by
+        rw [hctx, hst, Checked.Transaction.prepare_observe begun tx index, hp]
         rfl
       split <;> rename_i h <;> rw [hn] at h <;> cases h
       split <;> rename_i h <;> rw [ha] at h <;> cases h
@@ -1460,15 +1474,16 @@ omit [Checked.LegacyTransaction] in
 the transaction summary, including the final state, block output, return bytes and halt. -/
 theorem runNativeTransaction_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
     (trace frames : IO.FS.Handle) (template : Checked.LegacyTransaction)
-    (authorizationRefund : Nat → IO Unit) (benv : Benv) (bout : BlockOutput) (tx : Transaction)
-    (index : Nat) (runId : String) :
-    let native (r : Checked.Trace.TransactionResult benv bout tx index) :=
+    (authorizationRefund : Nat → IO Unit) {benv : Benv} (fresh : benv.Fresh) (bout : BlockOutput)
+    (tx : Transaction) (index : Nat) (runId : String) :
+    let native (r : Checked.Trace.TransactionResult benv.stat.toBlockContext benv.state bout tx index) :=
       (r.value.map (fun (run, out) => ((run.state, out), run.message.settlement run.entry))).map
         (fun (out, effects) => (out, some effects))
     let waiting (r : TraceTransaction.TransactionResult benv bout tx index) :=
       r.value.map (fun out => (out, r.messageRun.map Checked.TopLevel.Settlement.ofLegacy))
     native <$> @Checked.Trace.runTransaction template IO _
-        (TraceJson.sink cfg state trace frames) authorizationRefund benv bout tx index runId =
+        (TraceJson.sink cfg state trace frames) authorizationRefund benv.stat.toBlockContext benv.state
+        bout tx index runId =
       waiting <$> TraceTransaction.runTransaction
         (TraceJson.sink cfg state trace frames) authorizationRefund benv bout tx index runId := by
   intro native waiting
@@ -1478,7 +1493,7 @@ theorem runNativeTransaction_json (cfg : TraceJson.Config) (state : IO.Ref Trace
   have hl : native = (fun _ : Unit => observed) ∘ (fun _ => ()) := by
     funext result
     dsimp only [native, observed, Function.comp_apply]
-    rw [result.erases, Checked.Transaction.run_settlement_observe]
+    rw [result.erases, Checked.Transaction.run_settlement_observe fresh]
   have hr : waiting = (fun _ : Unit => observed) ∘ (fun _ => ()) := by
     funext result
     dsimp only [waiting, observed, Function.comp_apply]
@@ -1490,7 +1505,7 @@ theorem runNativeTransaction_json (cfg : TraceJson.Config) (state : IO.Ref Trace
       rw [waitingMessage_of_success result h]
       rfl
   rw [hl, hr]
-  simp only [comp_map, runNativeTransaction_json_effects]
+  simp only [comp_map, runNativeTransaction_json_effects _ _ _ _ _ _ fresh]
 
 /-! ### The transaction boundary -/
 

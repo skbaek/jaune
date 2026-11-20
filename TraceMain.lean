@@ -25,30 +25,28 @@ private def byteString (j : Json) (key : String) : IO Bytes :=
   | some (.str text) => (T8n.hexToBytes? text).toIO (key ++ " must be prefixed hex bytes")
   | some _ => throw (IO.userError (key ++ " must be a hex string"))
 
-private def decodeBenv (input : Json) (fork : Fork) (rules : ForkRules) : IO Benv := do
+private def decodeBlock (input : Json) (fork : Fork) (rules : ForkRules) : IO (BlockContext × State) := do
   let preState ← (← required input "alloc").toWorld
   let env ← T8n.decodeEnv rules false (← required input "env")
   let chainId ← T8n.natOr input "chainId" 1
   if chainId ≥ 2^64 then throw (IO.userError "chainId exceeds uint64")
-  let benv : Benv := { (default : Benv) with
-    state := preState
-    stat := { (default : BenvStat) with
-      fork := fork
-      chainId := chainId.toUInt64
-      origState := preState
-      blockGasLimit := env.gasLimit
-      blockHashes := env.blockHashes
-      coinbase := env.coinbase
-      number := env.number
-      baseFeePerGas := env.baseFeePerGas
-      time := env.timestamp.toU256
-      prevRandao := env.prevRandao
-      excessBlobGas := env.excessBlobGas
-      parentBeaconBlockRoot := env.parentBeaconBlockRoot
-      slotNumber := env.slotNumber } }
-  return benv
+  let block : BlockContext := {
+    fork := fork
+    chainId := chainId.toUInt64
+    gasLimit := env.gasLimit
+    blockHashes := env.blockHashes
+    coinbase := env.coinbase
+    number := env.number
+    baseFeePerGas := env.baseFeePerGas
+    timestamp := env.timestamp.toU256
+    prevRandao := env.prevRandao
+    excessBlobGas := env.excessBlobGas
+    parentBeaconBlockRoot := env.parentBeaconBlockRoot
+    slotNumber := env.slotNumber }
+  return (block, preState)
 
-private def decodeMessage (input : Json) (benv : Benv) (rules : ForkRules) : IO Checked.Frame := do
+private def decodeMessage (input : Json) (block : BlockContext) (preState : State) (rules : ForkRules) :
+    IO Checked.Frame := do
   let j ← required input "message"
   T8n.requireKnownFields "trace message" j ["kind", "caller", "address", "gas", "value",
     "input", "origin", "gasPrice", "stateGas", "static", "transferValue", "disablePrecompiles",
@@ -95,11 +93,11 @@ private def decodeMessage (input : Json) (benv : Benv) (rules : ForkRules) : IO 
       recipient := address
       value := value.toU256
       calldata := if call then data else []
-      code := if call then benv.state.getCode address else ⟨data.toArray⟩
+      code := if call then preState.getCode address else ⟨data.toArray⟩
       depthLeft := 1024
       isStatic
-      block := benv.stat.toBlockContext
-      tx := { origin, gasPrice, blobVersionedHashes := hashes, originalState := benv.stat.origState } }
+      block
+      tx := { origin, gasPrice, blobVersionedHashes := hashes, originalState := preState } }
     kind := if call then .call else .create
     target
     codeAddress := target
@@ -107,12 +105,12 @@ private def decodeMessage (input : Json) (benv : Benv) (rules : ForkRules) : IO 
     transfersValue
     disablePrecompiles
     stateGasGrant := stateGas }
-  let world : World := ⟨benv.state, .empty, benv.storageWrites⟩
-  return ⟨message, message.initialCheckpoint world accessed keys benv.createdAccounts .emptyWithCapacity⟩
+  let world : World := ⟨preState, .empty, .emptyWithCapacity⟩
+  return ⟨message, message.initialCheckpoint world accessed keys .emptyWithCapacity .emptyWithCapacity⟩
 
 private inductive Input where
   | message (frame : Checked.Frame)
-  | transaction (benv : Benv) (tx : Transaction)
+  | transaction (block : BlockContext) (preState : State) (tx : Transaction)
 
 private def writeRow (cfg : TraceJson.Config) (handle : IO.FS.Handle) (row : Json) : IO Unit := do
   let line := row.compress ++ "\n"
@@ -133,12 +131,12 @@ def run (inputPath outputPath : String) : IO Unit := do
   let forkName ← stringField input "fork"
   let fork ← (Fork.ofString? forkName).toIO "unknown fork"
   let rules ← IO.ofExcept (fork.rules.mapError SupportError.render)
-  let benv ← decodeBenv input fork rules
+  let (block, preState) ← decodeBlock input fork rules
   let selected : Input ← match input.find? "message", input.find? "transaction" with
-    | some _, none => Input.message <$> decodeMessage input benv rules
+    | some _, none => Input.message <$> decodeMessage input block preState rules
     | none, some value =>
       match T8n.decodeTransaction value with
-      | .ok tx => pure (.transaction benv tx)
+      | .ok tx => pure (.transaction block preState tx)
       | .error error => throw (IO.userError ("transaction: " ++ error.render))
     | _, _ => throw (IO.userError "supply exactly one of message or transaction")
   let maxSteps ← match input.find? "maxSteps" with
@@ -162,14 +160,14 @@ def run (inputPath outputPath : String) : IO Unit := do
       pure [("scope", Json.str "message"), ("outcome", Json.str "executed"),
         ("traceComplete", Json.bool true),
         ("gasUsedScope", Json.str "frame grant minus settled remaining gas; no transaction settlement")]
-    | .transaction initial tx => do
+    | .transaction block preState tx => do
       let transactionCfg := { cfg with deferSummary := true }
       let refund := fun amount => do
         let current ← state.get
         if current.started then throw (IO.userError "authorization refund arrived after frame entry")
         state.set { current with rootRefund := amount }
       let result ← @Checked.Trace.runTransaction ⟨default⟩ IO _
-        (TraceJson.sink transactionCfg state trace frames) refund initial .init tx 0 runId
+        (TraceJson.sink transactionCfg state trace frames) refund block preState .init tx 0 runId
       let current ← state.get
       if current.started && !current.closed then throw (IO.userError "transaction frame did not close")
       let identity := [("scope", Json.str "transaction"), ("transactionIndex", toJson (0 : Nat)),

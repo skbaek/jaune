@@ -20,7 +20,7 @@ def Frame.State.writeDelegation (s : Frame.State) (authority target : Address) :
 namespace TopLevel
 
 /-- Open a system call on its own transaction-start state and with an empty write ledger. -/
-def systemInput (block : BlockContext) (state : State) (createdAccounts : AdrSet)
+def systemInput (block : BlockContext) (state : State)
     (recipient : Address) (code : ByteArray) (calldata : Bytes) : Input :=
   let rules := block.rules
   let (stateGasGrant, accessedAddresses) : Nat × AdrSet := match rules.stateGas with
@@ -44,7 +44,7 @@ def systemInput (block : BlockContext) (state : State) (createdAccounts : AdrSet
     transfersValue := false
     disablePrecompiles := false }
   let checkpoint := message.initialCheckpoint ⟨state, .empty, .emptyWithCapacity⟩
-    accessedAddresses .emptyWithCapacity createdAccounts .emptyWithCapacity
+    accessedAddresses .emptyWithCapacity .emptyWithCapacity .emptyWithCapacity
   ⟨message, checkpoint, []⟩
 
 /-- A prepared native message with its rollback checkpoint, or a refusal at preparation. -/
@@ -334,15 +334,15 @@ def SystemRun.settlement (run : SystemRun) : TopLevel.Settlement :=
   run.message.settlement run.input
 
 /-- Run a protocol system call on its current world and validate the refund counter. -/
-def processSystemRun (block : BlockContext) (state : State) (createdAccounts : AdrSet)
+def processSystemRun (block : BlockContext) (state : State)
     (target : Address) (code : ByteArray) (data : Bytes) : Except Fault SystemRun := do
-  let input := TopLevel.systemInput block state createdAccounts target code data
+  let input := TopLevel.systemInput block state target code data
   let run ← TopLevel.runNative input
   let _ ← run.refundCounter
   pure ⟨input, run⟩
 
-def processSystemTransaction (block : BlockContext) (state : State) (createdAccounts : AdrSet)
+def processSystemTransaction (block : BlockContext) (state : State)
     (target : Address) (code : ByteArray) (data : Bytes) : Except Fault TopLevel.Settlement :=
-  (processSystemRun block state createdAccounts target code data).map SystemRun.settlement
+  (processSystemRun block state target code data).map SystemRun.settlement
 
 end Jaune.Checked
