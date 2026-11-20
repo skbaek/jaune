@@ -3,7 +3,11 @@
 
 This checker does not infer that an abbreviation is English or that a citation
 is authoritative. Its word vocabulary and exact source bindings are explicit
-review inputs. Bundles must be freshly exported against current imports.
+review inputs. Optional policy.derived rows map each final name to its exact
+old name and a directly bound base. The base and derived rename must agree on
+their source citation, primary rule, and changed component. Other name parts
+still require ordinary words or source evidence. Bundles must be freshly
+exported against current imports.
 """
 import argparse
 import hashlib
@@ -105,7 +109,9 @@ def transliterate(name, style):
 
 
 def validate_policy(policy, source_root):
-    if not isinstance(policy, dict) or policy.get('schema_version') != 1 or set(policy) != {'schema_version', 'words', 'sources', 'bindings'}:
+    required = {'schema_version', 'words', 'sources', 'bindings'}
+    if (not isinstance(policy, dict) or policy.get('schema_version') != 1
+            or set(policy) - {'derived'} != required):
         raise ValueError('policy requires schema_version 1, words, sources and bindings')
     words = policy['words']
     if (not isinstance(words, list) or any(not isinstance(w, str) or
@@ -143,17 +149,121 @@ def validate_policy(policy, source_root):
 TOKEN = re.compile(r'[A-Z]{2,}(?=s(?:[A-Z0-9_]|$))|[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|[A-Z]?[a-z]+|[0-9]+')
 
 
-def unknown_words(segment, words, abbreviations):
+def component_spans(name, component):
+    """Literal matches at whole camel/snake token boundaries, including digits."""
+    tokens = list(TOKEN.finditer(name))
+    starts = {t.start() for t in tokens}
+    ends = {t.end() for t in tokens}
+    return [m.span() for m in re.finditer(re.escape(component), name)
+            if m.start() in starts and m.end() in ends]
+
+
+def derive_name(entry, base):
+    """Prove this row changes just the sourced prefix or just its named tokens.
+
+    Return the spans in the final segment which the source authenticates.
+    An inherited namespace is checked by its own direct policy binding.
+    """
+    old, new = entry['old'], entry['new']
+    if base['old'] == base['new']:
+        return None
+    if old.startswith(base['old'] + '.') and new == base['new'] + old[len(base['old']):]:
+        return []
+    scope, _, leaf = old.rpartition('.')
+    new_scope, _, new_leaf = new.rpartition('.')
+    base_scope, _, before = base['old'].rpartition('.')
+    new_base_scope, _, after = base['new'].rpartition('.')
+    if (scope != new_scope or base_scope != new_base_scope
+            or not (scope == base_scope or scope.startswith(base_scope + '.'))
+            or before == after or not before.isalnum() or not after.isalnum()):
+        return None
+    replaced = component_spans(leaf, before)
+    if not replaced:
+        return None
+    pieces, covered, previous = [], [], 0
+    for i, (start, end) in enumerate(replaced):
+        pieces.extend((leaf[previous:start], after))
+        target_start = start + i * (len(after) - len(before))
+        covered.append((target_start, target_start + len(after)))
+        previous = end
+    pieces.append(leaf[previous:])
+    if ''.join(pieces) != new_leaf or not set(covered) <= set(component_spans(new_leaf, after)):
+        return None
+    return covered
+
+
+def derived_bindings(policy, mapping):
+    """Resolve opt-in derived rows against directly bound roots and the actual rename map."""
+    derived = policy.get('derived', {})
+    if not isinstance(derived, dict):
+        raise ValueError('derived must be an object')
+    mapped = {r['new']: r for r in mapping['entries'] if r['kind'] != 'module'}
+    result = {}
+    for name, row in derived.items():
+        if (not isinstance(row, dict) or set(row) != {'old', 'base'}
+                or not all(isinstance(v, str) and v for v in row.values())
+                or name in policy['bindings']):
+            raise ValueError(f'{name}: invalid derived binding')
+        entry = mapped.get(name)
+        base_name = row['base']
+        base = mapped.get(base_name)
+        binding = policy['bindings'].get(base_name)
+        if (entry is None or entry['old'] != row['old'] or base is None or binding is None
+                or entry['layer'] != base['layer'] or entry['source'] != base['source']
+                or entry['rule'].split(',')[0].strip() != binding['rule']
+                or base['rule'].split(',')[0].strip() != binding['rule']):
+            raise ValueError(f'{name}: derived binding lacks matching map row, source and directly bound base')
+        spans = derive_name(entry, base)
+        if spans is None:
+            raise ValueError(f'{name}: change extends beyond sourced component {base_name}')
+        result[name] = spans
+    return result
+
+
+def theorem_reference_endings(bundle):
+    """Punctuation inside a theorem's name can belong to its referenced definition.
+
+    The compiler identifies the enclosing declaration of each constant use.
+    Only the full qualified prefix of that theorem is evidence for the spelling.
+    """
+    index = bundle['index']
+    module = APPLY.module_name(index['module'])
+    constants = bundle.get('constants', {})
+    endings = {}
+    for key, info in index['references'].items():
+        ref = json.loads(key).get('c')
+        if not ref or not ref['n'].endswith(("'", '?', '!')):
+            continue
+        target = user_name(ref['n'], ref['m'])
+        for usage in info.get('usages', []):
+            if len(usage) != 5 or not isinstance(usage[4], str):
+                continue
+            owner = usage[4]
+            if constants.get(owner, {}).get('kernel', {}).get('payload') != ['theorem']:
+                continue
+            theorem = user_name(owner, module)
+            if theorem.startswith(target + '_') and '.' not in theorem[len(target):]:
+                endings.setdefault(theorem, set()).add(len(target.rsplit('.', 1)[-1]))
+    return endings
+
+
+def unknown_words(segment, words, abbreviations, covered=(), reference_endings=()):
     """Never silently drop Unicode, punctuation, or unrecognized characters."""
     segment = segment.rstrip("'?!")
     unknown = []
+    offset = 0
     for part in segment.split('_'):
+        start = offset
+        offset += len(part) + 1
+        if start + len(part) in reference_endings:
+            part = part.rstrip("'?!")
         if not part:
             unknown.append('<empty>')
             continue
         if part in abbreviations:
             continue
-        tokens = TOKEN.findall(part)
+        matches = list(TOKEN.finditer(part))
+        tokens = [m.group() for m in matches]
         if ''.join(tokens) != part:
             unknown.append(part)
             continue
@@ -161,6 +271,9 @@ def unknown_words(segment, words, abbreviations):
                           if ''.join(TOKEN.findall(a)) == a), key=len, reverse=True)
         i = 0
         while i < len(tokens):
+            if any(a <= start + matches[i].start() and start + matches[i].end() <= b for a, b in covered):
+                i += 1
+                continue
             match = next((a for a in allowed if a and tokens[i:i + len(a)] == a), None)
             if match:
                 i += len(match)
@@ -174,21 +287,25 @@ def unknown_words(segment, words, abbreviations):
     return unknown
 
 
-def lint_names(names, mapping, policy, words, final=False):
+def lint_names(names, mapping, policy, words, final=False, derived=None, reference_endings=None):
     """(problems, used source bindings, pending findings). A pending retired
     name is reported without failing, except in a final run, which enforces it."""
+    if reference_endings is None:
+        reference_endings = {}
+    if derived is None:
+        derived = derived_bindings(policy, mapping)
     problems, pending = [], []
     used_bindings = set()
     enforced_names, pending_names = MAP.retired_name_lists(mapping)
     if final:
         enforced_names, pending_names = enforced_names + pending_names, []
     abbreviations = set(mapping['allowed_abbreviations'])
-    mapped = {entry['new']: entry for entry in mapping['entries']}
+    mapped = {entry['new']: entry for entry in mapping['entries'] if entry['kind'] != 'module'}
     for name, location in sorted(names.items()):
         entry = mapped.get(name)
         if entry and entry['rule'].split(',')[0].strip() in ('1', '2', '3'):
             binding = policy['bindings'].get(name)
-            if not binding or binding['rule'] != entry['rule'].split(',')[0].strip():
+            if name not in derived and (not binding or binding['rule'] != entry['rule'].split(',')[0].strip()):
                 problems.append(dict(name=name, location=location, reason='map requires matching source binding'))
         retired = MAP.find_retired_tokens(name, mapping['retired_tokens'])
         if retired:
@@ -207,7 +324,10 @@ def lint_names(names, mapping, policy, words, final=False):
             if prefix in policy['bindings']:
                 used_bindings.add(prefix)
                 continue
-            unknown = unknown_words(part, words, abbreviations)
+            covered = derived.get(prefix, ())
+            if prefix in derived:
+                used_bindings.update((prefix, policy['derived'][prefix]['base']))
+            unknown = unknown_words(part, words, abbreviations, covered, reference_endings.get(prefix, ()))
             if unknown:
                 problems.append(dict(name=name, location=location,
                                      reason='unregistered word or source', segment=prefix, tokens=unknown))
@@ -218,6 +338,7 @@ def check(tree, mapping, policy, source_root, files, roots, final=False):
     MAP.validate_map(mapping)
     registered_pending = MAP.retired_name_lists(mapping)[1]
     words = validate_policy(policy, source_root)
+    derived = derived_bindings(policy, mapping)
     selected = [source for source, _ in files]
     if len(selected) != len(set(selected)):
         raise ValueError('duplicate selected source')
@@ -242,13 +363,14 @@ def check(tree, mapping, policy, source_root, files, roots, final=False):
         if bundle.get('source') != text:
             raise ValueError(f'{source}: reference bundle source mismatch; re-export')
         names = declarations(text, bundle['index'])
-        found, bindings, waiting = lint_names(names, mapping, policy, words, final)
+        found, bindings, waiting = lint_names(names, mapping, policy, words, final, derived,
+                                              theorem_reference_endings(bundle))
         used.update(bindings)
         problems.extend(dict(source=source, **problem) for problem in found)
         pending.extend(dict(source=source, **problem) for problem in waiting)
         rows.append(dict(source=source, source_sha256=sha(raw), bundle_sha256=sha(bundle_raw), declarations=len(names)))
     if roots:
-        for stale in sorted(set(policy['bindings']) - used):
+        for stale in sorted((set(policy['bindings']) | set(derived)) - used):
             problems.append(dict(name=stale, reason='unused source binding'))
     if final:
         # The landing map registers no pending name: each one left is a finding of its own.
