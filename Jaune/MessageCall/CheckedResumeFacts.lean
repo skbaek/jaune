@@ -1,4 +1,5 @@
 import Jaune.MessageCall.CheckedParts
+import Jaune.MessageCall.ResumeFacts
 import Jaune.MessageCall.Measures
 import Jaune.MessageCall.Records
 

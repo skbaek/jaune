@@ -1,4 +1,5 @@
 import Jaune.CheckedSufficiencyWalk
+import Jaune.MemoryAccounting
 import Jaune.GasFacts
 
 /-! # Memory expansion paid by the staged machine

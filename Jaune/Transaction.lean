@@ -1,4 +1,8 @@
 import Jaune.Transaction.Parts
+import Jaune.Run.Canonical
+import Jaune.Run.BlockFacts
+import Jaune.Sufficiency
+import Jaune.MessageCall.Canonical
 import Jaune.Run.CheckedCanonical
 -- `List.IsChain` itself is Batteries; its infix/suffix closure lemmas, which
 -- the retained-history predicate below reasons with, are Mathlib's.

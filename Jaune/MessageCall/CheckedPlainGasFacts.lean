@@ -1,4 +1,5 @@
 import Jaune.CheckedSufficiencyWalk
+import Jaune.Sufficiency
 import Jaune.Instructions.WordFacts
 import Jaune.Instructions.ShuffleFacts
 import Jaune.Instructions.LogFacts

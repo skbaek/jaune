@@ -184,36 +184,6 @@
    "to_module": "Jaune.MessageCall.Records"
   },
   {
-   "old": "Jaune.instInhabitedBlockContext",
-   "new": "Jaune.instInhabitedBlockContext",
-   "kind": "relocation",
-   "layer": "execution",
-   "rule": "4",
-   "source": "Plain English (rule 4); G2b N4-0 survivor extraction (Neon finding 1, jsn-u89)",
-   "from_module": "Jaune.MessageCall.State",
-   "to_module": "Jaune.MessageCall.Records"
-  },
-  {
-   "old": "Jaune.instInhabitedCallContext",
-   "new": "Jaune.instInhabitedCallContext",
-   "kind": "relocation",
-   "layer": "execution",
-   "rule": "4",
-   "source": "Plain English (rule 4); G2b N4-0 survivor extraction (Neon finding 1, jsn-u89)",
-   "from_module": "Jaune.MessageCall.State",
-   "to_module": "Jaune.MessageCall.Records"
-  },
-  {
-   "old": "Jaune.instInhabitedTransactionContext",
-   "new": "Jaune.instInhabitedTransactionContext",
-   "kind": "relocation",
-   "layer": "execution",
-   "rule": "4",
-   "source": "Plain English (rule 4); G2b N4-0 survivor extraction (Neon finding 1, jsn-u89)",
-   "from_module": "Jaune.MessageCall.State",
-   "to_module": "Jaune.MessageCall.Records"
-  },
-  {
    "old": "Jaune.Frame.Result.Canonical",
    "new": "Jaune.Frame.Result.Canonical",
    "kind": "relocation",
@@ -296,16 +266,6 @@
   {
    "old": "Jaune.StateGasMeter.Settled",
    "new": "Jaune.StateGasMeter.Settled",
-   "kind": "relocation",
-   "layer": "execution",
-   "rule": "4",
-   "source": "Plain English (rule 4); G2b N4-0 survivor extraction (Neon finding 1, jsn-u89)",
-   "from_module": "Jaune.MessageCall.ResumeFacts",
-   "to_module": "Jaune.MessageCall.Measures"
-  },
-  {
-   "old": "Jaune.instDecidableSettled",
-   "new": "Jaune.instDecidableSettled",
    "kind": "relocation",
    "layer": "execution",
    "rule": "4",

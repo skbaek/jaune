@@ -1,5 +1,6 @@
 import Jaune.FrameRun.CheckedOrder
 import Jaune.FrameRun.CheckedAdequacy
+import Jaune.Run.BodyFacts
 import Jaune.Run.CheckedTransaction
 import Jaune.Transaction
 import Jaune.Run.Prefix
