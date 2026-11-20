@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check compiler-indexed names against retired tokens and a reviewed policy.
+"""Check compiler-indexed names against retired tokens, retired names and a reviewed policy.
 
 This checker does not infer that an abbreviation is English or that a citation
 is authoritative. Its word vocabulary and exact source bindings are explicit
@@ -174,9 +174,14 @@ def unknown_words(segment, words, abbreviations):
     return unknown
 
 
-def lint_names(names, mapping, policy, words):
-    problems = []
+def lint_names(names, mapping, policy, words, final=False):
+    """(problems, used source bindings, pending findings). A pending retired
+    name is reported without failing, except in a final run, which enforces it."""
+    problems, pending = [], []
     used_bindings = set()
+    enforced_names, pending_names = MAP.retired_name_lists(mapping)
+    if final:
+        enforced_names, pending_names = enforced_names + pending_names, []
     abbreviations = set(mapping['allowed_abbreviations'])
     mapped = {entry['new']: entry for entry in mapping['entries']}
     for name, location in sorted(names.items()):
@@ -188,6 +193,12 @@ def lint_names(names, mapping, policy, words):
         retired = MAP.find_retired_tokens(name, mapping['retired_tokens'])
         if retired:
             problems.append(dict(name=name, location=location, reason='retired token', tokens=retired))
+        held = MAP.find_retired_names(name, enforced_names)
+        if held:
+            problems.append(dict(name=name, location=location, reason='retired name', names=held))
+        held = MAP.find_retired_names(name, pending_names)
+        if held:
+            pending.append(dict(name=name, location=location, reason='pending retired name', names=held))
         parts = name.split('.')
         for i, part in enumerate(parts):
             if i == 0 and part in ('Jaune', 'JauneConsensus'):
@@ -200,11 +211,12 @@ def lint_names(names, mapping, policy, words):
             if unknown:
                 problems.append(dict(name=name, location=location,
                                      reason='unregistered word or source', segment=prefix, tokens=unknown))
-    return problems, used_bindings
+    return problems, used_bindings, pending
 
 
-def check(tree, mapping, policy, source_root, files, roots):
+def check(tree, mapping, policy, source_root, files, roots, final=False):
     MAP.validate_map(mapping)
+    registered_pending = MAP.retired_name_lists(mapping)[1]
     words = validate_policy(policy, source_root)
     selected = [source for source, _ in files]
     if len(selected) != len(set(selected)):
@@ -221,7 +233,7 @@ def check(tree, mapping, policy, source_root, files, roots):
             raise ValueError(f'incomplete tree coverage: missing={sorted(expected - set(selected))}, extra={sorted(set(selected) - expected)}')
     elif not selected:
         raise ValueError('no selected files')
-    problems, rows, used = [], [], set()
+    problems, pending, rows, used = [], [], [], set()
     for source, bundle_path in files:
         raw = APPLY.safe_path(tree, source).read_bytes()
         bundle_raw = Path(bundle_path).read_bytes()
@@ -230,14 +242,20 @@ def check(tree, mapping, policy, source_root, files, roots):
         if bundle.get('source') != text:
             raise ValueError(f'{source}: reference bundle source mismatch; re-export')
         names = declarations(text, bundle['index'])
-        found, bindings = lint_names(names, mapping, policy, words)
+        found, bindings, waiting = lint_names(names, mapping, policy, words, final)
         used.update(bindings)
         problems.extend(dict(source=source, **problem) for problem in found)
+        pending.extend(dict(source=source, **problem) for problem in waiting)
         rows.append(dict(source=source, source_sha256=sha(raw), bundle_sha256=sha(bundle_raw), declarations=len(names)))
     if roots:
         for stale in sorted(set(policy['bindings']) - used):
             problems.append(dict(name=stale, reason='unused source binding'))
-    return dict(status='REGRESSION' if problems else 'OK',
+    if final:
+        # The landing map registers no pending name: each one left is a finding of its own.
+        for name in registered_pending:
+            problems.append(dict(name=name, reason='retired name still registered as pending'))
+    return dict(status='REGRESSION' if problems else 'OK', final=final,
+                pending_retired_names=registered_pending, pending=pending,
                 scope=('whole-tree' if set(roots) == {'Jaune', 'JauneConsensus'}
                        else 'selected-roots' if roots else 'selected-files'), roots=roots,
                 files=rows, problems=problems)
@@ -251,13 +269,16 @@ def main(argv=None):
     parser.add_argument('--source-root', type=Path, required=True)
     parser.add_argument('--file', nargs=2, action='append', default=[], metavar=('SOURCE', 'BUNDLE'))
     parser.add_argument('--root', action='append', default=[], help='require exact .lean coverage of this tree-relative root')
+    parser.add_argument('--final', action='store_true',
+                        help='landing verdict: pending retired names are enforced, and one still '
+                             'registered as pending in the map is a finding')
     parser.add_argument('--report', action='store_true',
                         help='report mode: naming findings exit 0 (setup and coverage failures still exit 2)')
     args = parser.parse_args(argv)
     try:
         map_raw, policy_raw = args.map.read_bytes(), args.policy.read_bytes()
         result = check(args.tree.resolve(), json.loads(map_raw), json.loads(policy_raw),
-                       args.source_root.resolve(), args.file, args.root)
+                       args.source_root.resolve(), args.file, args.root, args.final)
         result['map_sha256'] = sha(map_raw)
         result['policy_sha256'] = sha(policy_raw)
     except (OSError, ValueError, KeyError, TypeError) as error:

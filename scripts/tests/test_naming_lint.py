@@ -34,7 +34,9 @@ class NamingLintTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
         module = source[:-5].replace('/', '.')
-        index = dict(version=5, module=module, decls={name: [0, 0, 0, 14, 0, 4, 0, 9]}, references={})
+        last = name.split('.')[-1]
+        index = dict(version=5, module=module, references={},
+                     decls={name: [0, 0, 0, len(text) - 1, 0, 4, 0, 4 + len(last)]})
         bundle = self.root / (module + '.json')
         bundle.write_text(json.dumps(dict(source=text, index=index)))
         return source, str(bundle)
@@ -47,6 +49,97 @@ class NamingLintTests(unittest.TestCase):
             self.assertTrue(any(p['reason'] == 'retired token' for p in self.lint(name)))
         self.bind('Jaune.bal', 'bal')
         self.assertTrue(any(p['reason'] == 'retired token' for p in self.lint('Jaune.bal')))
+
+    def retire(self, enforced=(), pending=()):
+        self.mapping['retired_names'], self.mapping['pending_retired_names'] = list(enforced), list(pending)
+        self.policy['words'] = sorted(set(self.policy['words']) | {
+            'generic', 'call', 'create', 'frame', 'outer', 'spawn', 'step', 'ssz', 'case'})
+
+    def reasons(self, *names, final=False):
+        words = LINT.validate_policy(self.policy, self.root)
+        problems, _, pending = LINT.lint_names(dict.fromkeys(names, [0, 0, 0, 1]), self.mapping, self.policy,
+                                               words, final)
+        return [(p['reason'], p['names']) for p in problems if 'names' in p], [p['names'] for p in pending]
+
+    def test_retired_names_in_declarations_fields_and_private_names(self):
+        self.retire(enforced=['genericCall', 'Frame.outer'])
+        for name in ('Jaune.genericCall', 'Jaune.Checked.genericCallAmsterdam.step',
+                     'JauneConsensus.step_genericCall'):
+            self.assertEqual(self.reasons(name), ([('retired name', ['genericCall'])], []), name)
+        self.assertEqual(self.reasons('Jaune.Frame.outer'), ([('retired name', ['Frame.outer'])], []))
+        for name in ('Jaune.genericCreate', 'Jaune.Frame.step', 'Jaune.outer', 'Jaune.spawnCall'):
+            self.assertEqual(self.lint(name), [], name)
+        # A field definition and a private name, as the compiler indexes them.
+        text = 'outer genericCall'
+        ref = lambda n: json.dumps({'c': {'m': 'Jaune.Test', 'n': n}})
+        index = dict(version=5, module='Jaune.Test', decls={}, references={
+            ref('Jaune.Frame.outer'): {'definition': [0, 0, 0, 5], 'usages': []},
+            ref('_private.Jaune.Test.0.Jaune.genericCall'): {'definition': [0, 6, 0, 17], 'usages': []}})
+        names = LINT.declarations(text, index)
+        words = LINT.validate_policy(self.policy, self.root)
+        found = LINT.lint_names(names, self.mapping, self.policy, words)[0]
+        self.assertEqual({(p['name'], p['reason']) for p in found},
+                         {('Jaune.Frame.outer', 'retired name'), ('Jaune.genericCall', 'retired name')})
+
+    def test_retired_names_spare_source_names_and_no_source_exempts_one(self):
+        self.retire(enforced=['genericCall', 'genericCreate'])
+        self.bind('JauneConsensus.ssz_generic', 'ssz_generic')
+        self.assertEqual(self.lint('JauneConsensus.ssz_generic', 'JauneConsensus.sszGenericCase'), [])
+        self.policy['bindings'] = {}
+        self.bind('Jaune.genericCall', 'generic_call', 'lowerCamel')
+        self.assertEqual(self.reasons('Jaune.genericCall'), ([('retired name', ['genericCall'])], []))
+
+    def test_pending_retired_names_report_until_the_final_run(self):
+        self.retire(enforced=['Frame.outer'], pending=['genericCall'])
+        self.assertEqual(self.reasons('Jaune.genericCall.step'), ([], [['genericCall']]))
+        self.assertEqual(self.reasons('Jaune.genericCall.step', final=True),
+                         ([('retired name', ['genericCall'])], []))
+        pair = self.bundle(text='def genericCall := 1\n', name='Jaune.genericCall')
+        result = LINT.check(self.root, self.mapping, self.policy, self.root, [pair], [])
+        self.assertEqual((result['status'], result['final'], result['pending_retired_names']),
+                         ('OK', False, ['genericCall']))
+        self.assertEqual([(p['source'], p['name'], p['reason'], p['names']) for p in result['pending']],
+                         [('Jaune/Test.lean', 'Jaune.genericCall', 'pending retired name', ['genericCall'])])
+        result = LINT.check(self.root, self.mapping, self.policy, self.root, [pair], [], final=True)
+        self.assertEqual(result['status'], 'REGRESSION')
+        self.assertEqual([(p['name'], p['reason']) for p in result['problems']],
+                         [('Jaune.genericCall', 'retired name'),
+                          ('genericCall', 'retired name still registered as pending')])
+        # A final run with a clean tree still fails while the map registers a pending name.
+        clean = self.bundle()
+        result = LINT.check(self.root, self.mapping, self.policy, self.root, [clean], [], final=True)
+        self.assertEqual([p['reason'] for p in result['problems']], ['retired name still registered as pending'])
+        self.retire(enforced=['Frame.outer', 'genericCall'])
+        result = LINT.check(self.root, self.mapping, self.policy, self.root, [clean], [], final=True)
+        self.assertEqual((result['status'], result['final'], result['pending']), ('OK', True, []))
+
+    def test_reintroducing_a_retired_name_or_token_fails_on_a_synthetic_tree(self):
+        # The S1 and N3 controls: the tracked map with its pending names enforced, as at landing.
+        enforced, pending = LINT.MAP.retired_name_lists(self.mapping)
+        self.retire(enforced=enforced + pending)
+        green = 'def spawnCall := 1\n'
+        pair = self.bundle(text=green, name='Jaune.spawnCall')
+        other = self.bundle('JauneConsensus/Test.lean', name='JauneConsensus.value')
+        roots = ['Jaune', 'JauneConsensus']
+        baseline = LINT.check(self.root, self.mapping, self.policy, self.root, [pair, other], roots, final=True)
+        self.assertEqual((baseline['status'], baseline['scope']), ('OK', 'whole-tree'))
+        source = self.root / 'Jaune/Test.lean'
+        for planted, reason in (('genericCall', 'retired name'), ('genericCreateAmsterdam', 'retired name'),
+                                ('incorporateChild', 'retired name'), ('executeCode', 'retired name'),
+                                ('Devm', 'retired token')):
+            mutated = self.bundle(text=green.replace('spawnCall', planted), name='Jaune.' + planted)
+            result = LINT.check(self.root, self.mapping, self.policy, self.root, [mutated, other], roots, final=True)
+            self.assertEqual(result['status'], 'REGRESSION', planted)
+            self.assertEqual([(p['source'], p['name'], p['reason']) for p in result['problems']
+                              if p['reason'].startswith('retired')],
+                             [('Jaune/Test.lean', 'Jaune.' + planted, reason)], planted)
+            source.write_text(green)
+            self.assertEqual(LINT.sha(source.read_bytes()), baseline['files'][0]['source_sha256'])
+        # Without the registration the planted name passes: the control is the map's entry.
+        self.retire(enforced=[name for name in enforced + pending if name != 'genericCall'])
+        mutated = self.bundle(text=green.replace('spawnCall', 'genericCall'), name='Jaune.genericCall')
+        result = LINT.check(self.root, self.mapping, self.policy, self.root, [mutated, other], roots, final=True)
+        self.assertEqual(result['status'], 'OK')
 
     def test_unknown_words_cannot_hide_in_unicode_or_punctuation(self):
         for name in ('Jaune.acct', 'Jaune.readΞ', 'Jaune.read__value', 'Jaune.read$'):

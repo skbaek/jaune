@@ -18,6 +18,7 @@ OPTIONAL_FIELDS = ("notes", "from_module", "to_module", "public_from")
 ALLOWED_ENTRY_FIELDS = frozenset(REQUIRED_FIELDS + OPTIONAL_FIELDS)
 # An acronym with a plural `s` (`BLTs`, `NTBs`) is the acronym and `s`, not `BL` + `Ts`.
 TOKEN_RE = re.compile(r"[A-Z]{2,}(?=s(?:[A-Z0-9_]|$))|[A-Z]+(?=[A-Z][a-z0-9]|$)|[A-Z]?[a-z0-9]+")
+RETIRED_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)*(?:\.[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)*)*")
 
 
 def tokenize_identifier(qualified_name):
@@ -31,6 +32,13 @@ def tokenize_identifier(qualified_name):
     return tokens
 
 
+def _segment_has(segment, tokens, retired, pattern):
+    """The retired-token rule on one name segment: the segment is the retired
+    spelling, or holds its tokens as a run at camelCase/snake_case boundaries."""
+    return segment == retired or bool(pattern) and any(
+        tokens[i:i + len(pattern)] == pattern for i in range(len(tokens) - len(pattern) + 1))
+
+
 def find_retired_tokens(qualified_name, retired_tokens):
     """Return retired tokens appearing as identifier tokens in qualified_name."""
     hits = []
@@ -38,11 +46,50 @@ def find_retired_tokens(qualified_name, retired_tokens):
     for segment in qualified_name.split("."):
         tokens = tokenize_identifier(segment)
         for retired, pattern in patterns.items():
-            if segment == retired or (pattern and any(
-                    tokens[i:i + len(pattern)] == pattern
-                    for i in range(len(tokens) - len(pattern) + 1))):
+            if _segment_has(segment, tokens, retired, pattern):
                 hits.append(retired)
     return hits
+
+
+def find_retired_names(qualified_name, retired_names):
+    """Return the retired names qualified_name holds, each once, in list order.
+
+    A retired name is a dotted sequence of components. It is held when
+    consecutive segments of the name match its components one by one, each by
+    the retired-token rule. A one-component retired name is a retired token;
+    `Frame.outer` needs a `Frame` segment directly followed by an `outer` one.
+    """
+    segments = qualified_name.split(".")
+    tokens = [tokenize_identifier(segment) for segment in segments]
+    hits = []
+    for retired in retired_names:
+        parts = retired.split(".")
+        patterns = [tokenize_identifier(part) for part in parts]
+        if any(all(_segment_has(segments[i + j], tokens[i + j], parts[j], patterns[j])
+                   for j in range(len(parts)))
+               for i in range(len(segments) - len(parts) + 1)):
+            hits.append(retired)
+    return hits
+
+
+def retired_name_lists(data):
+    """(enforced, pending) retired names of a map; both lists are optional."""
+    lists = []
+    for key in ("retired_names", "pending_retired_names"):
+        value = data.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError(f"top-level '{key}' must be a list of strings")
+        for item in value:
+            # Every component must be tokens end to end, or part of it could never match.
+            if not RETIRED_NAME_RE.fullmatch(item) or any(
+                    "".join(TOKEN_RE.findall(piece)) != piece
+                    for part in item.split(".") for piece in part.split("_")):
+                raise ValueError(f"top-level '{key}' entry is not a dotted identifier: {item!r}")
+        lists.append(value)
+    enforced, pending = lists
+    if len(set(enforced + pending)) != len(enforced + pending):
+        raise ValueError("retired names are listed twice across 'retired_names' and 'pending_retired_names'")
+    return enforced, pending
 
 
 def _require_string_list(data, key):
@@ -61,8 +108,10 @@ def _parse_rules(raw_rule):
     return parts
 
 
-def validate_map(data):
-    """Validate rename-map schema, one-to-one bijection, sources, and retired tokens."""
+def validate_map(data, final=False):
+    """Validate rename-map schema, one-to-one bijection, sources, and retired tokens and names.
+
+    `final` is the landing check: no retired name may still be pending."""
     if not isinstance(data, dict):
         raise ValueError("rename map root must be a JSON object")
     if data.get("schema_version") != 1:
@@ -70,6 +119,12 @@ def validate_map(data):
 
     retired_tokens = _require_string_list(data, "retired_tokens")
     _require_string_list(data, "allowed_abbreviations")
+    # Retired names are not checked against rows: a name is retired at its cut,
+    # and a row may record an earlier rename to it (`Xinst.Run` -> `MessageOp.Run`).
+    # The lint rejects it in the tree.
+    _, pending_names = retired_name_lists(data)
+    if final and pending_names:
+        raise ValueError("pending retired names remain: " + ", ".join(pending_names))
 
     entries = data.get("entries")
     if not isinstance(entries, list):
@@ -276,27 +331,31 @@ class Renamer:
         return result
 
 
-def check_file(map_path=DEFAULT_MAP):
+def check_file(map_path=DEFAULT_MAP, final=False):
     """Load and validate a rename-map JSON file."""
     text = Path(map_path).read_text(encoding="utf-8")
     data = json.loads(text)
-    return validate_map(data)
+    return validate_map(data, final=final)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Validate Jaune's rename map schema.")
     parser.add_argument("--map", type=Path, default=DEFAULT_MAP,
                         help="path to rename-map JSON (default: scripts/naming-map.json)")
+    parser.add_argument("--final", action="store_true",
+                        help="landing check: fail while any retired name is still pending")
     args = parser.parse_args(argv)
     try:
-        entry_count, retired_count = check_file(args.map)
+        entry_count, retired_count = check_file(args.map, final=args.final)
+        enforced, pending = retired_name_lists(json.loads(Path(args.map).read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError) as error:
         print(f"SETUP — naming-map: {error}", file=sys.stderr)
         return 2
     except ValueError as error:
         print(f"REGRESSION — naming-map: {error}", file=sys.stderr)
         return 1
-    print(f"OK — naming-map: {entry_count} entries, {retired_count} retired tokens, schema valid")
+    print(f"OK — naming-map: {entry_count} entries, {retired_count} retired tokens, "
+          f"{len(enforced) + len(pending)} retired names ({len(pending)} pending), schema valid")
     return 0
 
 
