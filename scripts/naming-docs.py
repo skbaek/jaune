@@ -27,6 +27,10 @@ Four forms read context (jsn-u16, after the G0a review):
   by digest), a dotted code token headed by a variable (`rules.pow`) is stale
   when the tree spelled it exactly so and the plan respelled every such
   occurrence one way (`rules.proofOfWork`).
+With `--delete-receipt`, the scan also reports retired declarations and module
+paths. A name reused on the candidate is still valid. Removed names have no
+automatic replacement.
+
 Modules under `scripts/tests/` (naming-tool fixtures) are not indexed: no
 document describes them, and their names must not keep a product name alive.
 
@@ -45,6 +49,7 @@ import itertools
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -57,7 +62,7 @@ PATH = re.compile(r"(?<![\w./])(?:[A-Za-z_]\w*/)*[A-Za-z_]\w*\.lean\b")
 CODE = re.compile(r'```.*?```|`[^`\n]+`', re.S)
 BRACE = re.compile(r"(?<![\w.'?!/{,])[A-Za-z_][\w'?!.]*(?:\{[\w'?!]+(?:,[\w'?!]+)+\}[\w'?!.]*)+")
 MEMBERS = re.compile(r"`([A-Z][\w'?!.]*)`\s*\(((?:\s*`[^`\n]+`\s*(?:,|\bor\b|\band\b)?)+)\s*\)")
-WILDCARD = re.compile(r"`([A-Za-z_][\w']*)\*`")
+WILDCARD = re.compile(r"`([A-Za-z_][\w']*(?:\.[A-Za-z_][\w']*)*)\*`")
 VARFIELD = re.compile(r"(?<![\w.'?!/])[a-z][\w'?!]*(?:\.[A-Za-z_][\w'?!]*)+")
 TOKEN = re.compile(r"[A-Za-z_][\w'?!]*(?:\.[A-Za-z_][\w'?!]*)*")
 FIXTURES = 'scripts/tests/'
@@ -107,10 +112,12 @@ def suffixes(name):
 
 
 class Index:
-    def __init__(self, snapshot, mapping, plan=None):
+    def __init__(self, snapshot, mapping, plan=None, deletion=None):
         renamer = MAP.Renamer(mapping['entries'])
         base = Path(snapshot).parent
         data = json.loads(Path(snapshot).read_bytes())
+        if deletion is not None:
+            validate_deletion(deletion, data['candidate']['head'])
         names = set()
         sources = {}
         for module, row in data['exports'].items():
@@ -119,7 +126,7 @@ class Index:
                 continue
             export = json.loads((base / row['path']).read_bytes())
             names.update(export.get('constants', {}))
-            if path:
+            if path and plan is not None:
                 sources[path] = export.get('source', '')
         self.old = {}   # trailing spelling -> {replacement spelling: {old constant}}
         self.renamer = renamer
@@ -152,6 +159,31 @@ class Index:
         self.modules = dict(renamer.modules)
         self.unrenamed_modules = set(data['candidate']['modules']) - set(self.modules)
         self.constants = len(names)
+        self.deleted = {}
+        if deletion is not None:
+            self.index_deletions(deletion)
+
+    def index_deletions(self, receipt):
+        """A retired name has no automatic substitution. Reused names stay live."""
+        rows = receipt['deleted']
+        live_modules = self.unrenamed_modules | set(self.modules.values())
+        live_paths = {m.replace('.', '/') + '.lean' for m in live_modules}
+        live_basenames = {path.rsplit('/', 1)[-1] for path in live_paths}
+        live = self.after | live_modules | live_paths | live_basenames
+
+        def record(spelling, source):
+            if spelling not in live:
+                self.deleted.setdefault(spelling, set()).add(source)
+
+        for group in rows.values():
+            for row in group:
+                name = user(row['name'])
+                for spelling in suffixes(name):
+                    record(spelling, 'deleted ' + name)
+        for module in receipt['modules']['deleted']:
+            path = module.replace('.', '/') + '.lean'
+            for spelling in (module, path, path.rsplit('/', 1)[-1]):
+                record(spelling, 'deleted module ' + module)
 
     @staticmethod
     def plan_tokens(plan, sources):
@@ -198,6 +230,9 @@ class Index:
         for old_owner in {owner} | self.before_of.get(owner, set()):
             for replacement, constants in self.old.get(f'{old_owner}.{member}', {}).items():
                 found.setdefault(replacement.split('.')[-1], set()).update(constants)
+            deleted = self.deleted.get(f'{old_owner}.{member}')
+            if deleted:
+                found.setdefault(None, set()).update(deleted)
         return found or None
 
     def family(self, prefix):
@@ -205,6 +240,12 @@ class Index:
         at least two renamed one-component spellings start with P, each became
         Q + the same rest for one Q, and no constant of their namespaces
         spelled P... is left after the rename."""
+        removed = {name for word, names in self.deleted.items() if word.startswith(prefix)
+                   and '.' not in word[len(prefix):] for name in names}
+        if removed:
+            if any(word.startswith(prefix) and '.' not in word[len(prefix):] for word in self.after):
+                return None
+            return {None: removed}
         hits, news, parents = {}, set(), set()
         for spelling, replacements in self.old.items():
             if '.' in spelling or not spelling.startswith(prefix) or spelling in self.after:
@@ -226,7 +267,7 @@ class Index:
     def row(self, name):
         """The map row that renames a constant: its exact row, else the
         longest namespace row over it (with private names by user name)."""
-        if name.startswith('module '):
+        if name.startswith(('module ', 'deleted ')):
             return name
         name = user(name)
         if name in self.renamer.exact:
@@ -254,7 +295,8 @@ class Index:
                 news = {new.split('.')[-1] + '.lean' for new in hits.values()}
                 if hits and len(news) == 1 and not any(m.split('.')[-1] == stem for m in self.unrenamed_modules):
                     return {news.pop(): {'module ' + old for old in hits}}
-            return None
+        if spelling in self.deleted:
+            return {None: self.deleted[spelling]}
         if spelling in self.old and spelling not in self.after:
             return self.old[spelling]
         return None
@@ -262,6 +304,22 @@ class Index:
 
 def identifier_shaped(word):
     return bool(re.search(r"[A-Z]", word[1:]) or re.search(r"[\d_.]", word))
+
+
+def validate_deletion(receipt, head):
+    """The delete can be followed by other commits before the rename capture."""
+    if (receipt.get('schema_version') != 1 or receipt.get('verdict') != 'OK'
+            or receipt.get('unbound_rehearsal') is not False
+            or not all(receipt[side]['bound'] is True for side in ('before', 'after'))):
+        raise ValueError('a bound, passing delete-preservation receipt is required')
+    if sum(len(group) for group in receipt['deleted'].values()) != receipt['deleted_declarations']:
+        raise ValueError('deleted-name inventory does not match receipt total')
+    after = receipt['after']['revision']
+    if not all(isinstance(rev, str) and re.fullmatch('[0-9a-f]{40}', rev) for rev in (after, head)):
+        raise ValueError('expected full delete and snapshot commits')
+    if after != head and subprocess.run(
+            ['git', 'merge-base', '--is-ancestor', after, head], cwd=ROOT).returncode != 0:
+        raise ValueError('delete receipt is not an ancestor of the rename snapshot')
 
 
 def stale_span(word, start, index):
@@ -272,7 +330,7 @@ def stale_span(word, start, index):
     found = index.stale(word)
     if found is not None:
         return start, start + len(word), word, found
-    if '.' not in word:
+    if '.' not in word or word in index.after:
         return None
     parts = word.split('.')
     for i in range(len(parts) - 1, 0, -1):
@@ -299,7 +357,7 @@ def brace_finding(word, start, index):
     if all(v is None for v in results.values()):
         return None
     def candidate():
-        if any(v is None or len(v) != 1 for v in results.values()):
+        if any(v is None or len(v) != 1 or None in v for v in results.values()):
             return None
         news = {combo: next(iter(v)) for combo, v in results.items()}
         first = tuple(g[0] for g in groups)
@@ -372,7 +430,8 @@ def findings(text, index, all_code=False, path_key=None, keep=frozenset()):
         taken.append((f['start'], f['end']))
         candidates = f['candidates']
         out.append(dict(start=f['start'], end=f['end'], old=f['old'], line=text.count('\n', 0, f['start']) + 1,
-                        in_code=True, candidates=sorted(candidates), unique=f['unique'],
+                        in_code=True, candidates=sorted(c for c in candidates if c is not None),
+                        unique=f['unique'] and None not in candidates,
                         rows=sorted({str(index.row(c)) for cs in candidates.values() for c in cs})))
     for pattern in (PATH, IDENT):
         for m in pattern.finditer(text):
@@ -406,6 +465,9 @@ def main(argv=None):
     parser.add_argument('command', choices=('scan', 'apply'))
     parser.add_argument('--snapshot', type=Path, required=True)
     parser.add_argument('--map', type=Path, required=True)
+    parser.add_argument('--delete-receipt', type=Path,
+                        help='bound check-delete-preservation receipt from before the rename; '
+                             'report removed names and module paths that the rename did not restore')
     parser.add_argument('--all-code', action='store_true',
                         help='treat each file as code throughout (allowlists, manifests, coverage tables)')
     parser.add_argument('--keep', type=Path,
@@ -426,7 +488,8 @@ def main(argv=None):
             if plan.get('status') != 'planned' or plan.get('map_sha256') != sha(raw_map) or \
                     plan.get('snapshot_sha256') != sha(args.snapshot.read_bytes()):
                 raise ValueError('plan is not a planned plan of this snapshot and map')
-        index = Index(args.snapshot, mapping, plan)
+        deletion = json.loads(args.delete_receipt.read_bytes()) if args.delete_receipt else None
+        index = Index(args.snapshot, mapping, plan, deletion)
         keep = set()
         if args.keep:
             for row in json.loads(args.keep.read_bytes())['keep']:
