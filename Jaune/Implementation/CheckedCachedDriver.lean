@@ -406,8 +406,10 @@ private theorem execFueledCachedCore_fst :
 def execFueledCached (r : Frame.Running) (fuel : Nat) : Fueled Fault Frame.Exit :=
   (execFueledCachedCore r fuel none).1
 
-/-- The staged driver is its cached twin. The switch makes this the compiled-code substitution. -/
-theorem execFueled_eq_cached : execFueled = execFueledCached := by
+/-- The driver is its cached twin, and the compiled-code substitution: code compiled with this
+in scope runs `execFueledCached` wherever it calls `execFueled`. -/
+@[csimp] theorem execFueled_eq_cached :
+    execFueled = execFueledCached := by
   funext r fuel
   symm
   exact execFueledCachedCore_fst fuel r none
