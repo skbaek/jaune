@@ -12,9 +12,9 @@
 -- `conformance_target` in `scripts/sources.json`; that revision owns every
 -- field spelling, presence condition and ordering reproduced here.
 --
--- `stateTransitionE` validates the sealed header, derives the `Benv` from
+-- `stateTransitionE` validates the sealed header, derives the block context from
 -- the chain and header, runs the body, and checks the header's commitments.
--- The transition tool builds its `Benv` from `env` and runs the Checked
+-- The transition tool builds its `BlockContext` from `env` and runs the Checked
 -- body operations. It emits the resulting state and commitments for the caller.
 --
 -- The one genuinely new piece of control flow is the reject-and-continue
@@ -396,7 +396,7 @@ structure T8nOmmer : Type where
   address : Address
 deriving DecidableEq
 
-/-- Everything `env` contributes to a `BenvStat`, after the target's two
+/-- Everything `env` contributes to a `BlockContext`, after the target's two
 derivations have been applied. Fields no lane consumes -- `extraData`, the
 block-access-list pair -- are accepted and dropped, exactly as the target
 accepts and does not consume them. `difficulty` is the target's resolved block
@@ -464,7 +464,7 @@ Two shapes, both the target's. An **absent or empty** `blockHashes` yields the
 empty window whatever the block number says -- its `_resolve_block_hashes`
 returns early before it looks at the number, and that is the shape every state
 test arrives in. A **non-empty** one is expanded over the window; the target
-represents a gap in it as a `None` placeholder, and `BenvStat.blockHashes` has
+represents a gap in it as a `None` placeholder, and `BlockContext.blockHashes` has
 no placeholder, so a gap is refused here rather than silently read as some
 other block's hash. Every corpus case and every `fill` invocation that
 supplies the map at all supplies it dense. -/
@@ -527,7 +527,7 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
   let timestamp ← natOr j "currentTimestamp" defaultTimestamp
   requireBits "env.currentTimestamp" 256 timestamp
   -- `GASLIMIT` and `NUMBER` push these. The target fails only when a transaction
-  -- runs one, which a frontend cannot know before executing; `Benv` keeps them as
+  -- runs one, which a frontend cannot know before executing; `BlockContext` keeps them as
   -- `Nat`, so refusing here is the only way they are never pushed reduced.
   requireBits "env.currentGasLimit" 256 gasLimit
   requireBits "env.currentNumber" 256 number
