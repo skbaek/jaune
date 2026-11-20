@@ -36,4 +36,5 @@ import Jaune.Check.Transaction
 import Jaune.Check.Types
 import Jaune.Run.Trace
 import Jaune.Bridge.G2b.CheckedTrace
+import Jaune.Bridge.G2b.CheckedTraceJson
 import Jaune.Run.BodyFactsT8n

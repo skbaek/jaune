@@ -11,19 +11,23 @@ Old side: `Jaune.Trace.execFueled`, `Jaune.Trace.exec` and `Jaune.Trace.runFrame
 (`Jaune/MessageCall/TraceJson.lean`) at `9ce48608`, unedited. New side: `Checked.Trace.execFueled`,
 `Checked.Trace.exec` and `Checked.Trace.runFrame` (`Jaune.MessageCall.CheckedTrace`).
 
-The new tracer emits the old event type, projected from the checked state. The projection forgets
-exactly what no reader of an event reads: a `Devm`'s output and stored error where a running
-machine or a continuing step carries them, a halted frame's output, a fault's (never read) state,
-and a pending return's two passed-through fields. `normalize` forgets the same on an old event.
+The new tracer emits its own events (`Jaune.MessageCall.CheckedTraceEvent`). `Legacy.event`
+projects each onto the old event type, from the checked state; `Legacy.sink` reads an old sink
+through it. The projection forgets exactly what no reader of an event reads: a `Devm`'s output
+and stored error where a running machine or a continuing step carries them, a halted frame's
+output, a fault's (never read) state, and a pending return's two passed-through fields.
+`normalize` forgets the same on an old event.
 
 * `execFueled_events`, `exec_events`, `runFrame_events`: from related starts, the new tracer with
-  any sink, in any lawful monad, is the old tracer with the same sink after `normalize`: the same
+  any old sink through `Legacy.sink`, in any lawful monad, is the old tracer with the same sink
+  after `normalize`: the same
   sink calls on the same (normalised) events in the same order, the same frame numbering, and the
   same returned value. `runFrame_events` holds for every checked frame against its projection.
 * `consume_normalize`, `sink_normalize`: the serialiser reads nothing `normalize` forgets.
 * `runFrame_json`: so the two tracers write byte-identical `trace.jsonl` and `frames.jsonl` rows,
   and return the same result, for every checked frame (goal 3.1: the serialised event stream as a
-  further observation, proved equal).
+  further observation, proved equal). `Jaune.Bridge.G2b.CheckedTraceJson` carries this to the new
+  serialiser.
 
 It is classified `adapter` in `scripts/layering.json`, not `bridge`: a bridge module may not import
 an adapter, and both tracers and the serialiser are adapters. It is reached by the default build
@@ -36,6 +40,118 @@ namespace Jaune.Bridge.G2b.CheckedTrace
 variable [Checked.LegacyTransaction]
 
 open Jaune
+
+/-! ### The checked tracer's events, projected onto the `Devm` tracer's event vocabulary -/
+
+namespace Legacy
+
+/-- A checked memory as the event's memory. -/
+def mem (m : Memory) : Mem := ⟨m.data, m.size⟩
+
+/-- A checked state as the event's lifetime-grouped state. -/
+def state (s : Checked.Frame.State) : Frame.State :=
+  ⟨⟨s.machine.stack, mem s.machine.memory, s.machine.gasLeft, s.machine.stateGas,
+    s.machine.returnData⟩, s.world, s.substate, s.trail⟩
+
+/-- A checked state as a `Devm`, with no output and no stored error. -/
+def devm (s : Checked.Frame.State) : Devm := (state s).toDevm
+
+/-- A checked frame as the event's frame. -/
+def frame (f : Checked.Frame) : Frame := f.toLegacy
+
+/-- A running frame of the message `msg` as the event's running machine. -/
+def evm (msg : Message) (r : Checked.Frame.Running) : Evm := ⟨r.pc, msg.sevm, devm r.state⟩
+
+/-- How a frame stopped, as the event's raw result. -/
+def exitRaw : Checked.Frame.Exit → Execution
+  | .finished output s => .ok ((devm s).withOutput output)
+  | .reverted output s => .error (.revert, (devm s).withOutput output)
+  | .halted reason s => .error (.halt reason, devm s)
+
+/-- A fault as the event's raw result. Its state is never read. -/
+def faultRaw (fault : Fault) : Execution := .error (fault.toEvmError, default)
+
+/-- A frame's raw result or fault, as the event's raw result. -/
+def raw : Except Fault Checked.Frame.Exit → Execution
+  | .error fault => faultRaw fault
+  | .ok exit => exitRaw exit
+
+/-- A pending return as the event's, with no passed-through output and no stored error. -/
+def pending (p : Staging.Pending) : Pending := ⟨p.target, p.newAccountCharged, [], none⟩
+
+/-- One checked step as the event's step. A fault is shown as the raw result it ends the run
+with. -/
+def step (result : Except Fault Checked.Step) : Step :=
+  match result with
+  | .error fault => .halt (faultRaw fault)
+  | .ok (.exit e) => .halt (exitRaw e)
+  | .ok (.next pc s) => .next pc (devm s)
+  | .ok (.spawn child p pc) => .spawn (frame child) (pending p) pc
+
+/-- The top-level frame of a message, with the checked memory: `Frame.ofTop`'s, whose checkpoint
+memory is empty. -/
+def topFrame (msg : Msg) (isCreate : Bool) : Checked.Frame :=
+  let top := Frame.ofTop msg isCreate
+  let s := top.checkpoint
+  ⟨Checked.Message.ofLegacy top.message,
+    ⟨⟨s.machine.stack, Memory.empty, s.machine.gasLeft, s.machine.stateGas, s.machine.returnData⟩,
+      s.world, s.substate, s.trail⟩⟩
+
+/-- An entry of a frame of the message `msg` as the event's entry. -/
+def entry (msg : Message) : Checked.Frame.Entry → Frame.Entry
+  | .done result => .done result
+  | .run r => .run (evm msg r)
+
+/-- The caller after its child, as the event's raw result. -/
+def resumedRaw :
+    Except Fault (Except (ExceptionalHalt × Checked.Frame.State) Checked.Frame.State) → Execution
+  | .error fault => faultRaw fault
+  | .ok (.error (reason, s)) => .error (.halt reason, devm s)
+  | .ok (.ok s) => .ok (devm s)
+
+/-- The run identity as the event's. -/
+abbrev context (c : Checked.Trace.Context) : Trace.Context := ⟨c.runId, c.frame, c.depth⟩
+
+/-- A checked tracer event as the `Devm` tracer's: the checked state projected, the frame's
+message observed through the transaction template. -/
+def event : Checked.Trace.Event → Trace.Event
+  | .instruction c msg r result =>
+    .instruction (context c) (evm (msg.toLegacy Checked.LegacyTransaction.template) r) (step result)
+  | .entered c f e =>
+    .entered (context c) (frame f) (entry (f.message.toLegacy Checked.LegacyTransaction.template) e)
+  | .exited c outcome => .exited (context c) (outcome.map raw)
+  | .settled c f result => .settled (context c) (frame f) result
+  | .resumed c child x => .resumed (context c) child (resumedRaw x)
+
+/-- A `Devm` tracer sink as a checked tracer sink, through `event`. -/
+abbrev sink {m : Type → Type} (s : Trace.Sink m) : Checked.Trace.Sink m := fun e => s (event e)
+
+/-- The projection of each event, one constructor at a time. -/
+theorem event_instruction (c : Checked.Trace.Context) (msg : Checked.Message)
+    (r : Checked.Frame.Running) (result : Except Fault Checked.Step) :
+    event (.instruction c msg r result) =
+      .instruction (context c) (evm (msg.toLegacy Checked.LegacyTransaction.template) r)
+        (step result) := rfl
+theorem event_entered_done (c : Checked.Trace.Context) (f : Checked.Frame)
+    (x : Except Fault Frame.Result) :
+    event (.entered c f (.done x)) = .entered (context c) (frame f) (.done x) := rfl
+theorem event_entered_run (c : Checked.Trace.Context) (f : Checked.Frame)
+    (r : Checked.Frame.Running) :
+    event (.entered c f (.run r)) =
+      .entered (context c) (frame f)
+        (.run (evm (f.message.toLegacy Checked.LegacyTransaction.template) r)) := rfl
+theorem event_exited_none (c : Checked.Trace.Context) :
+    event (.exited c none) = .exited (context c) none := rfl
+theorem event_exited_some (c : Checked.Trace.Context) (o : Except Fault Checked.Frame.Exit) :
+    event (.exited c (some o)) = .exited (context c) (some (raw o)) := rfl
+theorem event_settled (c : Checked.Trace.Context) (f : Checked.Frame)
+    (x : Except Fault Frame.Result) :
+    event (.settled c f x) = .settled (context c) (frame f) x := rfl
+theorem event_resumed (c : Checked.Trace.Context) (n : Nat)
+    (x : Except Fault (Except (ExceptionalHalt × Checked.Frame.State) Checked.Frame.State)) :
+    event (.resumed c n x) = .resumed (context c) n (resumedRaw x) := rfl
+
+end Legacy
 
 /-! ### What the projection forgets -/
 
@@ -97,9 +213,9 @@ theorem sink_normalize (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
 
 /-! ### The projections, against the bridge maps -/
 
-theorem state_eq (s : Checked.Frame.State) : Checked.Trace.state s = s.toLegacy := rfl
+theorem state_eq (s : Checked.Frame.State) : Legacy.state s = s.toLegacy := rfl
 
-theorem frame_eq (f : Checked.Frame) : Checked.Trace.frame f = f.toLegacy := rfl
+theorem frame_eq (f : Checked.Frame) : Legacy.frame f = f.toLegacy := rfl
 
 /-- What relates a running checked frame of the message `msg` to a running machine: the same
 frame, grouped; the message's static record; no output. -/
@@ -109,25 +225,25 @@ structure Related (msg : Message) (r : Checked.Frame.Running) (evm : Evm) : Prop
   output : evm.dyna.output = []
 
 theorem Related.evm_eq {msg : Message} {r : Checked.Frame.Running} {evm : Evm}
-    (h : Related msg r evm) : Checked.Trace.evm msg r = normEvm evm := by
+    (h : Related msg r evm) : Legacy.evm msg r = normEvm evm := by
   have hpc : r.pc = evm.pc := congrArg Frame.Running.pc h.running
-  have hs : Checked.Trace.state r.state = Frame.State.ofDevm evm.dyna :=
+  have hs : Legacy.state r.state = Frame.State.ofDevm evm.dyna :=
     congrArg Frame.Running.state h.running
-  simp only [Checked.Trace.evm, normEvm, normDevm, Checked.Trace.devm, hpc, hs, h.static]
+  simp only [Legacy.evm, normEvm, normDevm, Legacy.devm, hpc, hs, h.static]
 
 theorem normRaw_of_fault {raw : Execution} {fault : Fault}
-    (h : Frame.Exit.ofExecution raw = .error fault) : normRaw raw = Checked.Trace.faultRaw fault := by
-  simp only [normRaw, h, Checked.Trace.faultRaw]
+    (h : Frame.Exit.ofExecution raw = .error fault) : normRaw raw = Legacy.faultRaw fault := by
+  simp only [normRaw, h, Legacy.faultRaw]
 
 theorem normRaw_of_exit {raw : Execution} {e : Checked.Frame.Exit}
-    (h : Frame.Exit.ofExecution raw = .ok e.toLegacy) : normRaw raw = Checked.Trace.exitRaw e := by
+    (h : Frame.Exit.ofExecution raw = .ok e.toLegacy) : normRaw raw = Legacy.exitRaw e := by
   simp only [normRaw, h]
   cases e <;> rfl
 
 /-- The old raw result's exit, against the new driver's outcome. -/
 theorem normRaw_of_square {raw : Execution} {x : Except Fault Checked.Frame.Exit}
     (h : x.map Checked.Frame.Exit.toLegacy = Frame.Exit.ofExecution raw) :
-    normRaw raw = Checked.Trace.raw x := by
+    normRaw raw = Legacy.raw x := by
   rcases x with fault | e
   · exact normRaw_of_fault h.symm
   · exact normRaw_of_exit h.symm
@@ -147,19 +263,19 @@ theorem enterWith_run_sta {f : Frame} {start : Devm} {evm : Evm}
 
 /-- The new entry of a spawned child against the old one. -/
 theorem enter_rel (child : Checked.Frame) :
-    (enter (Checked.Trace.frame child)).observe = (Checked.enter child).toLegacy := by
+    (enter (Legacy.frame child)).observe = (Checked.enter child).toLegacy := by
   rw [Frame.Entry.observe_enter, frame_eq, Checked.enter_toLegacy]
 
 /-- The new entry of a top-level frame against the old one. -/
 theorem enterWith_rel (f : Checked.Frame) :
-    (enterWith (Checked.Trace.frame f) (Checked.Trace.frame f).checkpoint.toDevm).observe =
+    (enterWith (Legacy.frame f) (Legacy.frame f).checkpoint.toDevm).observe =
       (Checked.enterWith f f.checkpoint).toLegacy := by
   simpa only [frame_eq] using f.enterWith_square
 
 /-- The new settlement against the old one. -/
 theorem settle_rel (child : Checked.Frame) {raw : Execution} {x : Except Fault Checked.Frame.Exit}
     (h : x.map Checked.Frame.Exit.toLegacy = Frame.Exit.ofExecution raw) :
-    settle (Checked.Trace.frame child) raw = x >>= Checked.settle child := by
+    settle (Legacy.frame child) raw = x >>= Checked.settle child := by
   rw [settle_eq, ← h, frame_eq]
   rcases x with fault | e
   · rfl
@@ -175,8 +291,8 @@ theorem execFueled_rel (fuel : Nat) {msg : Message} {r : Checked.Frame.Running} 
 
 /-- The new resumption against the old one, for a caller saved with its RIPEMD-160 flag down. -/
 theorem resume_rel (rules : ForkRules) (p : Pending) (saved : Checked.Frame.State)
-    (result : Frame.Result) (hflag : (Checked.Trace.state saved).trail.touchedRIPEMD160 = false) :
-    (resume rules p (Checked.Trace.state saved) result).map (Except.mapResultState Frame.State.ofDevm) =
+    (result : Frame.Result) (hflag : (Legacy.state saved).trail.touchedRIPEMD160 = false) :
+    (resume rules p (Legacy.state saved) result).map (Except.mapResultState Frame.State.ofDevm) =
       (Checked.resume rules (Staging.Pending.ofLegacy p) saved result).map
         Checked.ResumeResult.toLegacy := by
   rw [resume_ofDevm _ _ _ _ hflag, state_eq, Checked.resume_toLegacy]
@@ -201,19 +317,19 @@ inductive ResumedRel (msg : Message) (pc : Nat) (sta : Sevm) (context : Checked.
   /-- Both go on, from related states. -/
   | resumed {d : Devm} {s : Checked.Frame.State} :
       Related msg ⟨pc, context, s⟩ ⟨pc, sta, d⟩ →
-      Checked.Trace.resumedRaw (.ok (.ok s)) = normRaw (.ok d) →
+      Legacy.resumedRaw (.ok (.ok s)) = normRaw (.ok d) →
       ResumedRel msg pc sta context (.ok d) (.ok (.ok s))
   /-- Both stop, with the same normalised raw result. -/
   | stopped {e : EvmError × Devm} {x} :
-      (∀ s, x ≠ .ok (.ok s)) → normRaw (.error e) = Checked.Trace.resumedRaw x →
+      (∀ s, x ≠ .ok (.ok s)) → normRaw (.error e) = Legacy.resumedRaw x →
       ResumedRel msg pc sta context (.error e) x
 
 theorem resumedRel {msg : Message} {r : Checked.Frame.Running} {evm : Evm} (h : Related msg r evm)
     {child : Checked.Frame} {p : Pending} {pc : Nat}
-    (hflag : (Checked.Trace.frame child).checkpoint.trail.touchedRIPEMD160 = false)
+    (hflag : (Legacy.frame child).checkpoint.trail.touchedRIPEMD160 = false)
     (hpo : p.legacyOutput = []) (settled : Except Fault Frame.Result) :
     ResumedRel msg pc evm.sta r.context
-      (Trace.resumedRaw evm.sta.benvStat.rules (Checked.Trace.frame child) p settled)
+      (Trace.resumedRaw evm.sta.benvStat.rules (Legacy.frame child) p settled)
       (Checked.Trace.resumed r.context.block.rules child (Staging.Pending.ofLegacy p) settled) := by
   have hctx : r.context.inLegacy = CallContext.ofSevm evm.sta := congrArg Frame.Running.context h.running
   have hrules : r.context.block.rules = evm.sta.benvStat.rules :=
@@ -221,18 +337,18 @@ theorem resumedRel {msg : Message} {r : Checked.Frame.Running} {evm : Evm} (h : 
   rcases settled with fault | result
   · apply ResumedRel.stopped
     · intro s hs; cases hs
-    · simp only [Checked.Trace.resumedRaw]
+    · simp only [Legacy.resumedRaw]
       exact normRaw_of_fault (ofExecution_fault fault _)
-  · have hr : (resume evm.sta.benvStat.rules p (Checked.Trace.frame child).checkpoint result).map
+  · have hr : (resume evm.sta.benvStat.rules p (Legacy.frame child).checkpoint result).map
         (Except.mapResultState Frame.State.ofDevm) =
         (Checked.resume evm.sta.benvStat.rules (Staging.Pending.ofLegacy p) child.checkpoint
           result).map Checked.ResumeResult.toLegacy :=
       resume_rel evm.sta.benvStat.rules p child.checkpoint result hflag
-    have ho := fun d (hd : resume evm.sta.benvStat.rules p (Checked.Trace.frame child).checkpoint
+    have ho := fun d (hd : resume evm.sta.benvStat.rules p (Legacy.frame child).checkpoint
         result = .ok (.ok d)) => resume_output hd
     simp only [Trace.resumedRaw, Checked.Trace.resumed, hrules]
     revert hr ho
-    rcases resume evm.sta.benvStat.rules p (Checked.Trace.frame child).checkpoint result with
+    rcases resume evm.sta.benvStat.rules p (Legacy.frame child).checkpoint result with
       fault | (⟨reason, d⟩ | d) <;>
     rcases Checked.resume evm.sta.benvStat.rules (Staging.Pending.ofLegacy p) child.checkpoint
       result with fault' | (⟨reason', s⟩ | s) <;>
@@ -245,14 +361,14 @@ theorem resumedRel {msg : Message} {r : Checked.Frame.Running} {evm : Evm} (h : 
     · obtain ⟨rfl, hs⟩ := hr
       apply ResumedRel.stopped
       · intro s' hs'; cases hs'
-      simp only [normRaw, Frame.Exit.ofExecution, Frame.Exit.toExecution, Checked.Trace.resumedRaw,
-        Checked.Trace.devm, hs, state_eq]
+      simp only [normRaw, Frame.Exit.ofExecution, Frame.Exit.toExecution, Legacy.resumedRaw,
+        Legacy.devm, hs, state_eq]
     · have hdo : d.output = [] := (ho d rfl).trans hpo
       refine .resumed ⟨?_, h.static, hdo⟩ ?_
       · show (⟨pc, r.context.inLegacy, s.toLegacy⟩ : Frame.Running) = ⟨pc, CallContext.ofSevm evm.sta, _⟩
         rw [hctx, ← hr]
-      · simp only [normRaw, Frame.Exit.ofExecution, Frame.Exit.toExecution, Checked.Trace.resumedRaw,
-          Checked.Trace.devm, hr, hdo, state_eq]
+      · simp only [normRaw, Frame.Exit.ofExecution, Frame.Exit.toExecution, Legacy.resumedRaw,
+        Legacy.devm, hr, hdo, state_eq]
         rfl
 
 /-! ### Results erase to their values -/
@@ -494,80 +610,96 @@ theorem trace_run_ok {evm : Evm} {fuel : Nat} {child : Frame} {p : Pending} {pc 
       dsimp only [Option.map]
       rw [hresume])]
 
-/-! #### The new tracer, one outcome at a time -/
+/-! #### The new tracer, one outcome at a time, for any sink of its own events -/
 
-theorem checked_zero (msg : Message) (r : Checked.Frame.Running) (context : Trace.Context)
-    (nextFrame : Nat) :
-    Checked.Trace.CertifiedResult.nextFrame <$> Checked.Trace.execFueled sink msg r 0 context nextFrame =
-      (do sink (.exited context none); pure nextFrame) := by
+variable (nsink : Checked.Trace.Sink m)
+
+theorem checked_zero (msg : Checked.Message) (r : Checked.Frame.Running)
+    (context : Checked.Trace.Context) (nextFrame : Nat) :
+    Checked.Trace.CertifiedResult.nextFrame <$> Checked.Trace.execFueled nsink msg r 0 context nextFrame =
+      (do nsink (.exited context none); pure nextFrame) := by
   rw [Checked.Trace.execFueled]
   simp only [map_bind, map_pure]
 
-theorem checked_fault {msg : Message} {r : Checked.Frame.Running} {fuel : Nat} {fault : Fault}
-    (hstep : Checked.step r = .error fault) (context : Trace.Context) (nextFrame : Nat) :
+theorem checked_fault {msg : Checked.Message} {r : Checked.Frame.Running} {fuel : Nat} {fault : Fault}
+    (hstep : Checked.step r = .error fault) (context : Checked.Trace.Context) (nextFrame : Nat) :
     Checked.Trace.CertifiedResult.nextFrame <$>
-        Checked.Trace.execFueled sink msg r (fuel + 1) context nextFrame =
+        Checked.Trace.execFueled nsink msg r (fuel + 1) context nextFrame =
       (do
-        sink (.instruction context (Checked.Trace.evm msg r) (Checked.Trace.step (.error fault)))
-        sink (.exited context (some (Checked.Trace.faultRaw fault)))
+        nsink (.instruction context msg r (.error fault))
+        nsink (.exited context (some (.error fault)))
         pure nextFrame) := by
   rw [Checked.Trace.execFueled]
   split <;> rename_i h <;> rw [hstep] at h <;> cases h
   simp only [map_bind, map_pure]
 
-theorem checked_exit {msg : Message} {r : Checked.Frame.Running} {fuel : Nat}
-    {e : Checked.Frame.Exit} (hstep : Checked.step r = .ok (.exit e)) (context : Trace.Context)
-    (nextFrame : Nat) :
+theorem checked_exit {msg : Checked.Message} {r : Checked.Frame.Running} {fuel : Nat}
+    {e : Checked.Frame.Exit} (hstep : Checked.step r = .ok (.exit e))
+    (context : Checked.Trace.Context) (nextFrame : Nat) :
     Checked.Trace.CertifiedResult.nextFrame <$>
-        Checked.Trace.execFueled sink msg r (fuel + 1) context nextFrame =
+        Checked.Trace.execFueled nsink msg r (fuel + 1) context nextFrame =
       (do
-        sink (.instruction context (Checked.Trace.evm msg r) (Checked.Trace.step (.ok (.exit e))))
-        sink (.exited context (some (Checked.Trace.exitRaw e)))
+        nsink (.instruction context msg r (.ok (.exit e)))
+        nsink (.exited context (some (.ok e)))
         pure nextFrame) := by
   rw [Checked.Trace.execFueled]
   split <;> rename_i h <;> rw [hstep] at h <;> cases h
   simp only [map_bind, map_pure]
 
-theorem checked_next {msg : Message} {r : Checked.Frame.Running} {fuel : Nat} {pc : Nat}
-    {s : Checked.Frame.State} (hstep : Checked.step r = .ok (.next pc s)) (context : Trace.Context)
-    (nextFrame : Nat) :
+theorem checked_next {msg : Checked.Message} {r : Checked.Frame.Running} {fuel : Nat} {pc : Nat}
+    {s : Checked.Frame.State} (hstep : Checked.step r = .ok (.next pc s))
+    (context : Checked.Trace.Context) (nextFrame : Nat) :
     Checked.Trace.CertifiedResult.nextFrame <$>
-        Checked.Trace.execFueled sink msg r (fuel + 1) context nextFrame =
+        Checked.Trace.execFueled nsink msg r (fuel + 1) context nextFrame =
       (do
-        sink (.instruction context (Checked.Trace.evm msg r) (Checked.Trace.step (.ok (.next pc s))))
+        nsink (.instruction context msg r (.ok (.next pc s)))
         Checked.Trace.CertifiedResult.nextFrame <$>
-          Checked.Trace.execFueled sink msg ⟨pc, r.context, s⟩ fuel context nextFrame) := by
+          Checked.Trace.execFueled nsink msg ⟨pc, r.context, s⟩ fuel context nextFrame) := by
   rw [Checked.Trace.execFueled]
   split <;> rename_i h <;> rw [hstep] at h <;> cases h
   simp only [map_bind]
   rw [checked_cast' _ (by simp only [Checked.execFueled, hstep])]
 
+/-- How a caller stopped after its child: a fault or an exceptional halt. The resumed case is
+never shown. -/
+def stopOutcome :
+    Except Fault (Except (ExceptionalHalt × Checked.Frame.State) Checked.Frame.State) →
+      Except Fault Checked.Frame.Exit
+  | .error fault => .error fault
+  | .ok (.error (reason, s)) => .ok (.halted reason s)
+  | .ok (.ok s) => .ok (.finished [] s)
+
+/-- A stopped caller's outcome, projected, is its resumption's raw result. -/
+theorem raw_stopOutcome
+    (x : Except Fault (Except (ExceptionalHalt × Checked.Frame.State) Checked.Frame.State)) :
+    Legacy.raw (stopOutcome x) = Legacy.resumedRaw x := by
+  rcases x with fault | ⟨reason, s⟩ | s <;> rfl
+
 /-- The rows a stopped caller emits after its child. -/
-abbrev stopRows (context : Trace.Context) (nextFrame : Nat)
+abbrev stopRows (context : Checked.Trace.Context) (nextFrame : Nat)
     (x : Except Fault (Except (ExceptionalHalt × Checked.Frame.State) Checked.Frame.State))
     (n : Nat) : m Nat := do
-  sink (.resumed context nextFrame (Checked.Trace.resumedRaw x))
-  sink (.exited context (some (Checked.Trace.resumedRaw x)))
+  nsink (.resumed context nextFrame x)
+  nsink (.exited context (some (stopOutcome x)))
   pure n
 
-theorem checked_done_ok {msg : Message} {r : Checked.Frame.Running} {fuel : Nat}
+theorem checked_done_ok {msg : Checked.Message} {r : Checked.Frame.Running} {fuel : Nat}
     {child : Checked.Frame} {p : Staging.Pending} {pc : Nat} {settled : Except Fault Frame.Result}
     {s : Checked.Frame.State} (hstep : Checked.step r = .ok (.spawn child p pc))
     (hentry : Checked.enter child = .done settled)
     (hresume : Checked.Trace.resumed r.context.block.rules child p settled = .ok (.ok s))
-    (context : Trace.Context) (nextFrame : Nat) :
+    (context : Checked.Trace.Context) (nextFrame : Nat) :
     Checked.Trace.CertifiedResult.nextFrame <$>
-        Checked.Trace.execFueled sink msg r (fuel + 1) context nextFrame =
+        Checked.Trace.execFueled nsink msg r (fuel + 1) context nextFrame =
       (do
-        sink (.instruction context (Checked.Trace.evm msg r)
-          (Checked.Trace.step (.ok (.spawn child p pc))))
-        sink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) (.done settled))
-        sink (.settled { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) settled)
-        sink (.resumed context nextFrame (Checked.Trace.resumedRaw (.ok (.ok s))))
+        nsink (.instruction context msg r (.ok (.spawn child p pc)))
+        nsink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
+          child (.done settled))
+        nsink (.settled { context with frame := nextFrame, depth := context.depth + 1 }
+          child settled)
+        nsink (.resumed context nextFrame (.ok (.ok s)))
         Checked.Trace.CertifiedResult.nextFrame <$>
-          Checked.Trace.execFueled sink msg ⟨pc, r.context, s⟩ fuel context (nextFrame + 1)) := by
+          Checked.Trace.execFueled nsink msg ⟨pc, r.context, s⟩ fuel context (nextFrame + 1)) := by
   rw [Checked.Trace.execFueled]
   split <;> rename_i h <;> rw [hstep] at h <;> cases h
   simp only [map_bind]
@@ -581,23 +713,22 @@ theorem checked_done_ok {msg : Message} {r : Checked.Frame.Running} {fuel : Nat}
       rw [hresume]
       try rfl)]
 
-theorem checked_done_stop {msg : Message} {r : Checked.Frame.Running} {fuel : Nat}
+theorem checked_done_stop {msg : Checked.Message} {r : Checked.Frame.Running} {fuel : Nat}
     {child : Checked.Frame} {p : Staging.Pending} {pc : Nat} {settled : Except Fault Frame.Result}
     {x : Except Fault (Except (ExceptionalHalt × Checked.Frame.State) Checked.Frame.State)}
     (hstep : Checked.step r = .ok (.spawn child p pc))
     (hentry : Checked.enter child = .done settled)
     (hresume : Checked.Trace.resumed r.context.block.rules child p settled = x)
-    (hx : ∀ s, x ≠ .ok (.ok s)) (context : Trace.Context) (nextFrame : Nat) :
+    (hx : ∀ s, x ≠ .ok (.ok s)) (context : Checked.Trace.Context) (nextFrame : Nat) :
     Checked.Trace.CertifiedResult.nextFrame <$>
-        Checked.Trace.execFueled sink msg r (fuel + 1) context nextFrame =
+        Checked.Trace.execFueled nsink msg r (fuel + 1) context nextFrame =
       (do
-        sink (.instruction context (Checked.Trace.evm msg r)
-          (Checked.Trace.step (.ok (.spawn child p pc))))
-        sink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) (.done settled))
-        sink (.settled { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) settled)
-        stopRows sink context nextFrame x (nextFrame + 1)) := by
+        nsink (.instruction context msg r (.ok (.spawn child p pc)))
+        nsink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
+          child (.done settled))
+        nsink (.settled { context with frame := nextFrame, depth := context.depth + 1 }
+          child settled)
+        stopRows nsink context nextFrame x (nextFrame + 1)) := by
   rw [Checked.Trace.execFueled]
   split <;> rename_i h <;> rw [hstep] at h <;> cases h
   simp only [map_bind]
@@ -605,23 +736,23 @@ theorem checked_done_stop {msg : Message} {r : Checked.Frame.Running} {fuel : Na
   simp only [map_bind]
   split <;> rename_i h <;> rw [hresume] at h <;> subst h
   · exact absurd rfl (hx _)
-  all_goals simp only [map_bind, map_pure, stopRows]
+  all_goals simp only [map_bind, map_pure, stopRows, stopOutcome]
 
-theorem checked_run_none {msg : Message} {r : Checked.Frame.Running} {fuel : Nat}
+theorem checked_run_none {msg : Checked.Message} {r : Checked.Frame.Running} {fuel : Nat}
     {child : Checked.Frame} {p : Staging.Pending} {pc : Nat} {cr : Checked.Frame.Running}
     (hstep : Checked.step r = .ok (.spawn child p pc)) (hentry : Checked.enter child = .run cr)
-    (hrun : (Checked.execFueled cr fuel).run = none) (context : Trace.Context) (nextFrame : Nat) :
+    (hrun : (Checked.execFueled cr fuel).run = none) (context : Checked.Trace.Context)
+    (nextFrame : Nat) :
     Checked.Trace.CertifiedResult.nextFrame <$>
-        Checked.Trace.execFueled sink msg r (fuel + 1) context nextFrame =
+        Checked.Trace.execFueled nsink msg r (fuel + 1) context nextFrame =
       (do
-        sink (.instruction context (Checked.Trace.evm msg r)
-          (Checked.Trace.step (.ok (.spawn child p pc))))
-        sink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) (.run (Checked.Trace.evm child.toLegacy.message cr)))
+        nsink (.instruction context msg r (.ok (.spawn child p pc)))
+        nsink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
+          child (.run cr))
         let n ← Checked.Trace.CertifiedResult.nextFrame <$>
-          Checked.Trace.execFueled sink child.toLegacy.message cr fuel
+          Checked.Trace.execFueled nsink child.message cr fuel
             { context with frame := nextFrame, depth := context.depth + 1 } (nextFrame + 1)
-        sink (.exited context none)
+        nsink (.exited context none)
         pure n) := by
   rw [Checked.Trace.execFueled]
   split <;> rename_i h <;> rw [hstep] at h <;> cases h
@@ -635,29 +766,28 @@ theorem checked_run_none {msg : Message} {r : Checked.Frame.Running} {fuel : Nat
   split <;> rename_i h <;> rw [hrun] at h <;> cases h
   simp only [map_bind, map_pure]
 
-theorem checked_run_ok {msg : Message} {r : Checked.Frame.Running} {fuel : Nat}
+theorem checked_run_ok {msg : Checked.Message} {r : Checked.Frame.Running} {fuel : Nat}
     {child : Checked.Frame} {p : Staging.Pending} {pc : Nat} {cr : Checked.Frame.Running}
     {x : Except Fault Checked.Frame.Exit} {s : Checked.Frame.State}
     (hstep : Checked.step r = .ok (.spawn child p pc)) (hentry : Checked.enter child = .run cr)
     (hrun : (Checked.execFueled cr fuel).run = some x)
     (hresume : Checked.Trace.resumed r.context.block.rules child p (x >>= Checked.settle child) =
       .ok (.ok s))
-    (context : Trace.Context) (nextFrame : Nat) :
+    (context : Checked.Trace.Context) (nextFrame : Nat) :
     Checked.Trace.CertifiedResult.nextFrame <$>
-        Checked.Trace.execFueled sink msg r (fuel + 1) context nextFrame =
+        Checked.Trace.execFueled nsink msg r (fuel + 1) context nextFrame =
       (do
-        sink (.instruction context (Checked.Trace.evm msg r)
-          (Checked.Trace.step (.ok (.spawn child p pc))))
-        sink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) (.run (Checked.Trace.evm child.toLegacy.message cr)))
+        nsink (.instruction context msg r (.ok (.spawn child p pc)))
+        nsink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
+          child (.run cr))
         let n ← Checked.Trace.CertifiedResult.nextFrame <$>
-          Checked.Trace.execFueled sink child.toLegacy.message cr fuel
+          Checked.Trace.execFueled nsink child.message cr fuel
             { context with frame := nextFrame, depth := context.depth + 1 } (nextFrame + 1)
-        sink (.settled { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) (x >>= Checked.settle child))
-        sink (.resumed context nextFrame (Checked.Trace.resumedRaw (.ok (.ok s))))
+        nsink (.settled { context with frame := nextFrame, depth := context.depth + 1 }
+          child (x >>= Checked.settle child))
+        nsink (.resumed context nextFrame (.ok (.ok s)))
         Checked.Trace.CertifiedResult.nextFrame <$>
-          Checked.Trace.execFueled sink msg ⟨pc, r.context, s⟩ fuel context n) := by
+          Checked.Trace.execFueled nsink msg ⟨pc, r.context, s⟩ fuel context n) := by
   rw [Checked.Trace.execFueled]
   split <;> rename_i h <;> rw [hstep] at h <;> cases h
   simp only [map_bind]
@@ -680,27 +810,26 @@ theorem checked_run_ok {msg : Message} {r : Checked.Frame.Running} {fuel : Nat}
       rw [hresume]
       try rfl)]
 
-theorem checked_run_stop {msg : Message} {r : Checked.Frame.Running} {fuel : Nat}
+theorem checked_run_stop {msg : Checked.Message} {r : Checked.Frame.Running} {fuel : Nat}
     {child : Checked.Frame} {p : Staging.Pending} {pc : Nat} {cr : Checked.Frame.Running}
     {x : Except Fault Checked.Frame.Exit}
     {y : Except Fault (Except (ExceptionalHalt × Checked.Frame.State) Checked.Frame.State)}
     (hstep : Checked.step r = .ok (.spawn child p pc)) (hentry : Checked.enter child = .run cr)
     (hrun : (Checked.execFueled cr fuel).run = some x)
     (hresume : Checked.Trace.resumed r.context.block.rules child p (x >>= Checked.settle child) = y)
-    (hy : ∀ s, y ≠ .ok (.ok s)) (context : Trace.Context) (nextFrame : Nat) :
+    (hy : ∀ s, y ≠ .ok (.ok s)) (context : Checked.Trace.Context) (nextFrame : Nat) :
     Checked.Trace.CertifiedResult.nextFrame <$>
-        Checked.Trace.execFueled sink msg r (fuel + 1) context nextFrame =
+        Checked.Trace.execFueled nsink msg r (fuel + 1) context nextFrame =
       (do
-        sink (.instruction context (Checked.Trace.evm msg r)
-          (Checked.Trace.step (.ok (.spawn child p pc))))
-        sink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) (.run (Checked.Trace.evm child.toLegacy.message cr)))
+        nsink (.instruction context msg r (.ok (.spawn child p pc)))
+        nsink (.entered { context with frame := nextFrame, depth := context.depth + 1 }
+          child (.run cr))
         let n ← Checked.Trace.CertifiedResult.nextFrame <$>
-          Checked.Trace.execFueled sink child.toLegacy.message cr fuel
+          Checked.Trace.execFueled nsink child.message cr fuel
             { context with frame := nextFrame, depth := context.depth + 1 } (nextFrame + 1)
-        sink (.settled { context with frame := nextFrame, depth := context.depth + 1 }
-          (Checked.Trace.frame child) (x >>= Checked.settle child))
-        stopRows sink context nextFrame y n) := by
+        nsink (.settled { context with frame := nextFrame, depth := context.depth + 1 }
+          child (x >>= Checked.settle child))
+        stopRows nsink context nextFrame y n) := by
   rw [Checked.Trace.execFueled]
   split <;> rename_i h <;> rw [hstep] at h <;> cases h
   simp only [map_bind]
@@ -715,7 +844,7 @@ theorem checked_run_stop {msg : Message} {r : Checked.Frame.Running} {fuel : Nat
   refine bind_congr fun _ => ?_
   split <;> rename_i h <;> rw [hresume] at h <;> subst h
   · exact absurd rfl (hy _)
-  all_goals simp only [map_bind, map_pure, stopRows]
+  all_goals simp only [map_bind, map_pure, stopRows, stopOutcome]
 
 end Unfold
 
@@ -729,12 +858,14 @@ variable {m : Type → Type} [Monad m] [LawfulMonad m] (sink : Trace.Sink m)
 in the same order, as the `Devm` tracer with `sink` after `normalize`, and numbers the frames the
 same way. -/
 theorem execFueled_events (fuel : Nat) :
-    ∀ (msg : Message) (r : Checked.Frame.Running) (evm : Evm) (context : Trace.Context)
-      (nextFrame : Nat), Related msg r evm →
+    ∀ (msg : Checked.Message) (r : Checked.Frame.Running) (evm : Evm)
+      (context : Checked.Trace.Context) (nextFrame : Nat),
+      Related (msg.toLegacy Checked.LegacyTransaction.template) r evm →
       Checked.Trace.CertifiedResult.nextFrame <$>
-          Checked.Trace.execFueled sink msg r fuel context nextFrame =
+          Checked.Trace.execFueled (Legacy.sink sink) msg r fuel context nextFrame =
         Trace.CertifiedResult.nextFrame <$>
-          Trace.execFueled (fun e => sink (normalize e)) evm fuel context nextFrame := by
+          Trace.execFueled (fun e => sink (normalize e)) evm fuel (Legacy.context context)
+            nextFrame := by
   induction fuel with
   | zero =>
     intro msg r evm context nextFrame _
@@ -752,12 +883,13 @@ theorem execFueled_events (fuel : Nat) :
       cases hw : Evm.step evm with
       | halt raw =>
         rw [hw] at hrel
-        have hraw : normRaw raw = Checked.Trace.faultRaw fault :=
+        have hraw : normRaw raw = Legacy.faultRaw fault :=
           normRaw_of_square (x := .error fault) (by
             simp only [Jaune.Step.observe, Except.map] at hrel ⊢
             revert hrel; cases Frame.Exit.ofExecution raw <;> simp)
-        rw [checked_fault sink hc, trace_halt _ hw]
-        simp only [normalize_instruction, normalize_exited_some, normStep, hevm, hraw, Checked.Trace.step]
+        rw [checked_fault (Legacy.sink sink) hc, trace_halt _ hw]
+        simp only [Legacy.sink, Legacy.event_instruction, Legacy.event_exited_some, Legacy.raw,
+          normalize_instruction, normalize_exited_some, normStep, hevm, hraw, Legacy.step]
       | next pc d => rw [hw] at hrel; simp [Jaune.Step.observe, Except.map] at hrel
       | spawn child p pc => rw [hw] at hrel; simp [Jaune.Step.observe, Except.map] at hrel
     | ok step =>
@@ -767,12 +899,13 @@ theorem execFueled_events (fuel : Nat) :
         cases hw : Evm.step evm with
         | halt raw =>
           rw [hw] at hrel
-          have hraw : normRaw raw = Checked.Trace.exitRaw e :=
+          have hraw : normRaw raw = Legacy.exitRaw e :=
             normRaw_of_square (x := .ok e) (by
               simp only [Jaune.Step.observe, Except.map, Checked.Step.toLegacy] at hrel ⊢
               revert hrel; cases Frame.Exit.ofExecution raw <;> simp)
-          rw [checked_exit sink hc, trace_halt _ hw]
-          simp only [normalize_instruction, normalize_exited_some, normStep, hevm, hraw, Checked.Trace.step]
+          rw [checked_exit (Legacy.sink sink) hc, trace_halt _ hw]
+          simp only [Legacy.sink, Legacy.event_instruction, Legacy.event_exited_some, Legacy.raw,
+            normalize_instruction, normalize_exited_some, normStep, hevm, hraw, Legacy.step]
         | next pc d => rw [hw] at hrel; simp [Jaune.Step.observe, Except.map, Checked.Step.toLegacy] at hrel
         | spawn child p pc =>
           rw [hw] at hrel; simp [Jaune.Step.observe, Except.map, Checked.Step.toLegacy] at hrel
@@ -788,10 +921,11 @@ theorem execFueled_events (fuel : Nat) :
             Staging.Step.next.injEq] at hrel
           obtain ⟨rfl, hs⟩ := hrel
           have hd : d.output = [] := by have := hpost; rw [hw] at this; exact this
-          rw [checked_next sink hc, trace_next _ hw]
-          simp only [normalize_instruction, normStep, hevm, Checked.Trace.step]
-          have hdevm : Checked.Trace.devm s = normDevm d := by
-            simp only [Checked.Trace.devm, normDevm, state_eq, hs]
+          rw [checked_next (Legacy.sink sink) hc, trace_next _ hw]
+          simp only [Legacy.sink, Legacy.event_instruction, normalize_instruction, normStep, hevm,
+            Legacy.step]
+          have hdevm : Legacy.devm s = normDevm d := by
+            simp only [Legacy.devm, normDevm, state_eq, hs]
           rw [hdevm]
           refine bind_congr fun _ => ?_
           refine ih msg _ _ context nextFrame ⟨?_, h.static, hd⟩
@@ -812,16 +946,17 @@ theorem execFueled_events (fuel : Nat) :
           simp only [Jaune.Step.observe, Except.map, Checked.Step.toLegacy, Except.ok.injEq,
             Staging.Step.spawn.injEq] at hrel
           obtain ⟨hchild, hp, rfl⟩ := hrel
-          have hchild' : child' = Checked.Trace.frame child := hchild.symm
+          have hchild' : child' = Legacy.frame child := hchild.symm
           subst hchild' hp
           have hpost' := hpost
           rw [hw] at hpost'
           obtain ⟨hpo, hflag⟩ := hpost'
-          have hinstr : normalize (.instruction context evm (.spawn (Checked.Trace.frame child) p' pc)) =
-              .instruction context (Checked.Trace.evm msg r)
-                (Checked.Trace.step (.ok (.spawn child (Staging.Pending.ofLegacy p') pc))) := by
-            simp only [normalize, normStep, hevm, Checked.Trace.step, normPending,
-              Checked.Trace.pending]
+          have hinstr : normalize (.instruction (Legacy.context context) evm
+                (.spawn (Legacy.frame child) p' pc)) =
+              .instruction (Legacy.context context)
+                (Legacy.evm (msg.toLegacy Checked.LegacyTransaction.template) r)
+                (Legacy.step (.ok (.spawn child (Staging.Pending.ofLegacy p') pc))) := by
+            simp only [normalize, normStep, hevm, Legacy.step, normPending, Legacy.pending]
             rfl
           have hrules : r.context.block.rules = evm.sta.benvStat.rules :=
             congrArg (fun ctx : CallContext => ctx.block.rules) hctx
@@ -829,36 +964,39 @@ theorem execFueled_events (fuel : Nat) :
           cases hce : Checked.enter child with
           | done settled =>
             rw [hce] at hentry
-            have hwe : enter (Checked.Trace.frame child) = .done settled := by
+            have hwe : enter (Legacy.frame child) = .done settled := by
               revert hentry
-              cases enter (Checked.Trace.frame child) <;>
+              cases enter (Legacy.frame child) <;>
                 simp [Frame.Entry.observe, Checked.Frame.Entry.toLegacy]
             have hres := resumedRel h (pc := pc) hflag hpo settled
             revert hres
             generalize hx : Checked.Trace.resumed r.context.block.rules child
               (Staging.Pending.ofLegacy p') settled = x
-            generalize hy : Trace.resumedRaw evm.sta.benvStat.rules (Checked.Trace.frame child) p'
+            generalize hy : Trace.resumedRaw evm.sta.benvStat.rules (Legacy.frame child) p'
               settled = y
             intro hres
             cases hres with
             | resumed hR hraw =>
-              rw [checked_done_ok sink hc hce hx, trace_done_ok _ hw hwe hy]
-              simp only [hinstr]
+              rw [checked_done_ok (Legacy.sink sink) hc hce hx, trace_done_ok _ hw hwe hy]
+              simp only [Legacy.sink, Legacy.event_instruction, Legacy.event_entered_done,
+                Legacy.event_settled, Legacy.event_resumed, hinstr]
               refine bind_congr fun _ => bind_congr fun _ => bind_congr fun _ => ?_
               rw [hraw]
               refine bind_congr fun _ => ?_
               exact ih msg _ _ context (nextFrame + 1) hR
             | stopped hne hraw =>
-              rw [checked_done_stop sink hc hce hx hne, trace_done_error _ hw hwe hy]
-              simp only [hinstr]
-              simp only [stopRows, normalize_entered_done, normalize_exited_some,
-                normalize_settled, normalize_resumed, hraw]
+              rw [checked_done_stop (Legacy.sink sink) hc hce hx hne, trace_done_error _ hw hwe hy]
+              simp only [stopRows, Legacy.sink, Legacy.event_instruction, Legacy.event_entered_done,
+                Legacy.event_exited_some, Legacy.event_settled, Legacy.event_resumed,
+                raw_stopOutcome, hinstr]
+              simp only [normalize_entered_done, normalize_exited_some, normalize_settled,
+                normalize_resumed, hraw]
           | run cr =>
             rw [hce] at hentry
-            obtain ⟨cevm, hwe, hcr⟩ : ∃ cevm, enter (Checked.Trace.frame child) = .run cevm ∧
+            obtain ⟨cevm, hwe, hcr⟩ : ∃ cevm, enter (Legacy.frame child) = .run cevm ∧
                 cr.toLegacy = Frame.Running.ofEvm cevm := by
               revert hentry
-              cases enter (Checked.Trace.frame child) with
+              cases enter (Legacy.frame child) with
               | done _ => simp [Frame.Entry.observe, Checked.Frame.Entry.toLegacy]
               | run cevm =>
                 intro hentry
@@ -867,17 +1005,20 @@ theorem execFueled_events (fuel : Nat) :
                 exact ⟨cevm, rfl, hentry.symm⟩
             have hR : Related child.toLegacy.message cr cevm :=
               ⟨hcr, enterWith_run_sta hwe, enter_run_output hwe⟩
-            have hcevm : Checked.Trace.evm child.toLegacy.message cr = normEvm cevm := hR.evm_eq
+            have hcevm : Legacy.evm (child.message.toLegacy Checked.LegacyTransaction.template) cr =
+                normEvm cevm := hR.evm_eq
             have hrun := execFueled_rel fuel hR
             cases hcx : (Checked.execFueled cr fuel).run with
             | none =>
               rw [hcx] at hrun
               have hwx : (Jaune.execFueled cevm fuel).run = none := by
                 revert hrun; cases (Jaune.execFueled cevm fuel).run <;> simp
-              rw [checked_run_none sink hc hce hcx, trace_run_none _ hw hwe hwx]
-              simp only [hinstr]; simp only [normalize_entered_run, normalize_exited_none, hcevm]
+              rw [checked_run_none (Legacy.sink sink) hc hce hcx, trace_run_none _ hw hwe hwx]
+              simp only [Legacy.sink, Legacy.event_instruction, Legacy.event_entered_run,
+                Legacy.event_exited_none,
+                hinstr]; simp only [normalize_entered_run, normalize_exited_none, hcevm]
               refine bind_congr fun _ => bind_congr fun _ => ?_
-              rw [ih child.toLegacy.message cr cevm _ (nextFrame + 1) hR]
+              rw [ih child.message cr cevm _ (nextFrame + 1) hR]
             | some x =>
               rw [hcx] at hrun
               obtain ⟨raw, hwx, hraw⟩ : ∃ raw, (Jaune.execFueled cevm fuel).run = some raw ∧
@@ -890,33 +1031,36 @@ theorem execFueled_events (fuel : Nat) :
                   simp only [Option.map, Option.some.injEq] at hrun
                   exact ⟨raw, rfl, hrun⟩
               have hsettle := settle_rel child hraw
-              have hres := resumedRel h (pc := pc) hflag hpo (settle (Checked.Trace.frame child) raw)
+              have hres := resumedRel h (pc := pc) hflag hpo (settle (Legacy.frame child) raw)
               rw [hsettle] at hres
               revert hres
               generalize hxr : Checked.Trace.resumed r.context.block.rules child
                 (Staging.Pending.ofLegacy p') (x >>= Checked.settle child) = xr
-              generalize hy : Trace.resumedRaw evm.sta.benvStat.rules (Checked.Trace.frame child) p'
+              generalize hy : Trace.resumedRaw evm.sta.benvStat.rules (Legacy.frame child) p'
                 (x >>= Checked.settle child) = y
               intro hres
-              have hy' : Trace.resumedRaw evm.sta.benvStat.rules (Checked.Trace.frame child) p'
-                  (settle (Checked.Trace.frame child) raw) = y := by rw [hsettle]; exact hy
+              have hy' : Trace.resumedRaw evm.sta.benvStat.rules (Legacy.frame child) p'
+                  (settle (Legacy.frame child) raw) = y := by rw [hsettle]; exact hy
               cases hres with
               | resumed hR' hraw' =>
-                rw [checked_run_ok sink hc hce hcx hxr, trace_run_ok _ hw hwe hwx hy']
-                simp only [hinstr]
+                rw [checked_run_ok (Legacy.sink sink) hc hce hcx hxr, trace_run_ok _ hw hwe hwx hy']
+                simp only [Legacy.sink, Legacy.event_instruction, Legacy.event_entered_run,
+                  Legacy.event_settled, Legacy.event_resumed, hinstr]
                 simp only [normalize_entered_run, normalize_settled, normalize_resumed, hcevm,
                   hsettle, hraw']
                 refine bind_congr fun _ => bind_congr fun _ => ?_
-                rw [ih child.toLegacy.message cr cevm _ (nextFrame + 1) hR]
+                rw [ih child.message cr cevm _ (nextFrame + 1) hR]
                 refine bind_congr fun n => bind_congr fun _ => bind_congr fun _ => ?_
                 exact ih msg _ _ context n hR'
               | stopped hne hraw' =>
-                rw [checked_run_stop sink hc hce hcx hxr hne, trace_run_error _ hw hwe hwx hy']
-                simp only [hinstr]
+                rw [checked_run_stop (Legacy.sink sink) hc hce hcx hxr hne, trace_run_error _ hw hwe hwx hy']
+                simp only [stopRows, Legacy.sink, Legacy.event_instruction,
+                  Legacy.event_entered_run, Legacy.event_exited_some, Legacy.event_settled,
+                  Legacy.event_resumed, raw_stopOutcome, hinstr]
                 simp only [normalize_entered_run, normalize_exited_some, normalize_settled,
-                  normalize_resumed, hcevm, hsettle, stopRows, hraw']
+                  normalize_resumed, hcevm, hsettle, hraw']
                 refine bind_congr fun _ => bind_congr fun _ => ?_
-                rw [ih child.toLegacy.message cr cevm _ (nextFrame + 1) hR]
+                rw [ih child.message cr cevm _ (nextFrame + 1) hR]
 
 theorem trace_exec (evm : Evm) (context : Trace.Context) (nextFrame : Nat) :
     Trace.ExecutionResult.nextFrame <$> Trace.exec sink evm context nextFrame =
@@ -928,11 +1072,11 @@ theorem trace_exec (evm : Evm) (context : Trace.Context) (nextFrame : Nat) :
   dsimp only
   split <;> simp only [map_pure]
 
-theorem checked_exec (msg : Message) (r : Checked.Frame.Running) (context : Trace.Context)
-    (nextFrame : Nat) :
-    Checked.Trace.ExecutionResult.nextFrame <$> Checked.Trace.exec sink msg r context nextFrame =
+theorem checked_exec (nsink : Checked.Trace.Sink m) (msg : Checked.Message)
+    (r : Checked.Frame.Running) (context : Checked.Trace.Context) (nextFrame : Nat) :
+    Checked.Trace.ExecutionResult.nextFrame <$> Checked.Trace.exec nsink msg r context nextFrame =
       Checked.Trace.CertifiedResult.nextFrame <$>
-        Checked.Trace.execFueled sink msg r (sufficientFuel r.state.machine.gasMeasure) context
+        Checked.Trace.execFueled nsink msg r (sufficientFuel r.state.machine.gasMeasure) context
           nextFrame := by
   unfold Checked.Trace.exec
   rw [map_bind, checked_bind]
@@ -941,11 +1085,13 @@ theorem checked_exec (msg : Message) (r : Checked.Frame.Running) (context : Trac
   split <;> simp only [map_pure]
 
 /-- **The total driver.** -/
-theorem exec_events {msg : Message} {r : Checked.Frame.Running} {evm : Evm} (h : Related msg r evm)
-    (context : Trace.Context) (nextFrame : Nat) :
-    Checked.Trace.ExecutionResult.nextFrame <$> Checked.Trace.exec sink msg r context nextFrame =
+theorem exec_events {msg : Checked.Message} {r : Checked.Frame.Running} {evm : Evm}
+    (h : Related (msg.toLegacy Checked.LegacyTransaction.template) r evm)
+    (context : Checked.Trace.Context) (nextFrame : Nat) :
+    Checked.Trace.ExecutionResult.nextFrame <$>
+        Checked.Trace.exec (Legacy.sink sink) msg r context nextFrame =
       Trace.ExecutionResult.nextFrame <$>
-        Trace.exec (fun e => sink (normalize e)) evm context nextFrame := by
+        Trace.exec (fun e => sink (normalize e)) evm (Legacy.context context) nextFrame := by
   rw [checked_exec, trace_exec,
     show r.state.machine.gasMeasure = evm.dyna.gasMeasure from
       congrArg (fun x : Frame.Running => x.state.machine.gasMeasure) h.running]
@@ -976,42 +1122,45 @@ theorem checked_execution_bind {α : Type} {r : Checked.Frame.Running}
 `sink` makes the same sink calls, in the same order, as the `Devm` tracer on the frame's
 projection with `sink` after `normalize`. -/
 theorem runFrame_nextFrame (f : Checked.Frame) (runId : String) :
-    Checked.Trace.FrameResult.nextFrame <$> Checked.Trace.runFrame sink f runId =
+    Checked.Trace.FrameResult.nextFrame <$> Checked.Trace.runFrame (Legacy.sink sink) f runId =
       Trace.FrameResult.nextFrame <$>
-        Trace.runFrame (fun e => sink (normalize e)) (Checked.Trace.frame f) runId := by
+        Trace.runFrame (fun e => sink (normalize e)) (Legacy.frame f) runId := by
   have hentry := enterWith_rel f
   unfold Checked.Trace.runFrame Trace.runFrame
   dsimp only
   split
   next settled hce =>
     rw [hce] at hentry
-    have hwe : enterWith (Checked.Trace.frame f) (Checked.Trace.frame f).checkpoint.toDevm =
+    have hwe : enterWith (Legacy.frame f) (Legacy.frame f).checkpoint.toDevm =
         .done settled := by
       revert hentry
-      cases enterWith (Checked.Trace.frame f) (Checked.Trace.frame f).checkpoint.toDevm <;>
+      cases enterWith (Legacy.frame f) (Legacy.frame f).checkpoint.toDevm <;>
         simp [Frame.Entry.observe, Checked.Frame.Entry.toLegacy]
     split <;> rename_i h <;> rw [hwe] at h <;> cases h
-    simp only [map_bind, map_pure, normalize_entered_done, normalize_settled]
+    simp only [map_bind, map_pure, Legacy.sink, Legacy.event_entered_done, Legacy.event_settled,
+      normalize_entered_done, normalize_settled]
   next r hce =>
     rw [hce] at hentry
-    obtain ⟨evm, hwe, hr⟩ : ∃ evm, enterWith (Checked.Trace.frame f)
-        (Checked.Trace.frame f).checkpoint.toDevm = .run evm ∧
+    obtain ⟨evm, hwe, hr⟩ : ∃ evm, enterWith (Legacy.frame f)
+        (Legacy.frame f).checkpoint.toDevm = .run evm ∧
         r.toLegacy = Frame.Running.ofEvm evm := by
       revert hentry
-      cases enterWith (Checked.Trace.frame f) (Checked.Trace.frame f).checkpoint.toDevm with
+      cases enterWith (Legacy.frame f) (Legacy.frame f).checkpoint.toDevm with
       | done _ => simp [Frame.Entry.observe, Checked.Frame.Entry.toLegacy]
       | run evm =>
         intro hentry
         simp only [Frame.Entry.observe, Checked.Frame.Entry.toLegacy,
           Staging.Frame.Entry.run.injEq] at hentry
         exact ⟨evm, rfl, hentry.symm⟩
-    have hR : Related f.toLegacy.message r evm := ⟨hr, enterWith_run_sta hwe, enterWith_run_output rfl hwe⟩
-    have hsettle : settle (Checked.Trace.frame f) (Jaune.exec evm) = Checked.exec r >>= Checked.settle f := by
+    have hR : Related (f.message.toLegacy Checked.LegacyTransaction.template) r evm :=
+      ⟨hr, enterWith_run_sta hwe, enterWith_run_output rfl hwe⟩
+    have hsettle : settle (Legacy.frame f) (Jaune.exec evm) = Checked.exec r >>= Checked.settle f := by
       apply settle_rel
       rw [← Checked.exec_toLegacy, hr]
       exact exec_square evm hR.output
     split <;> rename_i h <;> rw [hwe] at h <;> cases h
-    simp only [map_bind, map_pure, normalize_entered_run, normalize_settled, hR.evm_eq]
+    simp only [map_bind, map_pure, Legacy.sink, Legacy.event_entered_run, Legacy.event_settled,
+      normalize_entered_run, normalize_settled, hR.evm_eq]
     refine bind_congr fun _ => ?_
     rw [checked_execution_bind, trace_execution_bind, exec_events sink hR]
     refine bind_congr fun n => ?_
@@ -1020,13 +1169,13 @@ theorem runFrame_nextFrame (f : Checked.Frame) (runId : String) :
 /-- **The top-level frame.** The same, with the returned value: the settled result, which is
 `Checked.Frame.runTop f` on both sides. -/
 theorem runFrame_events (f : Checked.Frame) (runId : String) :
-    (fun x => (x.value, x.nextFrame)) <$> Checked.Trace.runFrame sink f runId =
+    (fun x => (x.value, x.nextFrame)) <$> Checked.Trace.runFrame (Legacy.sink sink) f runId =
       (fun x => (x.value, x.nextFrame)) <$>
-        Trace.runFrame (fun e => sink (normalize e)) (Checked.Trace.frame f) runId := by
+        Trace.runFrame (fun e => sink (normalize e)) (Legacy.frame f) runId := by
   have hl : (fun x : Checked.Trace.FrameResult f => (x.value, x.nextFrame)) =
       (fun n => (Checked.Frame.runTop f, n)) ∘ Checked.Trace.FrameResult.nextFrame := by
     funext x; rw [← x.erases]; rfl
-  have hr : (fun x : Trace.FrameResult (Checked.Trace.frame f) => (x.value, x.nextFrame)) =
+  have hr : (fun x : Trace.FrameResult (Legacy.frame f) => (x.value, x.nextFrame)) =
       (fun n => (Checked.Frame.runTop f, n)) ∘ Trace.FrameResult.nextFrame := by
     funext x; show (x.value, x.nextFrame) = (Checked.Frame.runTop f, x.nextFrame)
     rw [x.erases, Checked.Frame.runTop_square]; rfl
@@ -1062,141 +1211,39 @@ variable (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State) (trace frames
 
 local notation "jsonSink" => TraceJson.sink cfg state trace frames
 
-private theorem instruction_template (context : Trace.Context) (msg : Checked.Message)
-    (r : Checked.Frame.Running) (step : Except Fault Checked.Step) :
-    jsonSink (.instruction context (Checked.Trace.evm (msg.toLegacy left.template) r)
-        (@Checked.Trace.step left step)) =
-      jsonSink (.instruction context (Checked.Trace.evm (msg.toLegacy right.template) r)
-        (@Checked.Trace.step right step)) := by
-  cases step with
-  | error => rfl
-  | ok step => cases step <;> rfl
+/-- The JSON sink reads nothing of the transaction template an event is projected through. -/
+private theorem event_template (e : Checked.Trace.Event) :
+    jsonSink (@Legacy.event left e) = jsonSink (@Legacy.event right e) := by
+  cases e with
+  | instruction context msg r step =>
+    cases step with
+    | error => rfl
+    | ok step => cases step <;> rfl
+  | entered => rfl
+  | exited => rfl
+  | settled context f result =>
+    cases result with
+    | error => rfl
+    | ok result => cases result <;> rfl
+  | resumed => rfl
 
-private theorem entered_template (context : Trace.Context) (f g : Frame) (e e' : Frame.Entry) :
-    jsonSink (.entered context f e) = jsonSink (.entered context g e') := rfl
-
-private theorem settled_template (context : Trace.Context) (f : Checked.Frame)
-    (result : Except Fault Frame.Result) :
-    jsonSink (.settled context (@Checked.Trace.frame left f) result) =
-      jsonSink (.settled context (@Checked.Trace.frame right f) result) := by
-  cases result with
-  | error => rfl
-  | ok result => cases result <;> rfl
-
-/-- The JSON sink reads the typed message and frame observations in each emitted row.
-The transaction template affects neither the stream nor the numbering of frames. -/
-private theorem execFueled_json_template (fuel : Nat) :
-    ∀ (msg : Checked.Message) (r : Checked.Frame.Running) (context : Trace.Context) (nextFrame : Nat),
-      Checked.Trace.CertifiedResult.nextFrame <$>
-        @Checked.Trace.execFueled left IO _ jsonSink (msg.toLegacy left.template) r fuel context nextFrame =
-      Checked.Trace.CertifiedResult.nextFrame <$>
-        @Checked.Trace.execFueled right IO _ jsonSink (msg.toLegacy right.template) r fuel context nextFrame := by
-  induction fuel with
-  | zero =>
-    intro msg r context nextFrame
-    rw [@checked_zero left, @checked_zero right]
-  | succ fuel ih =>
-    intro msg r context nextFrame
-    have instruction := instruction_template cfg state trace frames left right context msg r
-    have entered (context : Trace.Context) (f g : Frame) (e e' : Frame.Entry) :=
-      entered_template cfg state trace frames context f g e e'
-    have settled := settled_template cfg state trace frames left right
-    cases hs : Checked.step r with
-    | error fault =>
-      rw [@checked_fault left _ _ _ _ _ _ _ _ hs, @checked_fault right _ _ _ _ _ _ _ _ hs, instruction]
-    | ok step =>
-      cases step with
-      | exit result =>
-        rw [@checked_exit left _ _ _ _ _ _ _ _ hs, @checked_exit right _ _ _ _ _ _ _ _ hs, instruction]
-      | next pc s =>
-        rw [@checked_next left _ _ _ _ _ _ _ _ _ hs, @checked_next right _ _ _ _ _ _ _ _ _ hs, instruction]
-        exact bind_congr fun _ => ih msg _ context nextFrame
-      | spawn child pending pc =>
-        let childContext := {context with frame := nextFrame, depth := context.depth + 1}
-        cases he : Checked.enter child with
-        | done result =>
-          have sameEntry := entered childContext (@Checked.Trace.frame left child)
-            (@Checked.Trace.frame right child) (.done result) (.done result)
-          rcases hr : Checked.Trace.resumed r.context.block.rules child pending result with fault | ⟨halt, s⟩ | s
-          · rw [@checked_done_stop left _ _ _ _ _ _ _ _ _ _ _ _ hs he hr (by intro s h; cases h),
-                @checked_done_stop right _ _ _ _ _ _ _ _ _ _ _ _ hs he hr (by intro s h; cases h),
-                instruction, sameEntry, settled]
-          · rw [@checked_done_stop left _ _ _ _ _ _ _ _ _ _ _ _ hs he hr (by intro s h; cases h),
-                @checked_done_stop right _ _ _ _ _ _ _ _ _ _ _ _ hs he hr (by intro s h; cases h),
-                instruction, sameEntry, settled]
-          · rw [@checked_done_ok left _ _ _ _ _ _ _ _ _ _ _ _ hs he hr,
-                @checked_done_ok right _ _ _ _ _ _ _ _ _ _ _ _ hs he hr, instruction, sameEntry, settled]
-            exact bind_congr fun _ => bind_congr fun _ => bind_congr fun _ => bind_congr fun _ =>
-              ih msg _ context (nextFrame + 1)
-        | run cr =>
-          have sameEntry := entered childContext (@Checked.Trace.frame left child)
-            (@Checked.Trace.frame right child) (.run (Checked.Trace.evm (@Checked.Frame.toLegacy child left).message cr))
-            (.run (Checked.Trace.evm (@Checked.Frame.toLegacy child right).message cr))
-          have childTrace : Checked.Trace.CertifiedResult.nextFrame <$>
-              @Checked.Trace.execFueled left IO _ jsonSink (@Checked.Frame.toLegacy child left).message
-                cr fuel childContext (nextFrame + 1) =
-              Checked.Trace.CertifiedResult.nextFrame <$>
-                @Checked.Trace.execFueled right IO _ jsonSink (@Checked.Frame.toLegacy child right).message
-                  cr fuel childContext (nextFrame + 1) :=
-            ih child.message cr childContext (nextFrame + 1)
-          cases hx : (Checked.execFueled cr fuel).run with
-          | none =>
-            rw [@checked_run_none left _ _ _ _ _ _ _ _ _ _ _ hs he hx,
-                @checked_run_none right _ _ _ _ _ _ _ _ _ _ _ hs he hx, instruction, sameEntry, childTrace]
-          | some result =>
-            rcases hr : Checked.Trace.resumed r.context.block.rules child pending
-              (result >>= Checked.settle child) with fault | ⟨halt, s⟩ | s
-            · rw [@checked_run_stop left _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr (by intro s h; cases h),
-                  @checked_run_stop right _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr (by intro s h; cases h),
-                  instruction, sameEntry, childTrace, settled]
-            · rw [@checked_run_stop left _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr (by intro s h; cases h),
-                  @checked_run_stop right _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr (by intro s h; cases h),
-                  instruction, sameEntry, childTrace, settled]
-            · rw [@checked_run_ok left _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr,
-                  @checked_run_ok right _ _ _ _ _ _ _ _ _ _ _ _ _ hs he hx hr,
-                  instruction, sameEntry, childTrace, settled]
-              exact bind_congr fun _ => bind_congr fun _ => bind_congr fun n =>
-                bind_congr fun _ => bind_congr fun _ => ih msg _ context n
+/-- So the JSON sink through either template is the same checked tracer sink. -/
+private theorem sink_template :
+    @Legacy.sink left IO jsonSink = @Legacy.sink right IO jsonSink :=
+  funext (event_template cfg state trace frames left right)
 
 /-- Changing projection-only transaction metadata preserves the entire traced frame action. -/
 theorem runFrame_json_template (f : Checked.Frame) (runId : String) :
-    @Checked.Trace.runFrame left IO _ jsonSink f runId =
-      @Checked.Trace.runFrame right IO _ jsonSink f runId := by
-  let context : Trace.Context := ⟨runId, 0, 1⟩
-  unfold Checked.Trace.runFrame
-  dsimp only
-  split
-  next result _ =>
-    rw [entered_template cfg state trace frames context (@Checked.Trace.frame left f)
-      (@Checked.Trace.frame right f) (.done result) (.done result)]
-    rw [settled_template cfg state trace frames left right]
-  next r _ =>
-    rw [entered_template cfg state trace frames context (@Checked.Trace.frame left f)
-      (@Checked.Trace.frame right f) (.run (Checked.Trace.evm (@Checked.Frame.toLegacy f left).message r))
-      (.run (Checked.Trace.evm (@Checked.Frame.toLegacy f right).message r))]
-    refine bind_congr fun _ => ?_
-    rw [checked_execution_bind, checked_execution_bind, @checked_exec left, @checked_exec right]
-    have driver : Checked.Trace.CertifiedResult.nextFrame <$>
-        @Checked.Trace.execFueled left IO _ jsonSink (@Checked.Frame.toLegacy f left).message
-          r (sufficientFuel r.state.machine.gasMeasure) context 1 =
-        Checked.Trace.CertifiedResult.nextFrame <$>
-        @Checked.Trace.execFueled right IO _ jsonSink (@Checked.Frame.toLegacy f right).message
-          r (sufficientFuel r.state.machine.gasMeasure) context 1 :=
-      execFueled_json_template cfg state trace frames left right _ f.message r context 1
-    rw [driver]
-    exact bind_congr fun _ => by
-      rw [settled_template cfg state trace frames left right]
+    Checked.Trace.runFrame (@Legacy.sink left IO jsonSink) f runId =
+      Checked.Trace.runFrame (@Legacy.sink right IO jsonSink) f runId := by
+  rw [sink_template cfg state trace frames left right]
 
 /-- Authorization reporting and frame tracing do not depend on the transaction template. -/
 private theorem runPrepared_json_template (reportRefund : Nat → IO Unit)
     (prepared : Checked.TopLevel.Preparation) (runId : String) :
-    @Checked.Trace.runPrepared left IO _ jsonSink reportRefund prepared runId =
-      @Checked.Trace.runPrepared right IO _ jsonSink reportRefund prepared runId := by
-  cases prepared with
-  | refused => rfl
-  | frame f refund =>
-    simp only [Checked.Trace.runPrepared]
-    rw [runFrame_json_template cfg state trace frames left right]
+    Checked.Trace.runPrepared (@Legacy.sink left IO jsonSink) reportRefund prepared runId =
+      Checked.Trace.runPrepared (@Legacy.sink right IO jsonSink) reportRefund prepared runId := by
+  rw [sink_template cfg state trace frames left right]
 
 end Template
 
@@ -1206,9 +1253,9 @@ and returns the same result. -/
 theorem runFrame_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
     (trace frames : IO.FS.Handle) (f : Checked.Frame) (runId : String) :
     (fun x => (x.value, x.nextFrame)) <$>
-        Checked.Trace.runFrame (TraceJson.sink cfg state trace frames) f runId =
+        Checked.Trace.runFrame (Legacy.sink (TraceJson.sink cfg state trace frames)) f runId =
       (fun x => (x.value, x.nextFrame)) <$>
-        Trace.runFrame (TraceJson.sink cfg state trace frames) (Checked.Trace.frame f) runId := by
+        Trace.runFrame (TraceJson.sink cfg state trace frames) (Legacy.frame f) runId := by
   rw [runFrame_events]
   congr 2
   funext e
@@ -1217,17 +1264,17 @@ theorem runFrame_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
 /-- The checked top-level frame of a message projects onto the `Devm` one. -/
 theorem frame_topFrame (msg : Msg) (isCreate : Bool) :
     letI : Checked.LegacyTransaction := ⟨msg.tenv.stat⟩
-    Checked.Trace.frame (Checked.Trace.topFrame msg isCreate) = Frame.ofTop msg isCreate := rfl
+    Legacy.frame (Legacy.topFrame msg isCreate) = Frame.ofTop msg isCreate := rfl
 
 /-- **The message runner's call.** `TraceMain` traces a message as
 `Trace.runFrame sink (Frame.ofTop msg isCreate) runId`; the checked tracer on
-`Checked.Trace.topFrame msg isCreate` writes the same rows and returns the same result. -/
+`Legacy.topFrame msg isCreate` writes the same rows and returns the same result. -/
 theorem runFrame_json_top (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
     (trace frames : IO.FS.Handle) (msg : Msg) (isCreate : Bool) (runId : String) :
     letI : Checked.LegacyTransaction := ⟨msg.tenv.stat⟩
     (fun x => (x.value, x.nextFrame)) <$>
-        Checked.Trace.runFrame (TraceJson.sink cfg state trace frames)
-          (Checked.Trace.topFrame msg isCreate) runId =
+        Checked.Trace.runFrame (Legacy.sink (TraceJson.sink cfg state trace frames))
+          (Legacy.topFrame msg isCreate) runId =
       (fun x => (x.value, x.nextFrame)) <$>
         Trace.runFrame (TraceJson.sink cfg state trace frames) (Frame.ofTop msg isCreate) runId := by
   letI : Checked.LegacyTransaction := ⟨msg.tenv.stat⟩
@@ -1236,7 +1283,7 @@ theorem runFrame_json_top (cfg : TraceJson.Config) (state : IO.Ref TraceJson.Sta
 
 omit [Checked.LegacyTransaction] in
 private theorem directFrame_eq (msg : Msg) :
-    Checked.Trace.topFrame msg msg.target.isNone =
+    Legacy.topFrame msg msg.target.isNone =
       ⟨(Checked.TopLevel.Input.ofLegacy msg).message, (Checked.TopLevel.Input.ofLegacy msg).checkpoint⟩ := by
   rw [Checked.TopLevel.Input.ofLegacy_checkpoint]
   rfl
@@ -1247,8 +1294,9 @@ and settled result. The message scope enters the frame without transaction prepa
 theorem runDirectFrame_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
     (trace frames : IO.FS.Handle) (template : Checked.LegacyTransaction) (msg : Msg) (runId : String) :
     let input := Checked.TopLevel.Input.ofLegacy msg
-    (fun x => (x.value, x.nextFrame)) <$> @Checked.Trace.runFrame template IO _
-        (TraceJson.sink cfg state trace frames) ⟨input.message, input.checkpoint⟩ runId =
+    (fun x => (x.value, x.nextFrame)) <$> Checked.Trace.runFrame
+        (@Legacy.sink template IO (TraceJson.sink cfg state trace frames))
+        ⟨input.message, input.checkpoint⟩ runId =
       (fun x => (x.value, x.nextFrame)) <$> Trace.runFrame
         (TraceJson.sink cfg state trace frames) (Frame.ofTop msg msg.target.isNone) runId := by
   dsimp only
@@ -1282,7 +1330,7 @@ def runMessage {m : Type → Type} [Monad m] (sink : Trace.Sink m)
       | .refused .. => msg.tenv.stat⟩
     let reportRefund := if msg.benv.stat.rules.stateGas.isNone && msg.target.isSome
       then authorizationRefund else fun _ => pure ()
-    let result ← @Checked.Trace.runPrepared template m _ sink reportRefund
+    let result ← Checked.Trace.runPrepared (@Legacy.sink template m sink) reportRefund
       (Checked.TopLevel.ofPreparation msg prepared hp) runId
     pure {
       value := result.run.map (Checked.TopLevel.observe msg prepared)
@@ -1309,8 +1357,8 @@ theorem runMessage_json (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State
         (TraceJson.sink cfg state trace frames) authorizationRefund msg runId := by
   let sink := TraceJson.sink cfg state trace frames
   have frameEffects [Checked.LegacyTransaction] (f : Checked.Frame) :
-      (fun _ => ()) <$> Checked.Trace.runFrame sink f runId =
-        (fun _ => ()) <$> Trace.runFrame sink (Checked.Trace.frame f) runId := by
+      (fun _ => ()) <$> Checked.Trace.runFrame (Legacy.sink sink) f runId =
+        (fun _ => ()) <$> Trace.runFrame sink (Legacy.frame f) runId := by
     have h := congrArg (Functor.map (fun _ => ())) (runFrame_json cfg state trace frames f runId)
     simpa only [← comp_map, Function.comp_def] using h
   unfold TraceTransaction.runMessage
@@ -1352,8 +1400,8 @@ the waiting message, for any choice of projection-only transaction metadata. -/
 theorem runInput_json_observe (cfg : TraceJson.Config) (state : IO.Ref TraceJson.State)
     (trace frames : IO.FS.Handle) (template : Checked.LegacyTransaction)
     (authorizationRefund : Nat → IO Unit) (msg : Msg) (runId : String) :
-    (fun _ => ()) <$> @Checked.Trace.runInput template IO _
-        (TraceJson.sink cfg state trace frames)
+    (fun _ => ()) <$> Checked.Trace.runInput
+        (@Legacy.sink template IO (TraceJson.sink cfg state trace frames))
         (if msg.benv.stat.rules.stateGas.isNone && msg.target.isSome
           then authorizationRefund else fun _ => pure ())
         (Checked.TopLevel.Input.ofLegacy msg) runId =
@@ -1398,8 +1446,8 @@ theorem runNativeTransaction_json_effects (cfg : TraceJson.Config) (state : IO.R
     (trace frames : IO.FS.Handle) (template : Checked.LegacyTransaction)
     (authorizationRefund : Nat → IO Unit) {benv : Benv} (fresh : benv.Fresh) (bout : BlockOutput)
     (tx : Transaction) (index : Nat) (runId : String) :
-    (fun _ => ()) <$> @Checked.Trace.runTransaction template IO _
-        (TraceJson.sink cfg state trace frames) authorizationRefund benv.stat.toBlockContext benv.state
+    (fun _ => ()) <$> Checked.Trace.runTransaction
+        (@Legacy.sink template IO (TraceJson.sink cfg state trace frames)) authorizationRefund benv.stat.toBlockContext benv.state
         bout tx index runId =
       (fun _ => ()) <$> TraceTransaction.runTransaction
         (TraceJson.sink cfg state trace frames) authorizationRefund benv bout tx index runId := by
@@ -1481,8 +1529,8 @@ theorem runNativeTransaction_json (cfg : TraceJson.Config) (state : IO.Ref Trace
         (fun (out, effects) => (out, some effects))
     let waiting (r : TraceTransaction.TransactionResult benv bout tx index) :=
       r.value.map (fun out => (out, r.messageRun.map Checked.TopLevel.Settlement.ofLegacy))
-    native <$> @Checked.Trace.runTransaction template IO _
-        (TraceJson.sink cfg state trace frames) authorizationRefund benv.stat.toBlockContext benv.state
+    native <$> Checked.Trace.runTransaction
+        (@Legacy.sink template IO (TraceJson.sink cfg state trace frames)) authorizationRefund benv.stat.toBlockContext benv.state
         bout tx index runId =
       waiting <$> TraceTransaction.runTransaction
         (TraceJson.sink cfg state trace frames) authorizationRefund benv bout tx index runId := by

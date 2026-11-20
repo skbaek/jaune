@@ -1,4 +1,4 @@
-import Jaune.MessageCall.TraceJson
+import Jaune.MessageCall.CheckedTraceJson
 import Jaune.MessageCall.CheckedTrace
 import Jaune.Adapter.IO
 
@@ -112,7 +112,8 @@ private inductive Input where
   | message (frame : Checked.Frame)
   | transaction (block : BlockContext) (preState : State) (tx : Transaction)
 
-private def writeRow (cfg : TraceJson.Config) (handle : IO.FS.Handle) (row : Json) : IO Unit := do
+private def writeRow (cfg : Checked.TraceJson.Config) (handle : IO.FS.Handle) (row : Json) :
+    IO Unit := do
   let line := row.compress ++ "\n"
   if line.utf8ByteSize > cfg.maxRowBytes then throw (IO.userError "trace: row byte limit exceeded")
   handle.putStr line
@@ -142,7 +143,7 @@ def run (inputPath outputPath : String) : IO Unit := do
   let maxSteps ← match input.find? "maxSteps" with
     | none => pure none
     | some value => some <$> T8n.readNat "maxSteps" value
-  let cfg : TraceJson.Config := {
+  let cfg : Checked.TraceJson.Config := {
     runId := runId, memory := (← boolOr input "memory" false), maxSteps := maxSteps
     maxDataBytes := (← T8n.natOr input "maxDataBytes" 1048576)
     maxRowBytes := (← T8n.natOr input "maxRowBytes" 1048576) }
@@ -151,11 +152,10 @@ def run (inputPath outputPath : String) : IO Unit := do
   let directory : System.FilePath := outputPath
   let trace ← IO.FS.Handle.mk (directory / "trace.jsonl") .write
   let frames ← IO.FS.Handle.mk (directory / "frames.jsonl") .write
-  let state ← IO.mkRef ({} : TraceJson.State)
+  let state ← IO.mkRef ({} : Checked.TraceJson.State)
   let details ← match selected with
     | .message frame => do
-      let _ ← @Checked.Trace.runFrame ⟨default⟩ IO _
-        (TraceJson.sink cfg state trace frames) frame runId
+      let _ ← Checked.Trace.runFrame (Checked.TraceJson.sink cfg state trace frames) frame runId
       if !(← state.get).closed then throw (IO.userError "trace did not complete")
       pure [("scope", Json.str "message"), ("outcome", Json.str "executed"),
         ("traceComplete", Json.bool true),
@@ -166,8 +166,8 @@ def run (inputPath outputPath : String) : IO Unit := do
         let current ← state.get
         if current.started then throw (IO.userError "authorization refund arrived after frame entry")
         state.set { current with rootRefund := amount }
-      let result ← @Checked.Trace.runTransaction ⟨default⟩ IO _
-        (TraceJson.sink transactionCfg state trace frames) refund block preState .init tx 0 runId
+      let sink := Checked.TraceJson.sink transactionCfg state trace frames
+      let result ← Checked.Trace.runTransaction sink refund block preState .init tx 0 runId
       let current ← state.get
       if current.started && !current.closed then throw (IO.userError "transaction frame did not close")
       let identity := [("scope", Json.str "transaction"), ("transactionIndex", toJson (0 : Nat)),
