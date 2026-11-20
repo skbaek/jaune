@@ -3785,8 +3785,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -3831,8 +3845,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -3877,8 +3905,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -3923,8 +3965,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -3969,8 +4025,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4015,8 +4085,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4061,8 +4145,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4107,8 +4205,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4153,8 +4265,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4199,8 +4325,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4245,8 +4385,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4291,8 +4445,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4337,8 +4505,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4383,8 +4565,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4428,8 +4624,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4473,8 +4683,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4518,8 +4742,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4563,8 +4801,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4609,8 +4861,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4654,8 +4920,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4699,8 +4979,22 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
@@ -4748,13 +5042,33 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
-      "accepted": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
+      "accepted": [
+        {
+          "decision": "jsn-g2b-n4-0-accept",
+          "covers": "trace",
+          "text": "Check-trace-only remainder (master, 2026-11-20; goal 3.1 permits): the serializer-state representation-independence step (TraceMain holds a native IO.Ref Checked.TraceJson.State and passes ref.get/ref.set instead of the proved old-reference placement through the representation map) is covered by check-trace.py (30 tests) and the u88 byte comparison (38 requests, 0 differences), not by a theorem."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Serialized stream, frame scope (jsn-u88): for every checked frame, the native tracer through the native serializer (Legacy.nativeSink := Checked.TraceJson.sinkWith over the old IO.Ref through jsonState/ofJsonState) makes the same row writes and returns the same result and next frame as the W1 tracer through the W1 serializer on the projected frame.",
-        "Remainder not stated by any theorem (u88): TraceMain keeps a native IO.Ref Checked.TraceJson.State and passes ref.get/ref.set (Checked.TraceJson.sink), not the old reference through the representation map; that the two placements write the same bytes is representation independence of a state touched only by get and set, covered by check-trace.py (30 tests) and the u88 byte comparison (38 requests, 0 differences). It needs a logged check-trace-only acceptance (precedent jsn-w1-u29-accept, covers trace).",
+        "Remainder not stated by any theorem (u88): TraceMain keeps a native IO.Ref Checked.TraceJson.State and passes ref.get/ref.set (Checked.TraceJson.sink), not the old reference through the representation map; that the two placements write the same bytes is representation independence of a state touched only by get and set, covered by check-trace.py (30 tests) and the u88 byte comparison (38 requests, 0 differences). Accepted as check-trace-only (decision jsn-g2b-n4-0-accept, accepted row covers trace; precedent jsn-w1-u29-accept).",
         "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; #check_bridge in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
     },
@@ -4798,9 +5112,29 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
-      "accepted": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
+      "accepted": [
+        {
+          "decision": "jsn-g2b-n4-0-accept",
+          "covers": "trace",
+          "text": "Check-trace-only remainder (master, 2026-11-20; goal 3.1 permits): the serializer-state representation-independence step (TraceMain holds a native IO.Ref Checked.TraceJson.State and passes ref.get/ref.set instead of the proved old-reference placement through the representation map) is covered by check-trace.py (30 tests) and the u88 byte comparison (38 requests, 0 differences), not by a theorem."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Serialized stream, message scope (the scope TraceMain uses): every Msg, its native input against Frame.ofTop. Same remainder as G2b-trace-frame.",
@@ -4847,9 +5181,29 @@
         ]
       },
       "exempt": [],
-      "maps": [],
-      "n4_receipts": [],
-      "accepted": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
+      "accepted": [
+        {
+          "decision": "jsn-g2b-n4-0-accept",
+          "covers": "trace",
+          "text": "Check-trace-only remainder (master, 2026-11-20; goal 3.1 permits): the serializer-state representation-independence step (TraceMain holds a native IO.Ref Checked.TraceJson.State and passes ref.get/ref.set instead of the proved old-reference placement through the representation map) is covered by check-trace.py (30 tests) and the u88 byte comparison (38 requests, 0 differences), not by a theorem."
+        }
+      ],
       "gaps": [],
       "notes": [
         "Serialized stream, signed-transaction scope: every fresh Benv, BlockOutput, Transaction and index; the same row writes and the observations the transaction summary consumes (final state, block output, return bytes, halt, settlement). Same remainder as G2b-trace-frame.",
@@ -4899,8 +5253,22 @@
           "replacement": "Jaune.Checked.stateTransitionCoreE"
         }
       ],
-      "maps": [],
-      "n4_receipts": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n4-0-delta-map.json",
+          "revision": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac",
+          "before_candidate": "c7d39e52c78bb3bb973a565abf4cdfbc807f83b3",
+          "after_candidate": "429ff4498c1fb2768810df9c611171d453a1b22b",
+          "status": "OK",
+          "record": "g2-plan/u93-n4-0-extraction.md (N4-0 survivor extraction; compare.json sha256 bd81d400b47ba314ef3bc927b1766c93e42ab033651ef0b0093e02a9cfb8fdba, component-scc, 365 affected modules, 88.7 s, 550 MiB; before snapshot 793126fb at c7d39e52, after snapshot 949aff6a at 429ff449; decision jsn-g2b-n4-0-accept)"
+        }
+      ],
       "accepted": [],
       "gaps": [],
       "notes": [
