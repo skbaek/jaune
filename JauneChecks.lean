@@ -19,6 +19,7 @@ import Jaune.Check.CheckedBody
 import Jaune.Check.CheckedMachine
 import Jaune.Check.CheckedPortAuditA
 import Jaune.Check.CheckedPortAuditB
+import Jaune.Check.CheckedFactPorts
 import Jaune.Check.CheckedRowsAudit
 import Jaune.Check.CheckedSpecAudit
 import Jaune.Check.FrameBridgeAudit
