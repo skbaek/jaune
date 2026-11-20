@@ -5,6 +5,7 @@ import Jaune.Bridge.G2b.FinalRetained
 import Jaune.Bridge.G2b.BodyRoots
 import Jaune.Bridge.G2b.BodyResults
 import Jaune.Bridge.G2b.KeptHistory
+import Jaune.Bridge.G2b.KeptHistoryFold
 
 #union_axioms_of_modules Jaune.Bridge.G2b
 #union_axioms_of_modules Jaune.Run.Root

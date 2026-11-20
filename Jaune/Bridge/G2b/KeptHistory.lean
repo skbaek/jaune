@@ -24,21 +24,6 @@ structure KeptStep (cfg : ChainConfig) (fork : Fork) (parent : BlockChain) (bloc
   accepted : stateTransitionCoreE (Sum.inr (α := RulesLookupError)) fork parent block
     (fun _ => checkBlockOmmersScheduledE cfg fork.ruleSet parent block.header block.ommers) = .ok post
 
-theorem KeptStep.of_transition {cfg : ChainConfig} {parent post : BlockChain} {block : Block}
-    (h : stateTransitionUsing cfg parent block = .ok post) :
-    ∃ fork, KeptStep cfg fork parent block post := by
-  unfold stateTransitionUsing at h
-  obtain ⟨u, chain, h⟩ := Except.bind_eq_ok h
-  cases u
-  obtain ⟨fork, hf, h⟩ := Except.bind_eq_ok h
-  refine ⟨fork, Except.mapError_eq_ok_iff.mp chain, Except.mapError_eq_ok_iff.mp hf, ?_⟩
-  rw [← Jaune.stateTransitionScheduledE_eq_ok_iff]
-  cases hs : Jaune.stateTransitionScheduledE cfg fork parent block with
-  | error err => rw [hs] at h; cases h
-  | ok result =>
-    rw [hs] at h
-    exact congrArg Except.ok (Except.mapError_eq_ok_iff.mp h)
-
 inductive KeptHistory (cfg : ChainConfig) (start : BlockChain) : List KeptBlock → BlockChain → Prop
   | refl : KeptHistory cfg start [] start
   | step {blocks : List KeptBlock} {last : KeptBlock} :
@@ -65,22 +50,5 @@ theorem KeptHistory.exists_snoc {cfg : ChainConfig} {start parent post fork bloc
   obtain ⟨run, hr, hf⟩ := E.exists_blockRun step.accepted
   let b : KeptBlock := ⟨fork, parent, block, post, run, hr, hf⟩
   exact ⟨b, rfl, .step history step⟩
-
-/-- Successful configured transitions are represented at all forks in their original order. -/
-theorem KeptHistory.of_fold {cfg : ChainConfig} {start current post : BlockChain}
-    {blocks : List KeptBlock} (prior : KeptHistory cfg start blocks current)
-    (inputs : List Block) (accepted : inputs.foldlM (stateTransitionUsing cfg) current = .ok post) :
-    ∃ suffix, suffix.map KeptBlock.block = inputs ∧ KeptHistory cfg start (blocks ++ suffix) post := by
-  induction inputs generalizing current blocks with
-  | nil =>
-    cases accepted
-    exact ⟨[], rfl, by simpa using prior⟩
-  | cons first rest ih =>
-    obtain ⟨next, step, tail⟩ := Except.bind_eq_ok accepted
-    obtain ⟨fork, checkedStep⟩ := KeptStep.of_transition step
-    obtain ⟨b, hb, history⟩ := prior.exists_snoc checkedStep
-    obtain ⟨suffix, entries, full⟩ := ih history tail
-    refine ⟨b :: suffix, by simp [hb, entries], ?_⟩
-    simpa only [List.append_assoc, List.singleton_append] using full
 
 end Jaune.Staging

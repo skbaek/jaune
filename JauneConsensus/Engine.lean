@@ -221,7 +221,8 @@ def engineVerdict (cfg : ChainConfig) (cf : ConsensusFork) (exec : BlockChain)
     | .error e => throw (.forkLookup e)
     | .ok (.error e) => throw (.transition e)
     | .ok (.ok post) => pure post
-  let (_, bout) ← (applyBody (initBlockEnvironment f exec blk.header) blk.transactions blk.ommers blk.withdrawals).mapError .body
+  let (_, bout) ← (Checked.applyBody (Checked.initBlockContext f exec blk.header) exec.state
+    blk.transactions blk.ommers blk.withdrawals).mapError .body
   if bout.requests != req.executionRequests then throw .requestsMismatch
   pure post
 

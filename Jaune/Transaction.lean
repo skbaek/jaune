@@ -3,6 +3,7 @@ import Jaune.Run.Canonical
 import Jaune.Run.BlockFacts
 import Jaune.Sufficiency
 import Jaune.MessageCall.Canonical
+import Jaune.Run.CheckedCanonical
 -- `List.IsChain` itself is Batteries; its infix/suffix closure lemmas, which
 -- the retained-history predicate below reasons with, are Mathlib's.
 import Mathlib.Data.List.Chain
@@ -526,7 +527,7 @@ private theorem validateOmmersWith_mapError {ε : Type}
 and every ommer. It does not consult an activation schedule. -/
 def stateTransitionE (f : Fork) (ch : BlockChain) (block : Block) :
   Except TransitionError BlockChain :=
-  stateTransitionCoreE id f ch block
+  Checked.stateTransitionCoreE id f ch block
     (fun _ => checkBlockOmmers f.ruleSet ch block.header block.ommers)
 
 /-- Scheduled ommer validation uses the ommer's own number and timestamp,
@@ -564,7 +565,7 @@ stays on the outer typed channel. -/
 def stateTransitionScheduledE (cfg : ChainConfig) (f : Fork)
     (ch : BlockChain) (block : Block) :
     Except RulesLookupError (Except TransitionError BlockChain) :=
-  splitScheduled <| stateTransitionCoreE Sum.inr f ch block
+  splitScheduled <| Checked.stateTransitionCoreE Sum.inr f ch block
     (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers)
 
 private theorem validateOmmerHeaderScheduledE_single (chainId : UInt64) (f : Fork)
@@ -599,8 +600,8 @@ theorem stateTransitionScheduledE_single (chainId : UInt64) (f : Fork)
       .ok (stateTransitionE f ch block) := by
   unfold stateTransitionScheduledE stateTransitionE
   simp only [checkBlockOmmersScheduledE_single]
-  rw [stateTransitionCoreE_mapError]
-  cases stateTransitionCoreE id f ch block
+  rw [Checked.stateTransitionCoreE_mapError]
+  cases Checked.stateTransitionCoreE id f ch block
     (fun _ => checkBlockOmmers f.ruleSet ch block.header block.ommers) <;> rfl
 
 /-- With no proof-of-work ommers, configured and static cores agree on all
@@ -613,18 +614,18 @@ theorem stateTransitionScheduledE_of_pow_none (cfg : ChainConfig) (f : Fork)
       (checkBlockOmmers f.ruleSet ch block.header block.ommers).mapError Sum.inr := by
     simp only [checkBlockOmmersScheduledE, checkBlockOmmers, hp, transition_mapError_comp]
   simp only [ho]
-  rw [stateTransitionCoreE_mapError]
-  cases stateTransitionCoreE id f ch block
+  rw [Checked.stateTransitionCoreE_mapError]
+  cases Checked.stateTransitionCoreE id f ch block
     (fun _ => checkBlockOmmers f.ruleSet ch block.header block.ommers) <;> rfl
 
 theorem stateTransitionScheduledE_eq_ok_iff {cfg : ChainConfig} {f : Fork}
     {ch ch' : BlockChain} {block : Block} :
     stateTransitionScheduledE cfg f ch block = .ok (.ok ch') ↔
-      stateTransitionCoreE Sum.inr f ch block
+      Checked.stateTransitionCoreE Sum.inr f ch block
         (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers)
         = .ok ch' := by
   unfold stateTransitionScheduledE
-  cases stateTransitionCoreE Sum.inr f ch block
+  cases Checked.stateTransitionCoreE Sum.inr f ch block
       (fun _ => checkBlockOmmersScheduledE cfg f.ruleSet ch block.header block.ommers) with
   | error e => cases e <;> simp [splitScheduled]
   | ok a => simp [splitScheduled]
@@ -1742,14 +1743,14 @@ theorem stateTransitionAt_preserves_chainId
     ch'.chainId = ch.chainId := by
   rw [stateTransitionAt_eq_ok_iff] at h
   unfold stateTransitionE at h
-  exact stateTransitionCoreE_preserves_chainId h
+  exact Checked.stateTransitionCoreE_preserves_chainId h
 
 theorem stateTransitionUsing_preserves_chainId
     {cfg : ChainConfig} {ch : BlockChain} {block : Block} {ch' : BlockChain}
     (h : stateTransitionUsing cfg ch block = .ok ch') :
     ch'.chainId = ch.chainId := by
   obtain ⟨f, _, hs⟩ := stateTransitionUsing_run h
-  exact stateTransitionCoreE_preserves_chainId (stateTransitionScheduledE_eq_ok_iff.mp hs)
+  exact Checked.stateTransitionCoreE_preserves_chainId (stateTransitionScheduledE_eq_ok_iff.mp hs)
 
 /-- A same-ID configured transition is exactly the rule-selected core: the
 identity check Step 2 adds is a no-op whenever the caller's IDs already agree,
@@ -1805,7 +1806,7 @@ theorem addBlockToChainUsing_preserves_chainId
       · simp at hE
       · obtain ⟨rules, _, hE⟩ := Except.bind_eq_ok hE
         obtain ⟨_, hst⟩ := addBlockToChainScheduledCanonicalE_eq_ok_inl hE
-        exact stateTransitionCoreE_preserves_chainId
+        exact Checked.stateTransitionCoreE_preserves_chainId
           (stateTransitionScheduledE_eq_ok_iff.mp hst)
 
 --------------- CANONICALITY THROUGH EXECUTION (P0.4, STEP 4) ---------------
@@ -2079,7 +2080,7 @@ theorem stateTransitionAt_canonical {f : Fork} {ch : BlockChain}
     (hp : stateTransitionAt f ch block = .ok ch') : ch'.Canonical := by
   rw [stateTransitionAt_eq_ok_iff] at hp
   unfold stateTransitionE at hp
-  exact stateTransitionCoreE_canonical h hp
+  exact Checked.stateTransitionCoreE_canonical h hp
 
 theorem stateTransition_canonical {ch : BlockChain} (h : ch.Canonical)
     {block : Block} {ch'} (hp : stateTransition ch block = .ok ch') :
@@ -2091,7 +2092,7 @@ theorem stateTransitionUsing_canonical {cfg : ChainConfig} {ch : BlockChain}
     (h : ch.Canonical) {block : Block} {ch'}
     (hp : stateTransitionUsing cfg ch block = .ok ch') : ch'.Canonical := by
   obtain ⟨f, _, hs⟩ := stateTransitionUsing_run hp
-  exact stateTransitionCoreE_canonical h (stateTransitionScheduledE_eq_ok_iff.mp hs)
+  exact Checked.stateTransitionCoreE_canonical h (stateTransitionScheduledE_eq_ok_iff.mp hs)
 
 --------------- THE CHECKED TRANSITION (P0.2, STEP 6) ---------------
 
@@ -2223,9 +2224,9 @@ theorem BlockChain.validContext_of_scheduled {cfg : ChainConfig} {f : Fork}
     ch'.blocks.getLast? = some cb.block ∧ ch'.RetainedHistoryValid ∧
       ch'.state.Canonical ∧ ch'.state.root = cb.block.header.stateRoot := by
   have hc := stateTransitionScheduledE_eq_ok_iff.mp h
-  obtain ⟨hvh, hblocks, hroot⟩ := stateTransitionCoreE_eq_ok hc
+  obtain ⟨hvh, hblocks, hroot⟩ := Checked.stateTransitionCoreE_eq_ok hc
   obtain ⟨hph, hnum⟩ := validateHeader_links cc.tip_is_last hvh
-  refine ⟨?_, ?_, stateTransitionCoreE_canonical cc.canonicalState hc, hroot⟩
+  refine ⟨?_, ?_, Checked.stateTransitionCoreE_canonical cc.canonicalState hc, hroot⟩
   · rw [hblocks]; exact appendBlock_getLast? _ _
   · exact BlockChain.retainedHistoryValid_appendBlock cc.retainedHistory
       cc.tip_is_last ⟨hnum, hph⟩ cb.rlpCanonical.1 hblocks
@@ -2240,7 +2241,7 @@ theorem stateTransitionAt_eq_ok {f : Fork} {ch ch' : BlockChain}
       ch'.state.root = block.header.stateRoot := by
   rw [stateTransitionAt_eq_ok_iff] at h
   unfold stateTransitionE at h
-  exact stateTransitionCoreE_eq_ok h
+  exact Checked.stateTransitionCoreE_eq_ok h
 
 /-- The whole output witness of a successful transition from a checked
 snapshot, assembled from what the transition already established: `Step 4`'s
@@ -2557,11 +2558,11 @@ theorem stateTransitionUsing_shapeCoherent {cfg : ChainConfig} {ch ch' : BlockCh
   obtain ⟨f, hf, hrun⟩ := stateTransitionUsing_run h
   intro b hb
   have hc := stateTransitionScheduledE_eq_ok_iff.mp hrun
-  have hblocks := (stateTransitionCoreE_eq_ok hc).2.1
+  have hblocks := (Checked.stateTransitionCoreE_eq_ok hc).2.1
   rw [hblocks, appendBlock_getLast?] at hb
   cases hb
   refine ⟨f, hf, ?_⟩
-  have hv := stateTransitionCoreE_header hc
+  have hv := Checked.stateTransitionCoreE_header hc
   unfold validateHeader at hv
   obtain ⟨u, hshape, _⟩ := Except.bind_eq_ok hv
   cases u
@@ -2618,7 +2619,7 @@ theorem stateTransitionE_header_succ {f : Fork} {ch ch' : BlockChain} {block : B
     ∃ parent, ch.blocks.getLast? = some parent ∧
       block.header.number = parent.header.number + 1 ∧
       parent.header.timestamp < block.header.timestamp := by
-  exact validateHeader_succ (stateTransitionCoreE_header h)
+  exact validateHeader_succ (Checked.stateTransitionCoreE_header h)
 
 /-- The configured fork is no earlier than the parent's scheduled fork. -/
 theorem stateTransitionUsing_fork_mono {cfg : ChainConfig} {ch ch' : BlockChain}
@@ -2631,7 +2632,7 @@ theorem stateTransitionUsing_fork_mono {cfg : ChainConfig} {ch ch' : BlockChain}
       stateTransitionScheduledE cfg f ch block = .ok (.ok ch') := by
   obtain ⟨f, hf, hrun⟩ := stateTransitionUsing_run h
   obtain ⟨tip, htip, hnum, htime⟩ := validateHeader_succ
-    (stateTransitionCoreE_header (stateTransitionScheduledE_eq_ok_iff.mp hrun))
+    (Checked.stateTransitionCoreE_header (stateTransitionScheduledE_eq_ok_iff.mp hrun))
   rw [hlast] at htip
   cases htip
   exact ⟨f, hf, ChainConfig.forkAt_index_mono (by omega) (by omega) h₀ hf, hrun⟩
@@ -2666,7 +2667,7 @@ theorem stateTransitionScheduledE_firstFee_gasLimit
   obtain ⟨fp, hfp, hp⟩ := hshape parent hlast
   rw [h₀] at hfp
   cases hfp
-  have hv := stateTransitionCoreE_header (stateTransitionScheduledE_eq_ok_iff.mp h)
+  have hv := Checked.stateTransitionCoreE_header (stateTransitionScheduledE_eq_ok_iff.mp h)
   have hc : checkHeaderShape f.ruleSet block.header = .ok () := by
     unfold validateHeader at hv
     obtain ⟨u, hu, _⟩ := Except.bind_eq_ok hv

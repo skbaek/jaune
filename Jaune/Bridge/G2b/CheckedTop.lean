@@ -1650,9 +1650,17 @@ theorem Transaction.run_frames_observe {benv : Benv} (fresh : benv.Fresh) {bout 
 theorem KeptStep.of_transition {cfg : ChainConfig} {parent post : BlockChain} {block : Block}
     (accepted : stateTransitionUsing cfg parent block = .ok post) :
     ∃ fork, KeptStep cfg fork parent block post := by
-  obtain ⟨fork, waiting⟩ := Staging.KeptStep.of_transition accepted
-  exact ⟨fork, waiting.chainId, waiting.forkAt,
-    (stateTransitionCoreE_observe _ _ _ _ _).trans waiting.accepted⟩
+  unfold stateTransitionUsing at accepted
+  obtain ⟨u, chain, accepted⟩ := Except.bind_eq_ok accepted
+  cases u
+  obtain ⟨fork, hf, accepted⟩ := Except.bind_eq_ok accepted
+  refine ⟨fork, Except.mapError_eq_ok_iff.mp chain, Except.mapError_eq_ok_iff.mp hf, ?_⟩
+  rw [← Jaune.stateTransitionScheduledE_eq_ok_iff]
+  cases hs : Jaune.stateTransitionScheduledE cfg fork parent block with
+  | error err => rw [hs] at accepted; cases accepted
+  | ok result =>
+    rw [hs] at accepted
+    exact congrArg Except.ok (Except.mapError_eq_ok_iff.mp accepted)
 
 theorem KeptHistory.of_configured_fold {cfg : ChainConfig} {start current post : BlockChain}
     {blocks : List KeptBlock} (prior : KeptHistory cfg start blocks current) (inputs : List Block)
