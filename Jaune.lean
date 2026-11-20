@@ -163,6 +163,10 @@ import Jaune.MessageCall.CheckedMessageGasFacts
 import Jaune.MessageCall.CheckedStepGasBound
 import Jaune.MessageCall.CheckedPartsGas
 import Jaune.MessageCall.CheckedTotality
+import Jaune.MessageCall.CheckedKeccakFacts
+import Jaune.MessageCall.CheckedStaticcallEffects
+import Jaune.MessageCall.CheckedNativePrecompile
+import Jaune.MessageCall.CheckedMessageExecution
 import Jaune.Instructions.Word
 import Jaune.Instructions.Table
 import Jaune.Instructions.WordFacts
