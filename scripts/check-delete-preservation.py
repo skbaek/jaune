@@ -16,10 +16,14 @@ commit) it verifies, with N4's per-constant comparator and no rename map:
    (a kept declaration that reused a deleted declaration's matcher gets its
    own), each within its module; an on-demand auxiliary (equation lemma,
    splitter, sparse cases) that another module realized before may be
-   realized in this one after, and is compared with that copy. Every kept
-   `#guard` (as its elaborated expression), checked command and attribute
-   syntax is unchanged. A module whose export is byte-identical is taken as
-   unchanged, provided no generated constant it names was re-identified.
+   realized in this one after, and is compared with that copy. Lean sets a
+   matcher's reducibility by the visibility of the declaration that first
+   made it: a kept declaration whose matcher came from a deleted declaration
+   of the other visibility gets one with the other reducibility, which
+   needs a `matcher_reducibility` row. Every kept `#guard` (as its
+   elaborated expression), checked command and attribute syntax is unchanged.
+   A module whose export is byte-identical is taken as unchanged, provided
+   every generated constant it names is still that constant after the delete.
 
 2. Deleted. `deleted = before - after` is computed per module: authored
    constants, declarations Lean names itself (anonymous instances) and
@@ -47,22 +51,36 @@ Files (JSON, `schema_version` 1; every row must be used, a stale row fails):
                      "replaced": [{"module", "name", "by", "with_dependents"?}],
                      "retired": [{"module", "name", "reason", "with_dependents"?}],
                      "rewritten": [{"module", "name", "reason"}],
-                     "added": [{"module", "name", "reason"}]}
+                     "added": [{"module", "name", "reason"}],
+                     "matcher_reducibility": [{"module", "name", "after", "reason"}]}
                     `rewritten` lists a kept constant whose value was rewritten
                     (type, kind and attributes must still be equal); `added`
-                    lists a declaration that exists only after.
+                    lists a declaration that exists only after;
+                    `matcher_reducibility` acknowledges a matcher (`name`
+                    before, `after` after) whose reducibility follows its new
+                    owner's visibility.
   --guard-ledger    {"deleted": [{"module", "kind": "guard"|"check"|"attribute",
                                   "digest", "disposition": "restated"|
                                   "deleted-with-old-side"|"retired",
-                                  "replacement" | "reason", "count"?}],
+                                  "replacement" | "reason", "count"?,
+                                  "replacement_module"?}],
                      "added": [{"module", "kind", "digest", "reason"}]}
+                    `restated` needs `replacement`, the others `reason`; a
+                    `replacement_module` must hold guards or checks after.
   --map             an N4 map holding only `public_from` declaration rows with
                     `old == new` (a `private` declaration made public).
+  --inventory       `scripts/naming-inventory.json`, as in N4's compare: its
+                    registered exclusions (sources outside the exports).
 
 The receipt (`--receipt`) holds the full machine-computed deleted set grouped
 by module with each class and its witness, the unclassified declarations and
 unledgered checks as rows ready to complete, and the digests of both
 snapshots, their exports and every input file.
+
+The verdict needs both captures bound to their revisions (`--before-rev`,
+`--after-rev`: the capture's file inventory is the revision's clean tree) and
+the input files to be the ones in the after capture. `--allow-unbound` is for
+rehearsals while the classification is being written.
 
 Exit 0 iff the verdict is OK; 1 on a finding (REGRESSION); 2 on SETUP.
 Read-only: no Lean, no build, no host admission.
@@ -102,16 +120,15 @@ ON_DEMAND = re.compile(r'^(eq_\d+|eq_def|else_eq|splitter|congr_simp|congr_eq_\d
 # anonymous command (`#guard`, `#eval`, `example`), which the ledger covers.
 AUXILIARY = re.compile(r'^(match_\d+(?:_\d+)*|_?proof_\d+(?:_\d+)*|_?simp_\d+(?:_\d+)*|_unsafe_rec|_sunfold|_unfold|'
                        r'_f|_unary|_mutual|_eval(?:_\d+)?|_example|_nativeDecide_\d+(?:_\d+)*)$')
+MATCHER = FIDELITY.Comparison.MATCHER_LEAF
+SEMIREDUCIBLE, INSTANCE_REDUCIBLE = 'Lean.ReducibilityStatus.semireducible', 'Lean.ReducibilityStatus.instanceReducible'
+SECTIONS = ('replaced', 'retired', 'rewritten', 'added', 'matcher_reducibility')
 ITEM_KINDS = dict(guards='guard', checks='check', attributes='attribute')
 DISPOSITIONS = ('restated', 'deleted-with-old-side', 'retired')
 EMPTY_MAP = dict(schema_version=1, retired_tokens=[], allowed_abbreviations=[], entries=[])
 EMPTY_CLASSIFICATION = dict(schema_version=SCHEMA, old_side=dict(constants=[], namespaces=[]),
-                            replaced=[], retired=[], rewritten=[], added=[])
+                            replaced=[], retired=[], rewritten=[], added=[], matcher_reducibility=[])
 EMPTY_LEDGER = dict(schema_version=SCHEMA, deleted=[], added=[])
-
-
-class Finding(ValueError):
-    pass
 
 
 def sha256(data):
@@ -151,7 +168,7 @@ def _text(row, field, where):
 def validate_classification(data):
     if not isinstance(data, dict) or data.get('schema_version') != SCHEMA:
         raise ValueError('classification: unsupported schema_version')
-    unknown = set(data) - {'schema_version', 'old_side', 'replaced', 'retired', 'rewritten', 'added', 'notes'}
+    unknown = set(data) - {'schema_version', 'old_side', 'notes', *SECTIONS}
     if unknown:
         raise ValueError(f'classification: unknown fields {sorted(unknown)}')
     old = data.get('old_side', {})
@@ -163,7 +180,8 @@ def validate_classification(data):
                 or len(set(names)) != len(names):
             raise ValueError(f'classification: old_side.{field} must be a list of distinct names')
     seen = {}
-    required = dict(replaced=('by',), retired=('reason',), rewritten=('reason',), added=('reason',))
+    required = dict(replaced=('by',), retired=('reason',), rewritten=('reason',), added=('reason',),
+                    matcher_reducibility=('after', 'reason'))
     for section, fields in required.items():
         rows = data.get(section, [])
         if not isinstance(rows, list):
@@ -276,6 +294,7 @@ class ModuleCheck(FIDELITY.Comparison):
         self.module, self.context = module, context
         self.found = []
         self._kept_bundles = []
+        self._original, self._swapped = {}, set()
         b, a = self.before, self.after
         closure_before = self._substantive_closure(b['constants'], b['roots'], b['guards'], b['attributes'],
                                                    b['checks'], self.externally_referenced_before)
@@ -311,6 +330,34 @@ class ModuleCheck(FIDELITY.Comparison):
             self.generated_left.add(name)
             self._special_left |= set(bundle.get('_special_ids') or ())
             self.rehomed[name] = holder
+
+    def pair(self, a, b):
+        """Lean makes a private declaration's matcher semireducible and a
+        public one's instance-reducible. Across that one difference the pair
+        is compared with the after reducibility, and recorded."""
+        if a in self.generated_left and MATCHER.match(components(a)[-1]):
+            original = self._original.setdefault(a, self.left[a])
+            right = self.right.get(b)
+            self.left[a] = original
+            if right is not None and MATCHER.match(components(b)[-1]):
+                expected = {True: SEMIREDUCIBLE, False: INSTANCE_REDUCIBLE}
+                private = a.startswith('_private.'), b.startswith('_private.')
+                was = (original.get('attributes') or {}).get('reducibility')
+                now = (right.get('attributes') or {}).get('reducibility')
+                if private[0] != private[1] and (was, now) == (expected[private[0]], expected[private[1]]):
+                    self.left[a] = dict(original, attributes=dict(original['attributes'], reducibility=now))
+                    self._swapped.add((a, b))
+        super().pair(a, b)
+
+    def other_visibility(self, name):
+        """The graph key of an after matcher as the other visibility has it."""
+        record = self.right[name]
+        now = (record.get('attributes') or {}).get('reducibility')
+        if not MATCHER.match(components(name)[-1]) or now not in (SEMIREDUCIBLE, INSTANCE_REDUCIBLE):
+            return None
+        coarse = self.normalize(record, 'after', True)
+        other = SEMIREDUCIBLE if now == INSTANCE_REDUCIBLE else INSTANCE_REDUCIBLE
+        return FIDELITY.dag_digest(dict(coarse, attributes=dict(coarse['attributes'], reducibility=other)))
 
     def head(self, name, side):
         """The declaration a generated constant belongs to: ('named', full
@@ -404,7 +451,8 @@ class ModuleCheck(FIDELITY.Comparison):
                         except FIDELITY.Mismatch:
                             pass
             try:
-                candidates += [n for n in buckets[self.coarse_record(name, 'after')]
+                keys = [self.coarse_record(name, 'after'), self.other_visibility(name)]
+                candidates += [n for key in keys if key is not None for n in buckets[key]
                                if n != same and n not in self.pairs]
             except FIDELITY.Mismatch:
                 pass
@@ -435,6 +483,16 @@ class ModuleCheck(FIDELITY.Comparison):
             if head and head[0] == 'generated' and head[1] in added_heads:
                 continue
             self.found.append(f'generated constant {name} has no counterpart before the delete')
+
+        acknowledge = []
+        for left, right in sorted(self._swapped):
+            if self.pairs.get(left) != right:
+                continue
+            row = rows.use('matcher_reducibility', module, left)
+            if row is None or row['after'] != right:
+                acknowledge.append(dict(module=module, name=left, after=right, reason=''))
+                self.found.append(f'matcher {left} is {right} after the delete, with the reducibility of its new '
+                                  'owner\'s visibility; this needs a matcher_reducibility row')
 
         # Before side: what is unpaired vanished with the delete.
         vanishing = [n for n in self.generated_left
@@ -517,7 +575,7 @@ class ModuleCheck(FIDELITY.Comparison):
             items[key] = self.items(key, gone_names)
         renamed = {x: y for x, y in self.pairs.items() if x in self.generated_left and x != y}
         return dict(kept=len(kept), entries=entries, attached=attached, problems=self.found, items=items,
-                    renamed=renamed, rehomed=dict(self.rehomed), realized=sorted(realized),
+                    renamed=renamed, rehomed=dict(self.rehomed), realized=sorted(realized), acknowledge=acknowledge,
                     anonymous=sorted(anonymous), generated_kept=len(self.generated_right))
 
     def items(self, key, gone_names):
@@ -570,7 +628,7 @@ class Rows:
     def __init__(self, classification):
         self.data = classification
         self.tables = {section: {(r['module'], r['name']): r for r in classification.get(section, [])}
-                       for section in ('replaced', 'retired', 'rewritten', 'added')}
+                       for section in SECTIONS}
         self.rewritten = self.tables['rewritten']
         self.used = set()
 
@@ -585,12 +643,45 @@ class Rows:
                       for module, name in table if (section, module, name) not in self.used)
 
 
+def global_tables(selected, metas):
+    """Whole-capture tables from the per-module metadata, keyed as N4 keys
+    them: a name authored in two independent modules also has a
+    `name@module` key per module. Returns the authored names, all names,
+    each name's first holder, its holders, and who refers to it."""
+    occurrences, referrers = {}, {}
+    for module in sorted(selected):
+        meta = metas[module]
+        roots = set(meta['authored_roots'])
+        for name in meta['all_constants']:
+            occurrences.setdefault(name, []).append((module, name in roots))
+        for name in meta['kernel_referenced_constants']:
+            referrers.setdefault(name, set()).add(module)
+    all_roots, all_names, owners, holders = set(), set(), {}, {}
+    for name, rows in occurrences.items():
+        all_names.add(name)
+        if len(rows) == 1 or not any(root for _, root in rows):
+            owners[name] = rows[0][0]
+            holders[name] = {module for module, _ in rows}
+            if rows[0][1]:
+                all_roots.add(name)
+            continue
+        all_roots.add(name)
+        holders[name] = {module for module, _ in rows}
+        for module, root in rows:
+            key = f'{name}@{module}'
+            all_names.add(key)
+            owners[key] = module
+            holders[key] = {module}
+            if root:
+                all_roots.add(key)
+    return all_roots, all_names, owners, holders, referrers
+
+
 class Context:
     def __init__(self, before, after, renamer, metas):
         self.snapshots = dict(before=before, after=after)
         self.renamer, self.metas = renamer, metas
-        sides = {side: CANDIDATE._build_global_context_side(snap['selected'], metas[side])
-                 for side, snap in self.snapshots.items()}
+        sides = {side: global_tables(snap['selected'], metas[side]) for side, snap in self.snapshots.items()}
         (b_roots, b_all, b_owners, b_holders, b_refs), (a_roots, a_all, a_owners, a_holders, a_refs) = \
             sides['before'], sides['after']
         self.global_context = dict(before_roots=b_roots, after_roots=a_roots, before_constants=b_all,
@@ -727,13 +818,64 @@ def classify(entries, attached, classification, rows, after_users, problems):
     return counts
 
 
-def check(before, after, classification=None, ledger=None, mapping=None, progress=None, fast_path=True):
-    """`before`/`after`: `naming-candidate.read_snapshot(path, light=True)`."""
+def preconditions(before, after, inventory):
+    """N4's capture preconditions, for a delete: the same layout,
+    configuration and capture tools; every changed or deleted Lean source and
+    every importer of one is exported (or a registered exclusion); the
+    external artifacts both captures import are identical (a delete may
+    import fewer)."""
+    left, right = before['candidate'], after['candidate']
+    if left['source_dirs'] != right['source_dirs']:
+        raise ValueError('module source layout changed between captures')
+    for config in CANDIDATE.CONFIG:
+        if left['files'].get(config) != right['files'].get(config):
+            raise ValueError(f'build/dependency configuration changed: {config}')
+    if before['tool_sources'] != after['tool_sources']:
+        raise ValueError('capture implementation changed between captures')
+    covered = {row['path'] for side in (before, after) for m, row in side['candidate']['modules'].items()
+               if m in side['selected']}
+    changed = {path for path in left['files'].keys() | right['files'].keys()
+               if path.endswith('.lean') and left['files'].get(path) != right['files'].get(path)}
+    if changed - covered:
+        raise ValueError(f'changed Lean sources outside exports: {sorted(changed - covered)}')
+    excluded = set()
+    if inventory is not None:
+        raw, rows = inventory
+        for side in (left, right):
+            if side['files'].get('scripts/naming-inventory.json') != sha256(raw):
+                raise ValueError('naming inventory differs from a candidate\'s registered inventory')
+        for row in rows['excluded_sources']:
+            if left['files'].get(row['path']) == right['files'].get(row['path']) == row['sha256']:
+                excluded |= {m for m, r in left['modules'].items() if r['path'] == row['path']}
+    affected = CANDIDATE.affected_modules(left['modules'], right['modules'])
+    for side in (before, after):
+        missing = (affected & side['candidate']['modules'].keys()) - set(side['selected']) - excluded
+        if missing:
+            raise ValueError(f'affected importers outside exports: {sorted(missing)}')
+    external = [{name: CANDIDATE.artifact_identity(parts) for name, parts in side['artifacts'].items()
+                 if name not in side['candidate']['modules']} for side in (before, after)]
+    differing = sorted(n for n in external[0].keys() & external[1].keys() if external[0][n] != external[1][n])
+    if differing:
+        raise ValueError(f'external import artifacts changed: {differing[:8]}')
+    stale = sorted(n for n in external[1] if n in left['modules'])
+    if stale:
+        raise ValueError(f'the after capture imports artifacts of modules without a source: {stale[:8]}')
+    only_before, only_after = set(before.get('source_only', [])), set(after.get('source_only', []))
+    if only_after - only_before or {m for m in only_before - only_after if m in right['modules']}:
+        raise ValueError('source-only root classification changed between captures')
+    return dict(only_before=len(external[0].keys() - external[1].keys()),
+                only_after=sorted(external[1].keys() - external[0].keys()))
+
+
+def check(before, after, classification=None, ledger=None, mapping=None, fast_path=True, inventory=None):
+    """`before`/`after`: `naming-candidate.read_snapshot(path, light=True)`;
+    `inventory`: (bytes, parsed) of the registered naming inventory, as in N4."""
     start = time.monotonic()
     classification = validate_classification(classification or EMPTY_CLASSIFICATION)
     ledger = validate_ledger(ledger or EMPTY_LEDGER)
     mapping = validate_visibility_map(mapping or EMPTY_MAP)
-    _, _, renamer, _ = CANDIDATE._validate_compare_inputs(before, after, mapping, None, None)
+    external = preconditions(before, after, inventory)
+    renamer = MAP.Renamer(mapping['entries'])
     metas = {}
     for side, snap in (('before', before), ('after', after)):
         metas[side] = dict(snap.get('metas') or {})
@@ -760,10 +902,8 @@ def check(before, after, classification=None, ledger=None, mapping=None, progres
                      kept_guards=sum(metas['after'][m]['guard_count'] for m in identical),
                      kept_checks=sum(metas['after'][m]['check_count'] for m in identical),
                      kept_attribute_syntax=sum(metas['after'][m]['attr_count'] for m in identical))
-    import_changes, rehomed, renamed = {}, {}, {}
-    for position, module in enumerate(order):
-        if progress:
-            progress(position, len(order), module)
+    import_changes, rehomed, renamed, acknowledge = {}, {}, {}, []
+    for module in order:
         checker = ModuleCheck(module, context.environment('before', module),
                               context.environment('after', module), context)
         result = checker.run(rows)
@@ -772,6 +912,7 @@ def check(before, after, classification=None, ledger=None, mapping=None, progres
         attached.update(result['attached'])
         context.renamed.update(result['renamed'])
         renamed.update(result['renamed'])
+        acknowledge += result['acknowledge']
         rehomed.update({name: dict(module=module, before_module=holder) for name, holder in result['rehomed'].items()})
         totals['kept_authored'] += result['kept']
         for key, label in (('guards', 'kept_guards'), ('checks', 'kept_checks'),
@@ -852,9 +993,11 @@ def check(before, after, classification=None, ledger=None, mapping=None, progres
                      added=sorted(a_set - b_set)),
         totals=dict(sorted(totals.items())), deleted_declarations=len(entries),
         classes=dict(sorted(counts.items())), deleted=dict(sorted(deleted.items())),
-        unclassified=unclassified, deleted_checks=item_rows['deleted'], added_checks=item_rows['added'],
+        unclassified=unclassified, unacknowledged_matcher_reducibility=acknowledge,
+        deleted_checks=item_rows['deleted'], added_checks=item_rows['added'],
         deleted_checks_naming_deleted_declarations=dict(accounted), unledgered=unledgered,
         rehomed_generated=rehomed, renamed_generated=renamed, import_changes=import_changes,
+        external_artifacts=external,
         compared_modules=modules, seconds=round(time.monotonic() - start, 1))
 
 
@@ -876,9 +1019,13 @@ def main(argv=None):
     parser.add_argument('--classification', type=Path, help='committed classification of the deleted declarations')
     parser.add_argument('--guard-ledger', type=Path, help='committed ledger of deleted and added checks')
     parser.add_argument('--map', type=Path, help='N4 map of `public_from` rows (a private declaration made public)')
+    parser.add_argument('--inventory', type=Path,
+                        help='scripts/naming-inventory.json of both candidates: registered exclusions (as in N4)')
     parser.add_argument('--repo', type=Path, default=ROOT)
     parser.add_argument('--before-rev', help='revision the before capture must be the clean tree of')
     parser.add_argument('--after-rev', help='revision the after capture must be the clean tree of')
+    parser.add_argument('--allow-unbound', action='store_true',
+                        help='a rehearsal: do not require the revisions, nor the input files in the after capture')
     parser.add_argument('--receipt', type=Path, help='write the full result here')
     parser.add_argument('--compare-identical', action='store_true',
                         help='also run the comparator on modules whose exports are byte-identical (a self-check)')
@@ -886,6 +1033,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     git = None
     try:
+        if not args.allow_unbound and not (args.before_rev and args.after_rev):
+            raise ValueError('pass --before-rev and --after-rev (or --allow-unbound for a rehearsal)')
         inputs = {}
         for label, path, default in (('classification', args.classification, EMPTY_CLASSIFICATION),
                                      ('guard_ledger', args.guard_ledger, EMPTY_LEDGER), ('map', args.map, EMPTY_MAP)):
@@ -893,8 +1042,12 @@ def main(argv=None):
             inputs[label] = (json.loads(raw) if raw is not None else default, sha256(raw) if raw is not None else None)
         before = CANDIDATE.read_snapshot(args.before, light=True)
         after = CANDIDATE.read_snapshot(args.after, light=True)
+        inventory = None
+        if args.inventory:
+            raw = args.inventory.read_bytes()
+            inventory = (raw, json.loads(raw))
         result = check(before, after, inputs['classification'][0], inputs['guard_ledger'][0], inputs['map'][0],
-                       fast_path=not args.compare_identical)
+                       fast_path=not args.compare_identical, inventory=inventory)
         git = LEDGER.Git(args.repo.resolve())
         result['before'] = side_receipt(git, before, args.before, args.before_rev)
         result['after'] = side_receipt(git, after, args.after, args.after_rev)
@@ -902,6 +1055,17 @@ def main(argv=None):
             if revision and not result[label]['bound']:
                 result['problems'].append(f'the {label} capture is not the clean tree of {revision}')
                 result['verdict'] = 'REGRESSION'
+        repo = args.repo.resolve()
+        for label, path in (('classification', args.classification), ('guard_ledger', args.guard_ledger),
+                            ('map', args.map)):
+            if path is None or args.allow_unbound:
+                continue
+            located = path.resolve()
+            relative = str(located.relative_to(repo)) if located.is_relative_to(repo) else None
+            if after['candidate']['files'].get(relative) != inputs[label][1]:
+                result['problems'].append(f'{path} is not a file of the after capture with these bytes')
+                result['verdict'] = 'REGRESSION'
+        result['unbound_rehearsal'] = bool(args.allow_unbound)
         result.update({f'{label}_sha256': digest for label, (_, digest) in inputs.items()})
         result['tool_sha256'] = CANDIDATE.file_sha(Path(__file__))
         if args.receipt:
@@ -922,12 +1086,14 @@ def main(argv=None):
             print(f'REGRESSION — delete preservation: {len(result["problems"])} finding(s)', file=sys.stderr)
             return 1
         totals = result['totals']
+        if args.allow_unbound:
+            print('REHEARSAL (--allow-unbound): not a gate verdict')
         print(f'OK — delete preservation: {totals.get("kept_authored", 0)} kept authored constants and '
               f'{totals.get("kept_guards", 0)} kept guards unchanged; {result["deleted_declarations"]} deleted '
               f'declarations classified; before bound {result["before"]["bound"]}, '
               f'after bound {result["after"]["bound"]}')
         return 0
-    except (Finding, FIDELITY.Mismatch) as error:
+    except FIDELITY.Mismatch as error:
         print(f'REGRESSION — delete preservation: {error}', file=sys.stderr)
         return 1
     except (OSError, ValueError, KeyError, TypeError) as error:

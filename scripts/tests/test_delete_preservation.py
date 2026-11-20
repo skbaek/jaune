@@ -173,7 +173,8 @@ def deleted(tree):
 
 
 CLASSIFICATION = dict(schema_version=1, old_side=dict(constants=['J.Devm'], namespaces=[]),
-                      replaced=[], retired=[], rewritten=[], added=[])
+                      replaced=[], retired=[], rewritten=[], added=[], matcher_reducibility=[])
+SEMI, INSTANCE = 'Lean.ReducibilityStatus.semireducible', 'Lean.ReducibilityStatus.instanceReducible'
 
 
 def old_guard_digest():
@@ -328,6 +329,58 @@ class DeleteTests(unittest.TestCase):
         self.assertOK()
         put(self.after, 'Down', 'J.user', definition(app(c('J.other.match_1'), c('J.keep'))))
         self.assertFinding(r'\[Down\] kept constant J\.user changed: .*J\.oldRun\.match_1 became J\.other\.match_1')
+
+    def reuse_private_matcher(self):
+        """Before, the public `J.keep` reused the matcher of an earlier private
+        old declaration; after, it has its own, which Lean makes
+        instance-reducible where the private one was semireducible."""
+        old, matcher = '_private.Mixed.0.J.oldRun', '_private.Mixed.0.J.oldRun.match_1'
+        body = ['lam', NAT, ['bvar', 0]]
+        drop(self.before, 'Mixed', 'J.oldRun', 'J.oldRun.match_1', 'J.oldRun_spec', 'J.keep.match_1',
+             OLD_GUARD, ['J.oldRun_spec'])
+        items = self.before['Mixed']['items']
+        items.insert(0, ['gen', matcher, definition(body, reducibility=SEMI)])
+        items.insert(0, ['def', old, definition(app(c(matcher), ['lit', 2]), ['forall', DEVM, NAT])])
+        put(self.before, 'Mixed', 'J.keep', definition(app(c(matcher), ['lit', 1])))
+        put(self.after, 'Mixed', 'J.keep.match_1', definition(body, reducibility=INSTANCE))
+        self.ledger = None
+        return matcher
+
+    def test_matcher_reducibility_follows_the_new_owners_visibility_only_with_a_row(self):
+        matcher = self.reuse_private_matcher()
+        result = self.assertFinding(r'\[Mixed\] matcher _private\.Mixed\.0\.J\.oldRun\.match_1 is J\.keep\.match_1 '
+                                    r'after the delete.*needs a matcher_reducibility row')
+        self.assertEqual(len(result['problems']), 1)
+        row = dict(module='Mixed', name=matcher, after='J.keep.match_1', reason='')
+        self.assertEqual(result['unacknowledged_matcher_reducibility'], [row])
+        self.classification['matcher_reducibility'] = [dict(row, reason='the old declaration was private')]
+        self.assertOK()
+        self.classification['matcher_reducibility'] = [dict(row, after='J.other.match_1', reason='x')]
+        self.assertFinding(r'needs a matcher_reducibility row')
+
+    def test_matcher_reducibility_row_admits_no_other_difference(self):
+        matcher = self.reuse_private_matcher()
+        self.classification['matcher_reducibility'] = [dict(module='Mixed', name=matcher, after='J.keep.match_1',
+                                                            reason='the old declaration was private')]
+        body = ['lam', NAT, ['bvar', 0]]
+        put(self.after, 'Mixed', 'J.keep.match_1', definition(body, reducibility=INSTANCE, inline='inline'))
+        self.assertFinding(r'kept constant J\.keep changed: .*attributes')
+        put(self.after, 'Mixed', 'J.keep.match_1', definition(['lam', NAT, ['lit', 0]], reducibility=INSTANCE))
+        self.assertFinding(r'kept constant J\.keep changed: .*payload')
+        # The same visibility on both sides: the reducibility is a change.
+        put(self.after, 'Mixed', 'J.keep.match_1', definition(body, reducibility=INSTANCE))
+        put(self.before, 'Mixed', matcher, definition(body, reducibility='Lean.ReducibilityStatus.reducible'))
+        self.assertFinding(r'kept constant J\.keep changed: .*reducibility')
+
+    def test_unreferenced_matcher_of_the_other_visibility_is_found_by_graph(self):
+        # A kept theorem's proof made the matcher (proofs are not exported).
+        matcher = self.reuse_private_matcher()
+        put(self.before, 'Mixed', 'J.keep', definition(['lit', 1]))
+        put(self.after, 'Mixed', 'J.keep', definition(['lit', 1]))
+        self.assertFinding(r'needs a matcher_reducibility row')
+        self.classification['matcher_reducibility'] = [dict(module='Mixed', name=matcher, after='J.keep.match_1',
+                                                            reason='the old declaration was private')]
+        self.assertOK()
 
     def test_generated_constant_of_a_kept_declaration_cannot_vanish(self):
         self.before['Mixed']['items'].append(['gen', 'J.keepThm.match_1', definition(['lit', 8])])
@@ -494,6 +547,52 @@ class DeleteTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'export mode mismatch for Mixed'):
             self.run_check()
 
+    def snapshots(self):
+        self.runs = getattr(self, 'runs', 0) + 1
+        root = Path(self.tmp.name) / str(self.runs)
+        return snapshot(self.before, root / 'before'), snapshot(self.after, root / 'after')
+
+    def test_captures_must_share_tools_configuration_and_external_artifacts(self):
+        parts = lambda digest: {part: dict(path=part, sha256=digest) for part in CHECK.CANDIDATE.PARTS}
+        before, after = self.snapshots()
+        before['artifacts'] = {'Init': parts('1'), 'Std': parts('2'), 'Old': parts('3')}
+        after['artifacts'] = {'Init': parts('1')}
+        result = CHECK.check(before, after, self.classification, self.ledger)
+        # A delete may import fewer external modules; `Old` was a local module.
+        self.assertEqual((result['verdict'], result['external_artifacts']), ('OK', dict(only_before=1, only_after=[])))
+        after['artifacts'] = {'Init': parts('9')}
+        with self.assertRaisesRegex(ValueError, r"external import artifacts changed: \['Init'\]"):
+            CHECK.check(before, after, self.classification, self.ledger)
+        after['artifacts'] = {'Init': parts('1'), 'Old': parts('3')}
+        with self.assertRaisesRegex(ValueError, r"imports artifacts of modules without a source: \['Old'\]"):
+            CHECK.check(before, after, self.classification, self.ledger)
+        before, after = self.snapshots()
+        after['tool_sources'] = {'scripts/NamingFidelity.lean': 'changed'}
+        with self.assertRaisesRegex(ValueError, 'capture implementation changed'):
+            CHECK.check(before, after, self.classification, self.ledger)
+        before, after = self.snapshots()
+        after['candidate']['files']['lakefile.lean'] = 'changed'
+        with self.assertRaisesRegex(ValueError, 'build/dependency configuration changed: lakefile.lean'):
+            CHECK.check(before, after, self.classification, self.ledger)
+
+    def test_every_changed_source_and_its_importers_must_be_exported(self):
+        before, after = self.snapshots()
+        for side in (before, after):
+            side['candidate']['modules']['Pilot'] = dict(path='Pilot.lean', sha256='p', imports=['Mixed'],
+                                                         is_module=False)
+            side['candidate']['files'].update({'Pilot.lean': 'p', 'scripts/naming-inventory.json': 'i'})
+        with self.assertRaisesRegex(ValueError, r"affected importers outside exports: \['Pilot'\]"):
+            CHECK.check(before, after, self.classification, self.ledger)
+        # A registered exclusion whose bytes are unchanged is accounted for.
+        raw = json.dumps(dict(excluded_sources=[dict(path='Pilot.lean', sha256='p')])).encode()
+        for side in (before, after):
+            side['candidate']['files']['scripts/naming-inventory.json'] = hashlib.sha256(raw).hexdigest()
+        result = CHECK.check(before, after, self.classification, self.ledger, inventory=(raw, json.loads(raw)))
+        self.assertEqual(result['verdict'], 'OK')
+        after['candidate']['files']['Pilot.lean'] = 'q'
+        with self.assertRaisesRegex(ValueError, r"changed Lean sources outside exports: \['Pilot.lean'\]"):
+            CHECK.check(before, after, self.classification, self.ledger, inventory=(raw, json.loads(raw)))
+
     def test_input_files_are_validated(self):
         for field, value, pattern in (
                 ('retired', [dict(module='Mixed', name='J.x')], "missing non-empty 'reason'"),
@@ -518,7 +617,7 @@ class CommandLineTests(unittest.TestCase):
     """`main` end to end: receipt, verdict lines and exit codes (the snapshot
     reader itself is naming-candidate's)."""
 
-    def run_main(self, after, files=True, revisions=False):
+    def run_main(self, after, files=True, extra=('--allow-unbound',)):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             sides = dict(before=snapshot(base(), tmp / 'before'), after=snapshot(after, tmp / 'after'))
@@ -530,8 +629,7 @@ class CommandLineTests(unittest.TestCase):
                     '--receipt', str(tmp / 'out/receipt.json')]
             if files:
                 argv += ['--classification', str(tmp / 'classification.json'), '--guard-ledger', str(tmp / 'ledger.json')]
-            if revisions:
-                argv += ['--before-rev', 'HEAD', '--after-rev', 'HEAD']
+            argv += list(extra)
             out, err = io.StringIO(), io.StringIO()
             with unittest.mock.patch.object(CHECK.CANDIDATE, 'read_snapshot',
                                             lambda path, light=True: sides[Path(path).parent.name]), \
@@ -543,8 +641,10 @@ class CommandLineTests(unittest.TestCase):
     def test_ok_writes_a_bound_receipt(self):
         code, out, err, receipt = self.run_main(deleted(base()))
         self.assertEqual((code, err), (0, ''))
-        self.assertRegex(out, r'OK — delete preservation: 5 kept authored constants and 1 kept guards unchanged; '
+        self.assertRegex(out, r'REHEARSAL \(--allow-unbound\): not a gate verdict\n'
+                              r'OK — delete preservation: 5 kept authored constants and 1 kept guards unchanged; '
                               r'5 deleted declarations classified; before bound False, after bound False')
+        self.assertTrue(receipt['unbound_rehearsal'])
         self.assertEqual((receipt['verdict'], receipt['classes']), ('OK', {'old-side': 5}))
         for key in ('classification_sha256', 'guard_ledger_sha256', 'tool_sha256'):
             self.assertRegex(receipt[key], r'^[0-9a-f]{64}$')
@@ -559,11 +659,17 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(len(receipt['unclassified']), 5)
         self.assertEqual(len(receipt['unledgered']['deleted']), 1)
 
-    def test_capture_must_be_the_clean_tree_of_its_revision(self):
-        code, _, err, receipt = self.run_main(deleted(base()), revisions=True)
+    def test_verdict_needs_bound_captures_and_input_files_of_the_after_capture(self):
+        code, _, err, receipt = self.run_main(deleted(base()), extra=())
+        self.assertEqual((code, receipt), (2, None))
+        self.assertRegex(err, r'SETUP — delete preservation: pass --before-rev and --after-rev')
+        code, _, err, receipt = self.run_main(deleted(base()), extra=('--before-rev', 'HEAD', '--after-rev', 'HEAD'))
         self.assertEqual(code, 1)
         self.assertRegex(err, r'the before capture is not the clean tree of HEAD')
-        self.assertFalse(receipt['before']['bound'])
+        self.assertRegex(err, r'the after capture is not the clean tree of HEAD')
+        self.assertRegex(err, r'classification\.json is not a file of the after capture with these bytes')
+        self.assertRegex(err, r'ledger\.json is not a file of the after capture with these bytes')
+        self.assertEqual((receipt['before']['bound'], receipt['unbound_rehearsal']), (False, False))
 
     def test_setup_error_exits_2(self):
         after = deleted(base())
