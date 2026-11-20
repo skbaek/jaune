@@ -1,6 +1,5 @@
-import Jaune.Execution
-import Jaune.Sufficiency
 import Jaune.Transaction
+import Jaune.PrecompileInput
 import Jaune.FixtureException
 import Jaune.ChainStore
 import Jaune.FixtureTransition
@@ -1646,49 +1645,6 @@ def getFork (opts : List String) : IO Fork :=
            {Fork.all.map Fork.toString}, of which this build runs \
            {Fork.supported.map Fork.toString}"
 
-def createMinimalEvm
-    (fork : Fork) (adr : Address) (input : Bytes) (gasLimit : Nat) : Evm := {
-  pc := 0
-  sta := {
-    caller := default
-    target := none
-    currentTarget := adr
-    gas := gasLimit
-    value := default
-    data := input
-    codeAddress := none
-    code := .empty
-    depth := 1
-    shouldTransferValue := false
-    isStatic := false
-    disablePrecompiles := false
-    benvStat := { (default : BenvStat) with fork := fork }
-    tenvStat := default
-  }
-  dyna := {
-    mach := {
-      stack := []
-      memory := .empty
-      gasLeft := gasLimit
-    }
-    «meta» := {
-      logs := []
-      refundCounter := 0
-      output := []
-      accountsToDelete := .emptyWithCapacity
-      returnData := []
-      error := none
-      accessedAddresses := .emptyWithCapacity
-      accessedStorageKeys := .emptyWithCapacity
-      createdAccounts := .emptyWithCapacity
-    }
-    world := {
-      state := .empty
-      transientStorage := .empty
-    }
-  }
-}
-
 def processVector (fork : Fork) (adr : Address) : (Nat × Lean.Json) → IO Bool
   | ⟨idx, json⟩ => do
     let name ← (json.find? "Name" >>= Lean.Json.toString?).toIO s!"missing Name at index {idx}"
@@ -1704,8 +1660,7 @@ def processVector (fork : Fork) (adr : Address) : (Nat × Lean.Json) → IO Bool
         let gs := toString g
         (String.toNat? gs).toIO s!"invalid Gas for {name}"
       else pure 0
-    let evm := createMinimalEvm fork adr input 0xffffffffffff
-    let res := precompileRun evm adr
+    let res := Precompile.run { calldata := input, gasLeft := 0xffffffffffff, fork } adr
     match expected? with
     | some expected =>
       match res with
