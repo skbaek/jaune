@@ -30,8 +30,8 @@
     },
     "G2b": {
       "tag": "gate/g2b",
-      "commit": null,
-      "status": "pending"
+      "commit": "791a162bf429febedea4d11b54e3b9a540f60271",
+      "status": "tagged"
     }
   },
   "entries": [

@@ -1,0 +1,556 @@
+{
+  "after": {
+    "bound": true,
+    "exports_sha256": "14e5bfcc99161c743725412f7594a5daa2757bf2aef1a65d031de05e22852160",
+    "head": "791a162bf429febedea4d11b54e3b9a540f60271",
+    "inventory_sha256": "0b8d46f890e8e8a8de08d736a4179e4b531f8c86c00549953f19a59c83f15d41",
+    "snapshot_sha256": "17c5596d750f69d5a232ec3e8680c675b00414fdf5589d3531b1376a466de243"
+  },
+  "before": {
+    "bound": true,
+    "exports_sha256": "2aaa4989dbdc16de3bc3363fc6ce1bbaf1566a20869236950540cd8811b282a4",
+    "head": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+    "inventory_sha256": "74887c2cfb940b3261701dc086f10e9cdb9e7fe100a045faf4b8fb2245e94935",
+    "snapshot_sha256": "807ad68f9b6b0f90077ba2df97d49be2be9bb0b8302e15f178f58225bf8e1429"
+  },
+  "entries": [
+    {
+      "authored": 1891,
+      "closure": 2722,
+      "closure_scope_sha256": "c6827d83a22c682c0fcba047eedaab1f1be29092a1bd9a8732bd365a7e8b43bd",
+      "external_references": 558,
+      "generated": 831,
+      "id": "G2b-block",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 30,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.stateTransitionCoreE"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2723,
+      "tag_modules": 33,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1752,
+      "closure": 2544,
+      "closure_scope_sha256": "31ff6dfc02ae87def227e4b829686b892c0a8d638ff28387c1fedd267419fd1c",
+      "external_references": 544,
+      "generated": 792,
+      "id": "G2b-applyBody",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 29,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.applyBody"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2545,
+      "tag_modules": 32,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1752,
+      "closure": 2544,
+      "closure_scope_sha256": "31ff6dfc02ae87def227e4b829686b892c0a8d638ff28387c1fedd267419fd1c",
+      "external_references": 544,
+      "generated": 792,
+      "id": "G2b-applyBody-fresh",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 29,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.applyBody"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2545,
+      "tag_modules": 32,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1627,
+      "closure": 2366,
+      "closure_scope_sha256": "7ea69a3e9f3bef8451d4758fcbf04259e4bd28c9c4a6b3fc914df2e24439ddd9",
+      "external_references": 535,
+      "generated": 739,
+      "id": "G2b-transaction",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 27,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Transaction.run"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2367,
+      "tag_modules": 29,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1368,
+      "closure": 2039,
+      "closure_scope_sha256": "fa8f75d06829fce1ee58df1bf2ee77242eb32b032e8ca9022bdc727b78ec2c34",
+      "external_references": 496,
+      "generated": 671,
+      "id": "G2b-toplevel",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 24,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.TopLevel.run"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2040,
+      "tag_modules": 26,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1383,
+      "closure": 2059,
+      "closure_scope_sha256": "acae1ca3c73aca0c31b4e419f18da725dcf3945872ab3b7de8c563c365d41423",
+      "external_references": 499,
+      "generated": 676,
+      "id": "G2b-system",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 26,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.processSystemTransaction"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2060,
+      "tag_modules": 28,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1460,
+      "closure": 2137,
+      "closure_scope_sha256": "f259a9b10ea5f7926a46ba0d1f1d6d6091c517d2b74a6d49aca9efc8551e9451",
+      "external_references": 500,
+      "generated": 677,
+      "id": "G2b-system-checked",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 26,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.processCheckedSystemTransaction"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2138,
+      "tag_modules": 28,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1707,
+      "closure": 2460,
+      "closure_scope_sha256": "214daf08ec740c9dbb17b395d410b6c5bc2f4e98f531f1589b373be9fa497a13",
+      "external_references": 537,
+      "generated": 753,
+      "id": "G2b-body-step",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 29,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Body.step"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2461,
+      "tag_modules": 32,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1750,
+      "closure": 2542,
+      "closure_scope_sha256": "b2222d0b17352d9330c94f301c16a4660ba9ae49afd9df81affa6c9c582cb3b3",
+      "external_references": 544,
+      "generated": 792,
+      "id": "G2b-body-importer",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 29,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Body.importer"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2543,
+      "tag_modules": 32,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1285,
+      "closure": 1918,
+      "closure_scope_sha256": "86d4e727eef2ae977e9291f660ab9ee52c85d3b608eadf9621f9a9a56fe76364",
+      "external_references": 484,
+      "generated": 633,
+      "id": "G2b-frame-runTop",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 20,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Frame.runTop"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 1919,
+      "tag_modules": 21,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1284,
+      "closure": 1916,
+      "closure_scope_sha256": "69cb623039f431c65de6c8ffa89611b1282fc48423a6cd451a536e825ea290b1",
+      "external_references": 484,
+      "generated": 632,
+      "id": "G2b-exec",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 19,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.exec"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 1917,
+      "tag_modules": 20,
+      "verdict": "OK"
+    },
+    {
+      "authored": 828,
+      "closure": 1155,
+      "closure_scope_sha256": "25143a5afef613c78eb27457854c77f36ff0e9b0cd46f798cda8f9bc5dad45dd",
+      "external_references": 342,
+      "generated": 327,
+      "id": "G2b-dispatch",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 13,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Evm.step"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 1155,
+      "tag_modules": 13,
+      "verdict": "OK"
+    },
+    {
+      "authored": 299,
+      "closure": 443,
+      "closure_scope_sha256": "4c53ffb3d3560cc9a6ea8b3e02863dfdd3c6338d8b192eef77cdccd83605d55a",
+      "external_references": 207,
+      "generated": 144,
+      "id": "G2b-contexts",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 23,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.initBlockEnvironment"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 443,
+      "tag_modules": 15,
+      "verdict": "OK"
+    },
+    {
+      "authored": 8,
+      "closure": 13,
+      "closure_scope_sha256": "c708063021854f8f3159680d0b3abbd607eb6d2c56767a4b2dbdbc85c1669353",
+      "external_references": 48,
+      "generated": 5,
+      "id": "G2b-memory-write",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 8,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Mem.write"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 13,
+      "tag_modules": 8,
+      "verdict": "OK"
+    },
+    {
+      "authored": 10,
+      "closure": 13,
+      "closure_scope_sha256": "db3d4c72a4c12752c540e4d46a23367799e2f6c74a3034395ec56994cefe3e2c",
+      "external_references": 34,
+      "generated": 3,
+      "id": "G2b-memory-read",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 8,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Mem.read"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 13,
+      "tag_modules": 8,
+      "verdict": "OK"
+    },
+    {
+      "authored": 6,
+      "closure": 7,
+      "closure_scope_sha256": "35ee9738694c7391aed8e51352c727d1e5bb30077cf46cf56efe19e07d21057c",
+      "external_references": 22,
+      "generated": 1,
+      "id": "G2b-memory-extend",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 8,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Mem.extend"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 7,
+      "tag_modules": 8,
+      "verdict": "OK"
+    },
+    {
+      "authored": 668,
+      "closure": 1056,
+      "closure_scope_sha256": "827a7ad7e8e99d574263770b120b012e4b94bb56978a083791b043c9ea2d3834",
+      "external_references": 395,
+      "generated": 388,
+      "id": "G2b-precompile",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 9,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.precompileRun"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 1056,
+      "tag_modules": 9,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1286,
+      "closure": 1917,
+      "closure_scope_sha256": "5f4522e2a4bd8cf1861cc8f97878e0d7d0b3ef6aaa66d87a272e61d2a8b15a0e",
+      "external_references": 480,
+      "generated": 631,
+      "id": "G2b-view-raw",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 27,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Exec.rawNodes"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 1918,
+      "tag_modules": 30,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1289,
+      "closure": 1923,
+      "closure_scope_sha256": "490c2c57ce7602552f893be6afa8a5c5f35d178becb4b90e204ddda3f353b740",
+      "external_references": 482,
+      "generated": 634,
+      "id": "G2b-view-retained",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 27,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Exec.retainedNodes"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 1924,
+      "tag_modules": 30,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1290,
+      "closure": 1924,
+      "closure_scope_sha256": "953248bcb122ee38cb894b38b4cdc9a0a957e9199bf5e4b04603dc3a150b90d9",
+      "external_references": 481,
+      "generated": 634,
+      "id": "G2b-view-committed",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 25,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Exec.committedFrames"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 1925,
+      "tag_modules": 28,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1292,
+      "closure": 1916,
+      "closure_scope_sha256": "3150fd137fab50dd5f1dfc1fcab5e0cb18236195c86c9cb11b93993006ecdcf5",
+      "external_references": 476,
+      "generated": 624,
+      "id": "G2b-view-prefix",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 27,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Exec.Deriv.ParentPrefix"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 1917,
+      "tag_modules": 30,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1412,
+      "closure": 2147,
+      "closure_scope_sha256": "c4204a66d6adc05101647853b6f8fc909829b5827fc8771175f0dabe10157259",
+      "external_references": 547,
+      "generated": 735,
+      "id": "G2b-trace-frame",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 38,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Trace.runFrame",
+        "Jaune.TraceJson.sink"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2148,
+      "tag_modules": 72,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1412,
+      "closure": 2147,
+      "closure_scope_sha256": "c4204a66d6adc05101647853b6f8fc909829b5827fc8771175f0dabe10157259",
+      "external_references": 547,
+      "generated": 735,
+      "id": "G2b-trace-message",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 38,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.Trace.runFrame",
+        "Jaune.TraceJson.sink"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2148,
+      "tag_modules": 72,
+      "verdict": "OK"
+    },
+    {
+      "authored": 1756,
+      "closure": 2600,
+      "closure_scope_sha256": "1b512a87db8137b7dbcb37cc959581c90b6a49f774ad73894dbb302a51e16199",
+      "external_references": 584,
+      "generated": 844,
+      "id": "G2b-trace-transaction",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 40,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.TraceTransaction.runTransaction",
+        "Jaune.TraceJson.sink"
+      ],
+      "stopped_exempt": [],
+      "tag_closure": 2601,
+      "tag_modules": 79,
+      "verdict": "OK"
+    },
+    {
+      "authored": 552,
+      "closure": 768,
+      "closure_scope_sha256": "979da910843b7974fb160a13452004a662841bd76a1fe4c9a52569fc73487b71",
+      "external_references": 324,
+      "generated": 216,
+      "id": "G2b-s6c",
+      "maps": [
+        "d58b0bad86c9e3494089ca2853778804c0b41cdfb36ea14240cf34bafcf682ac"
+      ],
+      "mismatches": [],
+      "old_modules": 33,
+      "old_revision": "40e75855286fca8a97ad1a78d6435e89afaf7fc7",
+      "roots": [
+        "Jaune.stateTransitionCanonical"
+      ],
+      "stopped_exempt": [
+        "Jaune.stateTransitionCoreE"
+      ],
+      "tag_closure": 768,
+      "tag_modules": 59,
+      "verdict": "OK"
+    }
+  ],
+  "gate": "G2b",
+  "ledger_sha256": "d1b2a36639d7366b7a6136642f531186cd2771e5a73ea8b98c467bb3f6856a66",
+  "schema_version": 1,
+  "seconds": 82.4,
+  "tag": "gate/g2b",
+  "tag_commit": "791a162bf429febedea4d11b54e3b9a540f60271",
+  "tool_sha256": "15d136a6948dcbcf5dccaff9c9070a49e49a3e000fc8fef765f71ec5e491d5a2",
+  "verdict": "OK"
+}
