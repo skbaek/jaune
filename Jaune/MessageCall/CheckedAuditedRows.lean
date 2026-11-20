@@ -6,31 +6,19 @@ import Jaune.MessageCall.CheckedSpawnFacts
 
 The destination axiom audit's settlement rows (29-37) and block-context rows (38-42), restated with
 the same names under `Jaune.Checked` and the same conclusions over the checked interpreter. Rows
-29-37 are stated over `Checked.Exec`; their `Checked.Frame.Run` forms are the `callRan` rows of
-`FrameRun/CheckedSettlementViews.lean`. Row 38 (`benvAfterTransfer_stat`) has no counterpart: a
-checked transfer returns a `World`, so the block record cannot change by its type. Its proposed
-replacement is `Frame.enter_run_context`; the spawn-context rows are the proposed replacements of
-rows 39-42.
+30-33, 36 and 37 are stated over `Checked.Exec`; their `Checked.Frame.Run` forms are the `callRan`
+rows of `FrameRun/CheckedSettlementViews.lean`. Rows 29 and 35 do not mention `Exec` and live in
+`FrameRun/CheckedBasic.lean`. Row 38 (`benvAfterTransfer_stat`) has no counterpart: a checked
+transfer returns a `World`, so the block record cannot change by its type. Its proposed replacement
+is `Frame.enter_run_context`; the spawn-context rows (`genericCall.step_spawn_context`,
+`genericCreate.step_spawn_context`, `MessageOp.step_spawn_context`) are the proposed replacements of
+rows 39-42. `Frame.enter_run_context` and `genericCreate.step_spawn_context` live in
+`MessageCall/CheckedSpawnFacts.lean`.
 -/
 
 namespace Jaune.Checked
 
-/-! ## Rows 29-37: settlement -/
-
-/-- Row 29. Settlement can commit only a raw result that finished. -/
-theorem Frame.raw_commits_of_settlementCommits {f : Frame} {raw : Except Fault Frame.Exit}
-    (h : Frame.settlementCommits f raw = true) : Exec.finished raw = true :=
-  Frame.finished_of_settlementCommits h
-
-/-- Row 35. A call frame's settlement commits every finished raw result. -/
-theorem Frame.settlementCommits_ofCall_of_raw_commits {f : Frame} {raw : Except Fault Frame.Exit}
-    (hcall : f.message.kind = .call) (hraw : Exec.finished raw = true) :
-    Frame.settlementCommits f raw = true := by
-  rcases raw with fault | ⟨output, s⟩ | ⟨output, s⟩ | ⟨reason, s⟩
-  · cases hraw
-  · simp [Frame.settlementCommits, settle, hcall, bind, Except.bind, Frame.Result.ofSuccess]
-  · cases hraw
-  · cases hraw
+/-! ## Rows 30-33, 36, 37: settlement over `Exec` -/
 
 section RunOk
 
@@ -93,19 +81,6 @@ theorem Exec.committedFrames_eq_nil_of_not_commits {r out} (run : Exec r out)
 
 /-! ## Rows 39-42: block context across a frame boundary, and their proposed replacements -/
 
-/-- Proposed replacement of rows 38 and 39. Entering a frame runs it under its message's whole
-call context. -/
-theorem Frame.enter_run_context {f : Frame} {r : Frame.Running} (h : enter f = .run r) :
-    r.context = f.message.context := by
-  unfold enter enterWith at h
-  rcases ht : f.message.transfer f.enteredWorld with fault | world <;> simp only [ht] at h
-  · cases h
-  · rcases hc : f.message.codeAddress with _ | address <;> simp only [hc] at h
-    · cases h; rfl
-    · split at h
-      · cases h
-      · cases h; rfl
-
 /-- Row 39. Entering a frame runs it under the block record its message carries. -/
 theorem Frame.enter_run_benvStat {f : Frame} {r : Frame.Running} (h : enter f = .run r) :
     r.context.block = f.message.context.block := by
@@ -120,15 +95,6 @@ theorem genericCall.step_spawn_benvStat {ctx : CallContext} {parent : Frame.Stat
       inputIndex inputSize outputIndex outputSize code disablePrecompiles = .spawn child pending) :
     child.message.context.block = ctx.block :=
   (genericCall.step_spawn_context h).1
-
-/-- Proposed replacement of row 41. A CREATE-family spawn hands the parent's block and transaction
-records to the child frame. -/
-theorem genericCreate.step_spawn_context {ctx : CallContext} {s : Frame.State} {value : U256}
-    {a : Address} {i len : Nat} {child : Frame} {p : Staging.Pending}
-    (h : genericCreate.step ctx s value a i len = .spawn child p) :
-    child.message.context.block = ctx.block ∧ child.message.context.tx = ctx.tx :=
-  let ⟨_, _, _, _, _, hb, ht⟩ := genericCreate.step_spawn_checkpoint h
-  ⟨hb, ht⟩
 
 /-- Row 41. A CREATE-family spawn hands the parent's block record to the child frame. -/
 theorem genericCreate.step_spawn_benvStat {ctx : CallContext} {s : Frame.State} {value : U256}

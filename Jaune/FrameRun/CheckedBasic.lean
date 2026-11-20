@@ -1,6 +1,107 @@
-import Jaune.MessageCall.CheckedChronology
+import Jaune.MessageCall.CheckedDriver
+
+/-!
+The frame boundary (`resumeCaller`, the driver's spawn equations, settlement commitment) and the
+ordered frame run `Frame.Run`. Nothing here depends on the derivation `Checked.Exec`.
+-/
 
 namespace Jaune.Checked
+
+/-- Finishing a call either gives the driver's final outcome or a caller state to resume. -/
+def resumeCaller (rules : ForkRules) (child : Frame) (pending : Staging.Pending) :
+    Except Fault Frame.Result → Except (Except Fault Frame.Exit) Frame.State
+  | .error fault => .error (.error fault)
+  | .ok result =>
+    match resume rules pending child.checkpoint result with
+    | .error fault => .error (.error fault)
+    | .ok (.error (reason, state)) => .error (.ok (.halted reason state))
+    | .ok (.ok state) => .ok state
+
+theorem execFueled_spawn_done {r : Frame.Running} {fuel : Nat} {child pending pc result}
+    (hs : step r = .ok (.spawn child pending pc)) (he : enter child = .done result) :
+    execFueled r (fuel + 1) =
+      match resumeCaller r.context.block.rules child pending result with
+      | .error out => Fueled.ofExcept out
+      | .ok state => execFueled ⟨pc, r.context, state⟩ fuel := by
+  rw [execFueled, hs]
+  dsimp only
+  rw [he]
+  cases result with
+  | error f => rfl
+  | ok v =>
+    dsimp only [resumeCaller]
+    rcases resume r.context.block.rules pending child.checkpoint v with
+      f | ⟨reason, state⟩ | state <;> rfl
+
+theorem execFueled_spawn_run {r : Frame.Running} {fuel : Nat} {child pending pc cr}
+    (hs : step r = .ok (.spawn child pending pc)) (he : enter child = .run cr) :
+    execFueled r (fuel + 1) =
+      match (execFueled cr fuel).run with
+      | none => Fueled.exhausted
+      | some raw =>
+        match resumeCaller r.context.block.rules child pending (raw >>= settle child) with
+        | .error out => Fueled.ofExcept out
+        | .ok state => execFueled ⟨pc, r.context, state⟩ fuel := by
+  rw [execFueled, hs]
+  dsimp only
+  rw [he]
+  dsimp only
+  cases hc : (execFueled cr fuel).run with
+  | none => rfl
+  | some raw =>
+    dsimp only [Option.map]
+    cases raw >>= settle child with
+    | error f => rfl
+    | ok v =>
+      dsimp only [resumeCaller]
+      rcases resume r.context.block.rules pending child.checkpoint v with
+        f | ⟨reason, state⟩ | state <;> rfl
+
+/-- The raw root finished successfully. A creation still has to deposit its code. -/
+def Exec.finished : Except Fault Frame.Exit → Bool
+  | .ok (.finished ..) => true
+  | _ => false
+
+def Frame.settlementCommits (frame : Frame) (raw : Except Fault Frame.Exit) : Bool :=
+  match raw >>= settle frame with
+  | .ok (.success ..) => true
+  | _ => false
+
+theorem Frame.settlementCommits_iff {frame : Frame} {raw : Except Fault Frame.Exit} :
+    Frame.settlementCommits frame raw = true ↔
+      ∃ output gas meters world substate trail,
+        (raw >>= settle frame) = .ok (.success output gas meters world substate trail) := by
+  unfold Frame.settlementCommits
+  constructor
+  · intro h
+    split at h
+    · exact ⟨_, _, _, _, _, _, by assumption⟩
+    · cases h
+  · rintro ⟨_, _, _, _, _, _, h⟩
+    rw [h]
+
+theorem Frame.finished_of_settlementCommits {frame : Frame} {raw : Except Fault Frame.Exit}
+    (h : Frame.settlementCommits frame raw = true) : Exec.finished raw = true := by
+  rcases raw with fault | ⟨output, s⟩ | ⟨output, s⟩ | ⟨reason, s⟩
+  · cases h
+  · rfl
+  · cases h
+  · cases h
+
+/-- Row 29. Settlement can commit only a raw result that finished. -/
+theorem Frame.raw_commits_of_settlementCommits {f : Frame} {raw : Except Fault Frame.Exit}
+    (h : Frame.settlementCommits f raw = true) : Exec.finished raw = true :=
+  Frame.finished_of_settlementCommits h
+
+/-- Row 35. A call frame's settlement commits every finished raw result. -/
+theorem Frame.settlementCommits_ofCall_of_raw_commits {f : Frame} {raw : Except Fault Frame.Exit}
+    (hcall : f.message.kind = .call) (hraw : Exec.finished raw = true) :
+    Frame.settlementCommits f raw = true := by
+  rcases raw with fault | ⟨output, s⟩ | ⟨output, s⟩ | ⟨reason, s⟩
+  · cases hraw
+  · simp [Frame.settlementCommits, settle, hcall, bind, Except.bind, Frame.Result.ofSuccess]
+  · cases hraw
+  · cases hraw
 
 /-- A same-frame prefix stops at a running state. A whole run ends at its raw outcome. -/
 inductive Frame.Run.End where

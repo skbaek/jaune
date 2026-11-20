@@ -209,6 +209,28 @@ theorem MessageOp.step_spawn_context {ctx : CallContext} {s : Frame.State} {x : 
   rw [h] at shape
   exact ⟨shape.1, shape.2.1⟩
 
+/-- Proposed replacement of row 41. A CREATE-family spawn hands the parent's block and transaction
+records to the child frame. -/
+theorem genericCreate.step_spawn_context {ctx : CallContext} {s : Frame.State} {value : U256}
+    {a : Address} {i len : Nat} {child : Frame} {p : Staging.Pending}
+    (h : genericCreate.step ctx s value a i len = .spawn child p) :
+    child.message.context.block = ctx.block ∧ child.message.context.tx = ctx.tx :=
+  let ⟨_, _, _, _, _, hb, ht⟩ := genericCreate.step_spawn_checkpoint h
+  ⟨hb, ht⟩
+
+/-- Proposed replacement of rows 38 and 39. Entering a frame runs it under its message's whole
+call context. -/
+theorem Frame.enter_run_context {f : Frame} {r : Frame.Running} (h : enter f = .run r) :
+    r.context = f.message.context := by
+  unfold enter enterWith at h
+  rcases ht : f.message.transfer f.enteredWorld with fault | world <;> simp only [ht] at h
+  · cases h
+  · rcases hc : f.message.codeAddress with _ | address <;> simp only [hc] at h
+    · cases h; rfl
+    · split at h
+      · cases h
+      · cases h; rfl
+
 private theorem ofHalt_ne_spawn (pc : Nat) (x : Except (ExceptionalHalt × Frame.State) Frame.State)
     (child : Frame) (p : Staging.Pending) (dest : Nat) : Step.ofHalt pc x ≠ .spawn child p dest := by
   cases x <;> intro h <;> cases h
