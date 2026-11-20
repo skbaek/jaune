@@ -307,6 +307,104 @@ theorem Body.Prefix.Receipts.step_transaction {block : BlockContext} {p q : Jaun
       rw [List.getElem_append_left (by omega)]
       exact hp.get i (by omega)
 
+/-! ### Legacy gas accounting -/
+
+/-- Under rules without state gas, a signed transaction's settlement charges the block what it
+charges the sender, and no state gas. -/
+theorem Transaction.run_legacyGas {block : BlockContext} {state : State} {bout : BlockOutput}
+    {tx : Jaune.Transaction} {index : Nat} {run : TransactionRun} {out : BlockOutput}
+    (hnone : block.rules.stateGas = none)
+    (h : Transaction.run block state bout tx index = .ok (run, out)) :
+    run.gasSettlement.executionGasUsed = run.gasSettlement.gasUsed ∧
+      run.gasSettlement.stateGasUsed = 0 := by
+  unfold Transaction.run at h
+  obtain ⟨admitted, _, h⟩ := Except.bind_eq_ok h
+  obtain ⟨prepared, hp, h⟩ := Except.bind_eq_ok h
+  obtain ⟨message, _, hs⟩ := Except.bind_eq_ok h
+  have hb : prepared.input.message.context.block = block := by
+    unfold Transaction.prepare at hp
+    obtain ⟨_, _, hp⟩ := Except.bind_eq_ok hp
+    cases target : tx.type.to? <;> simp only [target, pure, Except.pure] at hp <;> cases hp <;> rfl
+  unfold Transaction.settleRun at hs
+  obtain ⟨_, _, hs⟩ := Except.bind_eq_ok hs
+  cases hs
+  dsimp only
+  rw [hb]
+  exact settleTransactionGas_none_invariants hnone _ _ _ _ _ _
+
+/-- Under rules without state gas every operation keeps the legacy relation between the block
+counters. -/
+theorem Body.step_legacyGasAccounting {block : BlockContext} {p q : Jaune.Body.Prefix} {op : BodyOp}
+    (hnone : block.rules.stateGas = none) (hp : p.toBlockOutput.LegacyGasAccounting)
+    (h : Body.step block p op = .ok q) : q.toBlockOutput.LegacyGasAccounting := by
+  cases op with
+  | transaction tx index =>
+    simp only [Body.step, Body.stepWith] at h
+    obtain ⟨⟨run, out⟩, ht, h⟩ := Except.bind_eq_ok h
+    cases h
+    change out.LegacyGasAccounting
+    rw [Transaction.run_output ht]
+    exact BlockOutput.LegacyGasAccounting.withGasSettlement hp (Transaction.run_legacyGas hnone ht) run.blobGasUsed
+  | systemCall address data index =>
+    simp only [Body.step, Body.stepWith] at h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h; exact hp
+  | withdrawals ws index =>
+    simp only [Body.step, Body.stepWith] at h
+    cases h; exact hp
+  | depositRequests =>
+    simp only [Body.step, Body.stepWith] at h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h; exact hp
+  | requestCall type address index =>
+    simp only [Body.step, Body.stepWith] at h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h; exact hp
+  | rewards coinbase minerReward credits =>
+    simp only [Body.step, Body.stepWith] at h
+    cases h; exact hp
+  | buildAccessList =>
+    simp only [Body.step, Body.stepWith] at h
+    cases h; exact hp
+  | checkAccessListLimit =>
+    simp only [Body.step, Body.stepWith] at h
+    obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+    cases h; exact hp
+
+theorem Body.fold_legacyGasAccounting {block : BlockContext} (hnone : block.rules.stateGas = none) :
+    ∀ (ops : List BodyOp) (p q : Jaune.Body.Prefix), p.toBlockOutput.LegacyGasAccounting →
+      ops.foldlM (Body.step block) p = .ok q → q.toBlockOutput.LegacyGasAccounting
+  | [], p, q, hp, h => by cases h; exact hp
+  | op :: ops, p, q, hp, h => by
+    rw [List.foldlM_cons] at h
+    obtain ⟨p', hs, h⟩ := Except.bind_eq_ok h
+    exact Body.fold_legacyGasAccounting hnone ops p' q (Body.step_legacyGasAccounting hnone hp hs) h
+
+theorem Body.importer_legacyGasAccounting {block : BlockContext} {state : State}
+    (hnone : block.rules.stateGas = none)
+    {txs : List (Bytes ⊕ Jaune.Transaction)} {ommers : List Header} {wds : List Withdrawal}
+    {q : Jaune.Body.Prefix} (h : Body.importer block state txs ommers wds = .ok q) :
+    q.toBlockOutput.LegacyGasAccounting := by
+  unfold Body.importer at h
+  obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
+  exact Body.fold_legacyGasAccounting hnone _ (Jaune.Body.Prefix.init state) _
+    BlockOutput.init_legacyGasAccounting h
+
+/-- **Legacy gas accounting in the block body.** A successful body under rules without state
+gas keeps the legacy block-counter relation: every step does. -/
+theorem applyBody_legacyGasAccounting {block : BlockContext} {state : State}
+    (hnone : block.rules.stateGas = none)
+    {txs : List (Bytes ⊕ Jaune.Transaction)} {ommers : List Header} {wds : List Withdrawal} {p}
+    (hp : applyBody block state txs ommers wds = .ok p) : p.2.LegacyGasAccounting := by
+  unfold applyBody at hp
+  cases h : Body.importer block state txs ommers wds with
+  | error e => simp [h, Functor.map, Except.map] at hp
+  | ok q =>
+    simp only [h, Functor.map, Except.map, Except.ok.injEq] at hp
+    subst hp
+    exact Body.importer_legacyGasAccounting hnone h
+
 /-- Every operation except the access-list build and its limit check reads only the summary
 for its operation record and the next summary. -/
 theorem Body.stepRun_summary (block : BlockContext) {p p' : Jaune.Body.Prefix} {op : BodyOp}

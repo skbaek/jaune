@@ -205,6 +205,7 @@ import Jaune.FrameRun.CheckedOrder
 import Jaune.Bridge.G3.FrameRun
 import Jaune.Bridge.G3.FrameViews
 import Jaune.FrameRun.CheckedFacts
+import Jaune.Run.CheckedCanonical
 import Jaune.FrameRun.CheckedMemory
 import Jaune.MessageCall.CheckedAuditedRows
 import Jaune.CheckedSymbolicPush
