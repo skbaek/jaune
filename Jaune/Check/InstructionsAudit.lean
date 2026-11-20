@@ -5,7 +5,6 @@
 -- to its exact subset of the three standard axioms. The default build compiles this module
 -- through `JauneChecks.lean`.
 import AxiomAudit
-import Jaune.Bridge.G2b.CheckedDispatch
 import Jaune.Instructions.MemoryFacts
 import Jaune.Instructions.ReadFacts
 
@@ -13,7 +12,6 @@ import Jaune.Instructions.ReadFacts
 #expect_axioms Jaune.Checked.MemoryRow.step_error [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.MemoryEffect.apply_size [Quot.sound, propext]
 #expect_axioms Jaune.Checked.MemoryRow.step_size [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Arms.PlainOp.memoryRow?_runCore_eq [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.PlainOp.memoryRow?_run_eq [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.PlainOp.memoryRow?_run_fork_eq [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.PlainOp.memory_run_congr_fork [Classical.choice, Quot.sound, propext]
@@ -24,16 +22,9 @@ import Jaune.Instructions.ReadFacts
 #expect_axioms Jaune.Checked.ReadRow.step_ok [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.ReadRow.step_error [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.Frame.State.liftRead_keeps [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Arms.PlainOp.readRow?_runCore_eq [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.PlainOp.readRow?_run_eq [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.PlainOp.readRow?_run_fork_eq [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.PlainOp.read_run_congr_fork [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Checked.PlainOp.read_run_keeps [Classical.choice, Quot.sound, propext]
 
 -- The family dispatch (G2b, W4 step H): the cut's bridge against the per-opcode arms.
-#expect_axioms Jaune.Checked.PlainOp.runCore_arms [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.PlainOp.run_arms [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.NextOp.step_arms [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Arms.PlainOp.wordRow?_runCore_eq [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Arms.SstoreRow.ofRules_lift_eq [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Arms.TstoreRow.ofRules_lift_eq [Classical.choice, Quot.sound, propext]

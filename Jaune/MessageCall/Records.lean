@@ -59,9 +59,6 @@ end
 
 section
 namespace Jaune
-instance : Inhabited CallContext := ⟨
-  { caller := 0, recipient := 0, value := 0, calldata := [], code := .empty, depthLeft := 1024
-    isStatic := false, tx := default, block := default }⟩
 end Jaune
 end
 

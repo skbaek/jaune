@@ -1,4 +1,5 @@
 import Jaune.MessageCall.CheckedDriver
+import Jaune.MessageCall.Measures
 
 /-!
 The frame boundary (`resumeCaller`, the driver's spawn equations, settlement commitment) and the
@@ -102,6 +103,18 @@ theorem Frame.settlementCommits_ofCall_of_raw_commits {f : Frame} {raw : Except 
   · simp [Frame.settlementCommits, settle, hcall, bind, Except.bind, Frame.Result.ofSuccess]
   · cases hraw
   · cases hraw
+
+/-- A decoded next-op instruction steps through `NextOp.step`. -/
+theorem step_of_next {r : Frame.Running} {n : NextOp} (h : NextOp.At r.context.code r.pc n) :
+    step r = .ok (NextOp.step r n) := by
+  unfold step
+  rw [show r.getOp = some (.next n) from h]
+
+/-- A decoded halting instruction exits with its own result. -/
+theorem step_of_halt {r : Frame.Running} {l : HaltOp} (h : HaltOp.At r.context.code r.pc l) :
+    step r = (HaltOp.run r.context r.state l).map Step.exit := by
+  unfold step
+  rw [show r.getOp = some (.halt l) from h]
 
 /-- A same-frame prefix stops at a running state. A whole run ends at its raw outcome. -/
 inductive Frame.Run.End where

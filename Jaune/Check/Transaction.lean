@@ -7,7 +7,6 @@
 -- through `JauneChecks.lean`.
 import AxiomAudit
 import Jaune.Transaction
-import Jaune.Run.BodyFacts
 import Jaune.Check.Machine
 
 namespace Jaune
@@ -135,109 +134,9 @@ private def fixtureTestTx : Transaction :=
     type := .legacy 10 (some 0)
   }
 
-private def fixtureTestBenv (blockGasLimit : Nat := 10000000) : Benv :=
-  {
-    state := .empty
-    createdAccounts := .emptyWithCapacity
-    stat := {
-      fork := .prague
-      chainId := 1
-      origState := .empty
-      blockGasLimit := blockGasLimit
-      blockHashes := []
-      coinbase := 0
-      number := 1
-      baseFeePerGas := 1
-      time := 0
-      prevRandao := 0
-      excessBlobGas := 0
-      parentBeaconBlockRoot := 0
-    }
-  }
-
 private def fixtureTestAccount
     (nonce : UInt64) (bal : U256) (code : ByteArray := .empty) : Account :=
   { nonce := nonce, balance := bal, storage := .empty, code := code }
-
-private def fixtureAmsterdamBenv (blockGasLimit : Nat := 30000000)
-    (state : State := .empty) (origState : State := .empty) : Benv :=
-  let base := fixtureTestBenv blockGasLimit
-  { base with
-    state := state
-    stat := {base.stat with fork := .amsterdam, origState := origState}
-  }
-
-private def fixtureAmsterdamMsg (state origState : State)
-    (target : Option Address) (currentTarget : Address) (value gas grant : Nat)
-    (accessed : AdrSet := .emptyWithCapacity) : Msg :=
-  { (default : Msg) with
-    benv := fixtureAmsterdamBenv (state := state) (origState := origState)
-    tenv := { (default : Tenv) with stat := {
-      (default : TenvStat) with
-      origin := 1
-      gas := gas
-      stateGasReservoir := grant
-    }}
-    caller := 1
-    target := target
-    currentTarget := currentTarget
-    gas := gas
-    value := value.toU256
-    codeAddress := target
-    code := state.getCode currentTarget
-    depth := 1024
-    shouldTransferValue := true
-    accessedAddresses := accessed
-    stateGasGrant := grant
-  }
-
-private def delegationChargeGuard (doRepeat : Bool) :
-    Option (Nat × Nat × Nat × Nat) :=
-  let msg := fixtureAmsterdamMsg .empty .empty (some 2) 2 0 20000 300000
-  let initial := initDevm msg
-  match applyValidatedDelegationAmsterdam amsterdamStateGasRules msg 5 6
-      initial .emptyWithCapacity .emptyWithCapacity with
-  | .error _ => none
-  | .ok ⟨once, paid, setFor⟩ =>
-    if doRepeat then
-      match applyValidatedDelegationAmsterdam amsterdamStateGasRules msg 5 7
-          once paid setFor with
-      | .error _ => none
-      | .ok ⟨twice, _, _⟩ =>
-        some ⟨once.gasLeft, once.stateGasLeft,
-          twice.gasLeft, twice.stateGasLeft⟩
-    else some ⟨once.gasLeft, once.stateGasLeft, 0, 0⟩
-
-private def prepareCreateGuard (collision : Bool) :
-    Option (Nat × Nat × Option SettledHalt) :=
-  let address : Address := 9
-  let account := fixtureTestAccount 1 0
-  let state := if collision then State.set .empty address account else .empty
-  let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
-  match prepareTopLevelAmsterdam amsterdamStateGasRules msg with
-  | .ok ⟨_, devm⟩ => some ⟨devm.gasLeft, devm.stateGasLeft, none⟩
-  | .error _ =>
-    match TopLevel.run msg with
-    | .ok run => some ⟨run.gasLeft, run.stateGasLeft, run.error⟩
-    | .error _ => none
-
-private def delegatedDispatchGuard (warm : Bool) :
-    Option (Nat × Nat × Option Address) :=
-  let target : Address := 10
-  let delegate : Address := 11
-  let delegation :=
-    (eoaDelegationMarker ++ delegate.toBytes).toByteArray
-  let state :=
-    (State.set .empty target (fixtureTestAccount 0 0 delegation)).set
-      delegate (fixtureTestAccount 0 0 (.mk (.mk [0x00])))
-  let accessed : AdrSet :=
-    if warm then ({target, delegate} : AdrSet) else {target}
-  let msg := fixtureAmsterdamMsg state state (some target) target 0
-    10000 0 accessed
-  match prepareTopLevelAmsterdam amsterdamStateGasRules msg with
-  | .error _ => none
-  | .ok ⟨prepared, devm⟩ =>
-    some ⟨devm.gasLeft, devm.stateGasLeft, prepared.codeAddress⟩
 
 /-! The W5 value tables.  These evaluate the production definitions and pin
 the split that downstream t8n vectors observe. -/
@@ -278,70 +177,11 @@ private def amsterdamTxMaxGas : Nat :=
 #guard settleTransactionGas amsterdamRules 1000 0 100 200 1000 (-50)
   = ⟨560, 440, 700, 0⟩
 
-#guard delegationChargeGuard false =
-  some ⟨11000, 81210, 0, 0⟩
 -- The second write to one authority pays neither ACCOUNT_WRITE nor AUTH_BASE.
-#guard delegationChargeGuard true =
-  some ⟨11000, 81210, 11000, 81210⟩
-#guard prepareCreateGuard false = some ⟨20000, 16400, none⟩
-#guard prepareCreateGuard true =
-  some ⟨0, 200000, some (.halt (.addressCollision .none))⟩
 
 -- Storage-only top-level creation deploys and wipes storage in both lanes;
 -- code and nonce remain independent collision controls.
-private def legacyStorageOnlyCreateGuard : Bool :=
-  let address : Address := 12
-  let state := State.setStorVal .empty address 1 1
-  let msg : Msg :=
-    {(default : Msg) with
-      benv := {(default : Benv) with state := state}
-      target := none, currentTarget := address, gas := 20000, depth := 1024}
-  match TopLevel.run msg with
-  | .ok run =>
-    run.error.isNone && (run.state.get address).storage.isEmpty && (run.state.get address).nonce == 1
-  | .error _ => false
 
-private def amsterdamStorageOnlyCreateGuard : Bool :=
-  let address : Address := 13
-  let state := State.setStorVal .empty address 1 1
-  let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
-  match TopLevel.run msg with
-  | .ok run =>
-    run.error.isNone && (run.state.get address).storage.isEmpty && (run.state.get address).nonce == 1
-  | .error _ => false
-
-private def legacyCreateCollisionGuard (code : Bool) : Bool :=
-  let address : Address := 14
-  let state :=
-    if code then State.setCode .empty address (.mk (.mk [0x00]))
-    else State.set .empty address (fixtureTestAccount 1 0)
-  let msg : Msg :=
-    {(default : Msg) with
-      benv := {(default : Benv) with state := state}
-      target := none, currentTarget := address, gas := 20000, depth := 1024}
-  match TopLevel.run msg with
-  | .ok run =>
-    run.gasLeft == 0 && run.error == some (.halt (.addressCollision .none))
-  | .error _ => false
-
-private def amsterdamCreateCollisionGuard (code : Bool) : Bool :=
-  let address : Address := 15
-  let state :=
-    if code then State.setCode .empty address (.mk (.mk [0x00]))
-    else State.set .empty address (fixtureTestAccount 1 0)
-  let msg := fixtureAmsterdamMsg state state none address 0 20000 200000
-  match prepareTopLevelAmsterdam amsterdamStateGasRules msg with
-  | .error ⟨.halt (.addressCollision .none), _⟩ => true
-  | _ => false
-
-#guard legacyStorageOnlyCreateGuard
-#guard amsterdamStorageOnlyCreateGuard
-#guard legacyCreateCollisionGuard true
-#guard legacyCreateCollisionGuard false
-#guard amsterdamCreateCollisionGuard true
-#guard amsterdamCreateCollisionGuard false
-#guard delegatedDispatchGuard false = some ⟨7000, 0, some 11⟩
-#guard delegatedDispatchGuard true = some ⟨9900, 0, some 11⟩
 -- Constructor-level matcher for the transaction-validation boundary guards.
 private def txvFails {α : Type} (p : TransactionValidationError → Bool) :
     Except TransactionValidationError α → Bool
@@ -405,35 +245,12 @@ private def guardTightCodeLimits : CodeLimits :=
 #guard txvFails (fun | .gasPriceProductOverflow _ => true | _ => false) <|
   checkTransactionLegacyGasFee 0 2 (2 ^ 255)
 
-#guard txvFails (fun | .gasAllowanceExceeded _ => true | _ => false) <|
-  checkTransactionGasLimits (fixtureTestBenv Gas.transaction) .init
-    {fixtureTestTx with gasLimit := Gas.transaction + 1}
-
 private def amsterdamCapacityTx : Transaction :=
   {plainAmsterdamTransfer with gasLimit := amsterdamTxMaxGas + 50}
-
-private def amsterdamCapacityBenv : Benv :=
-  fixtureAmsterdamBenv (amsterdamTxMaxGas + 100)
 
 private def amsterdamCapacityOutput : BlockOutput :=
   {BlockOutput.init with blockGasUsed := 100, blockStateGasUsed := 50}
 
-#guard (checkTransactionGasLimits amsterdamCapacityBenv
-    amsterdamCapacityOutput amsterdamCapacityTx).toOption.isSome
-#guard txvFails (fun | .gasAllowanceExceeded _ => true | _ => false) <|
-  checkTransactionGasLimits amsterdamCapacityBenv
-    {amsterdamCapacityOutput with blockGasUsed := 101} amsterdamCapacityTx
-#guard txvFails (fun | .gasAllowanceExceeded _ => true | _ => false) <|
-  checkTransactionGasLimits amsterdamCapacityBenv
-    {amsterdamCapacityOutput with blockStateGasUsed := 51} amsterdamCapacityTx
-
-#guard txvFails (fun | .type3BlobCountExceeded _ => true | _ => false) <|
-  checkTransactionGasLimits fixtureTestBenv .init
-    { fixtureTestTx with
-      type := .eip4844 1 1 10 0 [] 1 (List.replicate 10 0) }
-#guard txvFails (fun | .type3ZeroBlobs _ => true | _ => false) <|
-  checkTransactionBlobData fixtureTestBenv
-    {fixtureTestTx with type := .eip4844 1 1 10 0 [] 1 []} 10
 #guard (checkTransactionBlobCount osakaRules.tx
   (List.replicate 5 (0 : U256))).toOption.isSome
 #guard (checkTransactionBlobCount osakaRules.tx
@@ -442,15 +259,7 @@ private def amsterdamCapacityOutput : BlockOutput :=
   checkTransactionBlobCount osakaRules.tx (List.replicate 7 (0 : U256))
 #guard (checkTransactionBlobCount pragueRules.tx
   (List.replicate 7 (0 : U256))).toOption.isSome
-#guard txvFails (fun | .type3InvalidBlobVersionedHash _ => true | _ => false) <|
-  checkTransactionBlobData fixtureTestBenv
-    {fixtureTestTx with type := .eip4844 1 1 10 0 [] 1 [0]} 10
 -- The blob-fee rejection renders its exact observed golden message.
-#guard txvFails
-    (fun e => e.render ==
-      "InsufficientMaxFeePerBlobGasError : insufficient max fee per blob gas") <|
-  checkTransactionBlobData fixtureTestBenv
-    {fixtureTestTx with type := .eip4844 1 1 10 0 [] 0 [(1 : U256) <<< 248]} 10
 
 #guard txvFails (fun | .nonceMismatchTooLow _ => true | _ => false) <|
   checkTransactionSenderAccount (fixtureTestAccount 2 100) fixtureTestTx 0
@@ -462,13 +271,6 @@ private def amsterdamCapacityOutput : BlockOutput :=
 #guard txvFails (fun | .senderNotEoa _ => true | _ => false) <|
   checkTransactionSenderAccount
     (fixtureTestAccount 0 100 (ByteArray.mk #[0x01])) fixtureTestTx 0
-
-#guard (systemTransactionEnvironment
-    fixtureAmsterdamBenv).stat.stateGasReservoir
-  = amsterdamStateGasRules.systemReservoir
-#guard (systemTransactionMessage fixtureAmsterdamBenv
-    (systemTransactionEnvironment fixtureAmsterdamBenv) 1 [] .empty).stateGasGrant
-  = amsterdamStateGasRules.systemReservoir
 
 --------------- GAS-LIMIT BOUNDARY CHECKS ----------------
 
@@ -895,10 +697,6 @@ private def guardBlockAtRules (rules : ForkRules) (timestamp : Nat) : Block :=
 -- S8 0x44 (unit U5): `DIFFICULTY` source selection at environment
 -- construction. Under proof of work the opcode reads the header's difficulty;
 -- post-merge it reads `prevRandao`, so Prague is unaffected.
-#guard (initBlockContext .byzantium guardEmptyChain
-  { guardTestHeader with difficulty := 19 }).prevRandao = Nat.toU256 19
-#guard (initBlockContext .prague guardEmptyChain
-  { guardTestHeader with difficulty := 19 }).prevRandao = 0
 
 -- EIP-7918 uses a strict price comparison. At the 16-wei equality boundary
 -- the ordinary target subtraction still applies; one wei above it activates
@@ -1433,9 +1231,6 @@ private def guardLondonFirst (baseFee gasLimit : Nat) : Header :=
   | _ => false)
 
 -- `initBlockContext` reads an absent field as zero.
-#guard (initBlockContext .prague (guardChainAt guardParent15) guardHeader15).baseFeePerGas = 0
-#guard (initBlockContext .prague (guardChainAt guardParent15) guardHeader15).excessBlobGas = 0
-#guard (initBlockContext .prague (guardChainAt guardParent15) guardHeader15).parentBeaconBlockRoot = 0
 
 ------------------- PRE-MERGE CONSENSUS (U7) --------------------
 
@@ -1576,47 +1371,12 @@ private def guardPowLineOmmer (parentNumber : Nat) : Header :=
 -- The rewards (EELS `pay_rewards`, Byzantium's 3 ETH), as the body's rewards
 -- step pays them: the miner gets `3 + 3/32` ETH for one ommer, and the age-1
 -- ommer's miner `7/8` of 3 ETH.
-private def bodyRewards (pow : ProofOfWorkRules) (number : Nat) (coinbase : Address)
-    (ommers : List Header) (st : State) : State :=
-  let fork : Fork := if pow.blockReward = 3 * 10 ^ 18 then .byzantium else .constantinople
-  let benv : Benv := { (default : Benv) with
-    state := st
-    stat := { (default : BenvStat) with fork := fork, number := number, coinbase := coinbase } }
-  match benv.stat.rules.proofOfWork with
-  | some p =>
-    if p.blockReward = pow.blockReward ∧ p.bombDelay = pow.bombDelay then
-      match Body.fold benv (Body.Prefix.init st)
-          (Body.postOps benv 0 ommers []) with
-      | .ok q => q.state
-      | .error _ => .empty
-    else .empty
-  | none => .empty
-#guard (bodyRewards { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 } 2
-    guardPowCoinbase [guardPowOmmer] .empty).bal guardPowCoinbase
-  = (3093750000000000000 : Nat).toU256
-#guard (bodyRewards { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 } 2
-    guardPowCoinbase [guardPowOmmer] .empty).bal guardOmmerCoinbase
-  = (2625000000000000000 : Nat).toU256
 -- Age 2 pays 6/8; no ommer pays the miner the bare block reward.
-#guard (bodyRewards { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 } 3
-    guardPowCoinbase [guardPowOmmer] .empty).bal guardOmmerCoinbase
-  = (1500000000000000000 : Nat).toU256
-#guard (bodyRewards { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 } 3
-    guardPowCoinbase [] .empty).bal guardPowCoinbase
-  = (2 * 10 ^ 18 : Nat).toU256
 
 -- The whole Byzantium body on that block: the two system calls, the
 -- withdrawals and the request pass are gated off, so the state the body
 -- leaves is exactly the input state plus the rewards -- two accounts.
-private def guardPowBenv : Benv :=
-  initBlockEnvironment .byzantium guardPowChain (guardPowBlockWith [guardPowOmmer])
 
-#guard (match applyBody guardPowBenv [] [guardPowOmmer] [] with
-  | .ok ⟨st, bout⟩ =>
-      st.bal guardPowCoinbase == (3093750000000000000 : Nat).toU256 &&
-      st.bal guardOmmerCoinbase == (2625000000000000000 : Nat).toU256 &&
-      st.toList.length == 2 && bout.requests.isEmpty
-  | .error _ => false)
 -- The two system-call gates, observed: with a storage-writing contract at
 -- both system addresses and no block hashes, Byzantium's body leaves both
 -- contracts' storage empty and never asks for a parent hash, while Cancun's
@@ -1624,28 +1384,8 @@ private def guardPowBenv : Benv :=
 -- is gated off too).
 private def guardSysCode : ByteArray := ⟨#[0x60, 0x01, 0x60, 0x00, 0x55, 0x00]⟩
 
-private def guardSysBenv (benv : Benv) : Benv :=
-  { benv with
-      state := (State.setCode .empty beaconRootsAddress guardSysCode).setCode
-        historyStorageAddress guardSysCode
-      stat := { benv.stat with blockHashes := [] } }
-
-#guard (match applyBody (guardSysBenv guardPowBenv) [] [guardPowOmmer] [] with
-  | .ok ⟨st, _⟩ => (st.get beaconRootsAddress).storage.isEmpty &&
-      (st.get historyStorageAddress).storage.isEmpty
-  | .error _ => false)
-#guard (match applyBody (guardSysBenv (initBlockEnvironment .cancun guardPowChain guardTestHeader))
-    [] [] [] with
-  | .ok ⟨st, _⟩ => !(st.get beaconRootsAddress).storage.isEmpty &&
-      (st.get historyStorageAddress).storage.isEmpty
-  | .error _ => false)
-
 -- Under Prague's rules the same body runs every step: the request pass calls
 -- the request contracts, which this chain has not deployed.
-#guard (match applyBody (initBlockEnvironment .prague guardPowChain (guardPowBlockWith []))
-    [] [guardPowOmmer] [] with
-  | .error (.block (.systemContractEmpty _)) => true
-  | _ => false)
 
 -- P0.2, the history half: `RetainedHistoryValid` has teeth, and is decided
 -- rather than assumed. A genesis-rooted chain whose blocks are consecutively
@@ -2014,91 +1754,15 @@ private def typedEnvelopeBytes? (bs : Bytes) : Option Bytes :=
 -- They deliberately exercise `PlainOp.runCore`, all four `MessageOp.step` CALL
 -- variants, and the private top-level dispatch boundary rather than a pricing
 -- helper in isolation.
-private def orderingGuardMessage (fork : Fork) (gas : Nat) : Msg :=
-  let state := State.setBal .empty (0x1000 : Address) 100
-  { (default : Msg) with
-    benv := { (default : Benv) with
-      state := state
-      stat := { (default : BenvStat) with fork := fork, origState := state } }
-    caller := 0x1000
-    target := some 0x1000
-    currentTarget := 0x1000
-    gas := gas
-    depth := 8 }
-
-private def orderingGuardSummary (r : Execution) :
-    String × Nat × List Nat × Bool × Bool :=
-  let (status, d) := match r with
-    | .ok d => ("ok", d)
-    | .error (e, d) => (e.render, d)
-  (status, d.gasLeft, d.stack.map U256.toNat,
-    d.accessedAddresses.contains (0x2000 : Address),
-    d.accessedAddresses.contains (0x3000 : Address))
-
-private def orderingGuardTstore
-    (fork : Fork) (gas : Nat) (stack : List U256) :=
-  let msg := { orderingGuardMessage fork gas with isStatic := true }
-  orderingGuardSummary
-    (PlainOp.runCore 0 ((initDevm msg).withStack stack) (initSevm msg) .tstore)
 
 -- Amsterdam follows `storage.py.tstore`: the static error precedes stack
 -- access and charging. The `none` lane retains the pre-Amsterdam order.
-#guard orderingGuardTstore .amsterdam 0 [] =
-  ("WriteInStaticContext", 0, [], false, false)
-#guard orderingGuardTstore .amsterdam 99 [1, 2] =
-  ("WriteInStaticContext", 99, [1, 2], false, false)
-#guard orderingGuardTstore .amsterdam 100 [1, 2] =
-  ("WriteInStaticContext", 100, [1, 2], false, false)
-#guard orderingGuardTstore .prague 0 [] =
-  ("StackUnderflowError", 0, [], false, false)
-#guard orderingGuardTstore .prague 99 [1, 2] =
-  ("OutOfGasError", 99, [], false, false)
-
-private def orderingGuardDelegatedMessage (gas : Nat) : Msg :=
-  let code := (eoaDelegationMarker ++ (0x3000 : Address).toBytes).toByteArray
-  (orderingGuardMessage .amsterdam gas).setCode 0x2000 code
-
-private def orderingGuardCall
-    (gas : Nat) (x : MessageOp) (stack : List U256) :=
-  let msg := orderingGuardDelegatedMessage gas
-  let d := (initDevm msg).withStack stack
-  match MessageOp.step (initSevm msg) d x with
-  | .done r => orderingGuardSummary r
-  | .spawn _ _ => ("spawn", 0, [], false, false)
 
 -- The first check may warm the direct code address. The second includes the
 -- delegated access price and must fail before the delegated address is warmed.
-#guard orderingGuardCall 2999 .staticcall [0, 0x2000, 0, 0, 0, 0] =
-  ("OutOfGasError", 2999, [], false, false)
-#guard orderingGuardCall 3000 .call [0, 0x2000, 0, 0, 0, 0, 0] =
-  ("OutOfGasError", 3000, [], true, false)
-#guard orderingGuardCall 3000 .callcode [0, 0x2000, 0, 0, 0, 0, 0] =
-  ("OutOfGasError", 3000, [], true, false)
-#guard orderingGuardCall 3000 .delegatecall [0, 0x2000, 0, 0, 0, 0] =
-  ("OutOfGasError", 3000, [], true, false)
-#guard orderingGuardCall 3000 .staticcall [0, 0x2000, 0, 0, 0, 0] =
-  ("OutOfGasError", 3000, [], true, false)
-#guard (orderingGuardCall 6000 .staticcall [0, 0x2000, 0, 0, 0, 0]).1 =
-  "spawn"
-
-private def orderingGuardTopLevel (gas : Nat) : String × Nat × Bool × Bool :=
-  let msg := { orderingGuardDelegatedMessage gas with
-    target := some 0x2000
-    currentTarget := 0x2000 }
-  let devm := addAccessedAddress (initDevm msg) 0x2000
-  match resolveTopLevelCallAmsterdam msg devm with
-  | .error (e, d) =>
-    (e.render, d.gasLeft,
-      d.accessedAddresses.contains (0x2000 : Address),
-      d.accessedAddresses.contains (0x3000 : Address))
-  | .ok (_, d) =>
-    ("ok", d.gasLeft,
-      d.accessedAddresses.contains (0x2000 : Address),
-      d.accessedAddresses.contains (0x3000 : Address))
 
 -- Top-level dispatch has the same boundary: a cold delegated access priced at
 -- 3,000 with only 2,999 gas leaves the already-warm recipient as the sole one.
-#guard orderingGuardTopLevel 2999 = ("OutOfGasError", 2999, true, false)
 
 --------------- EIP-7928 BLOCK-LEVEL ACCESS LIST REGRESSIONS (G6) ---------------
 
@@ -2216,17 +1880,6 @@ private def blockAccessListGuardView (b : BlockAccessListBuilder) :
 
 -- A failed child's reads survive the merge into its parent: `resume` takes the
 -- reverted child's trail.
-#guard
-  let parent := initDevm (orderingGuardMessage .amsterdam 100000)
-  let child := (parent.balReadAccount amsterdamRules blockAccessListGuardB)
-    |>.balReadStorage amsterdamRules blockAccessListGuardB 5
-  let failed : Frame.Result := .revert [] 0 StateGasMeter.zero (Frame.State.ofDevm child).trail
-  match resume amsterdamRules ⟨.call 0 0, false, [], none⟩ (Frame.State.ofDevm parent) failed with
-  | .ok (.ok merged) =>
-    merged.meta.accountReads.contains blockAccessListGuardB ∧
-      merged.meta.storageReads.contains (blockAccessListGuardB, 5) ∧
-      ¬ parent.meta.accountReads.contains blockAccessListGuardB
-  | _ => False
 
 -- The item rule: `items > gasLimit / itemCost` rejects; at the limit it admits.
 private def blockAccessListGuardList (n : Nat) : BlockAccessList :=
@@ -2262,57 +1915,17 @@ private def touchState (parentCode cCode : List UInt8) : State :=
   let st := State.setCode st touchParent ⟨parentCode.toArray⟩
   State.setCode st touchC ⟨cCode.toArray⟩
 
-private def touchMsg (fork : Fork) (parentCode cCode : List UInt8) : Msg :=
-  let state := touchState parentCode cCode
-  { (default : Msg) with
-    benv := { (default : Benv) with
-      state := state
-      stat := { (default : BenvStat) with fork := fork, origState := state } }
-    caller := 0x5000
-    target := some touchParent
-    currentTarget := touchParent
-    codeAddress := some touchParent
-    code := ⟨parentCode.toArray⟩
-    gas := 200000
-    depth := 8 }
-
-/-- The transaction-level touched set the top-level message run reports. -/
-private def touchedOf (fork : Fork) (parentCode : List UInt8)
-    (cCode : List UInt8 := []) : Option (List Address) :=
-  match TopLevel.run (touchMsg fork parentCode cCode) with
-  | .ok run => some run.touchedAccounts.toList
-  | .error _ => none
-
 -- A successful child's empty target is touched; Prague records nothing.
-#guard touchedOf .grayGlacier (touchCall 0x2000 1000 ++ [0x00]) = some [touchE]
-#guard touchedOf .prague (touchCall 0x2000 1000 ++ [0x00]) = some []
 -- A zero `SELFDESTRUCT` credit to the storage-only `touchE` (U6b,
 -- `settle.eraseEmptyOnModify`): before Paris `modify_state` keeps it, storage
 -- and all, and the beneficiary touch hands it to the sweep; from Paris the
 -- credit erases it at once and nothing is touched. Reported as (`touchE` still
 -- present, its slot 1, the touched set).
-private def touchSelfdestruct (fork : Fork) : Option (Bool × U256 × List Address) :=
-  match TopLevel.run (touchMsg fork [0x61, 0x20, 0x00, 0xFF] []) with
-  | .ok run =>
-    some (run.state[touchE]?.isSome, (run.state.get touchE).storage.get 1,
-      run.touchedAccounts.toList)
-  | .error _ => none
-#guard touchSelfdestruct .berlin = some (true, 1, [touchE])
-#guard touchSelfdestruct .grayGlacier = some (true, 1, [touchE])
-#guard touchSelfdestruct .paris = some (false, 0, [])
-#guard touchSelfdestruct .prague = some (false, 0, [])
 -- A failed child's touches die with it ...
-#guard touchedOf .grayGlacier (touchCall 0x4000 50000 ++ [0x00])
-    (touchCall 0x2000 1000 ++ touchRevert) = some []
 -- ... except 0x03: the quirk keeps a touch of RIPEMD-160 made inside the
 -- failed child,
-#guard touchedOf .grayGlacier (touchCall 0x4000 50000 ++ [0x00])
-    (touchCall 0x03 1000 ++ touchRevert) = some [ripemd160Address]
 -- and a failed call to 0x03 itself (out of gas) still touches it.
-#guard touchedOf .grayGlacier (touchCall 0x03 1 ++ [0x00]) = some [ripemd160Address]
-#guard touchedOf .prague (touchCall 0x03 1 ++ [0x00]) = some []
 -- A failed transaction keeps no touch at all.
-#guard touchedOf .grayGlacier (touchCall 0x2000 1000 ++ touchRevert) = some []
 
 -- The sweep erases a touched account that is still empty, keeps a touched
 -- account that is not, and is the identity without `touchedSweep`.
@@ -2328,28 +1941,7 @@ private def touchCallValue (dest gas value : Nat) : List UInt8 :=
    0x61, (dest / 256).toUInt8, (dest % 256).toUInt8,
    0x61, (gas / 256).toUInt8, (gas % 256).toUInt8, 0xF1, 0x50]
 
-/-- U6b end to end: the parent (funded with 1 wei) calls `touchC`, which
-self-destructs to the storage-only `touchE` with a zero balance, and then
-sends `touchE` 1 wei; the transaction's sweep follows. Before Paris the kept
-`touchE` is funded before the sweep, so it survives with its storage; from
-Paris the zero credit already erased it, so the 1 wei lands in a fresh
-account. Reported as (`touchE`'s balance, its slot 1). -/
-private def touchSelfdestructThenFund (fork : Fork) : Option (U256 × U256) :=
-  let parentCode := touchCall 0x4000 50000 ++ touchCallValue 0x2000 1000 1 ++ [0x00]
-  let msg := touchMsg fork parentCode [0x61, 0x20, 0x00, 0xFF]
-  let msg := { msg with benv := msg.benv.setBal touchParent 1 }
-  match TopLevel.run msg with
-  | .ok run =>
-    let state := sweepTouchedAccounts msg.benv.stat.rules run.touchedAccounts.toList run.state
-    some ((state.get touchE).balance, (state.get touchE).storage.get 1)
-  | .error _ => none
-#guard touchSelfdestructThenFund .berlin = some (1, 1)
-#guard touchSelfdestructThenFund .grayGlacier = some (1, 1)
-#guard touchSelfdestructThenFund .paris = some (1, 0)
-#guard touchSelfdestructThenFund .prague = some (1, 0)
-
 end Jaune
 
 #expect_axioms Jaune.Bytes.toExceptTransaction_unknown_typeNotSupported [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.decodeTransaction_unknown_typeNotSupported [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Transaction.settleRun_state [Classical.choice, Quot.sound, propext]

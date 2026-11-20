@@ -1,6 +1,5 @@
 import Jaune.T8n
-import Jaune.Run.BodyFacts
-import Jaune.Bridge.G2b.CheckedTop
+import Jaune.FrameRun.CheckedFacts
 
 /-!
 # The transition tool's driver keeps the receipts so far (goal `jaune-shape-and-names-v1`, W2 cut F)
@@ -14,36 +13,6 @@ about the adapter's own driver.
 namespace Jaune.T8n
 
 open Jaune
-
-private theorem checkedStep_observe {benv : Benv} (fresh : benv.Fresh) :
-    Checked.Body.step benv.stat.toBlockContext = fun p op => (Body.step benv p op).map Prod.snd :=
-  funext fun p => funext fun op => Checked.Body.step_observe fresh p op
-
-/-- The Checked fold keeps exactly the prefixes, rejections and accepted transactions of
-the waiting body step. -/
-theorem foldTransactions_observe {benv : Benv} (fresh : benv.Fresh) :
-    foldTransactions benv.stat.toBlockContext =
-      foldTransactionsWith (fun p op => (Body.step benv p op).map Prod.snd) := by
-  rw [foldTransactions, checkedStep_observe fresh]
-
-/-- State-test mode has the same outcome and error after selecting its single transaction. -/
-theorem runStateTest_observe {benv : Benv} (fresh : benv.Fresh) (txs : List (TransactionParse Transaction)) :
-    runStateTest benv.stat.toBlockContext benv.state txs = (do
-      let selected := match txs with | [] => [] | tx :: _ => [⟨0, tx⟩]
-      let ⟨p, rej, inc⟩ ← foldTransactionsWith
-        (fun p op => (Body.step benv p op).map Prod.snd) selected (Body.Prefix.init benv.state) [] []
-      .ok ⟨p.state, p.toBlockOutput, rej, none, inc⟩) := by
-  simp only [runStateTest, foldTransactions_observe fresh]
-  cases txs <;> rfl
-
-/-- The complete blockchain-mode outcome agrees, including a returned block exception
-with its prefix and the built access list. -/
-theorem runBlockchain_observe {benv : Benv} (fresh : benv.Fresh) (txs : List (TransactionParse Transaction))
-    (wds : List Withdrawal) (reward : Option Nat) (ommers : List T8nOmmer) :
-    runBlockchain benv.stat.toBlockContext benv.state txs wds reward ommers =
-      runBlockchainWith (fun p op => (Body.step benv p op).map Prod.snd) benv.stat.toBlockContext benv.state
-        txs wds reward ommers := by
-  rw [runBlockchain, checkedStep_observe fresh]
 
 /-- The tolerant loop keeps the receipts so far, one receipt per accepted transaction. -/
 theorem foldTransactions_receipts (block : BlockContext) :

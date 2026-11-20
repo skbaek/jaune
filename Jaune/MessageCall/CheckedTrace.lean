@@ -9,9 +9,11 @@ The streaming driver over the checked interpreter (`Checked.step`, `Checked.ente
 events of `Jaune.MessageCall.CheckedTraceEvent`, over the checked types themselves, through a
 `Trace.Sink`; the serialiser `Jaune.MessageCall.CheckedTraceJson` reads them.
 
-`Jaune.Bridge.G2b.CheckedTrace` projects each event onto the `Devm` tracer's event vocabulary and
-proves that, from related starts, the projected events are the `Devm` tracer's events normalised
-by exactly what the projection forgets, and that the serialised output is identical.
+At the `gate/g2b` tag the bridge `Jaune.Bridge.G2b.CheckedTrace` projected each event onto the
+`Devm` tracer's event vocabulary and proved that, from related starts, the projected events were
+the `Devm` tracer's events normalised by exactly what the projection forgets, and that the
+serialised output was identical; the bridge was deleted with the `Devm` tracer after the tag
+(bridge ledger, gate G2b).
 
 Each successful return carries a kernel-checked projection onto the checked driver. This module
 sits outside `Jaune.lean`'s import closure.

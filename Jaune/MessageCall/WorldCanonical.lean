@@ -43,16 +43,6 @@ end
 section
 open Jaune
 namespace Jaune
-theorem Message.transfer_canonical {m : Message} {w w' : World} (h : w.Canonical)
-    (hw : m.transfer w = .ok w') : w'.Canonical := by
-  unfold Message.transfer at hw
-  split at hw
-  · split at hw
-    · nomatch hw
-    · rename_i w1 h1
-      cases hw
-      exact World.Canonical.addBalance (World.Canonical.subtractBalance h h1) _ _
-  · cases hw; exact h
 end Jaune
 end
 

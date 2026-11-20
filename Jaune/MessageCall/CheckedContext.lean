@@ -71,70 +71,14 @@ namespace Jaune
 /-- The rules selected by a block context satisfy the fork invariants. -/
 theorem BlockContext.rules_valid (b : BlockContext) : b.rules.Valid := Fork.ruleSet_valid b.fork
 
-/-- The block record a frame reads, from the shared `BenvStat`. -/
-def BenvStat.toBlockContext (b : BenvStat) : BlockContext :=
-  { fork := b.fork, chainId := b.chainId, gasLimit := b.blockGasLimit, blockHashes := b.blockHashes
-    coinbase := b.coinbase, number := b.number, baseFeePerGas := b.baseFeePerGas
-    timestamp := b.time, prevRandao := b.prevRandao, excessBlobGas := b.excessBlobGas
-    parentBeaconBlockRoot := b.parentBeaconBlockRoot, slotNumber := b.slotNumber }
-
-/-- The transaction record a frame reads, from the shared `TenvStat` and the original state. -/
-def TenvStat.toTransactionContext (t : TenvStat) (originalState : State) : TransactionContext :=
-  { origin := t.origin, gasPrice := t.gasPrice, blobVersionedHashes := t.blobVersionedHashes
-    originalState }
-
-/-- The total forgetful map from the shared call context to the checked one. -/
-def CallContext.toChecked (c : CallContext) : Checked.CallContext :=
-  { caller := c.caller, recipient := c.recipient, value := c.value, calldata := c.calldata
-    code := c.code, depthLeft := c.depthLeft, isStatic := c.isStatic
-    tx := c.tx.toTransactionContext c.block.origState, block := c.block.toBlockContext }
-
 /-- The default checked context, over the checked fields: no caller, recipient, value, input or
 code, the full call depth, not static, and the default transaction and block records. -/
 instance : Inhabited Checked.CallContext := ⟨
   { caller := 0, recipient := 0, value := 0, calldata := [], code := .empty, depthLeft := 1024
     isStatic := false, tx := default, block := default }⟩
 
-/-- The native default agrees with the default shared context's checked projection. -/
-theorem CallContext.toChecked_default :
-    (default : CallContext).toChecked = (default : Checked.CallContext) := rfl
-
 end Jaune
 
 namespace Jaune.Checked
-
-/-- Reconstruct the waiting context for comparison and trace observation. The template supplies
-the transaction fields outside the interpreter's context. -/
-def CallContext.toLegacy (c : CallContext) (template : TenvStat := default) : Jaune.CallContext :=
-  { caller := c.caller, recipient := c.recipient, value := c.value, calldata := c.calldata
-    code := c.code, depthLeft := c.depthLeft, isStatic := c.isStatic
-    tx := { template with
-      origin := c.tx.origin
-      gasPrice := c.tx.gasPrice
-      blobVersionedHashes := c.tx.blobVersionedHashes }
-    block := {
-      fork := c.block.fork
-      chainId := c.block.chainId
-      origState := c.tx.originalState
-      blockGasLimit := c.block.gasLimit
-      blockHashes := c.block.blockHashes
-      coinbase := c.block.coinbase
-      number := c.block.number
-      baseFeePerGas := c.block.baseFeePerGas
-      time := c.block.timestamp
-      prevRandao := c.block.prevRandao
-      excessBlobGas := c.block.excessBlobGas
-      parentBeaconBlockRoot := c.block.parentBeaconBlockRoot
-      slotNumber := c.block.slotNumber } }
-
-/-- Project the static fields used by the Checked interpreter from a waiting message. -/
-def Message.ofLegacy (m : Jaune.Message) : Message :=
-  ⟨m.context.toChecked, m.kind, m.codeAddress, m.target, m.gas, m.stateGasGrant,
-    m.transfersValue, m.disablePrecompiles⟩
-
-/-- Observe a Checked message through the waiting message interface. -/
-def Message.toLegacy (m : Message) (template : TenvStat := default) : Jaune.Message :=
-  ⟨m.context.toLegacy template, m.kind, m.codeAddress, m.target, m.gas, m.stateGasGrant,
-    m.transfersValue, m.disablePrecompiles⟩
 
 end Jaune.Checked
