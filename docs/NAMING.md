@@ -529,7 +529,7 @@ excluded sources such as the historical, non-elaborating
 rather than omit). `naming-census.py census` runs the lint in report mode over
 both layers from a capture's exports and writes every flagged name. The policy
 is a review input: until it is reviewed and source bindings are added, the
-census is a report and no whole-tree N3 verdict is claimed. Declarations whose
+draft-policy census reports outstanding findings. Declarations whose
 range spells a keyword rather than their name (anonymous instances, syntax and
 macro kinds) are not linted: notation keywords are out of N3 scope. The development controls use clearly
 synthetic policy/source files. Policy additions must not be used to exempt a
@@ -540,6 +540,17 @@ With current compiler bundles for every file, run:
 ```sh
 python3 scripts/check-naming.py --tree . --policy POLICY.json --source-root SOURCE_ROOT --root Jaune --root JauneConsensus --file Jaune/FILE.lean FILE.references.json [--final]
 ```
+
+For a whole-tree candidate capture, the census can supply the verified export
+for each source. Use the same reviewed policy and source root as the direct lint.
+
+```sh
+python3 scripts/naming-census.py census --snapshot CAPTURE/snapshot.json --policy POLICY.json --source-root SOURCE_ROOT --output FRESH_DIRECTORY --final
+```
+
+The final census writes all findings and exits 1 on a naming regression.
+An invalid capture exits 2. Both modes verify the capture, the local sources it imports, and its Lake and
+toolchain inputs.
 
 Repeat `--file` for every Lean file under both roots. Missing, extra or duplicate
 files fail. Source bytes must equal their bundle's bytes. Whole-tree runs also

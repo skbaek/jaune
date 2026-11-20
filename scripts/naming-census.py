@@ -11,7 +11,8 @@ is English: review it like any policy change.
 registered lint roots, using the compiler exports of a candidate capture, and
 writes every flagged declaration, field and constructor name (token, name,
 module, reason) with summary counts. It needs no Lean: exports come from
-`naming-candidate.py capture`.
+`naming-candidate.py capture`. With `--final`, it also enforces pending retired
+names and returns the strict whole-tree lint verdict.
 """
 import argparse
 from collections import Counter
@@ -57,20 +58,38 @@ def vocabulary(tree, retired):
     return sorted(w for w, n in counts.items() if n >= 2 and w not in banned)
 
 
-def census(tree, snapshot_path, policy_path, map_path, source_root):
+def census(tree, snapshot_path, policy_path, map_path, source_root, final=False):
     inventory = json.loads((tree / 'scripts/naming-inventory.json').read_bytes())
     roots = inventory['lint_roots']
-    snapshot = json.loads(Path(snapshot_path).read_bytes())
-    exports = {snapshot['candidate']['modules'][m]['path']: Path(snapshot_path).parent / row['path']
-               for m, row in snapshot['exports'].items()}
-    selected = sorted(p for p in exports if any(p.startswith(r + '/') for r in roots))
-    mapping = json.loads(Path(map_path).read_bytes())
-    policy = json.loads(Path(policy_path).read_bytes())
-    result = LINT.check(tree, mapping, policy, source_root, [(p, exports[p]) for p in selected], roots)
+    if final and set(roots) != {'Jaune', 'JauneConsensus'}:
+        raise ValueError('final naming census requires both registered product roots')
+    snapshot_digest = CANDIDATE.file_sha(snapshot_path)
+    snapshot = CANDIDATE.read_snapshot(snapshot_path, fidelity=False, light=True)
+    if CANDIDATE.file_sha(snapshot_path) != snapshot_digest:
+        raise ValueError('snapshot changed during verification')
+    modules = snapshot['candidate']['modules']
+    selected = {modules[m]['path']: m for m in snapshot['exports']
+                if any(modules[m]['path'].startswith(root + '/') for root in roots)}
+    files = [(p, snapshot['export_paths'][selected[p]]) for p in sorted(selected)]
+    # Product sources are checked against the bytes actually parsed by the lint below.
+    # Other local imports and Lake inputs also affect the names the compiler resolved.
+    imports = set(CANDIDATE.closure(modules, sorted(selected.values()))) - set(selected.values())
+    inputs = {modules[m]['path'] for m in imports}
+    inputs.update(set(snapshot['candidate']['files']) & {'lean-toolchain', 'lakefile.lean', 'lakefile.toml', 'lake-manifest.json'})
+    for path in sorted(inputs):
+        if CANDIDATE.file_sha(LINT.APPLY.safe_path(tree, path)) != snapshot['candidate']['files'][path]:
+            raise ValueError(f'{path}: compiler input differs from capture')
+    map_raw = Path(map_path).read_bytes()
+    policy_raw = Path(policy_path).read_bytes()
+    result = LINT.check(tree, json.loads(map_raw), json.loads(policy_raw), source_root, files, roots, final=final)
+    for row in result['files']:
+        module = selected[row['source']]
+        if (row['source_sha256'] != modules[module]['sha256']
+                or row['bundle_sha256'] != snapshot['exports'][module]['sha256']):
+            raise ValueError(f'{module}: lint input differs from verified capture')
     flagged = []
     for problem in result['problems']:
-        module = next((m for m, row in snapshot['candidate']['modules'].items()
-                       if row['path'] == problem.get('source')), None)
+        module = selected.get(problem.get('source'))
         flagged.append(dict(name=problem['name'], module=module, source=problem.get('source'),
                             reason=problem['reason'], segment=problem.get('segment'),
                             tokens=problem.get('tokens', [])))
@@ -86,9 +105,9 @@ def census(tree, snapshot_path, policy_path, map_path, source_root):
                    unregistered_tokens=len([t for t in tokens if t not in retired]),
                    top_unregistered=dict(Counter({t: n for t, n in tokens.items() if t not in retired}).most_common(60)),
                    by_reason=dict(Counter(row['reason'] for row in flagged)))
-    return dict(status='OK', mode='report', scope=result['scope'], roots=roots,
-                snapshot_sha256=CANDIDATE.file_sha(snapshot_path),
-                policy_sha256=CANDIDATE.file_sha(policy_path), map_sha256=CANDIDATE.file_sha(map_path),
+    return dict(status=result['status'] if final else 'OK', mode='final' if final else 'report',
+                scope=result['scope'], roots=roots, snapshot_sha256=snapshot_digest,
+                policy_sha256=hashlib.sha256(policy_raw).hexdigest(), map_sha256=hashlib.sha256(map_raw).hexdigest(),
                 summary=summary, findings=flagged)
 
 
@@ -105,6 +124,7 @@ def main():
     c.add_argument('--map', type=Path, default=ROOT / 'scripts/naming-map.json')
     c.add_argument('--source-root', type=Path, default=ROOT)
     c.add_argument('--output', type=Path, required=True)
+    c.add_argument('--final', action='store_true', help='enforce the final whole-tree naming gate')
     args = parser.parse_args()
     try:
         if args.command == 'vocabulary':
@@ -114,15 +134,15 @@ def main():
                                               indent=1) + '\n')
             print(f'OK — naming vocabulary: {len(words)} words')
             return 0
-        result = census(args.tree.resolve(), args.snapshot, args.policy, args.map, args.source_root.resolve())
+        result = census(args.tree.resolve(), args.snapshot, args.policy, args.map, args.source_root.resolve(), args.final)
         args.output.mkdir(parents=True, exist_ok=False)
         (args.output / 'census.json').write_text(json.dumps(result, indent=1) + '\n')
         with (args.output / 'census.tsv').open('w') as out:
             out.write('module\tname\treason\tsegment\ttokens\n')
             for row in sorted(result['findings'], key=lambda r: (r['module'] or '', r['name'])):
                 out.write(f"{row['module']}\t{row['name']}\t{row['reason']}\t{row['segment'] or ''}\t{','.join(row['tokens'])}\n")
-        print('OK — naming census: ' + json.dumps(result['summary']['by_reason']))
-        return 0
+        print(f"{result['status']} — naming census: " + json.dumps(result['summary']['by_reason']))
+        return 0 if result['status'] == 'OK' else 1
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(f'SETUP — naming census: {error}', file=sys.stderr)
         return 2
