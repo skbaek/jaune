@@ -11,7 +11,9 @@
 -- prestate `benv.state` (u82's named map; every guard `Benv` here has empty `createdAccounts`). The
 -- old guards stay until the delete commit (precedent: G2a `8840b59b`). The default build compiles
 -- this module through `JauneChecks.lean`.
+import AxiomAudit
 import Jaune.Run.CheckedTransaction
+import Jaune.FrameRun.CheckedFacts
 
 namespace Jaune.Checked
 
@@ -280,3 +282,7 @@ private def bodySysContext (block : BlockContext) : BlockContext :=
   | _ => false)
 
 end Jaune.Checked
+
+-- The audit row of `Jaune/Check/Transaction.lean`'s last line, on the W1
+-- `Jaune.Transaction.settleRun_state` (`Run/BodyFacts.lean`), for its Checked counterpart.
+#expect_axioms Jaune.Checked.Transaction.settleRun_state [Classical.choice, Quot.sound, propext]
