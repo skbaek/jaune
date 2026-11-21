@@ -30,9 +30,15 @@ class NamingFidelityTests(unittest.TestCase):
         self.before = snapshot({'N.old': constant()}, ['N.old'])
         self.after = snapshot({'N.new': constant()}, ['N.new'])
         self.renames = {'N.old': 'N.new'}
+        # Master ruling R22: the reviewed sites passed to the comparison
+        # (None: no sites file).
+        self.r19_sites = None
+
+    def context(self):
+        return None if self.r19_sites is None else dict(r19_sites=self.r19_sites)
 
     def run_check(self):
-        return CHECK.Comparison(self.before, self.after, self.renames).run()
+        return CHECK.Comparison(self.before, self.after, self.renames, global_context=self.context()).run()
 
     def entries(self, *rows):
         return CHECK.MAP.Renamer([dict(old=a, new=b, kind=k, **extra) for a, b, k, extra in rows])
@@ -1500,11 +1506,13 @@ class NamingFidelityTests(unittest.TestCase):
             at_site('_private.M.0.N.old', '_private.M.0.N.new')
 
     def test_double_backtick_private_literals_follow_the_map(self):
-        # Master rulings R19-R21: ``helper`` of a private helper elaborates to a
+        # Master rulings R19-R22: ``helper`` of a private helper elaborates to a
         # constructor-form chain in the definition body; it respells to the
-        # helper's image only by the compiler's resolved references to it in
-        # the holder's own declaration span that are double-backtick literals
-        # in the captured source, at most one chain occurrence per reference.
+        # helper's image only at a reviewed site (R22, listed here for every
+        # case, so each R21 condition below is shown necessary on its own) and
+        # by the compiler's resolved references to it in the holder's own
+        # declaration span that are double-backtick literals in the captured
+        # source, at most one chain occurrence per reference.
         ctor = ('Lean.Name.str', 'Lean.Name.num')
         old, new = '_private.M.0.N.C.helper', '_private.M2.0.N.helper'
         rows = [('N.C', 'N', 'namespace', {}), ('M', 'M2', 'module', {})]
@@ -1535,7 +1543,10 @@ class NamingFidelityTests(unittest.TestCase):
             self.before['module_decls'] = {'M': {holder: (len(prefix), end)} if decl else {}}
             self.before['module_references'] = {'M': [(c, by, a + len(prefix), b + len(prefix)) for c, by, a, b in refs]}
             self.renames = self.entries(*rows)
+            self.r19_sites = {('M', holder, old, new), ('M', holder, missing, '_private.M2.0.N.absent'),
+                              ('M', holder, 'N.C.pub', 'N.pub')}
             return self.run_check()
+        missing = '_private.M.0.N.C.absent'
         verdict = run(chain(old), chain(new))
         self.assertIn(['N.C.k', old, new, 'double-backtick name literal (compiler reference)'],
                       verdict['derived_literals_respelled'])
@@ -1586,10 +1597,15 @@ class NamingFidelityTests(unittest.TestCase):
         # the `let` the tactic made keeps the literal's chain in the term, so
         # the hand-built chain is a second occurrence against one reference.
         tactic = 'def k : Name := by\n  let x := ``helper\n  clear x\n  exact hand\n'
-        let = lambda value, body: ['letE', 'x', ['const', ['name', 'Lean.Name'], []], value, body]
+        # Schema 8 writes a `let` as ['let', nonDep, type, value, body] (NamingFidelity.lean).
+        let = lambda value, body: ['let', False, ['const', ['name', 'Lean.Name'], []], value, body]
         with self.assertRaises(CHECK.Mismatch):
             run(let(chain(old), chain(old)), let(chain(new), chain(new)), source=tactic,
                 refs=[(old, 'N.C.k') + at(tactic, '``helper')])
+        # (Control: the `let` alone, with an ordinary body, respells.)
+        body = ['const', ['name', 'Q.hand'], []]
+        self.assertEqual(run(let(chain(old), body), let(chain(new), body), source=tactic,
+                             refs=[(old, 'N.C.k') + at(tactic, '``helper')])['status'], 'OK')
         # The spelling must be a dot-suffix of the constant's own name.
         other = 'def k : Name := ``helpers\n'
         with self.assertRaises(CHECK.Mismatch):
@@ -1605,7 +1621,6 @@ class NamingFidelityTests(unittest.TestCase):
             run(chain(old), chain(new), source=edge, decl_len=len('def k := ``help'))
         # (2) a chain naming no existing old constant, or whose image is no
         # after constant (checked on the whole-environment tables).
-        missing = '_private.M.0.N.C.absent'
         absent = 'def k : Name := ``absent\n'
         self.assertEqual(run(chain(missing), chain(missing), source=absent,
                              refs=[(missing, 'N.C.k') + at(absent, '``absent')])['status'], 'OK')
@@ -1616,12 +1631,12 @@ class NamingFidelityTests(unittest.TestCase):
         run(chain(old), chain(new), source=both, refs=[(missing, 'N.C.k') + at(both, '``absent'),
                                                        (old, 'N.C.k') + at(both, '``helper')])
         self.after['constants']['_private.M2.0.N.absent'] = constant(5)
-        probe = CHECK.Comparison(self.before, self.after, self.renames)
+        probe = CHECK.Comparison(self.before, self.after, self.renames, global_context=self.context())
         term = pair(chain(old), chain(missing))
         self.assertEqual(probe.compiler_reference_admissions('N.C.k', term), {old})
         del self.after['constants'][new]
         CHECK.Comparison._NAMESPACES.clear()
-        probe = CHECK.Comparison(self.before, self.after, self.renames)
+        probe = CHECK.Comparison(self.before, self.after, self.renames, global_context=self.context())
         self.assertEqual(probe.compiler_reference_admissions('N.C.k', term), frozenset())
         # (1) a constructor chain `toExpr` would write as `mkStrK` is data.
         pub = 'def k : Name := ``N.C.pub\n'
@@ -1630,6 +1645,115 @@ class NamingFidelityTests(unittest.TestCase):
         with self.assertRaises(CHECK.Mismatch):
             run(chain('N.C.pub'), chain('N.pub'), source=pub, refs=[('N.C.pub', 'N.C.k') + at(pub, '``N.C.pub')],
                 before_consts={'N.C.pub': constant(3)}, after_consts={'N.pub': constant(3)})
+
+    def test_r19_admissions_only_at_reviewed_sites(self):
+        # Master ruling R22 after cross-family review 5: indirect evidence
+        # cannot tell a `toExpr`-written double-backtick literal from a
+        # hand-built constructor chain, so an admission needs a reviewed site
+        # (module, holder, old, new) on top of the R21 evidence.
+        ctor = ('Lean.Name.str', 'Lean.Name.num')
+        old, new = '_private.M.0.N.C.helper', '_private.M2.0.N.helper'
+        rows = [('N.C', 'N', 'namespace', {}), ('M', 'M2', 'module', {})]
+        chain = lambda n: self.name_chain(n, heads=ctor)
+        pair = lambda a, b: ['app', ['app', ['const', ['name', 'Prod.mk'], []], a], b]
+        prefix = 'private def helper : Nat := 3\n'
+        site = ('M', 'N.C.k', old, new)
+        def run(before_e, after_e, source, sites, holder='N.C.k', kind='definition', decl_start=0):
+            # The reference is the `helper` just after the first two backticks
+            # of `source`: it passes R21 (two backticks, a dot-suffix
+            # spelling, inside the holder's span, one reference for one chain).
+            start = source.index('``helper') + 2
+            refs = [(old, holder, len(prefix) + start, len(prefix) + start + len('helper'))]
+            body = (self.gen_body if kind == 'definition' else
+                    lambda t: dict(kernel=dict(type=t, universes=0, payload=['theorem']), attributes={}))
+            image = holder.replace('N.C.', 'N.')
+            self.before = snapshot({holder: body(before_e), old: constant(3)}, [holder])
+            self.after = snapshot({image: body(after_e), new: constant(3)}, [image])
+            self.before['owners'] = {holder: 'M', old: 'M'}
+            self.after['owners'] = {image: 'M2', new: 'M2'}
+            self.before['module_sources'] = {'M': prefix + source}
+            self.before['module_decls'] = {'M': {holder: (len(prefix) + decl_start, len(prefix) + len(source))}}
+            self.before['module_references'] = {'M': refs}
+            self.renames = self.entries(*rows)
+            self.r19_sites = sites
+            return self.run_check()
+        # Each term takes the hand-built chain's name and the side (the
+        # helper constant itself is `old` before and `new` after).
+        hand = lambda n, _: pair(['const', ['name', 'Q.quoted'], []], chain(n))
+        # Review 5's five counterexample classes. Each holds no chain from
+        # the reference and one hand-built chain; the evidence passes R21, so
+        # only the sites file decides.
+        cases = {
+            # 1. a quotation of a double-backtick literal (its pre-resolution
+            #    is a quoted identifier, not a constructor chain);
+            'quoted literal': ('def k := (`(``helper), hand)\n', 'definition', hand),
+            # 2. a literal in a theorem's proof, which the export omits; the
+            #    hand-built chain is in the statement;
+            'theorem proof': ('theorem k : P hand := by\n  let _ := ``helper\n  exact ax _\n', 'theorem',
+                              lambda n, _: ['app', ['const', ['name', 'Q.P'], []], chain(n)]),
+            # 3. a literal a tactic elaborates and drops;
+            'tactic-erased': ('def k : Name := by\n  change (fun _ : Name => Name) ``helper\n  exact hand\n',
+                              'definition', lambda n, _: chain(n)),
+            # 4. a notation (or a shadowing macro) putting two backticks
+            #    before an ordinary call;
+            'notation': ('local notation "!``" x:max => x\ndef k := (!``helper, hand)\n', 'definition',
+                         lambda n, side: pair(['const', ['name', side], []], chain(n))),
+            # 5. a canonical synthetic range into a comment, a string or a
+            #    `«»` name.
+            'synthetic range': ('def k := hand -- ``helper\n', 'definition', lambda n, _: chain(n)),
+        }
+        for label, (source, kind, term) in cases.items():
+            with self.subTest(label):
+                self.assertEqual(run(term(old, old), term(old, new), source, None, kind=kind)['status'], 'OK')
+                # Not listed (no file, or a file listing another site): fails.
+                for sites in (None, set(), {('M', 'N.C.other', old, new)}):
+                    with self.assertRaises(CHECK.Mismatch):
+                        run(term(old, old), term(new, new), source, sites, kind=kind)
+                # The evidence does pass R21: were the site listed, it would
+                # be admitted. That is why a site is listed only after review.
+                self.assertEqual(run(term(old, old), term(new, new), source, {site}, kind=kind)['status'], 'OK')
+        # A genuine literal at its listed site passes; with no file it fails.
+        literal = 'def k : Name := ``helper\n'
+        verdict = run(chain(old), chain(new), literal, {site})
+        self.assertIn(['N.C.k', old, new, 'double-backtick name literal (compiler reference)'],
+                      verdict['derived_literals_respelled'])
+        with self.assertRaises(CHECK.Mismatch):
+            run(chain(old), chain(new), literal, None)
+        # A listed holder whose row differs in old, new or module: fails.
+        for wrong in (('M', 'N.C.k', '_private.M.0.N.C.other', new), ('M', 'N.C.k', old, '_private.M2.0.N.other'),
+                      ('M2', 'N.C.k', old, new), ('M', 'N.k', old, new)):
+            with self.subTest(wrong=wrong), self.assertRaises(CHECK.Mismatch):
+                run(chain(old), chain(new), literal, {wrong})
+        # The R21 evidence stays necessary at a listed site.
+        with self.assertRaises(CHECK.Mismatch):
+            run(chain(old), chain(new), 'def k : Name := ```helper\n', {site})
+        # Both backticks lie inside the holder's span (review 5 note 3:
+        # `span[0] + 2 <= start`), not just the reference.
+        bare = '``helper\n'
+        self.assertEqual(run(chain(old), chain(new), bare, {site})['status'], 'OK')
+        for start in (1, 2):
+            with self.subTest(decl_start=start), self.assertRaises(CHECK.Mismatch):
+                run(chain(old), chain(new), bare, {site}, decl_start=start)
+
+    def test_reviewed_sites_file(self):
+        row = dict(module='M', holder='N.C.k', old='a', new='b', review='evidence.md')
+        raw = lambda **over: json.dumps(dict(dict(schema_version=1, sites=[row]), **over)).encode()
+        self.assertEqual(CHECK.read_r19_sites(raw()), {('M', 'N.C.k', 'a', 'b')})
+        for bad in (raw(schema_version=2), raw(sites={}), raw(extra=1), raw(sites=[row, row]),
+                    raw(sites=[dict(row, review='')]), raw(sites=[dict(row, review='a\nb')]),
+                    raw(sites=[{k: v for k, v in row.items() if k != 'review'}]), raw(sites=[dict(row, line=1)])):
+            with self.assertRaises(ValueError):
+                CHECK.read_r19_sites(bad)
+        # The committed sites file: the twelve reviewed admissions of the G2b
+        # rename, all in the canonical_primitive elaborator, each pointing at
+        # its review.
+        sites = CHECK.read_r19_sites((ROOT / 'scripts/maps/g2b-r19-sites.json').read_bytes())
+        self.assertEqual(len(sites), 12)
+        self.assertEqual({(m, h) for m, h, _, _ in sites}, {(
+            'Jaune.MessageCall.CheckedCanonical',
+            'Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1')})
+        self.assertTrue(all(o.startswith('_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_')
+                            for _, _, o, _ in sites))
 
     def test_export_references_read_on_demand(self):
         # Neon-4 should-fix 2: the standalone and batched paths read the

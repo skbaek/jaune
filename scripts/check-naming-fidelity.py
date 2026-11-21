@@ -1249,6 +1249,35 @@ def export_references(export_path):
     return APPLY.module_name(data['index']['module']), rows
 
 
+R19_SITES_SCHEMA = 1
+R19_SITE_KEYS = ('module', 'holder', 'old', 'new', 'review')
+
+
+def read_r19_sites(raw):
+    """The reviewed sites of compiler-reference (R19) admissions (master
+    ruling R22), from the bytes of a sites file such as
+    `scripts/maps/g2b-r19-sites.json`: `{"schema_version": 1, "sites": [row]}`,
+    each row exactly `module`, `holder`, `old`, `new` and `review` (a one-line
+    pointer to the review evidence), all non-empty strings, no row twice.
+    Returns the frozenset of (module, holder, old, new); an admission must
+    match one exactly. Raises ValueError on any other shape."""
+    data = json.loads(raw)
+    if not isinstance(data, dict) or data.get('schema_version') != R19_SITES_SCHEMA or \
+            not isinstance(data.get('sites'), list) or set(data) - {'schema_version', 'description', 'sites'}:
+        raise ValueError(f'R19 sites file: expected schema_version {R19_SITES_SCHEMA} and a list of sites')
+    sites = set()
+    for row in data['sites']:
+        if not isinstance(row, dict) or set(row) != set(R19_SITE_KEYS) or \
+                not all(isinstance(row[k], str) and row[k] and '\n' not in row[k] for k in R19_SITE_KEYS):
+            raise ValueError(f'R19 sites file: a site has exactly {", ".join(R19_SITE_KEYS)} '
+                             f'as non-empty one-line strings: {row!r}')
+        key = tuple(row[k] for k in R19_SITE_KEYS[:4])
+        if key in sites:
+            raise ValueError(f'R19 sites file: duplicate site {key!r}')
+        sites.add(key)
+    return frozenset(sites)
+
+
 def extract_module_meta(export_path, export_sha256=None):
     """Extract lightweight verified `.meta.json` sidecar from a single `.export.json`."""
     export_path = Path(export_path)
@@ -1311,6 +1340,9 @@ class Comparison:
         self.mapping = mapping
         self._aux_modules = self.aux_module_table(mapping)
 
+        # Master ruling R22: the reviewed sites at which a compiler-reference
+        # (R19) admission is allowed; None or empty admits none.
+        self.r19_sites = frozenset(gc.get('r19_sites') or ())
         self.all_before_roots = gc['before_roots'] if 'before_roots' in gc else before['roots']
         self.all_after_roots = gc['after_roots'] if 'after_roots' in gc else after['roots']
         self.all_before_constants = gc['before_constants'] if 'before_constants' in gc else before['constants']
@@ -1426,10 +1458,11 @@ class Comparison:
                             if form:
                                 contextual.add(cid)
                             if form == 'ctor':
-                                # R19/R20: a constructor-form chain in a body is
-                                # a `toExpr`-written double-backtick literal only
-                                # with the compiler's resolved references to it
-                                # in the holder's own declaration span.
+                                # R19-R22: a constructor-form chain in a body is
+                                # respelled as a double-backtick literal only at
+                                # a reviewed site, with the compiler's resolved
+                                # references to it in the holder's own
+                                # declaration span as a necessary condition.
                                 if admitted is None:
                                     admitted = self.compiler_reference_admissions(name, value)
                                 if '.'.join(chain[0]) in admitted:
@@ -1559,25 +1592,41 @@ class Comparison:
         return memo[id(value)][0]
 
     def compiler_reference_admissions(self, holder, value):
-        """Master rulings R19 and R20: the constructor-form chains of
-        `holder` that are double-backtick literals, by the compiler's own
-        resolved references (the ilean `references` of the before export:
-        each usage of a constant, its range and the declaration holding it).
+        """Master rulings R19-R22: the constructor-form chains of `holder`
+        admitted as double-backtick literals at reviewed sites.
 
-        A chain decoding to `lit` is admitted only when: `toExpr` writes
+        This is a reviewed-site rule, not a general soundness argument
+        (R22). Lean writes a `toExpr`-built double-backtick literal and a
+        hand-built `Name.str`/`Name.num` chain the same way, and five review
+        rounds showed that indirect evidence (the compiler's references plus
+        the source bytes) cannot tell them apart: a quotation of a
+        double-backtick literal, a literal in an unexported theorem proof, a
+        literal a tactic elaborates and drops, a notation or macro that puts
+        two backticks before an ordinary reference, and a synthetic range
+        each pass that evidence while contributing no chain. So a chain is
+        admitted only at a site of the explicitly passed reviewed-sites file
+        (`r19_sites`: module, holder, old, new, matched exactly), each site
+        backed by a review of the holder's source; without the file, or at
+        any other site, nothing is admitted.
+
+        The R21 evidence stays a necessary condition on top. A chain
+        decoding to `lit` is admitted only when: `toExpr` writes
         `lit` in constructor form (checked by the caller); `lit` is exactly an
         existing old constant whose map image is an existing after constant;
         the export records `holder`'s own declaration span, and that span
         holds compiler references, by `holder`, to exactly `lit`, each a
-        double-backtick literal in the captured source (the two bytes before
-        its range are two backticks and the range spells a dot-suffix of the
-        name; R21); and the
+        double-backtick literal in the captured source (the two characters
+        before its range lie inside the span and are two backticks, not
+        three, and the range spells a dot-suffix of the name; R21); and the
         number of occurrences of chains decoding to `lit` in `holder`'s term
         (counted along every path of the DAG, inner chains included) is at
-        most the number of those references. Without a recorded span or
-        references nothing is admitted. No source text is read.
+        most the number of those references; and (module, holder, lit, map
+        image) is a reviewed site. Without a reviewed site, a recorded span,
+        the captured source or references nothing is admitted.
 
         Returns the set of admitted names."""
+        if not self.r19_sites:
+            return frozenset()
         module = self.holder_module(holder)
         span = ((self.before.get('module_decls') or {}).get(module) or {}).get(holder) if module else None
         if span is None:
@@ -1592,13 +1641,13 @@ class Comparison:
             # two backticks, and the range spells a dot-suffix of the
             # constant's (user) name. Calls, type or proof mentions and
             # quotations `(x) are references of other kinds.
-            if start < 2 or source[start - 2:start] != '``' or (start >= 3 and source[start - 3] == '`'):
+            if source[start - 2:start] != '``' or (start >= 3 and source[start - 3] == '`'):
                 return False
             private = MAP.split_private(const) if const.startswith('_private.') else None
             parts = (private[2] if private else const).split('.')
             return source[start:end] in {'.'.join(parts[-k:]) for k in range(1, len(parts) + 1)}
         counts = Counter(const for const, by, start, end in references
-                         if by == holder and span[0] <= start and end <= span[1] and
+                         if by == holder and span[0] + 2 <= start and end <= span[1] and
                          spelled_by_double_backtick(const, start, end))
         if not counts:
             return frozenset()
@@ -1610,7 +1659,8 @@ class Comparison:
             if not (0 < n <= counts.get(lit, 0) and lit in self.all_before_constants):
                 continue
             image = self.name(lit)
-            if image != lit and image in self.all_after_constants:
+            if image != lit and image in self.all_after_constants and \
+                    (module, holder, lit, image) in self.r19_sites:
                 admitted.add(lit)
         return frozenset(admitted)
 
@@ -3258,13 +3308,20 @@ def main():
     parser.add_argument('--map', type=Path, required=True)
     parser.add_argument('--before', type=Path, action='append', required=True)
     parser.add_argument('--after', type=Path, action='append', required=True)
+    parser.add_argument('--r19-sites', type=Path,
+                        help='reviewed sites of compiler-reference (R19) admissions, e.g. '
+                             'scripts/maps/g2b-r19-sites.json (master ruling R22); without it none is admitted')
     args = parser.parse_args()
     try:
         raw = args.map.read_bytes()
+        sites_raw = args.r19_sites.read_bytes() if args.r19_sites else None
         before = read_exports(args.before)
         before['module_references'] = dict(export_references(path) for path in args.before)
-        result = check(before, read_exports(args.after), json.loads(raw))
+        result = check(before, read_exports(args.after), json.loads(raw),
+                       global_context=dict(r19_sites=read_r19_sites(sites_raw)) if sites_raw is not None else None)
         result['map_sha256'] = hashlib.sha256(raw).hexdigest()
+        if sites_raw is not None:
+            result['r19_sites_sha256'] = hashlib.sha256(sites_raw).hexdigest()
         print(json.dumps(result, indent=2))
         return 0
     except Mismatch as error:

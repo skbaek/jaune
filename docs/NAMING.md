@@ -600,7 +600,7 @@ side of a rename:
 
 ```sh
 lake env .lake/build/bin/jaune-naming-fidelity SOURCE.lean MODULE BEFORE.json
-python3 scripts/check-naming-fidelity.py --map MAP.json --before BEFORE.json --after AFTER.json
+python3 scripts/check-naming-fidelity.py --map MAP.json --before BEFORE.json --after AFTER.json [--r19-sites SITES.json]
 ```
 
 Repeat `--before` and `--after` for every exported module in the comparison.
@@ -866,30 +866,54 @@ images, and each has a unit test with controls in
   `ParserDescr.node`, `ParserDescr.trailingNode`); a node shared with any
   other position is data. The chain must name an existing constant or
   namespace before, and its image one after. A constructor-form
-  (`Name.str`/`Name.num`) chain in a definition body is respelled only
-  under rulings R19 and R20: `toExpr` writes that name in constructor form
-  (a numeric or private component, or more than eight components); it
-  decodes exactly to an existing old constant whose map image is an
-  existing after constant; the export records the holder declaration's own
-  span, and the compiler's resolved references in the before export (the
-  ilean `references`: each usage with its range and holding declaration)
-  hold references by that declaration, inside that span, to exactly that
-  constant, each a double-backtick literal (R21: the captured source bytes
-  just before the reference's range are exactly two backticks, and the
-  range spells a dot-suffix of the constant's name; a call, a type or proof
-  mention or a quotation `` `(x) `` is a reference of another kind and never
-  counts); and the chains decoding to it in the holder's term (counted
-  along every DAG path, inner chains included) are no more than those
-  references (reason `double-backtick name literal (compiler reference)`).
-  The comparison reads these references on demand from each before export
-  (`export_references`) on every path: the component compare, the batched
-  and union compares, and the standalone checker.
-  No source text is read and there is no module-level fallback. Sound
-  because a double-backtick literal is elaborated as a resolved reference
-  to the constant (the compiler records it), so respelling it to the map
-  image is a names-only change. Hand-built `Name` data (no recorded
-  reference, a reference resolving to another constant, or a name `mkStrK`
-  could write) is never respelled. A chain mixing the two
+  (`Name.str`/`Name.num`) chain in a definition body is respelled as a
+  double-backtick literal (reason `double-backtick name literal (compiler
+  reference)`) only at a reviewed site (ruling R22). This is a
+  reviewed-site rule, not a general soundness claim. `toExpr` writes a
+  double-backtick literal with a numeric or private component, or with more
+  than eight components, in constructor form, and a hand-built chain of the
+  same name is the same term. Five independent review rounds showed that
+  indirect evidence cannot tell them apart. Rulings R19-R21 tried source
+  text, then the compiler's recorded references, then only references
+  preceded by two backticks in the captured source. Each time a review found
+  references that pass the evidence but put no chain in the holder's term:
+  a quotation of a
+  double-backtick literal, a literal in a theorem's proof (which the export
+  omits), a literal a tactic elaborates and drops, a notation or macro that
+  puts two backticks before an ordinary reference, and a synthetic range
+  into a comment or string. Any one of them, beside a hand-built chain,
+  would let that chain change. So the evidence is not a proof, and an
+  admission needs:
+  - a row of the reviewed-sites file passed explicitly (`--r19-sites
+    scripts/maps/g2b-r19-sites.json`, schema version 1). Each row gives
+    `module`, `holder`, `old`, `new` and `review`, a one-line pointer to a
+    review of the holder's source. The review shows that each literal is a
+    real double-backtick literal and that the holder builds no `Name` by
+    hand. The admission must match a row exactly (holder module before,
+    holder, decoded name, map image). With no file, or at any other site,
+    nothing is admitted and the chain compares as written, which fails the
+    rename;
+  - and, as necessary conditions on top, R21's evidence. The chain decodes
+    exactly to an existing old constant whose map image is an existing
+    after constant. The export records the holder declaration's own span.
+    The compiler's resolved references in the before export (the ilean
+    `references`: each usage with its range and holding declaration) hold
+    references by that declaration, inside that span, to exactly that
+    constant. Each is a double-backtick literal in the captured source: the
+    two characters just before the range are exactly two backticks, not
+    three, and lie inside the span, and the range spells a dot-suffix of the
+    constant's name. The chains decoding to it in the holder's term (counted
+    along every DAG path, inner chains included) are no more than those
+    references.
+
+  The comparison reads the references on demand from each before export
+  (`export_references`) and its captured source text on every path: the
+  component compare, the batched and union compares, and the standalone
+  checker. There is no module-level fallback. The G2b rename has twelve such
+  sites, all in the `canonical_primitive` elaborator (each row names its
+  module before the rename). Any other constructor-form chain is
+  data and is never respelled, nor is a constructor chain of a name `mkStrK`
+  could write. A chain mixing the two
   encodings, a numeral that is not a raw literal or exactly
   `OfNat.ofNat Nat n (instOfNatNat n)`, or a `mkStr` chain `mkStrN` could
   have written (built by hand, runtime data) stays literal, and a string
@@ -981,7 +1005,7 @@ elaborating the source body.
 
 ```sh
 python3 scripts/naming-candidate.py capture --root CHECKOUT --source-dir . --source-dir scripts --source-dir scripts/tests/naming --module ROOT_MODULE --build-prefix BUILD_ARGV_JSON --admit-command ADMIT_ARGV_JSON --release-command RELEASE_ARGV_JSON --output FRESH_DIRECTORY
-python3 scripts/naming-candidate.py compare --before BEFORE/snapshot.json --after AFTER/snapshot.json --map MAP.json
+python3 scripts/naming-candidate.py compare --before BEFORE/snapshot.json --after AFTER/snapshot.json --map MAP.json [--r19-sites SITES.json]
 ```
 
 Repeat `--module` for multiple roots. For a standalone file that has no Lake
