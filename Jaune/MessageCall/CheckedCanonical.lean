@@ -138,21 +138,23 @@ elab "canonical_primitive" : tactic => withMainContext do
   if head == ``Frame.State.liftMachine && !bound then
     evalTactic (← `(tactic| exact liftCanonical (by canonical_leaf) _))
     return
-  let (rule, arity, pair) ← match head with
-    | ``Frame.State.push => pure (mkIdent ``canonical_push, 1, false)
-    | ``Frame.State.pop => pure (mkIdent ``canonical_pop, 0, true)
-    | ``Frame.State.chargeGas => pure (mkIdent ``canonical_chargeGas, 1, false)
-    | ``Frame.State.chargeStateGas => pure (mkIdent ``canonical_chargeStateGas, 1, false)
-    | ``Frame.State.popToNat => pure (mkIdent ``canonical_popToNat, 0, true)
-    | ``Frame.State.popToAddress => pure (mkIdent ``canonical_popToAddress, 0, true)
-    | ``Frame.State.popN => pure (mkIdent ``canonical_popN, 1, true)
-    | ``Frame.State.pushItem => pure (mkIdent ``canonical_pushItem, 2, false)
-    | ``Frame.State.applyUnary => pure (mkIdent ``canonical_applyUnary, 2, false)
-    | ``Frame.State.applyBinary => pure (mkIdent ``canonical_applyBinary, 2, false)
-    | ``Frame.State.applyTernary => pure (mkIdent ``canonical_applyTernary, 2, false)
-    | ``Frame.State.assertDynamic => pure (mkIdent ``canonical_assertDynamic, 1, false)
-    | ``Except.assert => pure (mkIdent ``Walk.assert, 0, false)
-    | _ => throwError "expected a machine or state operation"
+  let some (rule, arity, pair) :=
+      (if head == ``Frame.State.push then some (``canonical_push, 1, false)
+      else if head == ``Frame.State.pop then some (``canonical_pop, 0, true)
+      else if head == ``Frame.State.chargeGas then some (``canonical_chargeGas, 1, false)
+      else if head == ``Frame.State.chargeStateGas then some (``canonical_chargeStateGas, 1, false)
+      else if head == ``Frame.State.popToNat then some (``canonical_popToNat, 0, true)
+      else if head == ``Frame.State.popToAddress then some (``canonical_popToAddress, 0, true)
+      else if head == ``Frame.State.popN then some (``canonical_popN, 1, true)
+      else if head == ``Frame.State.pushItem then some (``canonical_pushItem, 2, false)
+      else if head == ``Frame.State.applyUnary then some (``canonical_applyUnary, 2, false)
+      else if head == ``Frame.State.applyBinary then some (``canonical_applyBinary, 2, false)
+      else if head == ``Frame.State.applyTernary then some (``canonical_applyTernary, 2, false)
+      else if head == ``Frame.State.assertDynamic then some (``canonical_assertDynamic, 1, false)
+      else if head == ``Except.assert then some (``Walk.assert, 0, false)
+      else none : Option (Name × Nat × Bool))
+    | throwError "expected a machine or state operation"
+  let rule := mkIdent rule
   let fact ← match arity with
     | 0 => `($rule (by canonical_leaf))
     | 1 => `($rule _ (by canonical_leaf))

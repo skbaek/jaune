@@ -229,27 +229,38 @@ elab "inv_primitive" : tactic => withMainContext do
   if head == ``Frame.State.liftMachine && !bound then
     evalTactic (← `(tactic| apply liftMachine_inv))
     return
-  let (rule, arity, pair) ← match head with
-    | ``Frame.State.pop | ``Machine.pop =>
-      pure ("pop_inv", 0, true)
-    | ``Frame.State.popToNat | ``Machine.popToNat =>
-      pure ("popToNat_inv", 0, true)
-    | ``Frame.State.popToAddress | ``Machine.popToAddress =>
-      pure ("popToAddress_inv", 0, true)
-    | ``Frame.State.popN | ``Machine.popN => pure ("popN_inv", 1, true)
-    | ``Frame.State.chargeGas | ``Machine.chargeGas => pure ("chargeGas_inv", 1, false)
-    | ``Frame.State.chargeStateGas | ``Machine.chargeStateGas => pure ("chargeStateGas_inv", 1, false)
-    | ``Frame.State.push | ``Machine.push => pure ("push_inv", 1, false)
-    | ``Frame.State.pushItem | ``Machine.pushItem => pure ("pushItem_inv", 2, false)
-    | ``Frame.State.applyUnary | ``Machine.applyUnary => pure ("applyUnary_inv", 2, false)
-    | ``Frame.State.applyBinary | ``Machine.applyBinary => pure ("applyBinary_inv", 2, false)
-    | ``Frame.State.applyTernary | ``Machine.applyTernary => pure ("applyTernary_inv", 2, false)
-    | ``Frame.State.assertDynamic => pure ("assertDynamic_inv", 1, false)
-    | ``Except.assert => pure ("assert", 0, false)
-    | _ => throwError "unknown primitive"
-  let group := if rule == "assert" then (if machine then ``MWalk else ``Walk)
-    else (if machine then `Jaune.Checked.RunInvariants.Machine else `Jaune.Checked.RunInvariants.State)
-  let rule := mkIdent <| group.str rule
+  let some (machineRule, stateRule, arity, pair) :=
+      (if head == ``Frame.State.pop || head == ``Machine.pop then
+        some (``Machine.pop_inv, ``State.pop_inv, 0, true)
+      else if head == ``Frame.State.popToNat || head == ``Machine.popToNat then
+        some (``Machine.popToNat_inv, ``State.popToNat_inv, 0, true)
+      else if head == ``Frame.State.popToAddress || head == ``Machine.popToAddress then
+        some (``Machine.popToAddress_inv, ``State.popToAddress_inv, 0, true)
+      else if head == ``Frame.State.popN || head == ``Machine.popN then
+        some (``Machine.popN_inv, ``State.popN_inv, 1, true)
+      else if head == ``Frame.State.chargeGas || head == ``Machine.chargeGas then
+        some (``Machine.chargeGas_inv, ``State.chargeGas_inv, 1, false)
+      else if head == ``Frame.State.chargeStateGas || head == ``Machine.chargeStateGas then
+        some (``Machine.chargeStateGas_inv, ``State.chargeStateGas_inv, 1, false)
+      else if head == ``Frame.State.push || head == ``Machine.push then
+        some (``Machine.push_inv, ``State.push_inv, 1, false)
+      else if head == ``Frame.State.pushItem || head == ``Machine.pushItem then
+        some (``Machine.pushItem_inv, ``State.pushItem_inv, 2, false)
+      else if head == ``Frame.State.applyUnary || head == ``Machine.applyUnary then
+        some (``Machine.applyUnary_inv, ``State.applyUnary_inv, 2, false)
+      else if head == ``Frame.State.applyBinary || head == ``Machine.applyBinary then
+        some (``Machine.applyBinary_inv, ``State.applyBinary_inv, 2, false)
+      else if head == ``Frame.State.applyTernary || head == ``Machine.applyTernary then
+        some (``Machine.applyTernary_inv, ``State.applyTernary_inv, 2, false)
+      else if head == ``Frame.State.assertDynamic then
+        some (Name.anonymous, ``State.assertDynamic_inv, 1, false)
+      else if head == ``Except.assert then
+        some (``MWalk.assert, ``Walk.assert, 0, false)
+      else none : Option (Name × Name × Nat × Bool))
+    | throwError "unknown primitive"
+  let rule := if machine then machineRule else stateRule
+  if rule.isAnonymous then throwError "unknown primitive"
+  let rule := mkIdent rule
   let fact ← match arity with
     | 0 => `($rule (by inv_leaf))
     | 1 => `($rule _ (by inv_leaf))
