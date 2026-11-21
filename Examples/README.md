@@ -6,49 +6,48 @@ closure; an ordinary `lake build` compiles it alongside Jaune.
 
 ## Symbolic instructions and composition
 
-[Execution.lean](Execution.lean) imports `Jaune.SymbolicPush`. Its operands,
-environment, world and metadata are variables. It proves decoding and complete
+[Execution.lean](Execution.lean) imports `Jaune.SymbolicPush` and `Jaune.FrameRun.Adequacy`. Its operands,
+call context, world, substate and trail are variables. It proves decoding and complete
 raw-frame execution of `PUSH1 a; PUSH1 b; STOP`, starting with six gas and an empty
 stack. The result has the two operand words on its stack, zero gas and unchanged
-world and metadata. `interpreter` connects the constructed derivation to total
+world, substate and trail. `interpreter` connects the constructed run to total
 `Jaune.exec` through adequacy.
 
 The reusable `Jaune.SymbolicPush` rules describe success, insufficient gas and
 stack overflow. Success requires enough gas and fewer than 1024 stack entries.
 Out-of-gas leaves the input state; overflow after charging retains the gas charge
-in the raw error. `prepend` composes a decoded PUSH with an existing continuation.
+in the halted state. `prepend` puts a decoded PUSH in front of an existing run.
 These are direct-frame statements, not transaction validation or settlement
 claims. The bytecode example uses PUSH1; it does not establish support for every
 instruction or fork-specific opcode.
 
-The `Jaune.Exec` module owns the canonical execution type `Jaune.Exec` and its
-adequacy theorem `Jaune.exec_iff_exec_eq`; importing a Blanc package is
-unnecessary. `Jaune.ExecDeriv`,
-`Jaune.ExecSettlement` and `Jaune.ExecChronology` expose derivation, settlement and
-occurrence support respectively. Compiler and contract-specific APIs remain in
-Blanc.
+The `Jaune.FrameRun.Basic` module owns the canonical run type `Jaune.Frame.Run`, and
+`Jaune.FrameRun.Adequacy` its adequacy theorem `Jaune.Frame.Run.exec_iff`; importing a
+Blanc package is unnecessary. `Jaune.FrameRun.Order`, `Jaune.FrameRun.SettlementViews` and
+`Jaune.FrameRun.Views` expose sub-run order, settlement and occurrence support
+respectively. Compiler and contract-specific APIs remain in Blanc.
 
 ## Arithmetic and composition by inversion
 
-[Arithmetic.lean](Arithmetic.lean) imports `Jaune.SymbolicPush` and
-`Jaune.SymbolicArith` and runs `PUSH1 a; PUSH1 b; ADD; STOP` from gas `g` and an
+[Arithmetic.lean](Arithmetic.lean) imports `Jaune.SymbolicArithmetic` and
+`Jaune.FrameRun.Adequacy` and runs `PUSH1 a; PUSH1 b; ADD; STOP` from gas `g` and an
 incoming stack `s`, both variables. The premises are `9 ≤ g` and
 `s.length < 1023`; `concrete` discharges them at `g = 9`, `s = []`. It is a
 completed raw frame ending at `STOP`, not a settled message. The final stack is
 `(b + a) :: s` with value `a.toNat + b.toNat` (`ADD` wraps modulo `2 ^ 256`,
 which two bytes never reach), and `final_gas` is `g - 9`.
 
-`result` is the composition step: it takes an arbitrary `Jaune.Exec` derivation
+`result` is the composition step: it takes an arbitrary whole `Jaune.Frame.Run`
 from the start state and inverts it one continuing step at a time (`next`), then
-settles the `STOP` with `Exec.halt_inv`, so every derivation has the stated
+settles the `STOP` with the example's own `halt_inv`, so every run has the stated
 outcome. `interpreter` reads the total `Jaune.exec` result through adequacy.
 
-`Jaune.SymbolicArith` covers `ADD`, `SUB` and `MUL` (the `Op` family) with a
+`Jaune.SymbolicArithmetic` covers `ADD`, `SUB` and `MUL` (the `Op` family) with a
 success rule, an out-of-gas rule and a stack-underflow rule, plus `prepend` for
 composing a decoded instruction with a continuation. Other binary opcodes are
 not family members. Two `#guard_msgs` checks keep the build red if the `ADD`
-rule applied to `DIV` (after the final-state observations), or a gas premise
-one short (at the end of the file), ever elaborates.
+rule applied to `DIV`, or a gas premise
+one short (both at the end of the file), ever elaborates.
 
 ## Message calls in four parts
 
@@ -97,8 +96,8 @@ separate from the universally quantified direct-frame proof above.
 ## Installing as a Git dependency
 
 The external smoke source in [scripts/consumer/Consumer.lean](../scripts/consumer/Consumer.lean)
-constructs a complete out-of-gas derivation and proves its interpreter result.
-It imports only `Jaune.SymbolicPush`; it uses neither this example library nor
+constructs a complete out-of-gas run and proves its interpreter result.
+It imports `Jaune.SymbolicPush` and `Jaune.FrameRun.Adequacy`; it uses neither this example library nor
 a Blanc package. A disposable package can be prepared for a published commit:
 
 ```sh

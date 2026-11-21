@@ -1,7 +1,35 @@
 {
  "schema_version": 1,
- "description": "Spellings in documents that look like an old name's trailing components but name an external interface, not a renamed constant (naming-docs.py --keep). Reviewed in context by jsn-u9 for G0a.",
+ "description": "Spellings in documents that look like an old or deleted name's trailing components but name an external interface, or that mention a retired or deleted name on purpose, not as a live constant (naming-docs.py --keep). Reviewed in context by jsn-u9 for G0a and jsn-u99 for G2b.",
  "keep": [
-  {"file": "README.md", "spelling": "txs", "reason": "the t8n command's transaction-list input (`txs`), an ecosystem transition-tool interface name, not Jaune.Block.txs"}
+  {"file": "README.md", "spelling": "txs", "reason": "the t8n command's transaction-list input (`txs`), an ecosystem transition-tool interface name, not Jaune.Block.txs"},
+  {"file": "API.md", "spelling": "bout", "reason": "the variable name of `Transaction.run`'s block-output argument (`Jaune/Run/Transaction.lean`), quoted in its signature"},
+  {"file": "API.md", "spelling": "true", "reason": "the Lean Boolean literal in `f.message.disablePrecompiles = true`"},
+  {"file": "README.md", "spelling": "bal", "reason": "the registered `bal-header-format-v1` overlay of `scripts/sources.json`, an external correction-package name, not Jaune.State.bal"},
+  {"file": "TRUSTED.md", "spelling": "bal", "reason": "the registered `bal-header-format-v1` overlay of `scripts/sources.json`, an external correction-package name, not Jaune.State.bal"},
+  {"file": "TRUSTED.md", "spelling": "benvAfterTransfer_stat", "reason": "Blanc's retired obligation `Blanc.benvAfterTransfer_stat`, named as the one of fourteen that needs no row (user-approved P-T2, Q2 option B)"},
+  {"file": "TRUSTED.md", "spelling": "p256Verify", "reason": "the vector file name `p256Verify.json` (`scripts/vectors/`), an external corpus file, not the renamed Gas.p256Verify"},
+  {"file": "TRUSTED.md", "spelling": "pair", "reason": "the consensus benchmark flag `--bench-hash-pair`"},
+  {"file": "TRUSTED.md", "spelling": "commitments", "reason": "part of the consensus-specs file names `polynomial-commitments.md` and `specs/fulu/polynomial-commitments-sampling.md`"},
+  {"file": "scripts/GATES.md", "spelling": "eval", "reason": "the Lean command `#eval`"},
+  {"file": "scripts/GATES.md", "spelling": "bal", "reason": "the registered `bal-header-format-v1` overlay, and the `bal` retired-token plant of `check-naming-lint-tool.py`"},
+  {"file": "scripts/GATES.md", "spelling": "pair", "reason": "the consensus benchmark flag `--bench-hash-pair` and recorded mainnet data pairs"},
+  {"file": "scripts/GATES.md", "spelling": "time", "reason": "the consensus fork-choice test `checks` key `time`"},
+  {"file": "scripts/GATES.md", "spelling": "evm", "reason": "the placeholder `<evm>` for a third-party t8n binary"},
+  {"file": "scripts/GATES.md", "spelling": "benvAfterTransfer_stat", "reason": "Blanc's retired obligation named as the one of fourteen that needs no row (as TRUSTED.md, P-T2)"},
+  {"file": "docs/NAMING.md", "spelling": "Devm", "reason": "rule 5's list of retired private short forms"},
+  {"file": "docs/NAMING.md", "spelling": "Sevm", "reason": "rule 5's list of retired private short forms"},
+  {"file": "docs/NAMING.md", "spelling": "Benv", "reason": "rule 5's list of retired private short forms"},
+  {"file": "docs/NAMING.md", "spelling": "Tenv", "reason": "rule 5's list of retired private short forms"},
+  {"file": "docs/NAMING.md", "spelling": "bal", "reason": "rule 5's retired short form `bal`, rule 6's example, and the lint tool's `bal` plant"},
+  {"file": "docs/NAMING.md", "spelling": "genericCall", "reason": "the \"Retired names\" list and the retired-token rule's examples"},
+  {"file": "docs/NAMING.md", "spelling": "genericCreate", "reason": "the \"Retired names\" list"},
+  {"file": "docs/NAMING.md", "spelling": "incorporateChild", "reason": "the \"Retired names\" list and the lint control's plants"},
+  {"file": "docs/NAMING.md", "spelling": "genericCall.step", "reason": "the retired-token rule's example of a rejected spelling"},
+  {"file": "docs/NAMING.md", "spelling": "genericCallAmsterdam_bound", "reason": "the retired-token rule's example of a rejected spelling"},
+  {"file": "docs/NAMING.md", "spelling": "Checked.Frame", "reason": "the retired-token rule's example: `Frame.outer` rejects `Checked.Frame.outer`"},
+  {"file": "docs/NAMING.md", "spelling": "Le", "reason": "Lean's relation token `le`/`Le` (section 2), not Jaune.Devm.Rels.Le"},
+  {"file": "docs/NAMING.md", "spelling": "eval", "reason": "the Lean command `#eval`"},
+  {"file": "scripts/TRACE_PRODUCTION.md", "spelling": "true", "reason": "the JSON literal `true` in a trace request example"}
  ]
 }
