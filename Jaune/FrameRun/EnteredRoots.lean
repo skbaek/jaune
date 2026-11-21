@@ -83,28 +83,28 @@ namespace TopLevel
 
 
 /-- Every successful value of `x` satisfies `P`. -/
-private def OkP {ε α : Type} (P : α → Prop) (x : Except ε α) : Prop := ∀ a, x = .ok a → P a
+private def OkSatisfies {ε α : Type} (P : α → Prop) (x : Except ε α) : Prop := ∀ a, x = .ok a → P a
 
-private theorem OkP.ok {ε α : Type} {P : α → Prop} {a : α} (h : P a) : OkP (ε := ε) P (.ok a) := by
+private theorem OkSatisfies.ok {ε α : Type} {P : α → Prop} {a : α} (h : P a) : OkSatisfies (ε := ε) P (.ok a) := by
   intro b hb; cases hb; exact h
 
-private theorem OkP.error {ε α : Type} {P : α → Prop} {e : ε} : OkP P (.error e : Except ε α) := by
+private theorem OkSatisfies.error {ε α : Type} {P : α → Prop} {e : ε} : OkSatisfies P (.error e : Except ε α) := by
   intro b hb; cases hb
 
-private theorem OkP.bind {ε α β : Type} {Q : α → Prop} {P : β → Prop} {x : Except ε α}
-    {f : α → Except ε β} (hx : OkP Q x) (hf : ∀ a, Q a → OkP P (f a)) : OkP P (x >>= f) := by
+private theorem OkSatisfies.bind {ε α β : Type} {Q : α → Prop} {P : β → Prop} {x : Except ε α}
+    {f : α → Except ε β} (hx : OkSatisfies Q x) (hf : ∀ a, Q a → OkSatisfies P (f a)) : OkSatisfies P (x >>= f) := by
   intro b hb
   obtain ⟨a, ha, hb⟩ := Except.bind_eq_ok hb
   exact hf a (hx a ha) b hb
 
-private theorem OkP.elim {ε α : Type} {P : α → Prop} {x : Except ε α} {a : α} (h : OkP P x)
+private theorem OkSatisfies.holds {ε α : Type} {P : α → Prop} {x : Except ε α} {a : α} (h : OkSatisfies P x)
     (hx : x = .ok a) : P a := h a hx
 
-attribute [irreducible] OkP
+attribute [irreducible] OkSatisfies
 
-private theorem OkP.charge {x : Except (ExceptionalHalt × Frame.State) Frame.State}
-    (hx : ∀ u, x = .ok u → u.Fresh) : OkP (ε := PreparationFailure × Frame.State) Frame.State.Fresh (preparationCharge x) :=
-  by unfold OkP; exact fun _ h => Frame.State.Fresh.preparationCharge hx h
+private theorem OkSatisfies.charge {x : Except (ExceptionalHalt × Frame.State) Frame.State}
+    (hx : ∀ u, x = .ok u → u.Fresh) : OkSatisfies (ε := PreparationFailure × Frame.State) Frame.State.Fresh (preparationCharge x) :=
+  by unfold OkSatisfies; exact fun _ h => Frame.State.Fresh.preparationCharge hx h
 
 /-! Preparation without state gas. -/
 
@@ -113,39 +113,39 @@ private def InputFresh (input : Input) (a : Input × α) : Prop :=
     (input.checkpoint.Fresh → a.1.checkpoint.Fresh)
 
 private theorem authorizationStep_fresh (auth : Authorization) (input : Input) (refund) :
-    OkP (fun a => a.1.message = input.message ∧ (input.checkpoint.Fresh → a.1.checkpoint.Fresh))
+    OkSatisfies (fun a => a.1.message = input.message ∧ (input.checkpoint.Fresh → a.1.checkpoint.Fresh))
       (authorizationStep auth input refund) := by
   unfold authorizationStep
   repeat' (first | (dsimp only) | split)
   all_goals first
-    | exact OkP.error
-    | (apply OkP.ok; exact ⟨rfl, id⟩)
+    | exact OkSatisfies.error
+    | (apply OkSatisfies.ok; exact ⟨rfl, id⟩)
 
 private theorem authorizationLoop_fresh :
     ∀ (auths : List Authorization) (input : Input) (refund),
-      OkP (fun a => a.1.message = input.message ∧ (input.checkpoint.Fresh → a.1.checkpoint.Fresh))
+      OkSatisfies (fun a => a.1.message = input.message ∧ (input.checkpoint.Fresh → a.1.checkpoint.Fresh))
         (authorizationLoop auths input refund)
-  | [], _, _ => OkP.ok ⟨rfl, id⟩
+  | [], _, _ => OkSatisfies.ok ⟨rfl, id⟩
   | auth :: rest, input, refund => by
     unfold authorizationLoop
-    refine OkP.bind (authorizationStep_fresh auth input refund) fun ⟨mid, r⟩ ⟨m1, f1⟩ => ?_
-    unfold OkP
+    refine OkSatisfies.bind (authorizationStep_fresh auth input refund) fun ⟨mid, r⟩ ⟨m1, f1⟩ => ?_
+    unfold OkSatisfies
     intro b hb
-    obtain ⟨m2, f2⟩ := (authorizationLoop_fresh rest mid r).elim hb
+    obtain ⟨m2, f2⟩ := (authorizationLoop_fresh rest mid r).holds hb
     exact ⟨m2.trans m1, f2 ∘ f1⟩
 
 private theorem applyAuthorizations_fresh (input : Input) :
-    OkP (InputFresh input) (applyAuthorizations input) := by
+    OkSatisfies (InputFresh input) (applyAuthorizations input) := by
   unfold applyAuthorizations
   split
-  · exact OkP.ok ⟨rfl, id⟩
-  · refine OkP.bind (authorizationLoop_fresh _ input 0) fun x hx => ?_
+  · exact OkSatisfies.ok ⟨rfl, id⟩
+  · refine OkSatisfies.bind (authorizationLoop_fresh _ input 0) fun x hx => ?_
     obtain ⟨mid, r⟩ := x
     obtain ⟨hm, hf⟩ := hx
     dsimp only at hm hf ⊢
     split
-    · exact OkP.error
-    · apply OkP.ok
+    · exact OkSatisfies.error
+    · apply OkSatisfies.ok
       exact ⟨by dsimp only; rw [hm], hf⟩
 
 private theorem resolveCodeDelegation_fresh (input : Input) :
@@ -163,107 +163,107 @@ private def PreparedFresh (input : Input) : Prepared → Prop
     message.context.calldata = input.message.context.calldata ∧ (input.checkpoint.Fresh → checkpoint.Fresh)
 
 private theorem prepareWithoutStateGas_fresh (input : Input) :
-    OkP (PreparedFresh input) (prepareWithoutStateGas input) := by
+    OkSatisfies (PreparedFresh input) (prepareWithoutStateGas input) := by
   unfold prepareWithoutStateGas
   split
   · split
-    · exact OkP.ok trivial
-    · exact OkP.ok ⟨rfl, id⟩
-  · refine OkP.bind (applyAuthorizations_fresh input) fun ⟨mid, r⟩ ⟨c1, f1⟩ => ?_
+    · exact OkSatisfies.ok trivial
+    · exact OkSatisfies.ok ⟨rfl, id⟩
+  · refine OkSatisfies.bind (applyAuthorizations_fresh input) fun ⟨mid, r⟩ ⟨c1, f1⟩ => ?_
     obtain ⟨c2, f2⟩ := resolveCodeDelegation_fresh mid
-    exact OkP.ok ⟨c2.trans c1, f2 ∘ f1⟩
+    exact OkSatisfies.ok ⟨c2.trans c1, f2 ∘ f1⟩
 
 /-! Preparation under state gas. -/
 
 private theorem chargeNewAuthority_fresh {rules a} {s : Frame.State} (hs : s.Fresh) :
-    OkP Frame.State.Fresh (chargeNewAuthority rules a s) := by
+    OkSatisfies Frame.State.Fresh (chargeNewAuthority rules a s) := by
   unfold chargeNewAuthority
   split
-  · exact OkP.charge fun _ hu => hs.chargeStateGas hu
-  · exact OkP.ok hs
+  · exact OkSatisfies.charge fun _ hu => hs.chargeStateGas hu
+  · exact OkSatisfies.ok hs
 
 private theorem chargeAuthorityWrite_fresh {rules a} {s : Frame.State} {paid} (hs : s.Fresh) :
-    OkP (fun x => x.1.Fresh) (chargeAuthorityWrite rules a s paid) := by
+    OkSatisfies (fun x => x.1.Fresh) (chargeAuthorityWrite rules a s paid) := by
   unfold chargeAuthorityWrite
   split
-  · exact OkP.ok hs
-  · exact OkP.bind (OkP.charge fun _ hu => hs.chargeGas hu) fun _ h => OkP.ok h
+  · exact OkSatisfies.ok hs
+  · exact OkSatisfies.bind (OkSatisfies.charge fun _ hu => hs.chargeGas hu) fun _ h => OkSatisfies.ok h
 
 private theorem chargeAuthorizationBase_fresh {rules original a target} {s : Frame.State} {set}
-    (hs : s.Fresh) : OkP (fun x => x.1.Fresh) (chargeAuthorizationBase rules original a target s set) := by
+    (hs : s.Fresh) : OkSatisfies (fun x => x.1.Fresh) (chargeAuthorizationBase rules original a target s set) := by
   unfold chargeAuthorizationBase
   split
-  · exact OkP.ok hs
+  · exact OkSatisfies.ok hs
   · dsimp only
     split
-    · exact OkP.bind (OkP.charge fun _ hu => hs.chargeStateGas hu) fun _ h => OkP.ok h
-    · exact OkP.bind (OkP.ok hs) fun _ h => OkP.ok h
+    · exact OkSatisfies.bind (OkSatisfies.charge fun _ hu => hs.chargeStateGas hu) fun _ h => OkSatisfies.ok h
+    · exact OkSatisfies.bind (OkSatisfies.ok hs) fun _ h => OkSatisfies.ok h
 
 private theorem applyValidatedAuthorization_fresh {rules context a target} {s : Frame.State}
     {paid set} (hs : s.Fresh) :
-    OkP (fun x => x.1.Fresh) (applyValidatedAuthorization rules context a target s paid set) := by
+    OkSatisfies (fun x => x.1.Fresh) (applyValidatedAuthorization rules context a target s paid set) := by
   unfold applyValidatedAuthorization
-  refine OkP.bind (chargeNewAuthority_fresh hs) fun s1 h1 => ?_
-  refine OkP.bind (chargeAuthorityWrite_fresh h1) fun ⟨s2, p2⟩ h2 => ?_
-  refine OkP.bind (chargeAuthorizationBase_fresh h2) fun ⟨s3, d3⟩ h3 => ?_
-  exact OkP.ok (Frame.State.Fresh.of_machine_eq h3 rfl)
+  refine OkSatisfies.bind (chargeNewAuthority_fresh hs) fun s1 h1 => ?_
+  refine OkSatisfies.bind (chargeAuthorityWrite_fresh h1) fun ⟨s2, p2⟩ h2 => ?_
+  refine OkSatisfies.bind (chargeAuthorizationBase_fresh h2) fun ⟨s3, d3⟩ h3 => ?_
+  exact OkSatisfies.ok (Frame.State.Fresh.of_machine_eq h3 rfl)
 
 private theorem amsterdamAuthorizationStep_fresh {rules context auth} {s : Frame.State}
     {paid set} (hs : s.Fresh) :
-    OkP (fun x => x.1.Fresh) (amsterdamAuthorizationStep rules context auth s paid set) := by
+    OkSatisfies (fun x => x.1.Fresh) (amsterdamAuthorizationStep rules context auth s paid set) := by
   unfold amsterdamAuthorizationStep
   repeat' (first | (dsimp only) | split)
   all_goals first
-    | exact OkP.error
-    | exact OkP.ok hs
+    | exact OkSatisfies.error
+    | exact OkSatisfies.ok hs
     | exact applyValidatedAuthorization_fresh (hs.of_machine_eq rfl)
 
 private theorem amsterdamAuthorizationLoop_fresh {rules context} :
     ∀ (auths : List Authorization) {s : Frame.State} {paid set}, s.Fresh →
-      OkP (fun x => x.1.Fresh) (amsterdamAuthorizationLoop rules context auths s paid set)
-  | [], _, _, _, hs => OkP.ok hs
+      OkSatisfies (fun x => x.1.Fresh) (amsterdamAuthorizationLoop rules context auths s paid set)
+  | [], _, _, _, hs => OkSatisfies.ok hs
   | auth :: rest, s, paid, set, hs => by
     unfold amsterdamAuthorizationLoop
-    exact OkP.bind (amsterdamAuthorizationStep_fresh hs) fun ⟨s1, p1, d1⟩ h1 =>
+    exact OkSatisfies.bind (amsterdamAuthorizationStep_fresh hs) fun ⟨s1, p1, d1⟩ h1 =>
       amsterdamAuthorizationLoop_fresh rest h1
 
 private theorem applyAmsterdamAuthorizations_fresh {rules} {input : Input} (hs : input.checkpoint.Fresh) :
-    OkP Frame.State.Fresh (applyAmsterdamAuthorizations rules input) := by
+    OkSatisfies Frame.State.Fresh (applyAmsterdamAuthorizations rules input) := by
   unfold applyAmsterdamAuthorizations
-  exact OkP.bind (amsterdamAuthorizationLoop_fresh _ hs) fun ⟨s1, p1, d1⟩ h1 => OkP.ok h1
+  exact OkSatisfies.bind (amsterdamAuthorizationLoop_fresh _ hs) fun ⟨s1, p1, d1⟩ h1 => OkSatisfies.ok h1
 
 private def MessageFresh (message : Message) (x : Message × Frame.State) : Prop :=
   x.1.context.calldata = message.context.calldata ∧ x.2.Fresh
 
 private theorem resolveAmsterdamCall_fresh {message : Message} {s : Frame.State} (hs : s.Fresh) :
-    OkP (MessageFresh message) (resolveAmsterdamCall message s) := by
+    OkSatisfies (MessageFresh message) (resolveAmsterdamCall message s) := by
   unfold resolveAmsterdamCall
-  exact OkP.bind (OkP.charge fun _ hu => hs.chargeGas hu) fun s1 h1 => OkP.ok ⟨rfl, h1.of_machine_eq (by dsimp only; split <;> rfl)⟩
+  exact OkSatisfies.bind (OkSatisfies.charge fun _ hu => hs.chargeGas hu) fun s1 h1 => OkSatisfies.ok ⟨rfl, h1.of_machine_eq (by dsimp only; split <;> rfl)⟩
 
 private theorem dispatchAmsterdam_fresh {rules} {message : Message} {s : Frame.State} (hs : s.Fresh) :
-    OkP (MessageFresh message) (dispatchAmsterdam rules message s) := by
+    OkSatisfies (MessageFresh message) (dispatchAmsterdam rules message s) := by
   unfold dispatchAmsterdam
   have hs' : (s.recordAccountRead message.context.block.rules message.context.recipient).Fresh :=
     hs.of_machine_eq rfl
   dsimp only
   split
   · split
-    · exact OkP.error
+    · exact OkSatisfies.error
     · split
-      · exact OkP.bind (OkP.charge fun _ hu => hs'.chargeStateGas hu) fun _ h => OkP.ok ⟨rfl, h⟩
-      · exact OkP.bind (OkP.ok hs') fun _ h => OkP.ok ⟨rfl, h⟩
+      · exact OkSatisfies.bind (OkSatisfies.charge fun _ hu => hs'.chargeStateGas hu) fun _ h => OkSatisfies.ok ⟨rfl, h⟩
+      · exact OkSatisfies.bind (OkSatisfies.ok hs') fun _ h => OkSatisfies.ok ⟨rfl, h⟩
   · split
-    · exact OkP.bind (OkP.charge fun _ hu => hs'.chargeStateGas hu) fun _ h => resolveAmsterdamCall_fresh h
-    · exact OkP.bind (OkP.ok hs') fun _ h => resolveAmsterdamCall_fresh h
+    · exact OkSatisfies.bind (OkSatisfies.charge fun _ hu => hs'.chargeStateGas hu) fun _ h => resolveAmsterdamCall_fresh h
+    · exact OkSatisfies.bind (OkSatisfies.ok hs') fun _ h => resolveAmsterdamCall_fresh h
 
 private theorem prepareAmsterdamFrame_fresh {rules} {input : Input} (hs : input.checkpoint.Fresh) :
-    OkP (MessageFresh input.message) (prepareAmsterdamFrame rules input) := by
+    OkSatisfies (MessageFresh input.message) (prepareAmsterdamFrame rules input) := by
   unfold prepareAmsterdamFrame
   dsimp only
   split
-  · refine OkP.bind (OkP.ok hs) fun s1 h1 => ?_
+  · refine OkSatisfies.bind (OkSatisfies.ok hs) fun s1 h1 => ?_
     exact dispatchAmsterdam_fresh h1
-  · refine OkP.bind (applyAmsterdamAuthorizations_fresh hs) fun s1 h1 => ?_
+  · refine OkSatisfies.bind (applyAmsterdamAuthorizations_fresh hs) fun s1 h1 => ?_
     exact dispatchAmsterdam_fresh h1.commitStateGas
 
 /-- Preparation keeps the calldata and a fresh checkpoint. -/
@@ -272,13 +272,13 @@ theorem prepare_fresh {input : Input} {message : Message} {checkpoint : Frame.St
     message.context.calldata = input.message.context.calldata ∧ checkpoint.Fresh := by
   unfold prepare at h
   split at h
-  · obtain ⟨c, f⟩ := (prepareWithoutStateGas_fresh input).elim h
+  · obtain ⟨c, f⟩ := (prepareWithoutStateGas_fresh input).holds h
     exact ⟨c, f hs⟩
   · rename_i rules _
     have hp := prepareAmsterdamFrame_fresh (rules := rules) hs
     split at h
     · cases h
-      exact hp.elim (by assumption)
+      exact hp.holds (by assumption)
     · cases h
     · cases h
 
@@ -381,27 +381,27 @@ theorem validateTransaction_data_le {block : BlockContext} {tx : Jaune.Transacti
 /-- Admission keeps the transaction's gas limit within the block's. -/
 theorem checkTransactionGasLimits_le {block : BlockContext} {bout : BlockOutput} {tx : Jaune.Transaction}
     {used : Nat} (h : checkTransactionGasLimits block bout tx = .ok used) : tx.gasLimit ≤ block.gasLimit := by
-  have key : TopLevel.OkP (fun _ => tx.gasLimit ≤ block.gasLimit) (checkTransactionGasLimits block bout tx) := by
+  have key : TopLevel.OkSatisfies (fun _ => tx.gasLimit ≤ block.gasLimit) (checkTransactionGasLimits block bout tx) := by
     unfold checkTransactionGasLimits
     dsimp only
     cases hs : block.rules.stateGas with
     | none =>
       simp only
       split
-      · exact TopLevel.OkP.error
+      · exact TopLevel.OkSatisfies.error
       · split
-        · exact TopLevel.OkP.error
-        · apply TopLevel.OkP.ok; omega
+        · exact TopLevel.OkSatisfies.error
+        · apply TopLevel.OkSatisfies.ok; omega
     | some st =>
       simp only
       split
-      · exact TopLevel.OkP.error
+      · exact TopLevel.OkSatisfies.error
       · split
-        · exact TopLevel.OkP.error
+        · exact TopLevel.OkSatisfies.error
         · split
-          · exact TopLevel.OkP.error
-          · apply TopLevel.OkP.ok; omega
-  exact key.elim h
+          · exact TopLevel.OkSatisfies.error
+          · apply TopLevel.OkSatisfies.ok; omega
+  exact key.holds h
 
 theorem Transaction.admit_bounds {block : BlockContext} {state : State} {bout : BlockOutput}
     {tx : Jaune.Transaction} {index : Nat} {admitted : Transaction.Admitted}
@@ -656,6 +656,18 @@ theorem KeptStep.gasLimit_lt {cfg : ChainConfig} {fork : Fork} {parent : BlockCh
   unfold stateTransitionCoreTyped at h
   obtain ⟨_, hv, _⟩ := Except.bind_eq_ok h
   exact validateHeader_gasLimit_lt (Except.mapError_eq_ok_iff.mp hv)
+
+/-- The configured importer witnesses a kept step: chain identity, fork lookup and the typed
+transition with its scheduled ommer checks. -/
+theorem KeptStep.of_transition {cfg : ChainConfig} {parent post : BlockChain} {block : Block}
+    (accepted : stateTransitionUsing cfg parent block = .ok post) :
+    ∃ fork, KeptStep cfg fork parent block post := by
+  obtain ⟨fork, hf, hs⟩ := stateTransitionUsing_run accepted
+  refine ⟨fork, ?_, hf, stateTransitionScheduledTyped_eq_ok_iff.mp hs⟩
+  unfold stateTransitionUsing at accepted
+  obtain ⟨u, chain, _⟩ := Except.bind_eq_ok accepted
+  cases u
+  exact Except.mapError_eq_ok_iff.mp chain
 
 /-- Every top-level frame a kept history enters is entered. -/
 theorem KeptHistory.roots_entered {cfg : ChainConfig} {start post : BlockChain} {blocks : List KeptBlock}
