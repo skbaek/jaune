@@ -14,7 +14,7 @@
 #
 # A new occurrence anywhere -- in an instruction site, a charging helper, or a
 # new lemma -- fails the gate until it is classified here. That is the point:
-# once `BenvStat` carries a `Fork`, every reachable machine's legacy-lane
+# once `BlockContext` carries a `Fork`, every reachable machine's legacy-lane
 # schedule is `pragueGasSchedule`, whose three numbers equal these globals by
 # `rfl`, so a site that read the global instead of the selected record would
 # compute the same number on every machine and no evaluation guard could see

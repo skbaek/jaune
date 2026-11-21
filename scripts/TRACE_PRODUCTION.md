@@ -2,7 +2,7 @@
 
 `jaune-trace REQUEST.json NEW_OUTPUT_DIRECTORY` runs one explicitly identified
 message or signed transaction. Message mode uses `Jaune.Trace.runFrame`;
-transaction mode uses `Jaune.TraceTransaction.runTransaction`. Both actual
+transaction mode uses `Jaune.Trace.runTransaction`. Both actual
 drivers carry kernel-checked execution erasure certificates to the existing
 public operations. The executable is a default build target and remains
 outside `Jaune.lean`'s import closure.
@@ -95,7 +95,7 @@ transaction access-list preparation here.
 ## Signed transaction boundary
 
 Use `transaction` instead of `message` for one signed JSON transaction in the
-existing `T8n.decodeTx` format (types 0–4, including its refusal/validation
+existing `T8n.decodeTransaction` format (types 0–4, including its refusal/validation
 rules). The existing allocation/environment decoders are shared. For example,
 using a repository fixture as real signed input:
 

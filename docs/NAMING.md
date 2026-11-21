@@ -76,8 +76,7 @@ These are not short forms: `generic`, `call` and `outer` stay ordinary words,
 and the consensus pyspec name `ssz_generic` is untouched. A retired name is
 the whole spelling, registered in the map's `retired_names` (section 3) and
 rejected by the lint (section 5). `genericCall*`, `genericCreate*` and
-`incorporateChild*` are registered as pending until the commit that removes
-their last declarations.
+`incorporateChild*` were pending until the G2b delete commit.
 
 ## 2. Allowed abbreviations
 
@@ -471,12 +470,14 @@ patterns retain the dot. Explicit/custom eliminators, compound case labels
 and ambiguous or unavailable provenance remain unresolved; no spelling-based
 exception suppresses these reports.
 
-`scripts/tests/naming/RealSharedField.lean` imports the actual `Jaune.Machine`
-module. Its optional `RealSharedField` build target checks inferred projections,
-a transaction literal, Tx and Msg record updates, and downstream `simp` proofs.
-For the real rename pilot, export references for both Machine and this client,
-apply one map to both files in a disposable worktree, then build the client
-against the renamed Machine artifact. Compare both modules with the fidelity
+`scripts/tests/naming/RealSharedField.lean` imports the actual
+`Jaune.MessageCall.Context` module. Its optional `RealSharedField` build target checks inferred projections,
+a transaction literal, `Transaction` and `Message` record updates, and
+downstream `simp` proofs.
+For the real rename pilot, export references for both
+`Jaune.MessageCall.Context` and this client, apply one map to both files in a
+disposable worktree, then build the client against the renamed `Context`
+artifact. Compare both modules with the fidelity
 checker and retain the build/import receipts. This two-module pilot does not
 establish complete migration coverage for every other client.
 
