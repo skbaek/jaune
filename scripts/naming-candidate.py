@@ -209,7 +209,7 @@ def extend_items(merged, data):
         merged.setdefault('_pools', []).extend(data['_pools'])
     if '_special_ids' in data:
         merged.setdefault('_special_ids', set()).update(data['_special_ids'])
-    for field in ('quotation_sites', 'module_sources', 'module_decls', 'module_commands'):
+    for field in ('quotation_sites', 'module_sources', 'module_decls', 'module_commands', 'import_modules'):
         merged.setdefault(field, {}).update(data.get(field, {}))
 
 
@@ -1311,6 +1311,19 @@ def compare_components(before, after, mapping, inventory=None, reviewed=None, co
         before_owners=b_owners, after_owners=a_owners,
         before_holders=b_holders, after_holders=a_holders,
     )
+    record_cache = {}
+
+    def before_record(name):
+        """The before kernel record of `name`, read from its owner's export
+        (a `#guard_msgs` field-notation token names a constant of another
+        module, outside the compared environment)."""
+        module = b_owners.get(name)
+        if module is None or module not in before['export_paths']:
+            return None
+        if module not in record_cache:
+            record_cache[module] = FIDELITY.read_exports([before['export_paths'][module]])['constants']
+        return record_cache[module].get(name)
+    global_context['before_record'] = before_record
 
     uf_parent = {}
     def uf_find(x):

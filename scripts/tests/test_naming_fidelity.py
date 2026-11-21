@@ -1357,5 +1357,166 @@ class NamingFidelityTests(unittest.TestCase):
             self.run_check()
 
 
+    # --- U9 N4 extensions (master ruling R5): each admits only exact map images.
+
+    @staticmethod
+    def name_chain(name, heads=('Lean.Name.mkStr', 'Lean.Name.mkNum'), ofnat=False):
+        e = ['const', ['name', 'Lean.Name.anonymous'], []]
+        for part in name.split('.'):
+            if part.isdigit():
+                num = ['nat', int(part)]
+                if ofnat:
+                    num = ['app', ['app', ['app', ['const', ['name', 'OfNat.ofNat'], [0]], ['const', ['name', 'Nat'], []]],
+                                   num], ['app', ['const', ['name', 'instOfNatNat'], []], num]]
+                e = ['app', ['app', ['const', ['name', heads[1]], []], e], num]
+            else:
+                e = ['app', ['app', ['const', ['name', heads[0]], []], e], ['str', part]]
+        return e
+
+    def test_chained_private_name_literals_follow_the_map(self):
+        # A private syntax kind's literal is a mkStr/mkNum chain (its `.0.`);
+        # the module row and the namespace row rename it as they rename the kind.
+        rows = self.entries(('N.Old', 'N.New', 'namespace', {}), ('M', 'M2', 'module', {}))
+        kind_b, kind_a = '_private.M.0.N.Old.tac', '_private.M2.0.N.New.tac'
+        def run(before_lit, after_lit, body=7, ofnat=False):
+            parser = lambda lit: dict(kernel=['definition', 'safe', ['app', ['const', ['name', 'P.node'], []],
+                                                                      self.name_chain(lit, ofnat=ofnat)]], attributes={})
+            self.before = snapshot({'N.Old.a': constant(), kind_b: constant(body), 'gen': parser(before_lit)}, ['N.Old.a'])
+            self.after = snapshot({'N.New.a': constant(), kind_a: constant(7), 'gen': parser(after_lit)}, ['N.New.a'])
+            self.renames = rows
+            return self.run_check()
+        verdict = run(kind_b, kind_a)
+        self.assertEqual([r[1:] for r in verdict['derived_literals_respelled']],
+                         [[kind_b, kind_a, 'chained name literal']])
+        self.assertEqual(run(kind_b, kind_a, ofnat=True)['status'], 'OK')
+        # Control: a respelling that is not the map image fails.
+        with self.assertRaises(CHECK.Mismatch):
+            run(kind_b, '_private.M2.0.N.Other.tac')
+        # Control: the numeric component must stay (it is the chain's own numeral).
+        with self.assertRaises(CHECK.Mismatch):
+            run(kind_b, '_private.M2.1.N.New.tac')
+        # Control: a literal left unrespelled fails.
+        with self.assertRaises(CHECK.Mismatch):
+            run(kind_b, kind_b)
+        # Control: a body change beside the literal still fails.
+        with self.assertRaises(CHECK.Mismatch):
+            run(kind_b, kind_a, body=8)
+        # Control: a rebuilt name may use only the chain's own numerals.
+        _, numerals, heads = CHECK._name_chain(self.name_chain(kind_b))
+        self.assertIsNotNone(CHECK._name_chain_expr(kind_a, numerals, heads))
+        self.assertIsNone(CHECK._name_chain_expr('_private.M2.1.N.New.tac', numerals, heads))
+
+    def test_hand_built_name_chains_are_data(self):
+        # A mkStr chain that mkStrK could write is never a quotation: runtime data.
+        lit = self.name_chain('N.old')
+        self.assertIsNotNone(CHECK._name_chain(lit))
+        self.assertFalse(CHECK._literal_chain(CHECK._name_chain(lit)))
+        def gen(e):
+            return dict(kernel=['definition', 'safe', e], attributes={})
+        def run(after_name):
+            self.before = snapshot({'N.old': constant(), 'N.m': gen(self.name_chain('N.old'))}, ['N.old', 'N.m'])
+            self.after = snapshot({'N.new': constant(), 'N.m': gen(self.name_chain(after_name))}, ['N.new', 'N.m'])
+            return self.run_check()
+        # Data is compared as written: kept, it passes; respelled, it fails.
+        self.assertEqual(run('N.old')['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run('N.new')
+        # The constructor form (a name pattern) is a literal at any length; a
+        # mixed chain is refused.
+        pattern = self.name_chain('N.old', heads=('Lean.Name.str', 'Lean.Name.num'))
+        self.assertTrue(CHECK._literal_chain(CHECK._name_chain(pattern)))
+        mixed = self.name_chain('N.0.old', heads=('Lean.Name.str', 'Lean.Name.mkNum'))
+        self.assertIsNone(CHECK._name_chain(mixed))
+
+    def test_private_preresolution_decodes_numeric_components(self):
+        chain = self.name_chain('_private.M.0.N.f')
+        self.assertEqual(CHECK._name(chain), ['_private', 'M', '0', 'N', 'f'])
+        self.assertEqual(CHECK._name(self.name_chain('_private.M.0.N.f', ofnat=True)), ['_private', 'M', '0', 'N', 'f'])
+        decl = ['app', ['app', ['const', ['name', 'Lean.Syntax.Preresolved.decl'], []], chain],
+                ['app', ['const', ['name', 'List.nil'], []], ['const', ['name', 'String'], []]]]
+        self.assertEqual(CHECK._preresolved(decl), ['decl', ['name', '_private.M.0.N.f'], []])
+        # Control: a numeric component that is not a literal does not decode.
+        bad = ['app', ['app', ['const', ['name', 'Lean.Name.mkNum'], []], self.name_chain('M')], ['bvar', 0]]
+        self.assertIsNone(CHECK._name(bad))
+
+    def union_audit(self, prefix):
+        return ['syntax', 'Jaune.AxiomAudit.unionAxiomsOfModules',
+                [['atom', '#union_axioms_of_modules'], ['name', prefix], ['syntax', 'null', []]]]
+
+    def test_union_audit_prefix_follows_module_rows_with_its_population(self):
+        rows = self.entries(('N.old', 'N.new', 'declaration', {}), ('P', 'P2', 'module', {}),
+                            ('P.X', 'P2.X', 'module', {}), ('A', 'B', 'module', {}))
+        def run(after_prefix, after_imports, before_imports=('P', 'P.X', 'Q')):
+            self.setUp()
+            self.before['checks'], self.after['checks'] = [self.union_audit('P')], [self.union_audit(after_prefix)]
+            self.before['item_modules'], self.after['item_modules'] = {'checks': ['A']}, {'checks': ['B']}
+            self.before['import_modules'] = {'A': list(before_imports)}
+            self.after['import_modules'] = {'B': list(after_imports)}
+            self.renames = rows
+            return self.run_check()
+        verdict = run('P2', ['P2', 'P2.X', 'Q'])
+        self.assertIn(['A', 'P', 'P2', 'union audit module prefix'], verdict['derived_literals_respelled'])
+        # Control: a literal that is not the module row's image fails.
+        with self.assertRaises(CHECK.Mismatch):
+            run('P3', ['P2', 'P2.X', 'Q'])
+        # Control: the after population gained a module the rows do not account for.
+        with self.assertRaises(CHECK.Mismatch):
+            run('P2', ['P2', 'P2.X', 'P2.Z', 'Q'])
+        # Control: a module under the prefix that the rows leave behind.
+        with self.assertRaises(CHECK.Mismatch):
+            run('P2', ['P2', 'P2.X', 'Q'], before_imports=('P', 'P.X', 'P.Y', 'Q'))
+        # Control: without import records the literal is compared as written.
+        self.setUp()
+        self.before['checks'], self.after['checks'] = [self.union_audit('P')], [self.union_audit('P2')]
+        self.before['item_modules'], self.after['item_modules'] = {'checks': ['A']}, {'checks': ['B']}
+        self.renames = rows
+        with self.assertRaises(CHECK.Mismatch):
+            self.run_check()
+
+    def test_guard_msgs_field_notation_follows_constructor_and_method_rows(self):
+        ctor = lambda: dict(kernel=dict(type=['const', ref('N.Op'), []], universes=0,
+                                        payload=['constructor', ref('N.Op'), 0, 0, 0, False]), attributes={})
+        def run(after_text, rows=None, add=ctor):
+            self.before = snapshot({'N.Op': constant(5), 'N.Op.add': add(), 'N.Op.rinst': constant(2)},
+                                   ['N.Op', 'N.Op.add', 'N.Op.rinst'])
+            self.after = snapshot({'N.Op': constant(5), 'N.Op.plus': add(), 'N.Op.toPlain': constant(2)},
+                                  ['N.Op', 'N.Op.plus', 'N.Op.toPlain'])
+            self.renames = self.entries(*(rows or [('N.Op.add', 'N.Op.plus', 'declaration', {}),
+                                                   ('N.Op.rinst', 'N.Op.toPlain', 'declaration', {})]))
+            self.before['checks'] = self.guard('error: Op.add.rinst x-/')
+            self.after['checks'] = self.guard(after_text)
+            return self.run_check()
+        self.assertEqual(run('error: Op.plus.toPlain x-/')['status'], 'OK')
+        # Control: the field part must follow the method's row.
+        with self.assertRaises(CHECK.Mismatch):
+            run('error: Op.plus.rinst x-/')
+        with self.assertRaises(CHECK.Mismatch):
+            run('error: Op.add.toPlain x-/')
+        # Control: a change beyond the respelling still fails.
+        with self.assertRaises(CHECK.Mismatch):
+            run('error: Op.plus.toPlain y-/')
+        # Control: `P` that is not a constructor gives no field respelling.
+        with self.assertRaises(CHECK.Mismatch):
+            run('error: Op.plus.toPlain x-/', add=lambda: constant(3))
+        # Control: a method moved out of the type's namespace gives none either.
+        self.before = snapshot({'N.Op': constant(5), 'N.Op.add': ctor(), 'N.Op.rinst': constant(2)},
+                               ['N.Op', 'N.Op.add', 'N.Op.rinst'])
+        comparison = CHECK.Comparison(self.before, self.before, self.entries(
+            ('N.Op.add', 'N.Op.plus', 'declaration', {}), ('N.Op.rinst', 'N.Other.toPlain', 'declaration', {})))
+        self.assertEqual(comparison.respell_message('Op.add.rinst', 'guard_msgs'), 'Op.add.rinst')
+
+    def test_root_declaration_ids_spell_the_whole_name(self):
+        def spelled(text, name):
+            source = f'theorem {text} : True'
+            return CHECK.spelled_name(source, 8, 8 + len(text), name)
+        self.assertTrue(spelled('_root_.N.B.f', '_private.M.0.N.B.f'))
+        self.assertTrue(spelled('_root_.N.B.f', 'N.B.f'))
+        self.assertTrue(spelled('B.f', 'N.B.f'))
+        # Control: under `_root_` a suffix is not enough, and other names fail.
+        self.assertFalse(spelled('_root_.B.f', 'N.B.f'))
+        self.assertFalse(spelled('_root_.N.B.g', 'N.B.f'))
+        self.assertFalse(spelled('_root_', 'N.B.f'))
+
+
 if __name__ == '__main__':
     unittest.main()

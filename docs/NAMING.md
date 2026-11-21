@@ -833,6 +833,38 @@ or `test_naming_candidate.py` that fails without it:
   `map_sha256` and `snapshot_sha256` are the digests of the compared map and
   before snapshot.
 
+G2b U9 extensions (master ruling R5, 2026-11-21); each admits only exact map
+images, and each has a unit test with controls in
+`scripts/tests/test_naming_fidelity.py` that fail without it:
+- Chained `Name` literals. Lean writes a name with a numeric component
+  (every private name's `.0.`) or more than eight components as a
+  `Name.mkStr`/`Name.mkNum` chain, and a name pattern puts a
+  `Name.str`/`Name.num` chain into a matcher type. Such a chain is decoded
+  whole and follows the `Name` literal rules above (exact old constant, else
+  rule D, with the single-backtick data guard), then is rebuilt as Lean
+  writes the new name: `mkStrN` when it fits, otherwise a chain in the same
+  encoding with the chain's own numerals. A chain mixing the two encodings,
+  a numeral that is not a literal, or a `mkStr` chain `mkStrN` could have
+  written (built by hand, runtime data) stays literal. Respellings are listed
+  in the verdict (reason `chained name literal` or `chained namespace
+  literal`). A quoted identifier's pre-resolution decodes `mkNum` too, so a
+  private declaration is compared by its full name.
+- `#union_axioms_of_modules P`. `P` is read with `getId` and selects every
+  imported module named `P` or `P.…`. Under a module row `P -> P'` the
+  before literal compares as `P'` only when the population follows the module
+  rows: the holding module's imports under `P`, each mapped by its module row,
+  are exactly the renamed holding module's imports under `P'`. Otherwise it
+  stays literal (reason `union audit module prefix`).
+- `#guard_msgs` generalized field notation. Lean prints `T.f c` as `c.f`. A
+  token `P.f`, where no constant ends with the whole token and every constant
+  `P` may denote is a constructor of the inductive `T`, respells to `P'.f'`:
+  `P'` is the names-only respelling of `P`, and the map takes `T.f` to
+  `T'.f'` with `T'` the image of `T`. The same rule moves a golden through
+  `naming-pins.py --guard-msgs`.
+- A declaration id spelled `_root_.A.b` spells the whole name `A.b` (or the
+  user part of a private name): it is an authored root, not a compiler-named
+  constant.
+
 `naming-candidate.py compare --collect-all` reports every mismatch, in every
 environment, in one run instead of stopping at the first (normalization errors
 are recorded per item); the verdict still fails on any mismatch.

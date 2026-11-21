@@ -163,18 +163,141 @@ def _lit(e):
     return e[1] if isinstance(e, list) and len(e) == 2 and e[0] == 'str' else None
 
 
+NAME_STR = ('Lean.Name.mkStr', 'Lean.Name.str')
+NAME_NUM = ('Lean.Name.mkNum', 'Lean.Name.num')
+# Each encoding pairs its string and numeric heads: `toExpr`/quotations write
+# `mkStr`/`mkNum`, name patterns (matcher types) the constructors `str`/`num`.
+NAME_FAMILIES = {('Lean.Name.mkStr', 'Lean.Name.mkNum'), ('Lean.Name.str', 'Lean.Name.num')}
+
+
+def _numeral(e):
+    """A `Nat` literal: a raw `nat` literal or `OfNat.ofNat _ (nat n) _`, else None."""
+    if isinstance(e, list) and len(e) == 2 and e[0] == 'nat' and isinstance(e[1], int) and e[1] >= 0:
+        return e[1]
+    head, args = _unwind(e)
+    if head == 'OfNat.ofNat' and len(args) == 3 and isinstance(args[1], list) and args[1][:1] == ['nat']:
+        return _numeral(args[1])
+    return None
+
+
 def _name(e):
-    """Decode an elaborated `Lean.Name` expression, or None."""
+    """Decode an elaborated `Lean.Name` expression, or None. A numeric
+    component (`Name.mkNum`, the `.0.` of a private prefix) decodes to its
+    decimal spelling, so a private name reads as its full dotted name."""
     head, args = _unwind(e)
     if head == 'Lean.Name.anonymous' and not args:
         return []
-    if head in ('Lean.Name.mkStr', 'Lean.Name.str') and len(args) == 2:
+    if head in NAME_STR and len(args) == 2:
         prefix, part = _name(args[0]), _lit(args[1])
         return None if prefix is None or part is None else prefix + [part]
+    if head in NAME_NUM and len(args) == 2:
+        prefix, number = _name(args[0]), _numeral(args[1])
+        return None if prefix is None or number is None else prefix + [str(number)]
     if head and head.startswith('Lean.Name.mkStr') and head[len('Lean.Name.mkStr'):].isdigit():
         parts = [_lit(a) for a in args]
         return None if None in parts else parts
     return None
+
+
+def _head_node(e):
+    while isinstance(e, list) and len(e) == 3 and e[0] == 'app':
+        e = e[1]
+    return e
+
+
+def _name_chain(e):
+    """A chained `Name` literal down to `Lean.Name.anonymous`: Lean's
+    `toExpr` writes `Name.mkStr`/`Name.mkNum` chains for a name with a numeric
+    component (every private name) or more than eight components; name
+    patterns put `Name.str`/`Name.num` chains into matcher types.
+
+    Returns (components, numerals, heads): the components as strings (a
+    numeric one as its decimal spelling), the numeral node of each numeric
+    value, and the head node of each kind (`str`, `num`, `anonymous`).
+    Anything else, including a string component that is empty, dotted,
+    escaped or all digits, or a chain mixing the two encodings, is None."""
+    comps, numerals, heads = [], {}, {}
+    cur = e
+    while True:
+        head, args = _unwind(cur)
+        if head == 'Lean.Name.anonymous' and not args:
+            heads['anonymous'] = cur
+            break
+        if len(args) != 2 or head not in NAME_STR + NAME_NUM:
+            return None
+        kind = 'str' if head in NAME_STR else 'num'
+        if heads.setdefault(kind, _head_node(cur)) != _head_node(cur):
+            return None
+        if kind == 'str':
+            part = _lit(args[1])
+            if not isinstance(part, str) or not part or '.' in part or '«' in part or part.isdigit():
+                return None
+            comps.append(part)
+        else:
+            number = _numeral(args[1])
+            if number is None or numerals.setdefault(str(number), args[1]) != args[1]:
+                return None
+            comps.append(str(number))
+        cur = args[0]
+    if 'str' in heads and 'num' in heads and (heads['str'][1][1], heads['num'][1][1]) not in NAME_FAMILIES:
+        return None
+    comps.reverse()
+    return comps, numerals, heads
+
+
+def _constructor_inductive(record):
+    """The inductive type of a constructor's kernel record (export or decoded
+    form), else None."""
+    kernel = record.get('kernel') if isinstance(record, dict) else None
+    payload = kernel.get('payload') if isinstance(kernel, dict) else None
+    if (isinstance(payload, list) and len(payload) >= 2 and payload[0] == 'constructor' and
+            isinstance(payload[1], list) and len(payload[1]) == 2 and payload[1][0] == 'name'):
+        return payload[1][1]
+    return None
+
+
+def _literal_chain(chain):
+    """Whether a decoded chain is one Lean writes for a name literal: the
+    constructor form (a name pattern), or a `toExpr` chain that `mkStrK`
+    could not express. A `mkStr` chain of at most eight string components is
+    built by hand (runtime data), never by a quotation."""
+    comps, _, heads = chain
+    if 'str' in heads and heads['str'][1][1] == 'Lean.Name.mkStr' or 'num' in heads and heads['num'][1][1] == 'Lean.Name.mkNum':
+        return len(comps) > 8 or any(c.isdigit() for c in comps)
+    return True
+
+
+def _name_chain_expr(new_full, numerals, heads):
+    """`new_full` in the encoding of the decoded chain, as Lean writes it:
+    `toExpr` (`mkStr` heads) uses `Lean.Name.mkStrK` for a name of at most
+    eight string components and a chain otherwise; the constructor form
+    always chains. A numeric component must be one of the chain's own
+    numerals. None when the name cannot be written from the chain's parts."""
+    parts = new_full.split('.')
+    if not all(parts):
+        return None
+    str_head = heads.get('str')
+    to_expr = (str_head is not None and str_head[1][1] == 'Lean.Name.mkStr') or (
+        str_head is None and heads.get('num') is not None and heads['num'][1][1] == 'Lean.Name.mkNum')
+    if to_expr and len(parts) <= 8 and not any(p.isdigit() for p in parts):
+        levels = str_head[2] if str_head is not None else []
+        out = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], levels]
+        for part in parts:
+            out = ['app', out, ['str', part]]
+        return out
+    if 'anonymous' not in heads:
+        return None
+    out = heads['anonymous']
+    for part in parts:
+        if part.isdigit():
+            if part not in numerals or 'num' not in heads:
+                return None
+            out = ['app', ['app', heads['num'], out], numerals[part]]
+        else:
+            if 'str' not in heads:
+                return None
+            out = ['app', ['app', heads['str'], out], ['str', part]]
+    return out
 
 
 def _list(e):
@@ -615,6 +738,9 @@ def collect_const_refs(value, found=None, visited=None):
                 found.add(cur[2])
             if len(cur) == 3 and cur[0] == 'app':
                 lit = _mkstr_literal(cur)
+                if lit is None:
+                    chain = _name_chain(cur)
+                    lit = '.'.join(chain[0]) if chain and chain[0] else None
                 if lit is not None:
                     found.add(lit)
             for x in cur:
@@ -660,6 +786,10 @@ def spelled_name(source, a, b, name):
     declarations at a keyword. Their names derive from other names, so a rename
     changes them without any source edit: they are matched by kernel graph,
     like generated constants, not by the map.
+
+    A declId spelled from the root (`_root_.A.b`) spells the whole name:
+    the leading `_root_` is not a component, and the rest must equal the
+    (user part of the) name exactly.
     """
     spans = APPLY.components(source, a, b)
     if spans is None:
@@ -667,6 +797,8 @@ def spelled_name(source, a, b, name):
     spelled = [source[x:y] for x, y in spans]
     private = MAP.split_private(name)
     parts = APPLY.split_name(private[2] if private else name)
+    if spelled and spelled[0] == '_root_':
+        return len(spelled) > 1 and parts == spelled[1:]
     return parts[-len(spelled):] == spelled
 
 
@@ -1141,6 +1273,17 @@ class Comparison:
                 if not ready:
                     if len(cur) == 3 and cur[0] == 'app':
                         lit = _mkstr_literal(cur)
+                        chain = None
+                        if lit is None:
+                            # A chained literal (a private name's `.0.`, or a
+                            # name longer than eight components): decoded
+                            # whole, under the same rules, and rebuilt in its
+                            # own encoding (master ruling R5 (a), U9).
+                            chain = _name_chain(cur)
+                            if chain is not None and len(chain[0]) >= 2 and _literal_chain(chain):
+                                lit = '.'.join(chain[0])
+                            else:
+                                chain = None
                         if lit is not None:
                             new_full = self.name(lit) if lit in known else lit
                             why = 'name literal'
@@ -1148,7 +1291,11 @@ class Comparison:
                                 new_full, why = self.namespace_literal(lit, name), 'namespace literal'
                             if new_full != lit and '«' not in new_full and not self.data_literal(name, lit, new_full):
                                 parts = new_full.split('.')
-                                if len(parts) <= 8:
+                                out = None
+                                if chain is not None:
+                                    out = _name_chain_expr(new_full, chain[1], chain[2])
+                                    why = 'chained ' + why
+                                elif len(parts) <= 8:
                                     # Reach the outermost head node (`const Lean.Name.mkStrK levels`).
                                     head = cur
                                     while isinstance(head, list) and len(head) == 3 and head[0] == 'app':
@@ -1156,6 +1303,7 @@ class Comparison:
                                     out = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], head[2]]
                                     for part in parts:
                                         out = ['app', out, ['str', part]]
+                                if out is not None:
                                     self.respelled_literals.append([name, lit, new_full, why])
                                     memo[cid] = (out, True)
                                     continue
@@ -2032,6 +2180,38 @@ class Comparison:
 
     GUARD_TOKEN = re.compile(r"(?<![\w.'?!])[A-Za-z_][\w'?!]*(?:\.[A-Za-z_][\w'?!]*)*")
 
+    UNION_AUDIT = 'Jaune.AxiomAudit.unionAxiomsOfModules'
+
+    def union_audit_prefix(self, item, module):
+        """`#union_axioms_of_modules P` reads `P` with `getId` (a literal
+        name, compared as written) and audits every imported module named `P`
+        or `P.…`. Under a module row `P -> P'` the before literal respells to
+        `P'` exactly when that population follows the module rows: the before
+        modules under `P` (imports of `module`), each mapped by its module
+        row, are exactly the after modules under `P'` (imports of `module`'s
+        image). Otherwise, or without import records, it stays literal
+        (master ruling R5 (c), U9)."""
+        if not (isinstance(item, list) and len(item) == 3 and item[:2] == ['syntax', self.UNION_AUDIT] and
+                isinstance(item[2], list) and len(item[2]) >= 2 and isinstance(item[2][1], list) and
+                len(item[2][1]) == 2 and item[2][1][0] == 'name' and isinstance(item[2][1][1], str)):
+            return item
+        prefix = item[2][1][1]
+        new = self.mapping.module(prefix)
+        if new == prefix or module is None:
+            return item
+        before_imports = (self.before.get('import_modules') or {}).get(module)
+        after_imports = (self.after.get('import_modules') or {}).get(self.mapping.module(module))
+        if before_imports is None or after_imports is None:
+            return item
+        def under(name, p):
+            return name == p or name.startswith(p + '.')
+        was = {self.mapping.module(m) for m in before_imports if under(m, prefix)}
+        now = {m for m in after_imports if under(m, new)}
+        if not was or was != now:
+            return item
+        self.respelled_literals.append([module, prefix, new, 'union audit module prefix'])
+        return [item[0], item[1], [item[2][0], ['name', new]] + item[2][2:]]
+
     def respell_message(self, text, path):
         """A `#guard_msgs` expected text with every whole qualified-name token
         respelled by the map, under the names-only rule of `respell` (master
@@ -2057,6 +2237,31 @@ class Comparison:
                 parts = APPLY.split_name(private[2] if private else base)
                 self._after_suffixes.update('.'.join(parts[-k:]) for k in range(1, len(parts) + 1))
 
+        constants = self.before.get('constants') or {}
+
+        def field_notation(token):
+            """Generalized field notation (master ruling R5 (c-guard), U9):
+            Lean prints `T.f c` as `c.f`. A token `P.f` whose `P` denotes a
+            constructor `c` of the inductive `T` respells to `P'.f'`, where
+            `P'` is the names-only respelling of `P` and the map takes
+            `T.f` to `T'.f'` with `T'` the image of `T`. Every constant that
+            `P` may denote must qualify; otherwise nothing (kept as written)."""
+            head, leaf = token.rsplit('.', 1)
+            found = set()
+            for decl in self._suffixes.get(head, ()):
+                record = constants.get(decl)
+                if record is None and self._global_context and self._global_context.get('before_record'):
+                    record = self._global_context['before_record'](decl)
+                inductive = _constructor_inductive(record)
+                method = f'{inductive}.{leaf}' if inductive else None
+                if method is None or method not in self.all_before_constants:
+                    return set()
+                new_method = self.name(method)
+                if '.' not in new_method or new_method.rsplit('.', 1)[0] != self.name(inductive):
+                    return set()
+                found.add(self.respell(head, decl, path) + '.' + new_method.rsplit('.', 1)[1])
+            return found
+
         def one(match):
             token = match.group(0)
             if token in self._after_suffixes:
@@ -2066,6 +2271,8 @@ class Comparison:
             spellings = set()
             for decl in self._suffixes.get(token, ()):
                 spellings.add(self.respell(token, decl, path))
+            if not spellings and '.' in token:
+                spellings = field_notation(token)
             if len(spellings) > 1:
                 raise Mismatch(f'{path}: #guard_msgs token {token!r} respells ambiguously: {sorted(spellings)}')
             return spellings.pop() if spellings else token
@@ -2436,6 +2643,8 @@ class Comparison:
                 counted = Counter()
                 for index, (m, item) in enumerate(zip(owners, items)):
                     try:
+                        if key == 'checks' and side == 'before':
+                            item = self.union_audit_prefix(item, m)
                         counted[(self.component(m, side), dag_digest(self.normalize(item, side)))] += 1
                     except Mismatch as error:
                         if not self.collect:
