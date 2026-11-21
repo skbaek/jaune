@@ -189,13 +189,13 @@ other outcome, including success, into a build error. -/
 -- `DIV` is not a member of the arithmetic family, so the `ADD` rule cannot describe its step.
 /--
 error: Type mismatch
-  Checked.SymbolicArith.step_success r Checked.SymbolicArith.Op.add x y rest stack gas room
+  SymbolicArithmetic.step_success r SymbolicArithmetic.Op.add x y rest stack gas room
 has type
-  Checked.NextOp.step r (NextOp.plain Checked.SymbolicArith.Op.add.rinst) =
-    Checked.Step.next (r.pc + 1) (Checked.SymbolicArith.post Checked.SymbolicArith.Op.add x y rest r.state)
+  NextOp.step r (NextOp.plain SymbolicArithmetic.Op.add.toPlainOp) =
+    Step.next (r.pc + 1) (SymbolicArithmetic.post SymbolicArithmetic.Op.add x y rest r.state)
 but is expected to have type
-  Checked.NextOp.step r (NextOp.plain PlainOp.div) =
-    Checked.Step.next (r.pc + 1) (Checked.SymbolicArith.post Checked.SymbolicArith.Op.add x y rest r.state)
+  NextOp.step r (NextOp.plain PlainOp.div) =
+    Step.next (r.pc + 1) (SymbolicArithmetic.post SymbolicArithmetic.Op.add x y rest r.state)
 -/
 #guard_msgs in
 example (r : Frame.Running) (x y : U256) (rest : List U256)
