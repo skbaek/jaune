@@ -13,7 +13,7 @@ assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 FILES = ("scripts/assurance-manifest.json", "scripts/ExecutionAxioms.lean",
-         "Jaune/SymbolicPush.lean", "Jaune/SymbolicArith.lean")
+         "Jaune/SymbolicPush.lean", "Jaune/SymbolicArithmetic.lean")
 
 
 class AssuranceManifestTests(unittest.TestCase):
@@ -39,7 +39,7 @@ class AssuranceManifestTests(unittest.TestCase):
 
     def test_deleted_row_fails(self):
         self.edit("scripts/ExecutionAxioms.lean",
-                  "#expect_axioms Jaune.SymbolicArith.prepend ", "-- ")
+                  "#expect_axioms Jaune.SymbolicArithmetic.prepend ", "-- ")
         with self.assertRaisesRegex(ValueError, "without row"):
             MODULE.check(self.root)
 
@@ -47,15 +47,15 @@ class AssuranceManifestTests(unittest.TestCase):
         path = self.root / "scripts/assurance-manifest.json"
         manifest = json.loads(path.read_text(encoding="utf-8"))
         manifest["entries"] = [e for e in manifest["entries"]
-                               if e["declaration"] != "Jaune.Exec.strong_rec"]
+                               if e["declaration"] != "Jaune.Frame.Run.strongRec"]
         path.write_text(json.dumps(manifest), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "without manifest entry"):
             MODULE.check(self.root)
 
     def test_unaudited_rule_fails(self):
-        self.edit("Jaune/SymbolicArith.lean", "end Jaune.SymbolicArith",
-                  "@[simp] theorem extra : True := trivial\n\nend Jaune.SymbolicArith")
-        with self.assertRaisesRegex(ValueError, "Jaune.SymbolicArith.extra"):
+        self.edit("Jaune/SymbolicArithmetic.lean", "end Jaune.SymbolicArithmetic",
+                  "@[simp] theorem extra : True := trivial\n\nend Jaune.SymbolicArithmetic")
+        with self.assertRaisesRegex(ValueError, "Jaune.SymbolicArithmetic.extra"):
             MODULE.check(self.root)
 
 
