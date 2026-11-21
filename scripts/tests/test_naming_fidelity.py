@@ -1741,7 +1741,10 @@ class NamingFidelityTests(unittest.TestCase):
         self.assertEqual(CHECK.read_r19_sites(raw()), {('M', 'N.C.k', 'a', 'b')})
         for bad in (raw(schema_version=2), raw(sites={}), raw(extra=1), raw(sites=[row, row]),
                     raw(sites=[dict(row, review='')]), raw(sites=[dict(row, review='a\nb')]),
-                    raw(sites=[{k: v for k, v in row.items() if k != 'review'}]), raw(sites=[dict(row, line=1)])):
+                    raw(sites=[{k: v for k, v in row.items() if k != 'review'}]), raw(sites=[dict(row, line=1)]),
+                    # Review 6 note: blank, carriage return, a bool or non-int version.
+                    raw(sites=[dict(row, holder='   ')]), raw(sites=[dict(row, review='a\rb')]),
+                    raw(schema_version=True), raw(schema_version=1.0), raw(schema_version='1')):
             with self.assertRaises(ValueError):
                 CHECK.read_r19_sites(bad)
         # The committed sites file: the twelve reviewed admissions of the G2b

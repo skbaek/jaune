@@ -892,7 +892,10 @@ images, and each has a unit test with controls in
     hand. The admission must match a row exactly (holder module before,
     holder, decoded name, map image). With no file, or at any other site,
     nothing is admitted and the chain compares as written, which fails the
-    rename;
+    rename. A holder that identical non-authored copies in several modules
+    share (coalesced, such as two anonymous instances with one generated
+    name) is never a reviewed site, since a row for one module would also
+    cover the other copies (ruling R22b);
   - and, as necessary conditions on top, R21's evidence. The chain decodes
     exactly to an existing old constant whose map image is an existing
     after constant. The export records the holder declaration's own span.

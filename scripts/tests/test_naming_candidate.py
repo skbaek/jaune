@@ -1,9 +1,13 @@
+import contextlib
 import copy
 import importlib.util
+import io
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).parents[2]
 SPEC = importlib.util.spec_from_file_location('naming_candidate', ROOT / 'scripts/naming-candidate.py')
@@ -1003,6 +1007,132 @@ class ComponentCompareTests(unittest.TestCase):
                     for unlisted in (None, frozenset({('M', 'N.C.k', old, '_private.M2.0.N.other')})):
                         with self.assertRaises(CHECK.FIDELITY.Mismatch):
                             run(unlisted)
+
+    def test_reviewed_site_is_never_a_coalesced_holder(self):
+        # Review 6 blocker, ruling R22b: two anonymous `instance : Inhabited
+        # Lean.Name` in modules L and H share the name `instInhabitedName`;
+        # identical non-authored copies coalesce (owner one module, holders
+        # both). A row listed for L's double-backtick literal must not admit
+        # H's hand-built chain: every path (component, union, multi-file
+        # standalone) refuses a coalesced holder, in either module order.
+        holder = 'instInhabitedName'
+        def chain(name):
+            e = ['const', ['name', 'Lean.Name.anonymous'], []]
+            for part in name.split('.'):
+                if part.isdigit():
+                    e = ['app', ['app', ['const', ['name', 'Lean.Name.num'], []], e], ['nat', int(part)]]
+                else:
+                    e = ['app', ['app', ['const', ['name', 'Lean.Name.str'], []], e], ['str', part]]
+            return e
+        listed_src = 'private def helper : Nat := 3\ninstance : Inhabited Lean.Name := ``helper\n'
+        hand_src = 'instance : Inhabited Lean.Name := hand\n'
+        def build(path, listed, helper, hand=None, moved=False, r_in=None):
+            def module(source, line, end, consts, refs):
+                pool, (nat, three, name_t, lit) = self._pool(['const', ['name', 'Nat'], []], ['nat', 3],
+                                                             ['const', ['name', 'Lean.Name'], []], chain(helper))
+                return dict(source=source, roots=[], expr_pool=pool,
+                            constants=dict({holder: self._defn(name_t, lit)}, **({helper: self._defn(nat, three)} if consts else {})),
+                            # The selection range is the keyword `instance`: not authored.
+                            decls={holder: [line, 0, line, end, line, 0, line, 8]}, references=refs)
+            spec = {listed: module(listed_src, 1, 42, True, {json.dumps(dict(c=dict(m=listed, n=helper))):
+                                                             dict(usages=[[1, 36, 1, 42, holder]])})}
+            if hand is not None:  # the same chain, built by hand: no reference
+                spec[hand] = module(hand_src, 0, 38, False, {})
+            nat3 = dict(expr_pool=[['nat', 3], ['const', ['name', 'Nat'], []]])
+            if r_in is not None:
+                # `Q.r` relocates from the listed module to the hand-built
+                # one, joining the two in one component.
+                m = spec[r_in]
+                m['source'] += 'def r := 3\n'
+                m['roots'] = ['Q.r']
+                m['expr_pool'] = m['expr_pool'] + [['nat', 3]]
+                m['constants']['Q.r'] = self._defn(0, len(m['expr_pool']) - 1)
+            spec['Extra'] = dict(nat3, source='def e := 3\ndef f := 3\n', roots=['Extra.e'] + ([] if moved else ['Extra.f']),
+                                 constants={'Extra.e': self._defn(1, 0), **({} if moved else {'Extra.f': self._defn(1, 0)})})
+            if moved:
+                spec['Extra2'] = dict(nat3, source='def f := 3\n', roots=['Extra.f'], constants={'Extra.f': self._defn(1, 0)})
+            return self._build_snapshot(path, spec)
+        def run_all(tmp, listed, hand):
+            old, new = f'_private.{listed}.0.helper', f'_private.{listed}New.0.helper'
+            rows = [dict(old=listed, new=listed + 'New', kind='module', layer='execution', rule='4', source='t')]
+            mapping = dict(EMPTY, entries=rows)
+            union_map = dict(mapping, entries=rows + [dict(old='Extra.f', new='Extra.f', kind='relocation', layer='execution',
+                                                           rule='4', source='t', from_module='Extra', to_module='Extra2')])
+            sites = frozenset({(listed, holder, old, new)})
+            root = Path(tmp)
+            b = build(root / 'b', listed, old, hand)
+            a = build(root / 'a', listed + 'New', new, hand)
+            a_union = build(root / 'u', listed + 'New', new, hand, moved=True)
+            joined = hand is not None
+            bj = build(root / 'bj', listed, old, hand, r_in=listed if joined else None)
+            aj = build(root / 'aj', listed + 'New', new, hand, r_in=hand if joined else None)
+            joined_map = dict(mapping, entries=rows + ([dict(old='Q.r', new='Q.r', kind='relocation', layer='execution',
+                                                            rule='4', source='t', from_module=listed, to_module=hand)]
+                                                       if joined else []))
+            map_path = root / 'map.json'
+            map_path.write_text(json.dumps(mapping))
+            sites_path = root / 'sites.json'
+            sites_path.write_text(json.dumps(dict(schema_version=1, sites=[
+                dict(module=listed, holder=holder, old=old, new=new, review='fixture')])))
+            def standalone(order):
+                mods = [listed, hand] if hand is not None else [listed]
+                if order:
+                    mods.reverse()
+                argv = ['check-naming-fidelity.py', '--map', str(map_path), '--r19-sites', str(sites_path)]
+                argv += [x for m in mods for x in ('--before', str(root / 'b' / f'{m}.export.json'))]
+                argv += [x for m in mods for x in ('--after', str(root / 'a' / f'{(listed + "New") if m == listed else m}.export.json'))]
+                out, err = io.StringIO(), io.StringIO()
+                with mock.patch.object(sys, 'argv', argv), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = CHECK.FIDELITY.main()
+                return rc, out.getvalue(), err.getvalue()
+            return dict(
+                component=lambda: CHECK.compare_components(b, a, mapping, r19_sites=sites)['status'],
+                joined_component=lambda: CHECK.compare_components(bj, aj, joined_map, r19_sites=sites)['status'],
+                union=lambda: CHECK.compare(CHECK.read_snapshot(b), CHECK.read_snapshot(a_union), union_map,
+                                            r19_sites=sites)['status'],
+                standalone=lambda: standalone(False),
+                standalone_reversed=lambda: standalone(True))
+        for listed, hand in (('M1', 'M2'), ('M2', 'M1')):
+            with tempfile.TemporaryDirectory() as tmp:
+                for label, run in run_all(tmp, listed, hand).items():
+                    with self.subTest(listed=listed, hand=hand, path=label):
+                        if label.startswith('standalone'):
+                            rc, out, err = run()
+                            self.assertEqual(rc, 1, err)
+                            self.assertIn('REGRESSION', err)
+                        else:
+                            with self.assertRaises(CHECK.FIDELITY.Mismatch):
+                                run()
+        # A listed site whose holder is held by its module alone still passes,
+        # and the standalone verdict records the sites file's digest.
+        with tempfile.TemporaryDirectory() as tmp:
+            for label, run in run_all(tmp, 'M1', None).items():
+                with self.subTest(path=label, coalesced=False):
+                    if label.startswith('standalone'):
+                        rc, out, err = run()
+                        self.assertEqual(rc, 0, err)
+                        verdict = json.loads(out)
+                        self.assertEqual(verdict['status'], 'OK')
+                        self.assertEqual(verdict['r19_sites_sha256'],
+                                         CHECK.sha((Path(tmp) / 'sites.json').read_bytes()))
+                        self.assertIn([holder, '_private.M1.0.helper', '_private.M1New.0.helper',
+                                       'double-backtick name literal (compiler reference)'],
+                                      verdict['derived_literals_respelled'])
+                    else:
+                        self.assertEqual(run(), 'OK')
+
+    def test_combine_binds_the_reviewed_sites(self):
+        # Review 6 note: batches compared under different sites files (or one
+        # without) do not combine.
+        batch = dict(status='OK', before_candidate='b', after_candidate='a', before_inventory_sha256='i',
+                     after_inventory_sha256='j', map_sha256='m', before_snapshot_sha256='s',
+                     after_snapshot_sha256='t', r19_sites_sha256='x',
+                     batch=dict(environments=['A'], all_environments=['A', 'B'], scoped_rows=[], scoped_rows_checked=[]))
+        other = dict(batch, batch=dict(batch['batch'], environments=['B']))
+        self.assertEqual(CHECK.combine([batch, other])['r19_sites_sha256'], 'x')
+        for changed in (dict(other, r19_sites_sha256='y'), {k: v for k, v in other.items() if k != 'r19_sites_sha256'}):
+            with self.assertRaisesRegex(ValueError, 'different'):
+                CHECK.combine([batch, changed])
 
     def test_global_uniform_namespace_and_multi_component_reloc_aux_controls(self):
         with tempfile.TemporaryDirectory() as tmp:
