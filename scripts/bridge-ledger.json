@@ -5318,6 +5318,14 @@
           "status": "OK",
           "environments": 313,
           "record": "Hardened re-verification (jsn-u9h, master rulings R17 and R19, after the cross-family review): the same snapshots, no recapture (before snapshot 3b49eb8633d6b3f811d7672879f86c846a6619ac02c3c1929b6fdf07a4e44297, after snapshot 10c272a750bcf973210c8466b648092f12598f0e78b1e562fddd701871a87527), compared by the hardened tools of edce21b4c (check-naming-fidelity.py 78b4555ef45e00d5436d3bfca607698ce4ed4661201f9a3297f8a8d955b0ce08, naming-candidate.py ab6db6cfa403148a129ef23023ac8be32db074243843d61c1092f00511ab02b9, check-naming.py 6fe1e24c43323930ad9ee48a52cfd6dec80fc424675119767f7eb4a3003ae5ec): naming-candidate.py compare --collect-all, exit 0, OK, component-scc, 313 active components, 375 affected, 15 fast-path, wall 98 s; verdict JSON sha256 5ddb3a2f12d2f4d2c25ff35b19c61499547c56caaeb63861b5948d74606888bf. Audit trail (derived_literals_respelled, 269 rows): name literal 84, chained name literal 72, double-backtick name literal (declaration level) 12, union audit module prefix 41, qualified name 22, namespace literal 16, field label 7, field label width 5, preresolved duplicate removed (R12) 8, preresolved implied prefix removed (R12b) 2 (preresolved_drops 10); unhygienic_respellings 0. Record: g2-plan/u9h-evidence."
+        },
+        {
+          "map_sha256": "196b969338a5125238a2a680541147e721a27e2e63fecaa84fd11fcf4b958608",
+          "before_candidate": "e74747ffc4497d4c023bcca82b87c8b5889ca8d7",
+          "after_candidate": "c989c3654b50dfcf7b8684f268b114eaaca9460b",
+          "status": "OK",
+          "environments": 313,
+          "record": "Second hardened re-verification (jsn-u9h, master ruling R20, after cross-family review 3): the same snapshots, no recapture (before snapshot 3b49eb8633d6b3f811d7672879f86c846a6619ac02c3c1929b6fdf07a4e44297, after snapshot 10c272a750bcf973210c8466b648092f12598f0e78b1e562fddd701871a87527), compared by the tools of 991dd5cbd (check-naming-fidelity.py bcdb8ebb51b89c55de1c264c6560e5def634f64bffda84d91919c39137d6461c, naming-candidate.py 617e9bdea47190007a0040a0ad6acea3b1616aa436698bde90ced5f5187c8b9e, check-naming.py 3db8373c8b437658b50fa60b6ecdad246c98ca79219451470a44023359efc518): naming-candidate.py compare --collect-all, exit 0, OK, component-scc, 313 active components, 375 affected, 15 fast-path, wall 95 s; verdict JSON sha256 ba55398741dfadca3493ffb3b12c9f7aa2c5d5c2964a245bf60184405cbf0b7e. Audit trail: the same 269 rows as the R19 run, with the 12 constructor-form literals now admitted by compiler reference (reason double-backtick name literal (compiler reference)); name literal 84, chained name literal 72, union audit module prefix 41, qualified name 22, namespace literal 16, field label 7, field label width 5, R12 8, R12b 2 (preresolved_drops 10); unhygienic_respellings 0. Record: g2-plan/u9h2-evidence."
         }
       ],
       "accepted": [],
