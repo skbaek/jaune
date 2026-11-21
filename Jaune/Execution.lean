@@ -85,7 +85,7 @@ def State.code (w : State) (a : Address) : ByteArray :=
 -- P0.6 item 3: the leading byte of the fixed 32-byte hash is read through the
 -- total `head?`, never a partial index; an (unrepresentable) empty byte list
 -- would simply fail the predicate.
-def correctBlobHashVersion (h : U256) : Prop :=
+def correctBlobHashVersion (h : Hash32) : Prop :=
   h.toBytes.head? = some 0x01
 
 instance : DecidablePred correctBlobHashVersion := by
@@ -111,7 +111,7 @@ def nibbleKey (pr : Bytes × Bytes) : Bytes × Bytes :=
   let ac := pr.snd
   ⟨Bytes.toNibbles ad, ac⟩
 
-def receiptsRoot (w : List (Bytes × Bytes)) : U256 :=
+def receiptsRoot (w : List (Bytes × Bytes)) : Hash32 :=
   let keyVals : List (Bytes × Bytes) := (List.map nibbleKey w)
   let finalNTB : TrieBuilder := Std.TreeMap.ofList keyVals _
   trie finalNTB
@@ -142,12 +142,12 @@ def logsBloom (l : List Log) : Bytes :=
 produces them. -/
 private structure HeaderOptionals : Type where
   baseFeePerGas : Option Nat := none
-  withdrawalsRoot : Option U256 := none
+  withdrawalsRoot : Option Hash32 := none
   blobGasUsed : Option Nat := none
   excessBlobGas : Option Nat := none
-  parentBeaconBlockRoot : Option U256 := none
-  requestsHash : Option U256 := none
-  blockAccessListHash : Option U256 := none
+  parentBeaconBlockRoot : Option Hash32 := none
+  requestsHash : Option Hash32 := none
+  blockAccessListHash : Option Hash32 := none
   slotNumber : Option UInt64 := none
 
 /-- The representation facts the trailing fields carry: the base fee is a
@@ -405,7 +405,7 @@ def accountHasCodeOrNonce (state : State) (adr : Address) : Bool :=
 def accountHasStorage (state : State) (adr : Address) : Bool :=
   !(state.getStorage adr).isEmpty
 
-def Transaction.signingHash (tx : Transaction) : Option U256 :=
+def Transaction.signingHash (tx : Transaction) : Option Hash32 :=
   match tx.type with
   | .legacy gasPrice receiver =>
     if tx.v = 27 || tx.v = 28
@@ -542,7 +542,7 @@ def recoverAuthority (auth : Authorization) : Except CryptoError Address := do
     s = 0 ∨ (secp256k1.curveOrder.toU256 / 2) < s
   ) then
     .error (.invalidSignature .none)
-  let signingHash : U256 :=
+  let signingHash : Hash32 :=
     Bytes.keccak <|
       List.append setCodeTransactionMagic <|
         Rlp.Item.toBytes <| .list [

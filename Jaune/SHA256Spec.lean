@@ -183,7 +183,7 @@ def hashWords (m : List UInt8) : Vector UInt32 8 :=
 
 /-- FIPS 180-4 §6.2.2: the resulting 256-bit message digest is
 `H₀{N} ‖ H₁{N} ‖ H₂{N} ‖ H₃{N} ‖ H₄{N} ‖ H₅{N} ‖ H₆{N} ‖ H₇{N}`. -/
-def hash (m : List UInt8) : U256 :=
+def hash (m : List UInt8) : Hash32 :=
   let H : Vector UInt32 8 := hashWords m
   UInt32s.toU256 H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]
 

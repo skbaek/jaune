@@ -252,7 +252,7 @@ def word (d : Bytes) (i : Nat) : UInt64 :=
 
 /-- Keccak-256 as a 256-bit word: the 32-byte digest read big-endian, digest
 byte 0 most significant (the Ethereum convention for hash words). -/
-def keccak256 (M : Bytes) : U256 :=
+def keccak256 (M : Bytes) : Hash32 :=
   let d := keccak256Digest M
   ⟨⟨word d 0, word d 1⟩, ⟨word d 2, word d 3⟩⟩
 

@@ -102,7 +102,7 @@ structure BlockContext : Type where
   /-- The block's gas limit (`GASLIMIT`); `BenvStat.blockGasLimit`. -/
   gasLimit : Nat
   /-- The recent block hashes `BLOCKHASH` reads. -/
-  blockHashes : List U256
+  blockHashes : List Hash32
   /-- The beneficiary (`COINBASE`). -/
   coinbase : Address
   /-- The block number. -/
@@ -116,7 +116,7 @@ structure BlockContext : Type where
   /-- EIP-4844's excess blob gas. -/
   excessBlobGas : Nat
   /-- EIP-4788's parent beacon block root. -/
-  parentBeaconBlockRoot : U256
+  parentBeaconBlockRoot : Hash32
   /-- EIP-7843's slot number. -/
   slotNumber : UInt64 := 0
 
@@ -131,7 +131,7 @@ structure TransactionContext : Type where
   /-- The effective gas price (`GASPRICE`). -/
   gasPrice : Nat
   /-- EIP-4844's versioned hashes (`BLOBHASH`). -/
-  blobVersionedHashes : List U256
+  blobVersionedHashes : List Hash32
   /-- The state the transaction started on, which `SSTORE` compares against;
   `BenvStat.origState`. -/
   originalState : State

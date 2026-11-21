@@ -176,7 +176,7 @@ private def bodyHeader15 : Header :=
       excessBlobGas := none, parentBeaconBlockRoot := none }
 
 /-- `ommersListHash`: the keccak of the RLP list of the ommer headers. -/
-private def bodyOmmersListHash (ommers : List Header) : U256 :=
+private def bodyOmmersListHash (ommers : List Header) : Hash32 :=
   (Rlp.Item.list (ommers.map Header.toRlpItem)).toBytes.keccak
 
 private def bodyPowCoinbase : Address := 0xc0
