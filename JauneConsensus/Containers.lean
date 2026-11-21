@@ -37,7 +37,7 @@ abbrev BlobIndex := U64
 abbrev ColumnIndex := U64
 abbrev RowIndex := U64
 /-- `Root`, `Bytes32`, `Hash32`, `Domain`: a 32-byte chunk. -/
-abbrev Root := Jaune.U256
+abbrev Root := Jaune.Hash32
 abbrev Bytes32 := Jaune.U256
 abbrev Hash32 := Jaune.Hash32
 abbrev Domain := Jaune.U256

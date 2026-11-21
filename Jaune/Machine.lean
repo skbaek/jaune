@@ -515,7 +515,7 @@ def TrieBuilder.maxKeyLength (j : TrieBuilder) : Nat :=
 
 def collapse (j : TrieBuilder) : Rlp.Item := encodeTrieNode (2 * (j.maxKeyLength + 1)) j
 
-def trie (j : TrieBuilder) : U256 :=
+def trie (j : TrieBuilder) : Hash32 :=
   Bytes.keccak <| (collapse j).toBytes
 
 def U256.toRlpItem (w : U256) : Rlp.Item := .bytes w.toBytes
