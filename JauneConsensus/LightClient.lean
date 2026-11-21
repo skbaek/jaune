@@ -31,7 +31,8 @@ def NEXT_SYNC_COMMITTEE_GINDEX_ELECTRA : Nat := 87
 /-- `EXECUTION_PAYLOAD_GINDEX` (`specs/capella/light-client/sync-protocol.md`). -/
 def EXECUTION_PAYLOAD_GINDEX : Nat := 25
 
-/-- `floorlog2(x)` for `x ≥ 1`. -/
+/-- Total: `Nat.log2 x`, which is 0 at `x = 0`. consensus-specs `floorlog2` (pysetup/constants.py)
+raises for `x < 1`; the faithful partial version is `floorlog2?`. -/
 def floorlog2 (x : Nat) : Nat := Nat.log2 x
 
 /-- The zero byte vector. -/
@@ -122,7 +123,8 @@ def forkDigestsOf (cfg : Config) (f : ConsensusFork) (gvr : Root) : Fallible (Li
     else [start]
   epochs.mapM fun e => do computeForkDigest cfg f gvr (← U64.ofNat? e "fork digest epoch")
 
-/-- `floorlog2(x)` as pyspec computes it (`pysetup/constants.py`): it raises for `x < 1`. -/
+/-- consensus-specs `floorlog2` as pyspec computes it (pysetup/constants.py): fails for `x < 1`,
+otherwise `floorlog2 x`. -/
 def floorlog2? (x : Nat) : Fallible Nat :=
   if x < 1 then throw (.assert "floorlog2 accepts only positive values") else pure (floorlog2 x)
 

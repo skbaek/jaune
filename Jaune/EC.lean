@@ -22,6 +22,8 @@ structure FieldElement (p : Nat) : Type where
   (val : Nat)
 deriving DecidableEq
 
+/-- The alt_bn128 curve of EIP-196/EIP-197 (execution-specs alt_bn128.py), also called BN254 and
+bn256. -/
 abbrev AltBn128Fp : Type := FieldElement altBn128Prime
 
 instance {p} : ToString (FieldElement p) := ⟨fun x => toString x.val⟩
@@ -53,6 +55,8 @@ instance {p m} : ToString (GaloisField p m) := ⟨
     "  [" :: (x.val.map <| fun y => "    " ++ toString y ++ ",") ++ ["  ]"]
 ⟩
 
+/-- The alt_bn128 curve of EIP-196/EIP-197 (execution-specs alt_bn128.py), also called BN254 and
+bn256. -/
 abbrev AltBn128Fp2 : Type :=
   GaloisField altBn128Prime [1, 0, 1]
 
@@ -308,10 +312,16 @@ def GaloisField.div {p} {m} (xs ys : GaloisField p m) : GaloisField p m :=
 instance {p m} : HDiv (GaloisField p m) (GaloisField p m) (GaloisField p m) :=
   ⟨GaloisField.div⟩
 
+/-- The alt_bn128 curve of EIP-196/EIP-197 (execution-specs alt_bn128.py), also called BN254 and
+bn256. -/
 abbrev AltBn128G2 : Type := EllipticCurve AltBn128Fp2 0 ((3 : AltBn128Fp2) / ⟨[1, 9]⟩)
 
+/-- The alt_bn128 curve of EIP-196/EIP-197 (execution-specs alt_bn128.py), also called BN254 and
+bn256. -/
 abbrev AltBn128G1 : Type := EllipticCurve AltBn128Fp (0 : AltBn128Fp) (3 : AltBn128Fp)
 
+/-- The alt_bn128 curve of EIP-196/EIP-197 (execution-specs alt_bn128.py), also called BN254 and
+bn256. -/
 abbrev AltBn128Fp12 : Type :=
   GaloisField
     altBn128Prime
