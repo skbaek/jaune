@@ -1140,7 +1140,7 @@ the declaration's axiom closure differs from its set in either direction; the
 message names the row as `AXIOM mismatch for <name>: expected [...], actual [...]`.
 Rows and sets are a user-reserved decision (`jaune-destination-axiom-pins-20260924`
 approved the first 38; `jsn-g1-packet` removed one of them and
-re-pointed another, leaving 37; `jsn-g2b-u78-accept` re-pointed all 52 rows to
+re-pointed another, leaving 37; `jsn-g2b-u78-accept` re-pointed 26 rows to
 the declarations that replaced theirs at G2b, leaving the count unchanged): adding, removing or re-pinning one is never a routine
 edit. The other 15 were added at the standard set together with the
 declarations they audit (unit `jaune-c6-surface-20260924`), under that
