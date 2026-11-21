@@ -872,9 +872,16 @@ images, and each has a unit test with controls in
   span, and the compiler's resolved references in the before export (the
   ilean `references`: each usage with its range and holding declaration)
   hold references by that declaration, inside that span, to exactly that
-  constant; and the chains decoding to it in the holder's term (counted
+  constant, each a double-backtick literal (R21: the captured source bytes
+  just before the reference's range are exactly two backticks, and the
+  range spells a dot-suffix of the constant's name; a call, a type or proof
+  mention or a quotation `` `(x) `` is a reference of another kind and never
+  counts); and the chains decoding to it in the holder's term (counted
   along every DAG path, inner chains included) are no more than those
   references (reason `double-backtick name literal (compiler reference)`).
+  The comparison reads these references on demand from each before export
+  (`export_references`) on every path: the component compare, the batched
+  and union compares, and the standalone checker.
   No source text is read and there is no module-level fallback. Sound
   because a double-backtick literal is elaborated as a resolved reference
   to the constant (the compiler records it), so respelling it to the map

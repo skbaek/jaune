@@ -1500,17 +1500,28 @@ class NamingFidelityTests(unittest.TestCase):
             at_site('_private.M.0.N.old', '_private.M.0.N.new')
 
     def test_double_backtick_private_literals_follow_the_map(self):
-        # Master rulings R19/R20: ``helper`` of a private helper elaborates to a
+        # Master rulings R19-R21: ``helper`` of a private helper elaborates to a
         # constructor-form chain in the definition body; it respells to the
         # helper's image only by the compiler's resolved references to it in
-        # the holder's own declaration span, at most once per reference.
+        # the holder's own declaration span that are double-backtick literals
+        # in the captured source, at most one chain occurrence per reference.
         ctor = ('Lean.Name.str', 'Lean.Name.num')
         old, new = '_private.M.0.N.C.helper', '_private.M2.0.N.helper'
         rows = [('N.C', 'N', 'namespace', {}), ('M', 'M2', 'module', {})]
         chain = lambda n: self.name_chain(n, heads=ctor)
         pair = lambda a, b: ['app', ['app', ['const', ['name', 'Prod.mk'], []], a], b]
-        def run(before_e, after_e, refs=((old, 'N.C.k', 20),), span=(10, 40), before_consts=None,
-                after_consts=None, holder='N.C.k'):
+        literal = 'def k : Name := ``helper\n'
+        def at(source, token, nth=0):
+            # (start, end) of the nth occurrence of `token` (its spelling only).
+            k = -1
+            for _ in range(nth + 1):
+                k = source.index(token, k + 1)
+            lead = len(token) - len(token.lstrip('`('))
+            return k + lead, k + len(token.rstrip(')'))
+        def run(before_e, after_e, source=literal, refs=None, decl=True, before_consts=None, after_consts=None,
+                holder='N.C.k', decl_len=None):
+            if refs is None:
+                refs = [(old, holder) + at(source, '``helper')]
             self.before = snapshot(dict({holder: self.gen_body(before_e)}, **(before_consts if before_consts is not None
                                                                              else {old: constant(3)})), [holder])
             image = holder.replace('N.C.', 'N.')
@@ -1518,70 +1529,178 @@ class NamingFidelityTests(unittest.TestCase):
                                                                          else {new: constant(3)})), [image])
             self.before['owners'] = {holder: 'M', old: 'M'}
             self.after['owners'] = {image: 'M2', new: 'M2'}
-            self.before['module_sources'] = {'M': ' ' * 60}
-            self.before['module_decls'] = {'M': {} if span is None else {holder: span}}
-            self.before['module_references'] = {'M': [(c, by, at, at + 6) for c, by, at in refs]}
+            prefix = 'private def helper : Nat := 3\n'
+            self.before['module_sources'] = {'M': prefix + source}
+            end = len(prefix) + (len(source) if decl_len is None else decl_len)
+            self.before['module_decls'] = {'M': {holder: (len(prefix), end)} if decl else {}}
+            self.before['module_references'] = {'M': [(c, by, a + len(prefix), b + len(prefix)) for c, by, a, b in refs]}
             self.renames = self.entries(*rows)
             return self.run_check()
         verdict = run(chain(old), chain(new))
         self.assertIn(['N.C.k', old, new, 'double-backtick name literal (compiler reference)'],
                       verdict['derived_literals_respelled'])
-        # Neon-3 counterexample 1 (raw string `r#" ``helper "#`) and any other
-        # hand-built chain: no compiler reference, no respelling.
-        self.assertEqual(run(chain(old), chain(old), refs=())['status'], 'OK')
+        # A longer suffix spelling (``C.helper``) resolves the same constant.
+        self.assertEqual(run(chain(old), chain(new), source='def k : Name := ``C.helper\n',
+                             refs=[(old, 'N.C.k') + at('def k : Name := ``C.helper\n', '``C.helper')])['status'], 'OK')
+        # Neon-3 counterexample 1 (raw string) and any other hand-built chain:
+        # no compiler reference, no respelling.
+        self.assertEqual(run(chain(old), chain(old), source='def k := (r#" " ``helper " "#, x)\n', refs=[])['status'], 'OK')
         with self.assertRaises(CHECK.Mismatch):
-            run(chain(old), chain(new), refs=())
-        # Counterexample 2: ``zero resolved to `Nat.zero`, not to the local helper.
+            run(chain(old), chain(new), source='def k := (r#" " ``helper " "#, x)\n', refs=[])
+        # Neon-3 counterexample 2: ``zero resolved to `Nat.zero`.
+        zero = 'def k := (``zero, x)\n'
         with self.assertRaises(CHECK.Mismatch):
-            run(chain(old), chain(new), refs=(('Nat.zero', 'N.C.k', 20),))
-        # Counterexample 3: a holder without a recorded span (a generated
-        # matcher `g.match_1`) is never admitted, even if another declaration
-        # references the helper; no module-level fallback.
+            run(chain(old), chain(new), source=zero, refs=[('Nat.zero', 'N.C.k') + at(zero, '``zero')])
+        # Neon-3 counterexample 3: no recorded holder span (a generated
+        # matcher), or a reference held by another declaration.
         with self.assertRaises(CHECK.Mismatch):
-            run(chain(old), chain(new), refs=((old, 'N.C.unrelated', 20),), span=None)
+            run(chain(old), chain(new), decl=False)
         with self.assertRaises(CHECK.Mismatch):
-            run(chain(old), chain(new), refs=((old, 'N.C.unrelated', 20),))
-        with self.assertRaises(CHECK.Mismatch):
-            run(chain(old), chain(new), span=None)
-        # A reference outside the holder's span does not count.
-        with self.assertRaises(CHECK.Mismatch):
-            run(chain(old), chain(new), refs=((old, 'N.C.k', 50),))
-        # Counterexample 4: a real literal and a hand-built chain in the same
-        # declaration: two occurrences, one reference: neither respells.
+            run(chain(old), chain(new), refs=[(old, 'N.C.unrelated') + at(literal, '``helper')])
+        # Neon-3 counterexample 4: a real literal and a hand-built chain in the
+        # same declaration: two occurrences, one reference: neither respells;
+        # one DAG node on two paths is two occurrences.
         self.assertEqual(run(pair(chain(old), chain(old)), pair(chain(old), chain(old)))['status'], 'OK')
         with self.assertRaises(CHECK.Mismatch):
             run(pair(chain(old), chain(old)), pair(chain(new), chain(new)))
         with self.assertRaises(CHECK.Mismatch):
             run(pair(chain(old), chain(old)), pair(chain(new), chain(old)))
-        shared = chain(old)  # one DAG node on two paths is two occurrences
+        shared = chain(old)
         with self.assertRaises(CHECK.Mismatch):
             run(pair(shared, shared), pair(chain(new), chain(new)))
-        # Two references admit two occurrences.
-        self.assertEqual(run(pair(chain(old), chain(old)), pair(chain(new), chain(new)),
-                             refs=((old, 'N.C.k', 20), (old, 'N.C.k', 30)))['status'], 'OK')
+        two = 'def k : Name × Name := (``helper, ``helper)\n'
+        self.assertEqual(run(pair(chain(old), chain(old)), pair(chain(new), chain(new)), source=two,
+                             refs=[(old, 'N.C.k') + at(two, '``helper', 0), (old, 'N.C.k') + at(two, '``helper', 1)]
+                             )['status'], 'OK')
+        # Neon-4 counterexamples (R21): a reference of another kind never
+        # counts, each beside a hand-built chain.
+        for source, token in (('def k : Nat × Name := (helper, x)\n', 'helper'),            # a call
+                              ('def k (h : helper = 3) : Name := x\n', 'helper'),           # a type/proof mention
+                              ('def k : Syntax × Name := (`(helper), x)\n', '`(helper)'),   # a quotation
+                              ('def k : Name := ```helper\n', '```helper')):                # three backticks
+            self.assertEqual(run(chain(old), chain(old), source=source,
+                                 refs=[(old, 'N.C.k') + at(source, token)])['status'], 'OK')
+            with self.assertRaises(CHECK.Mismatch):
+                run(chain(old), chain(new), source=source, refs=[(old, 'N.C.k') + at(source, token)])
+        # A cleared tactic local (`let x := ``helper; clear x; exact hand`):
+        # the `let` the tactic made keeps the literal's chain in the term, so
+        # the hand-built chain is a second occurrence against one reference.
+        tactic = 'def k : Name := by\n  let x := ``helper\n  clear x\n  exact hand\n'
+        let = lambda value, body: ['letE', 'x', ['const', ['name', 'Lean.Name'], []], value, body]
+        with self.assertRaises(CHECK.Mismatch):
+            run(let(chain(old), chain(old)), let(chain(new), chain(new)), source=tactic,
+                refs=[(old, 'N.C.k') + at(tactic, '``helper')])
+        # The spelling must be a dot-suffix of the constant's own name.
+        other = 'def k : Name := ``helpers\n'
+        with self.assertRaises(CHECK.Mismatch):
+            run(chain(old), chain(new), source=other, refs=[(old, 'N.C.k') + at(other, '``helpers')])
+        # A reference outside the holder's span does not count.
+        outside = 'def k : Name := x\n-- ``helper\n'
+        with self.assertRaises(CHECK.Mismatch):
+            run(chain(old), chain(new), source=outside, refs=[(old, 'N.C.k', 200, 206)])
+        # ... nor one that starts inside it and ends past it.
+        edge = 'def k := ``helper\n'
+        self.assertEqual(run(chain(old), chain(new), source=edge, decl_len=len(edge))['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(chain(old), chain(new), source=edge, decl_len=len('def k := ``help'))
         # (2) a chain naming no existing old constant, or whose image is no
         # after constant (checked on the whole-environment tables).
         missing = '_private.M.0.N.C.absent'
-        self.assertEqual(run(chain(missing), chain(missing), refs=((missing, 'N.C.k', 20),))['status'], 'OK')
+        absent = 'def k : Name := ``absent\n'
+        self.assertEqual(run(chain(missing), chain(missing), source=absent,
+                             refs=[(missing, 'N.C.k') + at(absent, '``absent')])['status'], 'OK')
         with self.assertRaises(CHECK.Mismatch):
-            run(chain(missing), chain('_private.M2.0.N.absent'), refs=((missing, 'N.C.k', 20),))
-        run(chain(old), chain(new))
+            run(chain(missing), chain('_private.M2.0.N.absent'), source=absent,
+                refs=[(missing, 'N.C.k') + at(absent, '``absent')])
+        both = 'def k := (``absent, ``helper)\n'
+        run(chain(old), chain(new), source=both, refs=[(missing, 'N.C.k') + at(both, '``absent'),
+                                                       (old, 'N.C.k') + at(both, '``helper')])
         self.after['constants']['_private.M2.0.N.absent'] = constant(5)
-        self.before['module_references'] = {'M': [(missing, 'N.C.k', 20, 26), (old, 'N.C.k', 30, 36)]}
         probe = CHECK.Comparison(self.before, self.after, self.renames)
-        both = pair(chain(old), chain(missing))
-        self.assertEqual(probe.compiler_reference_admissions('N.C.k', both), {old})
+        term = pair(chain(old), chain(missing))
+        self.assertEqual(probe.compiler_reference_admissions('N.C.k', term), {old})
         del self.after['constants'][new]
         CHECK.Comparison._NAMESPACES.clear()
         probe = CHECK.Comparison(self.before, self.after, self.renames)
-        self.assertEqual(probe.compiler_reference_admissions('N.C.k', both), frozenset())
-        # (1) a constructor chain `toExpr` would write as `mkStrK` (simple, at
-        # most eight string components) is data even with a reference.
-        self.assertEqual(run(chain('N.C.pub'), chain('N.C.pub'), refs=(('N.C.pub', 'N.C.k', 20),),
+        self.assertEqual(probe.compiler_reference_admissions('N.C.k', term), frozenset())
+        # (1) a constructor chain `toExpr` would write as `mkStrK` is data.
+        pub = 'def k : Name := ``N.C.pub\n'
+        self.assertEqual(run(chain('N.C.pub'), chain('N.C.pub'), source=pub, refs=[('N.C.pub', 'N.C.k') + at(pub, '``N.C.pub')],
                              before_consts={'N.C.pub': constant(3)}, after_consts={'N.pub': constant(3)})['status'], 'OK')
         with self.assertRaises(CHECK.Mismatch):
-            run(chain('N.C.pub'), chain('N.pub'), refs=(('N.C.pub', 'N.C.k', 20),),
+            run(chain('N.C.pub'), chain('N.pub'), source=pub, refs=[('N.C.pub', 'N.C.k') + at(pub, '``N.C.pub')],
                 before_consts={'N.C.pub': constant(3)}, after_consts={'N.pub': constant(3)})
+
+    def test_export_references_read_on_demand(self):
+        # Neon-4 should-fix 2: the standalone and batched paths read the
+        # compiler references from the export itself (read_exports unchanged).
+        source = 'private def helper := 3\ndef k := ``helper\n'
+        data = dict(source=source, index=dict(module='M', references={
+            json.dumps(dict(c=dict(m='M', n='_private.M.0.helper'))): dict(definition=[0, 12, 0, 18],
+                                                                            usages=[[1, 11, 1, 17, 'k'], [1, 11, 1, 17]]),
+            json.dumps(dict(v='x')): dict(usages=[[0, 0, 0, 1, 'k']])}))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'M.export.json'
+            path.write_text(json.dumps(data))
+            module, rows = CHECK.export_references(path)
+        self.assertEqual(module, 'M')
+        self.assertEqual(rows, [('_private.M.0.helper', 'k', 35, 41)])
+        self.assertEqual(source[33:35] + source[35:41], '``helper')
+
+    def test_untested_hardened_paths(self):
+        # Neon-4 should-fix 3.
+        rows = self.entries(('N.Old.a', 'N', 'namespace', {}))
+        long_old, long_new = 'N.Old.a.b.c.d.e.f.g', 'N.b.c.d.e.f.g'
+        site = lambda e: self.gen_body(['app', ['const', ['name', 'Lean.ParserDescr.node'], []], e])
+        def run(before_e, after_e, source=None):
+            self.before = snapshot({long_old + '.h': constant(3), 'gen': before_e}, [long_old + '.h'])
+            self.after = snapshot({long_new + '.h': constant(3), 'gen': after_e}, [long_new + '.h'])
+            if source is not None:
+                self.before['owners'] = {'gen': 'M', long_old + '.h': 'M'}
+                self.after['owners'] = {'gen': 'M', long_new + '.h': 'M'}
+                self.before['module_sources'] = {'M': source}
+            self.renames = rows
+            return self.run_check()
+        # A nine-component quotation chain whose image has seven components
+        # is rebuilt as `mkStr7`, not as a chain.
+        self.assertEqual(run(site(self.name_chain(long_old)), site(self.mkstr(*long_new.split('.'))))['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(site(self.name_chain(long_old)), site(self.name_chain(long_new)))
+        # The single-backtick data guard applies to a chain: the module spells
+        # it as runtime data, so it stays as written.
+        data = f'def d := `{long_old}\n'
+        self.assertEqual(run(site(self.name_chain(long_old)), site(self.name_chain(long_old)), source=data)['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(site(self.name_chain(long_old)), site(self.mkstr(*long_new.split('.'))), source=data)
+        # A node shared by a quotation site and an ordinary argument of the
+        # same constant is data (`chain_literal_sites`: `site - other`).
+        shared = self.name_chain(long_old)
+        both = lambda a, b: self.gen_body(['app', ['app', ['const', ['name', 'P.pair'], []],
+                                                   ['app', ['const', ['name', 'Lean.ParserDescr.node'], []], a]], b])
+        self.assertEqual(run(both(shared, shared), both(self.name_chain(long_old), self.name_chain(long_old)))['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(both(shared, shared), both(self.mkstr(*long_new.split('.')), self.name_chain(long_old)))
+
+    def test_guard_field_notation_under_a_renamed_inductive(self):
+        # Neon-4 should-fix 3: the inductive itself is renamed (the real
+        # `Checked.SymbolicArith.Op -> SymbolicArithmetic.Op` case).
+        ctor = lambda t: dict(kernel=dict(type=['const', ref(t), []], universes=0,
+                                          payload=['constructor', ref(t), 0, 0, 0, False]), attributes={})
+        method = lambda t: dict(kernel=dict(type=['forall', 'Lean.BinderInfo.default', ['const', ref(t), []],
+                                                  ['const', ref('Nat'), []]], universes=0,
+                                            payload=['definition', 2]), attributes={})
+        def run(after_text):
+            self.before = snapshot({'N.Op': constant(5), 'N.Op.add': ctor('N.Op'), 'N.Op.rinst': method('N.Op')},
+                                   ['N.Op', 'N.Op.add', 'N.Op.rinst'])
+            self.after = snapshot({'N.Opx': constant(5), 'N.Opx.add': ctor('N.Opx'), 'N.Opx.toPlain': method('N.Opx')},
+                                  ['N.Opx', 'N.Opx.add', 'N.Opx.toPlain'])
+            self.renames = self.entries(('N.Op', 'N.Opx', 'namespace', {}), ('N.Op.rinst', 'N.Opx.toPlain', 'declaration', {}))
+            self.before['checks'] = self.guard('error: Op.add.rinst x-/')
+            self.after['checks'] = self.guard(after_text)
+            return self.run_check()
+        self.assertEqual(run('error: Opx.add.toPlain x-/')['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run('error: Opx.add.rinst x-/')
 
     def test_respell_cache_is_per_holder_for_contextual_chains(self):
         # Neon-3 finding 6: one shared chain node, data in one constant and a

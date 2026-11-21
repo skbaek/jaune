@@ -1228,6 +1228,27 @@ def read_exports(paths):
                 import_modules=import_modules, from_olean=from_olean)
 
 
+def export_references(export_path):
+    """(module, [(constant, holding declaration, start, end)]): the
+    compiler's resolved references recorded in an export (its ilean
+    `references`: every usage with its range and holding declaration), with
+    offsets into the export's captured source. Read on demand by the
+    comparison (master rulings R20, R21); `read_exports` and the capture
+    metadata are unchanged."""
+    data = json.loads(Path(export_path).read_bytes())
+    positions = APPLY.Positions(data['source'])
+    rows = []
+    for key, info in (data.get('index') or {}).get('references', {}).items():
+        const = json.loads(key).get('c')
+        if not const:
+            continue
+        for usage in info.get('usages', ()):
+            if len(usage) == 5 and isinstance(usage[4], str):
+                start, end = APPLY.span(positions, usage[:4])
+                rows.append((const['n'], usage[4], start, end))
+    return APPLY.module_name(data['index']['module']), rows
+
+
 def extract_module_meta(export_path, export_sha256=None):
     """Extract lightweight verified `.meta.json` sidecar from a single `.export.json`."""
     export_path = Path(export_path)
@@ -1547,7 +1568,10 @@ class Comparison:
         `lit` in constructor form (checked by the caller); `lit` is exactly an
         existing old constant whose map image is an existing after constant;
         the export records `holder`'s own declaration span, and that span
-        holds compiler references, by `holder`, to exactly `lit`; and the
+        holds compiler references, by `holder`, to exactly `lit`, each a
+        double-backtick literal in the captured source (the two bytes before
+        its range are two backticks and the range spells a dot-suffix of the
+        name; R21); and the
         number of occurrences of chains decoding to `lit` in `holder`'s term
         (counted along every path of the DAG, inner chains included) is at
         most the number of those references. Without a recorded span or
@@ -1559,10 +1583,23 @@ class Comparison:
         if span is None:
             return frozenset()
         references = self.module_references(module)
-        if not references:
+        source = (self.before.get('module_sources') or {}).get(module)
+        if not references or source is None:
             return frozenset()
-        counts = Counter(const for const, by, start, _ in references
-                         if by == holder and span[0] <= start < span[1])
+        def spelled_by_double_backtick(const, start, end):
+            # R21: only a reference whose recorded range is a double-backtick
+            # literal: the captured source bytes just before it are exactly
+            # two backticks, and the range spells a dot-suffix of the
+            # constant's (user) name. Calls, type or proof mentions and
+            # quotations `(x) are references of other kinds.
+            if start < 2 or source[start - 2:start] != '``' or (start >= 3 and source[start - 3] == '`'):
+                return False
+            private = MAP.split_private(const) if const.startswith('_private.') else None
+            parts = (private[2] if private else const).split('.')
+            return source[start:end] in {'.'.join(parts[-k:]) for k in range(1, len(parts) + 1)}
+        counts = Counter(const for const, by, start, end in references
+                         if by == holder and span[0] <= start and end <= span[1] and
+                         spelled_by_double_backtick(const, start, end))
         if not counts:
             return frozenset()
         occurrences = Counter()
@@ -3224,7 +3261,9 @@ def main():
     args = parser.parse_args()
     try:
         raw = args.map.read_bytes()
-        result = check(read_exports(args.before), read_exports(args.after), json.loads(raw))
+        before = read_exports(args.before)
+        before['module_references'] = dict(export_references(path) for path in args.before)
+        result = check(before, read_exports(args.after), json.loads(raw))
         result['map_sha256'] = hashlib.sha256(raw).hexdigest()
         print(json.dumps(result, indent=2))
         return 0
