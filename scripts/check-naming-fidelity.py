@@ -1258,17 +1258,20 @@ def read_r19_sites(raw):
     ruling R22), from the bytes of a sites file such as
     `scripts/maps/g2b-r19-sites.json`: `{"schema_version": 1, "sites": [row]}`,
     each row exactly `module`, `holder`, `old`, `new` and `review` (a one-line
-    pointer to the review evidence), all non-empty strings, no row twice.
+    pointer to the review evidence), all strings that are not blank and hold
+    no line break (`\n` or `\r`), no row twice; `schema_version` an int.
     Returns the frozenset of (module, holder, old, new); an admission must
     match one exactly. Raises ValueError on any other shape."""
     data = json.loads(raw)
-    if not isinstance(data, dict) or data.get('schema_version') != R19_SITES_SCHEMA or \
+    version = data.get('schema_version') if isinstance(data, dict) else None
+    if not isinstance(data, dict) or type(version) is not int or version != R19_SITES_SCHEMA or \
             not isinstance(data.get('sites'), list) or set(data) - {'schema_version', 'description', 'sites'}:
         raise ValueError(f'R19 sites file: expected schema_version {R19_SITES_SCHEMA} and a list of sites')
     sites = set()
     for row in data['sites']:
         if not isinstance(row, dict) or set(row) != set(R19_SITE_KEYS) or \
-                not all(isinstance(row[k], str) and row[k] and '\n' not in row[k] for k in R19_SITE_KEYS):
+                not all(isinstance(row[k], str) and row[k].strip() and '\n' not in row[k] and '\r' not in row[k]
+                        for k in R19_SITE_KEYS):
             raise ValueError(f'R19 sites file: a site has exactly {", ".join(R19_SITE_KEYS)} '
                              f'as non-empty one-line strings: {row!r}')
         key = tuple(row[k] for k in R19_SITE_KEYS[:4])
@@ -1599,7 +1602,7 @@ class Comparison:
         (R22). Lean writes a `toExpr`-built double-backtick literal and a
         hand-built `Name.str`/`Name.num` chain the same way, and five review
         rounds showed that indirect evidence (the compiler's references plus
-        the source bytes) cannot tell them apart: a quotation of a
+        the source text) cannot tell them apart: a quotation of a
         double-backtick literal, a literal in an unexported theorem proof, a
         literal a tactic elaborates and drops, a notation or macro that puts
         two backticks before an ordinary reference, and a synthetic range
@@ -1621,8 +1624,10 @@ class Comparison:
         number of occurrences of chains decoding to `lit` in `holder`'s term
         (counted along every path of the DAG, inner chains included) is at
         most the number of those references; and (module, holder, lit, map
-        image) is a reviewed site. Without a reviewed site, a recorded span,
-        the captured source or references nothing is admitted.
+        image) is a reviewed site whose holder is held by that module alone
+        (not coalesced with copies in other modules; R22b). Without a
+        reviewed site, a recorded span, the captured source or references
+        nothing is admitted.
 
         Returns the set of admitted names."""
         if not self.r19_sites:
@@ -1631,13 +1636,25 @@ class Comparison:
         span = ((self.before.get('module_decls') or {}).get(module) or {}).get(holder) if module else None
         if span is None:
             return frozenset()
+        # R22b: a coalesced holder (identical non-authored copies held by
+        # several modules, owned by one of them) is never a reviewed site: a
+        # row for one module would also admit the other modules' chains.
+        # Every path that merges modules records the holding modules
+        # (`read_exports`, `union_environment`, the environment merge and the
+        # component compare's global table).
+        if holder in (self.before.get('coalesced_equations') or ()):
+            return frozenset()
+        for table in (self.before.get('holders'), self.all_before_holders):
+            held = (table or {}).get(holder)
+            if held is not None and set(held) != {module}:
+                return frozenset()
         references = self.module_references(module)
         source = (self.before.get('module_sources') or {}).get(module)
         if not references or source is None:
             return frozenset()
         def spelled_by_double_backtick(const, start, end):
             # R21: only a reference whose recorded range is a double-backtick
-            # literal: the captured source bytes just before it are exactly
+            # literal: the captured source characters just before it are exactly
             # two backticks, and the range spells a dot-suffix of the
             # constant's (user) name. Calls, type or proof mentions and
             # quotations `(x) are references of other kinds.
