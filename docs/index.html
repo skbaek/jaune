@@ -893,7 +893,7 @@ footer a:hover{color:var(--ink)}
     <div class="grid2" style="margin-top:38px;align-items:start">
       <div>
         <div class="listing">
-          <div class="bar"><span>Jaune/Sufficiency.lean</span><span class="tag">fuel, discharged</span></div>
+          <div class="bar"><span>Jaune/MessageCall/Totality.lean</span><span class="tag">fuel, discharged</span></div>
 <pre><span class="c">-- Fuel strictly above the gas measure can never exhaust.</span>
 <span class="c">-- The measure is gasLeft plus any spilled Amsterdam state</span>
 <span class="c">-- gas; on every earlier fork it is exactly gasLeft.</span>
@@ -1001,7 +1001,7 @@ footer a:hover{color:var(--ink)}
           reference round, with axioms exactly <span class="mono">propext</span> and
           <span class="mono">Quot.sound</span>. The old definitions stay in the file — not as dead code,
           but as the specification the equivalence mentions. Keccak’s flat permutation carries the
-          same standing: <span class="mono">f1600_eq</span> proves it equal to its retained
+          same standing: <span class="mono">permutation_eq_referencePermutation</span> proves it equal to its retained
           reference transcription.
         </p>
       </div>
@@ -1493,7 +1493,7 @@ footer a:hover{color:var(--ink)}
           chain altitude — with well-posed open problems in representation choice, proof-exposure
           budgeting, and fork-parameterised reasoning. The sufficiency arc alone is a worked case
           study in retrofitting totality onto a large fueled interpreter.</p>
-        <div class="hook">start: API.md → Examples/Arithmetic.lean<br>then: Jaune/Sufficiency.lean → exec<br>and: <a href="https://github.com/skbaek/blanc/blob/corpus-v1-20261105/Blanc/LidoCircuitBreakerHistoryChain.lean">Blanc/LidoCircuitBreakerHistoryChain.lean</a> (at tag corpus-v1-20261105) → the theorems of §6</div>
+        <div class="hook">start: API.md → Examples/Arithmetic.lean<br>then: Jaune/MessageCall/Totality.lean → exec<br>and: <a href="https://github.com/skbaek/blanc/blob/corpus-v1-20261105/Blanc/LidoCircuitBreakerHistoryChain.lean">Blanc/LidoCircuitBreakerHistoryChain.lean</a> (at tag corpus-v1-20261105) → the theorems of §6</div>
       </div>
       <div class="aud">
         <h3>Protocol &amp; client engineers</h3>
