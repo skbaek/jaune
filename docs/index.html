@@ -925,10 +925,10 @@ footer a:hover{color:var(--ink)}
             becomes a clean equivalence — no fuel threshold, no
             <span class="mono">∃ fuel, ∀ fuel′ &gt; fuel, …</span> plumbing in any statement. The
             relational type and this equivalence now live in Jaune itself
-            (<span class="mono">Jaune/Exec.lean</span>), so a proof author needs no second package:
+            (<span class="mono">Jaune/FrameRun/Adequacy.lean</span>), so a proof author needs no second package:
           </p>
-          <pre style="margin:0;padding:12px 14px;background:var(--shade);border:1px solid var(--rule);overflow-x:auto;font-family:var(--mono);font-size:.74rem;line-height:1.7"><span class="k">lemma</span> <span class="d">exec_iff_exec_eq</span> (pc : <span class="t">Nat</span>) (sevm : <span class="t">Sevm</span>) (devm : <span class="t">Devm</span>) (exn : <span class="t">Execution</span>) :
-    <span class="t">Nonempty</span> (<span class="t">Exec</span> pc sevm devm exn) ↔ exec ⟨pc, sevm, devm⟩ = exn</pre>
+          <pre style="margin:0;padding:12px 14px;background:var(--shade);border:1px solid var(--rule);overflow-x:auto;font-family:var(--mono);font-size:.74rem;line-height:1.7"><span class="k">theorem</span> <span class="d">Frame.Run.exec_iff</span> (r : <span class="t">Frame.Running</span>) (out : <span class="t">Except</span> <span class="t">Fault</span> <span class="t">Frame.Exit</span>) :
+    <span class="t">Nonempty</span> (<span class="t">Frame.Run</span> r (.exit out)) ↔ exec r = out</pre>
           <p class="dim" style="font-size:.94rem;margin:14px 0 0">
             And the seeding is provably an implementation detail:
             <span class="mono">execFueled_run_mono</span> shows more fuel never changes a reached
