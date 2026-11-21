@@ -74,3 +74,4 @@ entered frames with their propagation and top-level bounds.
 #expect_axioms Jaune.KeptHistory.calls_ran_entered [Classical.choice, Quot.sound, propext]
 #expect_axioms Examples.RunCalls.calls_length [Classical.choice, Quot.sound, propext]
 #expect_axioms Examples.RunCalls.entry_call [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.KeptStep.of_transition [Classical.choice, Quot.sound, propext]
