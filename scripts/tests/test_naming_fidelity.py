@@ -1500,79 +1500,107 @@ class NamingFidelityTests(unittest.TestCase):
             at_site('_private.M.0.N.old', '_private.M.0.N.new')
 
     def test_double_backtick_private_literals_follow_the_map(self):
-        # Master ruling R19: ``canonical_push`` of a private helper elaborates to
-        # a constructor-form chain in the definition body; it respells to the
-        # helper's image only with all three conditions.
+        # Master rulings R19/R20: ``helper`` of a private helper elaborates to a
+        # constructor-form chain in the definition body; it respells to the
+        # helper's image only by the compiler's resolved references to it in
+        # the holder's own declaration span, at most once per reference.
         ctor = ('Lean.Name.str', 'Lean.Name.num')
         old, new = '_private.M.0.N.C.helper', '_private.M2.0.N.helper'
         rows = [('N.C', 'N', 'namespace', {}), ('M', 'M2', 'module', {})]
-        def run(before_name, after_name, source='def k := ``helper\n', decl_range=True,
-                before_consts=None, after_consts=None, outside=''):
-            lit = lambda n: self.gen_body(['app', ['app', ['const', ['name', 'Prod.mk'], []], self.name_chain(n, heads=ctor)],
-                                           ['nat', 1]])
-            self.before = snapshot(dict({'N.C.k': lit(before_name)}, **(before_consts if before_consts is not None
-                                                                       else {old: constant(3)})), ['N.C.k'])
-            self.after = snapshot(dict({'N.k': lit(after_name)}, **(after_consts if after_consts is not None
-                                                                   else {new: constant(3)})), ['N.k'])
-            self.before['owners'] = {'N.C.k': 'M', old: 'M'}
-            self.after['owners'] = {'N.k': 'M2', new: 'M2'}
-            self.before['module_sources'] = {'M': 'def other := 1\n' + source + outside}
-            if decl_range:
-                start = len('def other := 1\n')
-                self.before['module_decls'] = {'M': {'N.C.k': (start, start + len(source))}}
+        chain = lambda n: self.name_chain(n, heads=ctor)
+        pair = lambda a, b: ['app', ['app', ['const', ['name', 'Prod.mk'], []], a], b]
+        def run(before_e, after_e, refs=((old, 'N.C.k', 20),), span=(10, 40), before_consts=None,
+                after_consts=None, holder='N.C.k'):
+            self.before = snapshot(dict({holder: self.gen_body(before_e)}, **(before_consts if before_consts is not None
+                                                                             else {old: constant(3)})), [holder])
+            image = holder.replace('N.C.', 'N.')
+            self.after = snapshot(dict({image: self.gen_body(after_e)}, **(after_consts if after_consts is not None
+                                                                         else {new: constant(3)})), [image])
+            self.before['owners'] = {holder: 'M', old: 'M'}
+            self.after['owners'] = {image: 'M2', new: 'M2'}
+            self.before['module_sources'] = {'M': ' ' * 60}
+            self.before['module_decls'] = {'M': {} if span is None else {holder: span}}
+            self.before['module_references'] = {'M': [(c, by, at, at + 6) for c, by, at in refs]}
             self.renames = self.entries(*rows)
             return self.run_check()
-        verdict = run(old, new)
-        self.assertIn(['N.C.k', old, new, 'double-backtick name literal (declaration level)'],
+        verdict = run(chain(old), chain(new))
+        self.assertIn(['N.C.k', old, new, 'double-backtick name literal (compiler reference)'],
                       verdict['derived_literals_respelled'])
-        self.assertIn('double-backtick name literal (module level)',
-                      [r[3] for r in run(old, new, decl_range=False)['derived_literals_respelled']])
-        # (3) the same chain built by hand, with no double-backtick spelling: data.
-        hand = 'def k := Name.str (Name.num (Name.str .anonymous "M") 0) "helper"\n'
-        self.assertEqual(run(old, old, source=hand)['status'], 'OK')
+        # Neon-3 counterexample 1 (raw string `r#" ``helper "#`) and any other
+        # hand-built chain: no compiler reference, no respelling.
+        self.assertEqual(run(chain(old), chain(old), refs=())['status'], 'OK')
         with self.assertRaises(CHECK.Mismatch):
-            run(old, new, source=hand)
-        # (3) at declaration level: the spelling elsewhere in the module does not count.
-        self.assertIn('double-backtick name literal (module level)',
-                      [r[3] for r in run(old, new, source=hand, outside='def j := ``helper\n',
-                                         decl_range=False)['derived_literals_respelled']])
+            run(chain(old), chain(new), refs=())
+        # Counterexample 2: ``zero resolved to `Nat.zero`, not to the local helper.
         with self.assertRaises(CHECK.Mismatch):
-            run(old, new, source=hand, outside='def j := ``helper\n')
-        # (3) a commented-out or quoted spelling is no literal.
+            run(chain(old), chain(new), refs=(('Nat.zero', 'N.C.k', 20),))
+        # Counterexample 3: a holder without a recorded span (a generated
+        # matcher `g.match_1`) is never admitted, even if another declaration
+        # references the helper; no module-level fallback.
         with self.assertRaises(CHECK.Mismatch):
-            run(old, new, source='def k := 1 -- ``helper\n')
-        # (3) a spelling that resolves to another constant as well is no evidence.
-        other = '_private.M.0.N.D.helper'
+            run(chain(old), chain(new), refs=((old, 'N.C.unrelated', 20),), span=None)
         with self.assertRaises(CHECK.Mismatch):
-            run(old, new, before_consts={old: constant(3), other: constant(4)},
-                after_consts={new: constant(3), other.replace('M.0', 'M2.0'): constant(4)})
-        # (2) a chain naming no existing old constant.
+            run(chain(old), chain(new), refs=((old, 'N.C.unrelated', 20),))
+        with self.assertRaises(CHECK.Mismatch):
+            run(chain(old), chain(new), span=None)
+        # A reference outside the holder's span does not count.
+        with self.assertRaises(CHECK.Mismatch):
+            run(chain(old), chain(new), refs=((old, 'N.C.k', 50),))
+        # Counterexample 4: a real literal and a hand-built chain in the same
+        # declaration: two occurrences, one reference: neither respells.
+        self.assertEqual(run(pair(chain(old), chain(old)), pair(chain(old), chain(old)))['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(pair(chain(old), chain(old)), pair(chain(new), chain(new)))
+        with self.assertRaises(CHECK.Mismatch):
+            run(pair(chain(old), chain(old)), pair(chain(new), chain(old)))
+        shared = chain(old)  # one DAG node on two paths is two occurrences
+        with self.assertRaises(CHECK.Mismatch):
+            run(pair(shared, shared), pair(chain(new), chain(new)))
+        # Two references admit two occurrences.
+        self.assertEqual(run(pair(chain(old), chain(old)), pair(chain(new), chain(new)),
+                             refs=((old, 'N.C.k', 20), (old, 'N.C.k', 30)))['status'], 'OK')
+        # (2) a chain naming no existing old constant, or whose image is no
+        # after constant (checked on the whole-environment tables).
         missing = '_private.M.0.N.C.absent'
-        self.assertEqual(run(missing, missing, source='def k := ``absent\n')['status'], 'OK')
+        self.assertEqual(run(chain(missing), chain(missing), refs=((missing, 'N.C.k', 20),))['status'], 'OK')
         with self.assertRaises(CHECK.Mismatch):
-            run(missing, '_private.M2.0.N.absent', source='def k := ``absent\n')
-        run(old, new)
+            run(chain(missing), chain('_private.M2.0.N.absent'), refs=((missing, 'N.C.k', 20),))
+        run(chain(old), chain(new))
         self.after['constants']['_private.M2.0.N.absent'] = constant(5)
-        self.before['module_sources'] = {'M': 'def k := ``absent ``helper\n'}
-        self.before['module_decls'] = {}
+        self.before['module_references'] = {'M': [(missing, 'N.C.k', 20, 26), (old, 'N.C.k', 30, 36)]}
         probe = CHECK.Comparison(self.before, self.after, self.renames)
-        self.assertEqual(probe.double_backtick_literal('N.C.k', old), 'module')
-        self.assertIsNone(probe.double_backtick_literal('N.C.k', missing))
-        # (2) an old constant whose image is no after constant (outside the
-        # compared pair, a whole-environment table) gives no evidence.
+        both = pair(chain(old), chain(missing))
+        self.assertEqual(probe.compiler_reference_admissions('N.C.k', both), {old})
         del self.after['constants'][new]
+        CHECK.Comparison._NAMESPACES.clear()
         probe = CHECK.Comparison(self.before, self.after, self.renames)
-        self.assertIsNone(probe.double_backtick_literal('N.C.k', old))
-        # (2) a chain whose image is no existing after constant.
-        with self.assertRaises(CHECK.Mismatch):
-            run(old, new, after_consts={'_private.M2.0.N.elsewhere': constant(3)})
+        self.assertEqual(probe.compiler_reference_admissions('N.C.k', both), frozenset())
         # (1) a constructor chain `toExpr` would write as `mkStrK` (simple, at
-        # most eight string components) is data even with a ``N.C.pub`` literal.
-        self.assertEqual(run('N.C.pub', 'N.C.pub', source='def k := ``N.C.pub\n',
+        # most eight string components) is data even with a reference.
+        self.assertEqual(run(chain('N.C.pub'), chain('N.C.pub'), refs=(('N.C.pub', 'N.C.k', 20),),
                              before_consts={'N.C.pub': constant(3)}, after_consts={'N.pub': constant(3)})['status'], 'OK')
         with self.assertRaises(CHECK.Mismatch):
-            run('N.C.pub', 'N.pub', source='def k := ``N.C.pub\n',
+            run(chain('N.C.pub'), chain('N.pub'), refs=(('N.C.pub', 'N.C.k', 20),),
                 before_consts={'N.C.pub': constant(3)}, after_consts={'N.pub': constant(3)})
+
+    def test_respell_cache_is_per_holder_for_contextual_chains(self):
+        # Neon-3 finding 6: one shared chain node, data in one constant and a
+        # quotation-site literal in another of the same module, must respell
+        # in the second whatever the order the constants are visited.
+        kind_b, kind_a = '_private.M.0.N.Old.tac', '_private.M2.0.N.New.tac'
+        rows = self.entries(('N.Old', 'N.New', 'namespace', {}), ('M', 'M2', 'module', {}))
+        for order in (('N.a', 'N.b'), ('N.b', 'N.a')):
+            node_b, node_a = self.name_chain(kind_b), self.name_chain(kind_a)
+            site = lambda n: self.gen_body(['app', ['const', ['name', 'Lean.ParserDescr.node'], []], n])
+            data = lambda n: self.gen_body(['app', ['const', ['name', 'P.data'], []], n])
+            before = {'N.Old.x': constant(), kind_b: constant(7)}
+            before.update({k: (data(node_b) if k == 'N.a' else site(node_b)) for k in order})
+            after = {'N.New.x': constant(), kind_a: constant(7), 'N.a': data(node_b), 'N.b': site(node_a)}
+            self.before = snapshot(before, ['N.Old.x', 'N.a', 'N.b'])
+            self.after = snapshot(after, ['N.New.x', 'N.a', 'N.b'])
+            self.before['owners'] = {k: 'M' for k in before}
+            self.after['owners'] = {k: 'M2' for k in after}
+            self.assertEqual(CHECK.Comparison(self.before, self.after, rows).run()['status'], 'OK')
 
     def test_chained_literals_only_at_quotation_sites(self):
         # Neon counterexample 3: a toExpr-encoded chain (private, or over eight
@@ -1796,8 +1824,9 @@ class NamingFidelityTests(unittest.TestCase):
         rows = [('N.Op.add', 'N.Op.plus', 'declaration', {}), ('N.Op.rinst', 'N.Op.toPlain', 'declaration', {})]
         comparison = CHECK.Comparison(self.before, self.before, self.entries(*rows))
         self.assertEqual(comparison.respell_message('Op.add.rinst', 'guard_msgs'), 'Op.add.rinst')
-        # Control: a method moved out of the type's namespace gives none either.
-        self.before = snapshot({'N.Op': constant(5), 'N.Op.add': ctor(), 'N.Op.rinst': constant(2)},
+        # Control: a method moved out of the type's namespace gives none either
+        # (`rinst` is a genuine method, so the namespace check is what decides; R20).
+        self.before = snapshot({'N.Op': constant(5), 'N.Op.add': ctor(), 'N.Op.rinst': method(2)},
                                ['N.Op', 'N.Op.add', 'N.Op.rinst'])
         comparison = CHECK.Comparison(self.before, self.before, self.entries(
             ('N.Op.add', 'N.Op.plus', 'declaration', {}), ('N.Op.rinst', 'N.Other.toPlain', 'declaration', {})))
@@ -1986,6 +2015,56 @@ class NamingFidelityTests(unittest.TestCase):
         # Every drop is in the audit trail with its rule.
         verdict = run(['N.C.R', 'L', 'N'], ['N.R', 'L'])
         self.assertIn(['g', 'N', 'N', 'preresolved implied prefix removed (R12b)'], verdict['derived_literals_respelled'])
+
+    def test_preresolved_hardening_after_review_3(self):
+        # R20 (Neon-3 findings 3, 5.2, 8).
+        T = ['const', ['name', 'Lean.Syntax.Preresolved'], []]
+        def lit(n):
+            parts = n.split('.')
+            e = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], []]
+            for part in parts:
+                e = ['app', e, ['str', part]]
+            return e
+        def entry(kind, n):
+            if kind == 'ns':
+                return ['app', ['const', ['name', 'Lean.Syntax.Preresolved.namespace'], []], lit(n)]
+            nil = ['app', ['const', ['name', 'List.nil'], [['zero']]], ['const', ['name', 'String'], []]]
+            return ['app', ['app', ['const', ['name', 'Lean.Syntax.Preresolved.decl'], []], lit(n)], nil]
+        def lst(*entries):
+            out = ['app', ['const', ['name', 'List.nil'], [['zero']]], T]
+            for e in reversed(entries):
+                out = ['app', ['app', ['app', ['const', ['name', 'List.cons'], [['zero']]], T], e], out]
+            return out
+        def run(before, after, rows):
+            gen = lambda l: dict(kernel=['definition', 'safe', self.hygiene_ident(l)], attributes={})
+            self.before = snapshot({'A.C.R.x': constant(), 'L.Old.y': constant(2), 'g': gen(lst(*before))},
+                                   ['A.C.R.x', 'L.Old.y'])
+            self.after = snapshot({'A.R.x': constant(), 'L.New.y': constant(2), 'g': gen(lst(*after))},
+                                  ['A.R.x', 'L.New.y'])
+            self.renames = self.entries(('L.Old', 'L.New', 'namespace', {}), *rows)
+            return self.run_check()
+        merge = [('A.C', 'A', 'namespace', {}), ('A.C.R.x', 'A.R.x', 'declaration', {})]
+        # Finding 3: an R12 drop of a `Preresolved.decl` entry is recorded (no crash).
+        verdict = run([entry('ns', 'A.C'), entry('decl', 'A.C.R.x'), entry('decl', 'A.R.x')],
+                      [entry('ns', 'A'), entry('decl', 'A.R.x')], merge)
+        self.assertIn('preresolved duplicate removed (R12)', [r[3] for r in verdict['derived_literals_respelled']])
+        # Finding 5.2: R12b drops a prefix only when the map respelled the
+        # current namespace or the dropped entry, not another entry.
+        with self.assertRaises(CHECK.Mismatch):
+            run([entry('ns', 'A.B'), entry('ns', 'L.Old'), entry('ns', 'A')],
+                [entry('ns', 'A.B'), entry('ns', 'L.New')], merge)
+        # Finding 8: `[N.C.R, N.C, N, N]` keeps its pre-existing `N, N`.
+        rows = [('A.C', 'A', 'namespace', {}), ('A.C.R.x', 'A.R.x', 'declaration', {})]
+        with self.assertRaises(CHECK.Mismatch):
+            run([entry('ns', 'A.C.R'), entry('ns', 'A.C'), entry('ns', 'A'), entry('ns', 'A')],
+                [entry('ns', 'A.R'), entry('ns', 'A')], rows)
+        # A map-made duplicate of a pre-existing pair: none of them drops.
+        with self.assertRaises(CHECK.Mismatch):
+            run([entry('ns', 'A.C'), entry('ns', 'A'), entry('ns', 'A')], [entry('ns', 'A'), entry('ns', 'A')], rows)
+        # Without drops the list compares entry by entry.
+        self.assertEqual(run([entry('ns', 'A.C.R'), entry('ns', 'A.C'), entry('ns', 'A'), entry('ns', 'A')],
+                             [entry('ns', 'A.R'), entry('ns', 'A'), entry('ns', 'A'), entry('ns', 'A')],
+                             rows)['status'], 'OK')
 
     def test_preresolved_pairing_uses_the_coarse_bucket(self):
         # Finding 6.4: generated constants whose names differ are paired only

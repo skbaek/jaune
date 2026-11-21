@@ -1324,6 +1324,29 @@ def compare_components(before, after, mapping, inventory=None, reviewed=None, co
             record_cache[module] = FIDELITY.read_exports([before['export_paths'][module]])['constants']
         return record_cache[module].get(name)
     global_context['before_record'] = before_record
+    reference_cache = {}
+
+    def before_references(module):
+        """The compiler's resolved references recorded in `module`'s before
+        export (ilean `references`): (constant, holding declaration, start,
+        end), offsets into the module source (master ruling R20)."""
+        if module not in reference_cache:
+            rows = []
+            path = before['export_paths'].get(module)
+            if path is not None:
+                data = json.loads(Path(path).read_bytes())
+                positions = FIDELITY.APPLY.Positions(data['source'])
+                for key, info in (data.get('index') or {}).get('references', {}).items():
+                    const = json.loads(key).get('c')
+                    if not const:
+                        continue
+                    for usage in info.get('usages', ()):
+                        if len(usage) == 5 and isinstance(usage[4], str):
+                            start, end = FIDELITY.APPLY.span(positions, usage[:4])
+                            rows.append((const['n'], usage[4], start, end))
+            reference_cache[module] = rows
+        return reference_cache[module]
+    global_context['before_references'] = before_references
 
     uf_parent = {}
     def uf_find(x):

@@ -1051,10 +1051,11 @@ def lint_names(names, mapping, policy, words, final=False, derived=None, referen
     mapped = {entry['new']: entry for entry in mapping['entries'] if entry['kind'] != 'module'}
     for name, location in sorted(names.items()):
         entry = mapped.get(name)
-        if entry and entry['rule'].split(',')[0].strip() in ('1', '2', '3'):
+        if entry and any(r.strip() in ('1', '2', '3') for r in entry['rule'].split(',')):
             binding = policy['bindings'].get(name)
             # Every listed rule 1-3 is backed, the primary one included
-            # (no short-circuit on a binding under the primary rule; R17).
+            # (no short-circuit on a binding under the primary rule; R17),
+            # whatever its position in the list (R20).
             if name not in derived and (not binding or not binding_backs_listed_rule(name, entry, binding,
                                                                                      policy, mapped)):
                 problems.append(dict(name=name, location=location, reason='map requires matching source binding'))

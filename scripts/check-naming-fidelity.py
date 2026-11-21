@@ -1372,11 +1372,20 @@ class Comparison:
         special = self._special_left
         memo = {}  # id(node) -> (out_node, lits_added_here)
         sites = None  # chain_literal_sites(value), computed at the first chain
+        admitted = None  # R19 admissions of this holder, computed at the first constructor chain
+        # A node whose decision depends on this holder (a chain candidate the
+        # site or R19 rule judged here, or any ancestor of one) is clean only
+        # within this call, never in the per-module cache (R20, Neon-3 finding 6).
+        contextual, local_clean = set(), set()
+        def is_clean(i):
+            return i in clean_ids or i in local_clean
+        def mark_clean(i):
+            (local_clean if i in contextual else clean_ids).add(i)
         stack = [(value, False)]
         while stack:
             cur, ready = stack.pop()
             cid = id(cur)
-            if cid in memo or cid in clean_ids:
+            if cid in memo or is_clean(cid):
                 continue
             if isinstance(cur, list):
                 if not ready:
@@ -1393,12 +1402,17 @@ class Comparison:
                             chain = _name_chain(cur, strict=True)
                             form = _literal_chain(chain) if chain is not None and len(chain[0]) >= 2 else False
                             evidence = None
+                            if form:
+                                contextual.add(cid)
                             if form == 'ctor':
-                                # R19: a constructor-form chain in a body is a
-                                # `toExpr`-written double-backtick literal only
-                                # with source evidence of that literal.
-                                evidence = self.double_backtick_literal(name, '.'.join(chain[0]))
-                                if evidence is not None:
+                                # R19/R20: a constructor-form chain in a body is
+                                # a `toExpr`-written double-backtick literal only
+                                # with the compiler's resolved references to it
+                                # in the holder's own declaration span.
+                                if admitted is None:
+                                    admitted = self.compiler_reference_admissions(name, value)
+                                if '.'.join(chain[0]) in admitted:
+                                    evidence = 'compiler reference'
                                     lit = '.'.join(chain[0])
                                 else:
                                     chain = None
@@ -1426,7 +1440,7 @@ class Comparison:
                                 out = None
                                 if chain is not None:
                                     out = _name_chain_expr(new_full, chain[1], chain[2])
-                                    why = (f'double-backtick name literal ({evidence} level)' if evidence
+                                    why = (f'double-backtick name literal ({evidence})' if evidence
                                            else 'chained ' + why)
                                 elif len(parts) <= 8:
                                     # Reach the outermost head node (`const Lean.Name.mkStrK levels`).
@@ -1442,11 +1456,11 @@ class Comparison:
                                     memo[cid] = (out, True)
                                     continue
                             # Plain Name.mkStr literal that did not change: never contains sub-literals.
-                            clean_ids.add(cid)
+                            mark_clean(cid)
                             continue
                     stack.append((cur, True))
                     for x in reversed(cur):
-                        if isinstance(x, (list, dict)) and id(x) not in memo and id(x) not in clean_ids:
+                        if isinstance(x, (list, dict)) and id(x) not in memo and not is_clean(id(x)):
                             stack.append((x, False))
                 else:
                     changed = False
@@ -1456,7 +1470,9 @@ class Comparison:
                     for x in cur:
                         if isinstance(x, (list, dict)):
                             xid = id(x)
-                            if xid in clean_ids:
+                            if xid in contextual:
+                                contextual.add(cid)
+                            if is_clean(xid):
                                 nx = x
                             else:
                                 nx, lit_flag = memo[xid]
@@ -1471,7 +1487,7 @@ class Comparison:
                             out.append(x)
                     if not changed:
                         if not any_lits:
-                            clean_ids.add(cid)
+                            mark_clean(cid)
                         else:
                             memo[cid] = (cur, True)
                     else:
@@ -1483,7 +1499,7 @@ class Comparison:
                 if not ready:
                     stack.append((cur, True))
                     for v in cur.values():
-                        if isinstance(v, (list, dict)) and id(v) not in memo and id(v) not in clean_ids:
+                        if isinstance(v, (list, dict)) and id(v) not in memo and not is_clean(id(v)):
                             stack.append((v, False))
                 else:
                     changed = False
@@ -1493,7 +1509,9 @@ class Comparison:
                     for k, v in cur.items():
                         if isinstance(v, (list, dict)):
                             vid = id(v)
-                            if vid in clean_ids:
+                            if vid in contextual:
+                                contextual.add(cid)
+                            if is_clean(vid):
                                 nv = v
                             else:
                                 nv, lit_flag = memo[vid]
@@ -1508,62 +1526,105 @@ class Comparison:
                             out[k] = v
                     if not changed:
                         if not any_lits:
-                            clean_ids.add(cid)
+                            mark_clean(cid)
                         else:
                             memo[cid] = (cur, True)
                     else:
                         if has_sp or cid in special:
                             special.add(id(out))
                         memo[cid] = (out, True)
-        if id(value) in clean_ids:
+        if is_clean(id(value)):
             return value
         return memo[id(value)][0]
 
-    def double_backtick_literal(self, holder, lit):
-        """Master ruling R19: the evidence that a constructor-form chain
-        `lit` held by `holder` is a double-backtick literal ``X``, or None.
-        `lit` must be exactly an existing old constant whose map image is an
-        existing after constant, and the holder's source must spell ``X``
-        (outside comments and strings, on identifier boundaries) where `X` is
-        a dot-suffix of `lit`'s user name that resolves to `lit` alone: no
-        other old constant's user name is `X` or ends in `.X`. The range read
-        is the holder declaration's own when the export records it
-        (`'declaration'`), else its module's source (`'module'`)."""
-        if lit not in self.all_before_constants:
-            return None
-        image = self.name(lit)
-        if image == lit or image not in self.all_after_constants:
-            return None
+    def compiler_reference_admissions(self, holder, value):
+        """Master rulings R19 and R20: the constructor-form chains of
+        `holder` that are double-backtick literals, by the compiler's own
+        resolved references (the ilean `references` of the before export:
+        each usage of a constant, its range and the declaration holding it).
+
+        A chain decoding to `lit` is admitted only when: `toExpr` writes
+        `lit` in constructor form (checked by the caller); `lit` is exactly an
+        existing old constant whose map image is an existing after constant;
+        the export records `holder`'s own declaration span, and that span
+        holds compiler references, by `holder`, to exactly `lit`; and the
+        number of occurrences of chains decoding to `lit` in `holder`'s term
+        (counted along every path of the DAG, inner chains included) is at
+        most the number of those references. Without a recorded span or
+        references nothing is admitted. No source text is read.
+
+        Returns the set of admitted names."""
         module = self.holder_module(holder)
-        source = (self.before.get('module_sources') or {}).get(module) if module is not None else None
-        if source is None:
-            return None
-        cache = self.__dict__.setdefault('_double_backticks', {})
+        span = ((self.before.get('module_decls') or {}).get(module) or {}).get(holder) if module else None
+        if span is None:
+            return frozenset()
+        references = self.module_references(module)
+        if not references:
+            return frozenset()
+        counts = Counter(const for const, by, start, _ in references
+                         if by == holder and span[0] <= start < span[1])
+        if not counts:
+            return frozenset()
+        occurrences = Counter()
+        for node_id, (lit, paths) in self._chain_occurrences(value).items():
+            occurrences[lit] += paths
+        admitted = set()
+        for lit, n in occurrences.items():
+            if not (0 < n <= counts.get(lit, 0) and lit in self.all_before_constants):
+                continue
+            image = self.name(lit)
+            if image != lit and image in self.all_after_constants:
+                admitted.add(lit)
+        return frozenset(admitted)
+
+    @staticmethod
+    def _chain_occurrences(value):
+        """{id(node): (name, number of root paths)} for every node of the DAG
+        `value` that decodes as a constructor-form `toExpr` chain (inner
+        chains included)."""
+        order, seen, stack = [], set(), [(value, False)]
+        while stack:
+            cur, done = stack.pop()
+            if not isinstance(cur, (list, dict)):
+                continue
+            if done:
+                order.append(cur)
+                continue
+            if id(cur) in seen:
+                continue
+            seen.add(id(cur))
+            stack.append((cur, True))
+            for x in (cur.values() if isinstance(cur, dict) else cur):
+                if isinstance(x, (list, dict)) and id(x) not in seen:
+                    stack.append((x, False))
+        paths = {id(value): 1}
+        found = {}
+        for cur in reversed(order):  # parents before children
+            n = paths.get(id(cur), 0)
+            if isinstance(cur, list) and len(cur) == 3 and cur[0] == 'app':
+                chain = _name_chain(cur, strict=True)
+                if chain is not None and len(chain[0]) >= 2 and _literal_chain(chain) == 'ctor':
+                    found[id(cur)] = ('.'.join(chain[0]), n)
+            for x in (cur.values() if isinstance(cur, dict) else cur):
+                if isinstance(x, (list, dict)):
+                    paths[id(x)] = paths.get(id(x), 0) + n
+        return found
+
+    def module_references(self, module):
+        """The before export's compiler references of `module`:
+        [(constant, holding declaration, start, end)] with source offsets,
+        from the snapshot (`module_references`) or, in a component compare,
+        read from the module's export (`before_references`)."""
+        cache = self.__dict__.setdefault('_module_references', {})
         if module not in cache:
-            code = code_text(source)
-            cache[module] = [(m.start(), m.group(1)) for m in re.finditer(
-                r"(?<![`\w.'?!])``((?:[^\W\d][\w'?!]*)(?:\.[^\W\d][\w'?!]*)*)(?![\w.'?!])", code)]
-        span = ((self.before.get('module_decls') or {}).get(module) or {}).get(holder)
-        level = 'declaration' if span is not None else 'module'
-        private = MAP.split_private(lit) if lit.startswith('_private.') else None
-        user = private[2] if private else lit
-        parts = user.split('.')
-        suffixes = {'.'.join(parts[-k:]) for k in range(1, len(parts) + 1)}
-        users = self.__dict__.setdefault('_user_names', None)
-        if users is None:
-            users = self._user_names = {}
-            for key in self.all_before_constants:
-                split = MAP.split_private(key) if key.startswith('_private.') else None
-                users.setdefault(split[2] if split else key, []).append(key)
-        for start, spelled in cache[module]:
-            if span is not None and not (span[0] <= start < span[1]):
-                continue
-            if spelled not in suffixes:
-                continue
-            owners = [k for u, ks in users.items() if u == spelled or u.endswith('.' + spelled) for k in ks]
-            if owners == [lit]:
-                return level
-        return None
+            table = self.before.get('module_references')
+            if table is not None:
+                cache[module] = [tuple(r) for r in table.get(module, ())]
+            elif self._global_context and self._global_context.get('before_references'):
+                cache[module] = self._global_context['before_references'](module)
+            else:
+                cache[module] = []
+        return cache[module]
 
     def names_entity(self, name, side):
         """Whether `name` is a constant, or a namespace (a proper prefix of a
@@ -2506,7 +2567,7 @@ class Comparison:
             return '.'.join(parts) if parts else None
         def spelled(node):
             ns = namespace(node)
-            return ns if ns is not None else dag_digest(node).hex()[:16]
+            return ns if ns is not None else dag_digest(node)[:16]  # dag_digest is already hex (R20)
         entries = cells_l[1]
         befores = [before_entry(e) for e in entries]
         holder = self.holders[-1] if self.holders else None
@@ -2525,13 +2586,19 @@ class Comparison:
             earlier = entries[:i]
             image_dup = any(dag_equal(e, entry) for e in earlier)
             before_dup = any(dag_equal(b, was) for b in befores[:i])
-            if image_dup and not before_dup:
+            # R20 (Neon-3 finding 8): an entry duplicated before the rename
+            # (anywhere in the list) is never an R12 drop either.
+            pre_dup = sum(1 for b in befores if dag_equal(b, was)) > 1
+            if image_dup and not before_dup and not pre_dup:
                 kept.append((entry, 'R12'))  # dropped below; recorded with its rule
                 continue
             ns, ns_was = namespace(entry), namespace(was)
+            # R20 (Neon-3 finding 5.2): the map respelled the current
+            # namespace (entry 0) or the dropped entry itself.
+            touched = any(b is not e and not dag_equal(b, e) for b, e in ((befores[0], entries[0]), (was, entry)))
             implied = bool(i > 0 and current_kept and ns is not None and ns_was is not None and
                            current.startswith(ns + '.') and current_was.startswith(ns_was + '.') and
-                           sum(1 for b in befores if dag_equal(b, was)) == 1)
+                           sum(1 for b in befores if dag_equal(b, was)) == 1 and touched)
             kept.append((entry, 'R12b' if implied else None))
         drops = [(entry, 'R12') for entry, rule in kept if rule == 'R12']
         kept = [(entry, rule) for entry, rule in kept if rule != 'R12']

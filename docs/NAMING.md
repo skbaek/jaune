@@ -522,7 +522,8 @@ still be backed for the namespace token: a proper prefix of the name bound
 under that rule and renamed by a map row that lists it, from the prefix of
 the row's old name. A binding under a rule the row does not list never
 matches. Hardened after the cross-family review (ruling R17): every listed
-rule 1–3 is backed, the binding's own rule being the primary one included;
+rule 1–3 is backed, the binding's own rule being the primary one included,
+whatever the position of the rule 1–3 in the row's list (`7, 3` too; R20);
 the backing prefix row must rename (`old != new`) and lie in the row's
 layer; and the rest of the name after the prefix is kept, except that the
 leaf may change when the direct binding spells the whole leaf (`B256.bexp`
@@ -864,18 +865,22 @@ images, and each has a unit test with controls in
   other position is data. The chain must name an existing constant or
   namespace before, and its image one after. A constructor-form
   (`Name.str`/`Name.num`) chain in a definition body is respelled only
-  under ruling R19: `toExpr` writes that name in constructor form (a
-  numeric or private component, or more than eight components); it decodes
-  exactly to an existing old constant whose map image is an existing after
-  constant; and the holder's source spells it as a double-backtick literal
-  ``X`` (outside comments and strings) where `X` is a dot-suffix of the
-  constant's user name that no other old constant's name ends in. The
-  holder declaration's own source range is read when the export records it
-  (reason `double-backtick name literal (declaration level)`), else the
-  module's source (`... (module level)`). Sound because a double-backtick
-  literal is elaborated as a resolved reference to the constant, so
-  respelling it to the map image is a names-only change. Hand-built `Name`
-  data (no such literal, or a name `mkStrK` could write) is never respelled. A chain mixing the two
+  under rulings R19 and R20: `toExpr` writes that name in constructor form
+  (a numeric or private component, or more than eight components); it
+  decodes exactly to an existing old constant whose map image is an
+  existing after constant; the export records the holder declaration's own
+  span, and the compiler's resolved references in the before export (the
+  ilean `references`: each usage with its range and holding declaration)
+  hold references by that declaration, inside that span, to exactly that
+  constant; and the chains decoding to it in the holder's term (counted
+  along every DAG path, inner chains included) are no more than those
+  references (reason `double-backtick name literal (compiler reference)`).
+  No source text is read and there is no module-level fallback. Sound
+  because a double-backtick literal is elaborated as a resolved reference
+  to the constant (the compiler records it), so respelling it to the map
+  image is a names-only change. Hand-built `Name` data (no recorded
+  reference, a reference resolving to another constant, or a name `mkStrK`
+  could write) is never respelled. A chain mixing the two
   encodings, a numeral that is not a raw literal or exactly
   `OfNat.ofNat Nat n (instOfNatNat n)`, or a `mkStr` chain `mkStrN` could
   have written (built by hand, runtime data) stays literal, and a string
@@ -935,7 +940,9 @@ images, and each has a unit test with controls in
   lists competing candidates); a length change needs the map to have
   respelled an entry of that list; an R12b entry's before value must also be
   a proper prefix of the before current namespace and occur once in the
-  before list; the coarse pairing record applies the same reduction once to
+  before list, and the map must have respelled the current namespace or
+  that entry (R20); no entry duplicated before the rename is an R12 drop
+  either (R20); the coarse pairing record applies the same reduction once to
   the whole list. Every drop is in the verdict (reasons `preresolved
   duplicate removed (R12)` and `preresolved implied prefix removed (R12b)`),
   and the component compare's verdict lists `derived_literals_respelled`

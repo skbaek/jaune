@@ -865,6 +865,17 @@ class NamingLintTests(unittest.TestCase):
         self.assertIn(bad, reasons('Jaune.Yzz.exp', [row('Jaune.Zzz.bexp', 'Jaune.Yzz.exp', '1, 3, 7')], exp))
         # A single listed rule 1-3 bound under it stays as before.
         self.assertEqual(reasons('Jaune.Yzz.exp', [row('Jaune.Zzz.bexp', 'Jaune.Yzz.exp', '1, 7')], exp), [])
+        # R20 (Neon-3 finding 2): a rule 1-3 listed after another rule is
+        # checked too: `7, 3` and `4, 1` with no binding at all are findings.
+        for rule in ('7, 3', '4, 1'):
+            self.mapping = dict(self.mapping, entries=[r for r in self.mapping['entries']
+                                                       if not r['new'].startswith('Jaune.Yzz')] +
+                                [row('Jaune.Zzz.word', 'Jaune.Yzz.word', rule)])
+            self.policy['bindings'] = {'Jaune.Yzz': dict(rule='3', source='spec', spelling='Yzz', style='verbatim')}
+            self.assertIn(bad, [p['reason'] for p in self.lint('Jaune.Yzz.word') if p['name'] == 'Jaune.Yzz.word'])
+        # ... and passes when every listed rule 1-3 is backed (`7, 3`: rule 7
+        # direct binding for the kept leaf, rule 3 by the renamed prefix).
+        self.assertEqual(reasons('Jaune.Yzz.neg', [yzz, row('Jaune.Zzz.neg', 'Jaune.Yzz.neg', '7, 3')], neg), [])
 
     def test_root_spelled_declaration_is_linted(self):
         # Neon finding 5, R17: `_root_.N.x` spells the whole name, as N4 reads it.
