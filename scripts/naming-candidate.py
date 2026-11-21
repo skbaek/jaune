@@ -1020,6 +1020,9 @@ def read_snapshot(path, fidelity=True, roots=None, light=False):
         data['all_environments'] = sorted(environments(candidate['modules'], selected))
         return data
     data['all_environments'] = sorted(environments(candidate['modules'], selected))
+    # The batched and union compares read the compiler references from these
+    # paths on demand (R20/R21; review 5 should-fix 2).
+    data['export_paths'] = exports
     if roots is not None:
         unknown = sorted(set(roots) - set(data['all_environments']))
         if unknown:
@@ -1240,8 +1243,11 @@ def _build_global_context_side(selected, metas):
     return all_roots, all_consts, owners, holders, ext_ref_mods
 
 
-def compare_components(before, after, mapping, inventory=None, reviewed=None, collect=False, plan_edits=None):
-    """Per-component topological SCC DAG comparator with byte-identical fast path."""
+def compare_components(before, after, mapping, inventory=None, reviewed=None, collect=False, plan_edits=None,
+                       r19_sites=None):
+    """Per-component topological SCC DAG comparator with byte-identical fast path.
+    `r19_sites`: the reviewed sites of compiler-reference admissions
+    (`FIDELITY.read_r19_sites`, master ruling R22); None admits none."""
     if isinstance(before, (str, Path)):
         before = read_snapshot(before, light=True)
     if isinstance(after, (str, Path)):
@@ -1310,6 +1316,7 @@ def compare_components(before, after, mapping, inventory=None, reviewed=None, co
         before_constants=b_consts, after_constants=a_consts,
         before_owners=b_owners, after_owners=a_owners,
         before_holders=b_holders, after_holders=a_holders,
+        r19_sites=r19_sites,
     )
     record_cache = {}
 
@@ -1565,10 +1572,12 @@ def compare_components(before, after, mapping, inventory=None, reviewed=None, co
     return result
 
 
-def compare(before, after, mapping, inventory=None, reviewed=None, collect=False, plan_edits=None, batch=False):
+def compare(before, after, mapping, inventory=None, reviewed=None, collect=False, plan_edits=None, batch=False,
+            r19_sites=None):
     """`batch`: the snapshots were read with a subset of environments; the result lists
     the environments compared and the relocation/promotion rows checked, and
-    `combine` must show that the batches together cover every environment and row."""
+    `combine` must show that the batches together cover every environment and row.
+    `r19_sites`: as in `compare_components` (master ruling R22)."""
     affected, excluded, renamer, records = _validate_compare_inputs(before, after, mapping, inventory, reviewed)
     left, right = before['candidate'], after['candidate']
     used = set()
@@ -1582,7 +1591,7 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
             path = (before.get('export_paths') or {}).get(module)
             reference_cache[module] = FIDELITY.export_references(path)[1] if path is not None else []
         return reference_cache[module]
-    references_context = dict(before_references=before_references)
+    references_context = dict(before_references=before_references, r19_sites=r19_sites)
     if batch and (reviewed is not None or [renamer.module(r) for r in before['all_environments']]
                   != after['all_environments']):
         raise ValueError('a batched compare needs unchanged environment roots and no reviewed quotations')
@@ -1662,7 +1671,7 @@ def combine(batches):
     plan; their environments partition every maximal environment; every
     relocation or promotion row is checked in at least one environment."""
     keys = ('before_candidate', 'after_candidate', 'before_inventory_sha256', 'after_inventory_sha256',
-            'map_sha256', 'before_snapshot_sha256', 'after_snapshot_sha256')
+            'map_sha256', 'before_snapshot_sha256', 'after_snapshot_sha256', 'r19_sites_sha256')
     first = batches[0]
     for b in batches:
         if b.get('status') != 'OK' or 'batch' not in b:
@@ -1725,6 +1734,9 @@ def main():
                       help='scripts/naming-quotations.json: reviewed capture-qualified quotations')
     comp.add_argument('--inventory', type=Path,
                       help='scripts/naming-inventory.json of both candidates: registered exclusions')
+    comp.add_argument('--r19-sites', type=Path,
+                      help='scripts/maps/g2b-r19-sites.json: the reviewed sites of compiler-reference (R19) '
+                           'admissions (master ruling R22); without it none is admitted')
     comp.add_argument('--environments', help='comma-separated maximal environments: compare only these '
                       '(a batch); `combine` then checks that the batches cover every environment and row')
     comb = commands.add_parser('combine')
@@ -1746,15 +1758,19 @@ def main():
                 edits = plan_edits(args.plan.read_bytes(), args.map.read_bytes(), args.before.read_bytes())
             roots = args.environments.split(',') if args.environments else None
             mapping = json.loads(args.map.read_bytes())
+            sites_raw = args.r19_sites.read_bytes() if args.r19_sites else None
+            sites = FIDELITY.read_r19_sites(sites_raw) if sites_raw is not None else None
             if roots is not None:
                 after_roots = [FIDELITY.MAP.Renamer(mapping['entries']).module(r) for r in roots]
                 result = compare(read_snapshot(args.before, roots=roots), read_snapshot(args.after, roots=after_roots),
-                                 mapping, inventory, reviewed, args.collect_all, edits, batch=True)
+                                 mapping, inventory, reviewed, args.collect_all, edits, batch=True, r19_sites=sites)
             else:
                 result = compare_components(read_snapshot(args.before, light=True),
                                             read_snapshot(args.after, light=True),
-                                            mapping, inventory, reviewed, args.collect_all, edits)
+                                            mapping, inventory, reviewed, args.collect_all, edits, r19_sites=sites)
             result['map_sha256'] = file_sha(args.map)
+            if sites_raw is not None:
+                result['r19_sites_sha256'] = sha(sites_raw)
             result['before_snapshot_sha256'] = file_sha(args.before)
             result['after_snapshot_sha256'] = file_sha(args.after)
         print(json.dumps(result, indent=2))

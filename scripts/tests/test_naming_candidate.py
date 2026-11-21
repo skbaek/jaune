@@ -815,6 +815,7 @@ class ComponentCompareTests(unittest.TestCase):
                     line = prefix.count('\n')
                     col = idx_pos - (prefix.rfind('\n') + 1)
                     decls[dname] = [line, col, line, col + len(leaf), line, col, line, col + len(leaf)]
+            decls.update(spec.get('decls', {}))
             expr_pool = spec.get('expr_pool', [])
             level_pool = spec.get('level_pool', [])
             export_obj = dict(
@@ -824,7 +825,8 @@ class ComponentCompareTests(unittest.TestCase):
                 source=src,
                 level_pool=level_pool,
                 expr_pool=expr_pool,
-                index=dict(version=5, module=mod, directImports=direct_info, decls=decls, references={},
+                index=dict(version=5, module=mod, directImports=direct_info, decls=decls,
+                           references=spec.get('references', {}),
                            naming_syntax=dict(version=2, commands=[], from_olean=spec.get('from_olean', True))),
                 constants=spec['constants'],
                 guards=spec.get('guards', []),
@@ -926,6 +928,81 @@ class ComponentCompareTests(unittest.TestCase):
                                    new='Upstream.new', reason='name literal')])
             self.assertEqual(verdict['preresolved_drops'], [])
             self.assertEqual(verdict['unhygienic_respellings'], [])
+
+    @staticmethod
+    def _pool(*terms):
+        """An interned expression pool holding `terms` (nested lists); returns
+        (pool, [id of each term])."""
+        pool, ids = [], {}
+        def intern(e):
+            if isinstance(e, list) and e and e[0] == 'app':
+                e = ['app', intern(e[1]), intern(e[2])]
+            key = json.dumps(e)
+            if key not in ids:
+                ids[key] = len(pool)
+                pool.append(e)
+            return ids[key]
+        return pool, [intern(t) for t in terms]
+
+    def test_reviewed_sites_reach_every_compare_path(self):
+        # Review 5 should-fix 2 and ruling R22: the component, batched
+        # (--environments) and union compares all read the compiler
+        # references from the exports (`read_snapshot` keeps `export_paths`
+        # with fidelity=True, light=False) and admit a double-backtick
+        # literal only at a reviewed site.
+        old, new = '_private.M.0.N.C.helper', '_private.M2.0.N.helper'
+        def chain(name):
+            e = ['const', ['name', 'Lean.Name.anonymous'], []]
+            for part in name.split('.'):
+                if part.isdigit():
+                    e = ['app', ['app', ['const', ['name', 'Lean.Name.num'], []], e], ['nat', int(part)]]
+                else:
+                    e = ['app', ['app', ['const', ['name', 'Lean.Name.str'], []], e], ['str', part]]
+            return e
+        source = 'private def helper : Nat := 3\ndef k : Lean.Name := ``helper\n'
+        def side(mod, helper, holder, moved=False):
+            pool, (nat, three, name_t, lit) = self._pool(['const', ['name', 'Nat'], []], ['nat', 3],
+                                                         ['const', ['name', 'Lean.Name'], []], chain(helper))
+            spec = {mod: dict(
+                source=source, roots=[], expr_pool=pool,
+                constants={helper: self._defn(nat, three), holder: self._defn(name_t, lit)},
+                decls={holder: [1, 0, 1, 29, 1, 4, 1, 5]},
+                references={json.dumps(dict(c=dict(m=mod, n=helper))): dict(usages=[[1, 23, 1, 29, holder]])})}
+            # A second module, its own environment. `moved`: its `Extra.f`
+            # moves to a new root module (a relocation row), so the
+            # environment roots change and the compare takes the union path.
+            nat3 = dict(expr_pool=[['nat', 3], ['const', ['name', 'Nat'], []]])
+            spec['Extra'] = dict(nat3, source='def e := 3\ndef f := 3\n', roots=['Extra.e'] + ([] if moved else ['Extra.f']),
+                                 constants={'Extra.e': self._defn(1, 0), **({} if moved else {'Extra.f': self._defn(1, 0)})})
+            if moved:
+                spec['Extra2'] = dict(nat3, source='def f := 3\n', roots=['Extra.f'], constants={'Extra.f': self._defn(1, 0)})
+            return spec
+        rows = [dict(old='N.C', new='N', kind='namespace', layer='execution', rule='4', source='t'),
+                dict(old='M', new='M2', kind='module', layer='execution', rule='4', source='t')]
+        mapping = dict(EMPTY, entries=rows)
+        sites = frozenset({('M', 'N.C.k', old, new)})
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            b = self._build_snapshot(root / 'before', side('M', old, 'N.C.k'))
+            a = self._build_snapshot(root / 'after', side('M2', new, 'N.k'))
+            a_union = self._build_snapshot(root / 'after-union', side('M2', new, 'N.k', moved=True))
+            union_map = dict(mapping, entries=rows + [dict(old='Extra.f', new='Extra.f', kind='relocation', layer='execution',
+                                                           rule='4', source='t', from_module='Extra', to_module='Extra2')])
+            paths = dict(
+                component=lambda s: CHECK.compare_components(b, a, mapping, r19_sites=s),
+                batched=lambda s: CHECK.compare(CHECK.read_snapshot(b, roots=['M']), CHECK.read_snapshot(a, roots=['M2']),
+                                                mapping, batch=True, r19_sites=s),
+                union=lambda s: CHECK.compare(CHECK.read_snapshot(b), CHECK.read_snapshot(a_union), union_map, r19_sites=s))
+            for label, run in paths.items():
+                with self.subTest(label):
+                    verdict = run(sites)
+                    self.assertEqual(verdict['status'], 'OK')
+                    if label == 'union':
+                        self.assertEqual(list(verdict['environments']), ['<union>'])
+                    # Without the sites file, or at an unlisted site: fails.
+                    for unlisted in (None, frozenset({('M', 'N.C.k', old, '_private.M2.0.N.other')})):
+                        with self.assertRaises(CHECK.FIDELITY.Mismatch):
+                            run(unlisted)
 
     def test_global_uniform_namespace_and_multi_component_reloc_aux_controls(self):
         with tempfile.TemporaryDirectory() as tmp:

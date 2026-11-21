@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "description": "Reviewed sites for compiler-reference (R19) admissions in the N4 fidelity comparison (docs/NAMING.md, master ruling R22): a constructor-form Name chain is respelled as a double-backtick literal only at a site listed here, matched exactly, and only when the R21 evidence also holds. The G2b rename (map g2b-rename-delta-map.json).",
+  "sites": [
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_push",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_push",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_pop",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_pop",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_chargeGas",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_chargeGas",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_chargeStateGas",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_chargeStateGas",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_popToNat",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_popToNat",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_popToAddress",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_popToAddress",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_popN",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_popList",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_pushItem",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_pushItem",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_applyUnary",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_applyUnary",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_applyBinary",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_applyBinary",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_applyTernary",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_applyTernary",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    },
+    {
+      "module": "Jaune.MessageCall.CheckedCanonical",
+      "holder": "Jaune.Checked._aux_Jaune_MessageCall_CheckedCanonical___elabRules_Jaune_Checked_tacticCanonical_primitive_1",
+      "old": "_private.Jaune.MessageCall.CheckedCanonical.0.Jaune.Checked.canonical_assertDynamic",
+      "new": "_private.Jaune.MessageCall.Canonical.0.Jaune.canonical_assertDynamic",
+      "review": "g2-plan/u9h4-evidence/site-review.md: the elab \"canonical_primitive\" block, Jaune/MessageCall/CheckedCanonical.lean lines 131-166 at e74747ffc; twelve double-backtick canonical_* literals, no hand-built Name, only popN -> popList changed in 5c33bf174"
+    }
+  ]
+}
