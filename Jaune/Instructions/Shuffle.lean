@@ -1,4 +1,4 @@
-import Jaune.MessageCall.CheckedState
+import Jaune.MessageCall.State
 
 /-! The Shuffle family (S4): `DUP`, `SWAP`, and EIP-8024's `DUPN`, `SWAPN` and `EXCHANGE`.
 
@@ -7,7 +7,7 @@ immediate that does not decode. The family step runs over the frame-local `Machi
 row cannot reach the world, the substate or the trail; and `Shuffle` has no constructor that
 reads or writes memory, the return data or the state-gas meter. -/
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -48,11 +48,11 @@ def Shuffle.run (sh : Shuffle) (m : Machine) : Except (ExceptionalHalt × Machin
   | .swap index =>
     match List.swap m.stack index with
     | none => .error (.stackUnderflow .none, m)
-    | some stack => .ok { m with stack }
+    | some stack => .ok { m with stack := stack }
   | .exchange i j =>
     match List.exchange m.stack i j with
     | none => .error (.stackUnderflow .none, m)
-    | some stack => .ok { m with stack }
+    | some stack => .ok { m with stack := stack }
 
 /-- The family step: availability, the charge, the decode, the shuffle. -/
 def ShuffleRow.step (row : ShuffleRow) (opcodes : OpcodeRules) (m : Machine) :
@@ -85,4 +85,4 @@ def NextOp.shuffleRow? : Jaune.NextOp → Option ShuffleRow
   | .exchange imm => some (NextOp.exchangeRow imm)
   | _ => none
 
-end Jaune.Checked
+end Jaune

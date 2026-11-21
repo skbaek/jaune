@@ -105,12 +105,12 @@ instance : Ssz UInt8 where
   serializeTo b acc := acc.push b
   serializeTo_eq b acc := by simp
 
-theorem leNat_lt : ∀ bs : Bytes, leNat bs < 2 ^ (8 * bs.length)
-  | [] => by simp [leNat]
+theorem littleEndianNat_lt : ∀ bs : Bytes, littleEndianNat bs < 2 ^ (8 * bs.length)
+  | [] => by simp [littleEndianNat]
   | b :: bs => by
     have hb := b.toNat_lt
-    have ih := leNat_lt bs
-    show b.toNat + 256 * leNat bs < 2 ^ (8 * (bs.length + 1))
+    have ih := littleEndianNat_lt bs
+    show b.toNat + 256 * littleEndianNat bs < 2 ^ (8 * (bs.length + 1))
     rw [Nat.mul_succ, Nat.pow_add, show (2 : Nat) ^ 8 = 256 from rfl]
     omega
 
@@ -118,20 +118,20 @@ theorem leNat_lt : ∀ bs : Bytes, leNat bs < 2 ^ (8 * bs.length)
 instance : Ssz U64 where
   fixedSize? := some 8
   isBasic := true
-  serialize x := leBytes 8 x.toNat
+  serialize x := littleEndianBytes 8 x.toNat
   deserialize bs :=
-    if h : bs.length = 8 then pure (U64.ofNatLt (leNat bs) (by have := leNat_lt bs; rw [h] at this; exact this))
+    if h : bs.length = 8 then pure (U64.ofNatLt (littleEndianNat bs) (by have := littleEndianNat_lt bs; rw [h] at this; exact this))
     else decodeError (.length 8 bs.length)
-  hashTreeRoot x := chunkOf (leBytes 8 x.toNat)
+  hashTreeRoot x := chunkOf (littleEndianBytes 8 x.toNat)
 
 /-- `uintN` for `N = 8 * n` ("Serialization", `uintN`): `value.to_bytes(n, "little")`. -/
-instance {n : Nat} : Ssz (UIntN n) where
+instance {n : Nat} : Ssz (UnsignedInteger n) where
   fixedSize? := some n
   isBasic := true
-  serialize x := leBytes n x.toNat
+  serialize x := littleEndianBytes n x.toNat
   deserialize bs :=
-    if h : bs.length = n then pure ⟨leNat bs, h ▸ leNat_lt bs⟩ else decodeError (.length n bs.length)
-  hashTreeRoot x := chunkOf (leBytes n x.toNat)
+    if h : bs.length = n then pure ⟨littleEndianNat bs, h ▸ littleEndianNat_lt bs⟩ else decodeError (.length n bs.length)
+  hashTreeRoot x := chunkOf (littleEndianBytes n x.toNat)
 
 theorem slice_eq_take_drop (bs : Scope) (a c : Nat) :
     slice bs a c = (bs.toList.drop a).take (c - a) := by
@@ -208,7 +208,7 @@ instance instDecidableEqForkField {α : Type} [h : DecidableEq α] : {c : Bool} 
 element whose offset sits in the fixed part. -/
 inductive Part where
   | fixed (b : Bytes)
-  | var (b : Bytes)
+  | variableSize (b : Bytes)
 
 /-- "Vectors, containers, progressive containers, lists, progressive lists": the fixed parts
 (with `uint32` offsets interleaved for variable-size parts) followed by the variable parts.
@@ -217,22 +217,22 @@ lists respect their limits in the consensus types; the serialization itself is t
 def serializeParts (ps : List Part) : Bytes :=
   let fixedLen := ps.foldl (fun n p => n + match p with
     | .fixed b => b.length
-    | .var _ => BYTES_PER_LENGTH_OFFSET) 0
+    | .variableSize _ => BYTES_PER_LENGTH_OFFSET) 0
   let rec go : List Part → Nat → List Bytes → List Bytes → Bytes
     | [], _, fixedAcc, varAcc => (fixedAcc.reverse ++ varAcc.reverse).flatten
     | .fixed b :: rest, off, fixedAcc, varAcc => go rest off (b :: fixedAcc) varAcc
-    | .var b :: rest, off, fixedAcc, varAcc =>
-      go rest (off + b.length) (leBytes BYTES_PER_LENGTH_OFFSET off :: fixedAcc) (b :: varAcc)
+    | .variableSize b :: rest, off, fixedAcc, varAcc =>
+      go rest (off + b.length) (littleEndianBytes BYTES_PER_LENGTH_OFFSET off :: fixedAcc) (b :: varAcc)
   go ps fixedLen [] []
 
 /-- The parts of a homogeneous sequence. -/
 @[inline] def sequenceParts {α : Type} [Ssz α] (xs : List α) : List Part :=
   match Ssz.fixedSize? α with
   | some _ => xs.map fun x => .fixed (serialize x)
-  | none => xs.map fun x => .var (serialize x)
+  | none => xs.map fun x => .variableSize (serialize x)
 
 /-- Read the `uint32` offset at byte `pos`. Callers check `pos + 4 ≤ bs.size` first. -/
-@[inline] def readOffset (bs : Scope) (pos : Nat) : Nat := leNat (slice bs pos (pos + 4))
+@[inline] def readOffset (bs : Scope) (pos : Nat) : Nat := littleEndianNat (slice bs pos (pos + 4))
 
 /-- Check that `offsets` are non-decreasing and at most `scope`, then cut the variable parts:
 element `i` spans `[offsets[i], offsets[i+1])` and the last one ends at `scope`. -/
@@ -356,36 +356,36 @@ def sequenceChunkCount (α : Type) [Ssz α] (n : Nat) : Nat :=
 /-! ## Vectors and lists -/
 
 /-- `Vector[T, N]`: exactly `N` elements. -/
-structure SszVector (α : Type) (n : Nat) where
+structure Ssz.Vector (α : Type) (n : Nat) where
   toArray : Array α
   size_eq : toArray.size = n
 
 /-- `List[T, N]`: at most `N` elements. -/
-structure SszList (α : Type) (n : Nat) where
+structure Ssz.List (α : Type) (n : Nat) where
   toArray : Array α
   size_le : toArray.size ≤ n
 
-theorem SszVector.ext {α : Type} {n : Nat} :
-    ∀ {a b : SszVector α n}, a.toArray = b.toArray → a = b
+theorem Ssz.Vector.ext {α : Type} {n : Nat} :
+    ∀ {a b : Ssz.Vector α n}, a.toArray = b.toArray → a = b
   | ⟨_, _⟩, ⟨_, _⟩, rfl => rfl
 
-theorem SszList.ext {α : Type} {n : Nat} :
-    ∀ {a b : SszList α n}, a.toArray = b.toArray → a = b
+theorem Ssz.List.ext {α : Type} {n : Nat} :
+    ∀ {a b : Ssz.List α n}, a.toArray = b.toArray → a = b
   | ⟨_, _⟩, ⟨_, _⟩, rfl => rfl
 
-instance {α : Type} {n : Nat} [DecidableEq α] : DecidableEq (SszVector α n) := fun a b =>
-  if h : a.toArray = b.toArray then isTrue (SszVector.ext h) else isFalse (fun e => h (e ▸ rfl))
+instance {α : Type} {n : Nat} [DecidableEq α] : DecidableEq (Ssz.Vector α n) := fun a b =>
+  if h : a.toArray = b.toArray then isTrue (Ssz.Vector.ext h) else isFalse (fun e => h (e ▸ rfl))
 
-instance {α : Type} {n : Nat} [DecidableEq α] : DecidableEq (SszList α n) := fun a b =>
-  if h : a.toArray = b.toArray then isTrue (SszList.ext h) else isFalse (fun e => h (e ▸ rfl))
+instance {α : Type} {n : Nat} [DecidableEq α] : DecidableEq (Ssz.List α n) := fun a b =>
+  if h : a.toArray = b.toArray then isTrue (Ssz.List.ext h) else isFalse (fun e => h (e ▸ rfl))
 
-instance {α : Type} {n : Nat} [BEq α] : BEq (SszVector α n) := ⟨fun a b => a.toArray == b.toArray⟩
-instance {α : Type} {n : Nat} [BEq α] : BEq (SszList α n) := ⟨fun a b => a.toArray == b.toArray⟩
+instance {α : Type} {n : Nat} [BEq α] : BEq (Ssz.Vector α n) := ⟨fun a b => a.toArray == b.toArray⟩
+instance {α : Type} {n : Nat} [BEq α] : BEq (Ssz.List α n) := ⟨fun a b => a.toArray == b.toArray⟩
 
 /-- `Vector[T, N]` ("Serialization" as a sequence; "Merkleization": `merkleize(pack(value))`
 for basic `T`, `merkleize([hash_tree_root(e) for e in value])` otherwise). `N = 0` is an
 illegal type and never decodes. -/
-instance {α : Type} {n : Nat} [Ssz α] : Ssz (SszVector α n) where
+instance {α : Type} {n : Nat} [Ssz α] : Ssz (Ssz.Vector α n) where
   fixedSize? := (Ssz.fixedSize? α).map (n * ·)
   serialize v := serializeSequence v.toArray
   deserialize bs := do
@@ -398,7 +398,7 @@ instance {α : Type} {n : Nat} [Ssz α] : Ssz (SszVector α n) where
 
 /-- `List[T, N]` ("Merkleization": `mix_in_length(merkleize(pack(value), limit=chunk_count),
 len(value))` for basic `T`, and with element roots otherwise). -/
-instance {α : Type} {n : Nat} [Ssz α] : Ssz (SszList α n) where
+instance {α : Type} {n : Nat} [Ssz α] : Ssz (Ssz.List α n) where
   fixedSize? := none
   serialize v := serializeSequence v.toArray
   deserialize bs := do
@@ -410,11 +410,11 @@ instance {α : Type} {n : Nat} [Ssz α] : Ssz (SszList α n) where
 
 /-- The vector instance's serialization and decoding are the specification's readings
 (`serializeParts (seqParts ...)`, `deserializeSeq`); the instance runs the fast paths. -/
-theorem SszVector.serialize_eq {α : Type} {n : Nat} [Ssz α] (v : SszVector α n) :
+theorem Ssz.Vector.serialize_eq {α : Type} {n : Nat} [Ssz α] (v : Ssz.Vector α n) :
     serialize v = serializeParts (sequenceParts v.toArray.toList) := serializeSequence_eq _
 
-theorem SszVector.deserialize_eq {α : Type} {n : Nat} [Ssz α] (bs : Bytes) :
-    (deserialize bs : Fallible (SszVector α n)) =
+theorem Ssz.Vector.deserialize_eq {α : Type} {n : Nat} [Ssz α] (bs : Bytes) :
+    (deserialize bs : Fallible (Ssz.Vector α n)) =
       (if n = 0 then throw (.decode (.illegalType "Vector[T, 0]"))
        else do
         let xs ← deserializeSequence (α := α) bs (some n) n
@@ -422,11 +422,11 @@ theorem SszVector.deserialize_eq {α : Type} {n : Nat} [Ssz α] (bs : Bytes) :
   show (if n = 0 then _ else _) = _
   simp only [deserializeSequenceFast_eq]; rfl
 
-theorem SszList.serialize_eq {α : Type} {n : Nat} [Ssz α] (v : SszList α n) :
+theorem Ssz.List.serialize_eq {α : Type} {n : Nat} [Ssz α] (v : Ssz.List α n) :
     serialize v = serializeParts (sequenceParts v.toArray.toList) := serializeSequence_eq _
 
-theorem SszList.deserialize_eq {α : Type} {n : Nat} [Ssz α] (bs : Bytes) :
-    (deserialize bs : Fallible (SszList α n)) =
+theorem Ssz.List.deserialize_eq {α : Type} {n : Nat} [Ssz α] (bs : Bytes) :
+    (deserialize bs : Fallible (Ssz.List α n)) =
       (do
         let xs ← deserializeSequence (α := α) bs none n
         if h : xs.size ≤ n then pure ⟨xs, h⟩ else throw (.decode (.limit n xs.size))) := by

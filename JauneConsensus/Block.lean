@@ -34,7 +34,7 @@ def FULL_EXIT_REQUEST_AMOUNT : U64 := U64.zero
 variable {P : Preset} {f : ConsensusFork}
 
 /-- The bytes of a fixed-length byte vector. -/
-private def vectorBytes {n : Nat} (v : SszVector UInt8 n) : Bytes := v.toArray.toList
+private def vectorBytes {n : Nat} (v : Ssz.Vector UInt8 n) : Bytes := v.toArray.toList
 
 /-! ## Header, RANDAO, eth1 data -/
 
@@ -393,7 +393,7 @@ def processWithdrawals (state : BeaconState P f) (payload : ExecutionPayload P) 
     state ← decreaseBalance state w.validator_index w.amount
   if f.atLeast .electra then
     let pending ← state.pendingPartialWithdrawals
-    state ← state.setPendingPartialWithdrawals (← SszList.ofArray (pending.toArray.extract processed pending.length) site)
+    state ← state.setPendingPartialWithdrawals (← Ssz.List.ofArray (pending.toArray.extract processed pending.length) site)
   if h : 0 < expected.size then
     let latest := expected[expected.size - 1]
     state := { state with next_withdrawal_index := ← U64.add? latest.index U64.one site }

@@ -33,17 +33,17 @@ theorem Account.clearIfEmpty_of_code {ac : Account} (hc : ac.code.size ≠ 0) :
     exact (hc h.1).elim
   · rfl
 
-theorem State.Protected.setBal {w : State} {a : Address} (hp : w.Protected a) (b : Address) (v : U256) :
-    (w.setBal b v).Protected a := by
+theorem State.Protected.setBalance {w : State} {a : Address} (hp : w.Protected a) (b : Address) (v : U256) :
+    (w.setBalance b v).Protected a := by
   by_cases he : b = a
   · subst b
-    simpa only [State.Protected, State.setBal_get_self, Account.clearIfEmpty_nonce,
+    simpa only [State.Protected, State.setBalance_get_self, Account.clearIfEmpty_nonce,
       Account.clearIfEmpty_code, Account.withBalance] using hp
-  · simpa only [State.Protected, State.setBal_get_ne he] using hp
+  · simpa only [State.Protected, State.setBalance_get_ne he] using hp
 
-theorem State.setBal_storage_of_protected {w : State} {a b : Address} {v : U256}
-    (hp : w.Protected a) : ((w.setBal b v).get a).storage = (w.get a).storage := by
-  rw [State.setBal_get_stor]
+theorem State.setBalance_storage_of_protected {w : State} {a b : Address} {v : U256}
+    (hp : w.Protected a) : ((w.setBalance b v).get a).storage = (w.get a).storage := by
+  rw [State.setBalance_get_storage]
   split_ifs with h
   · obtain ⟨rfl, h⟩ := h
     exact (hp.elim (fun hn => hn h.2.1) (fun hc => hc h.1)).elim

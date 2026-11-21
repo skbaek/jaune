@@ -71,7 +71,7 @@ theorem routedSum_cons (bi : U64) (w : Withdrawal) (l : List Withdrawal) :
   rw [this]
   rw [routedSum_single]
 
-theorem withdrawnAmount_foldl {bi vi : U64}
+theorem withdrawnAmount_foldlM {bi vi : U64}
     (hv : Gloas.convertBuilderIndexToValidatorIndex bi = .ok vi) :
     ∀ (l : List Withdrawal) (acc x : U64),
       l.foldlM (fun acc w => if w.validator_index == vi then acc.add? w.amount "withdrawn"
@@ -83,7 +83,7 @@ theorem withdrawnAmount_foldl {bi vi : U64}
   | w :: l, acc, x, h => by
     rw [List.foldlM_cons] at h
     obtain ⟨a, ha, h⟩ := bind_eq_ok_iff.mp h
-    have ih := withdrawnAmount_foldl hv l a x h
+    have ih := withdrawnAmount_foldlM hv l a x h
     rw [routedSum_cons, ih]
     by_cases hw : w.validator_index = vi
     · have hr : Routes bi w := (routes_iff_of_convert hv w).mpr hw
@@ -101,7 +101,7 @@ theorem withdrawnAmount_toNat {bi vi x : U64} {ws : Array Withdrawal}
     (h : Gloas.withdrawnAmount ws vi = .ok x) : x.toNat = routedSum bi ws.toList := by
   unfold Gloas.withdrawnAmount at h
   rw [← Array.foldlM_toList] at h
-  have := withdrawnAmount_foldl hv ws.toList U64.zero x h
+  have := withdrawnAmount_foldlM hv ws.toList U64.zero x h
   have h0 : U64.zero.toNat = 0 := rfl
   omega
 
@@ -414,21 +414,21 @@ def Source (s : Gloas.BeaconState P) (x : Gloas.BuilderPendingWithdrawal) : Prop
     (U64.zero < s.latest_execution_payload_bid.value ∧ x = bidWithdrawal s.latest_execution_payload_bid)
 
 /-- The sources of `s'` are sources of `s`. -/
-def SourceLe (s s' : Gloas.BeaconState P) : Prop := ∀ x, Source s' x → Source s x
+def NoNewSource (s s' : Gloas.BeaconState P) : Prop := ∀ x, Source s' x → Source s x
 
-theorem SourceLe.refl (s : Gloas.BeaconState P) : SourceLe s s := fun _ h => h
+theorem NoNewSource.refl (s : Gloas.BeaconState P) : NoNewSource s s := fun _ h => h
 
-theorem SourceLe.trans {a b c : Gloas.BeaconState P} (h₁ : SourceLe a b) (h₂ : SourceLe b c) : SourceLe a c :=
+theorem NoNewSource.trans {a b c : Gloas.BeaconState P} (h₁ : NoNewSource a b) (h₂ : NoNewSource b c) : NoNewSource a c :=
   fun x h => h₁ x (h₂ x h)
 
-theorem sourceLe_of_equalities {s s' : Gloas.BeaconState P}
+theorem noNewSource_of_equalities {s s' : Gloas.BeaconState P}
     (hw : s'.builder_pending_withdrawals = s.builder_pending_withdrawals)
     (hp : s'.builder_pending_payments = s.builder_pending_payments)
-    (hL : s'.latest_execution_payload_bid = s.latest_execution_payload_bid) : SourceLe s s' := by
+    (hL : s'.latest_execution_payload_bid = s.latest_execution_payload_bid) : NoNewSource s s' := by
   intro x h; unfold Source at h ⊢; rw [hw, hp, hL] at h; exact h
 
-theorem sourceLe_of_invariant {s s' : Gloas.BeaconState P} (h : InvariantFrame s s') : SourceLe s s' :=
-  sourceLe_of_equalities h.2.2.1 h.2.1 h.2.2.2.1
+theorem noNewSource_of_invariant {s s' : Gloas.BeaconState P} (h : InvariantFrame s s') : NoNewSource s s' :=
+  noNewSource_of_equalities h.2.2.1 h.2.1 h.2.2.2.1
 
 theorem empty_weight : Gloas.BuilderPendingPayment.empty.weight = U64.zero := rfl
 
@@ -436,7 +436,7 @@ theorem empty_weight : Gloas.BuilderPendingPayment.empty.weight = U64.zero := rf
 which is positive) and shifts the payments down, filling with empty entries. -/
 theorem sourceLe_rotation (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT) {cfg : Config}
     {a b : Gloas.BeaconState P} (h : Gloas.processBuilderPendingPayments cfg a = .ok b) :
-    SourceLe a b := by
+    NoNewSource a b := by
   obtain ⟨-, q, hqh, hW, hP⟩ := processBuilderPendingPayments_frame h
   have hq0 := quorum_pos hq hqh
   have hL := (processBuilderPendingPayments_core cfg a b h).2.1
@@ -469,26 +469,26 @@ theorem sourceLe_rotation (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_IN
 /-- `process_slots` creates no source. -/
 theorem sourceLe_processSlots (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT) {ctx : Context}
     {s s' : Gloas.BeaconState P} {slot : U64} (h : Gloas.processSlots ctx s slot = .ok s') :
-    SourceLe s s' :=
-  processSlots_induction (ctx := ctx) (fun m => SourceLe s m)
+    NoNewSource s s' :=
+  processSlots_induction (ctx := ctx) (fun m => NoNewSource s m)
     (fun st st1 st2 next hI f1 _ hc => by
-      have hs : SourceLe st st2 := by
+      have hs : NoNewSource st st2 := by
         rcases hc with ⟨rfl, _⟩ | ⟨_, he⟩
-        · exact sourceLe_of_invariant f1
+        · exact noNewSource_of_invariant f1
         · obtain ⟨a, b, fa, hb, fb⟩ := processEpoch_phases he
-          exact (sourceLe_of_invariant f1).trans ((sourceLe_of_invariant fa).trans
-            ((sourceLe_rotation hq hb).trans (sourceLe_of_invariant fb)))
-      exact hI.trans (hs.trans (sourceLe_of_equalities rfl rfl rfl))) h (SourceLe.refl s)
+          exact (noNewSource_of_invariant f1).trans ((noNewSource_of_invariant fa).trans
+            ((sourceLe_rotation hq hb).trans (noNewSource_of_invariant fb)))
+      exact hI.trans (hs.trans (noNewSource_of_equalities rfl rfl rfl))) h (NoNewSource.refl s)
 
 /-- The parent settlement creates no source: `settle_builder_payment` moves a non-empty payment's
 withdrawal into the queue and empties the entry; the direct append moves `L`'s; the builder
 requests touch only the registry. -/
-theorem sourceLe_parent {ctx : Context} {s s1 : Gloas.BeaconState P} {blk : Gloas.BeaconBlock P}
-    (h : Gloas.processParentExecutionPayload ctx s blk = .ok s1) : SourceLe s s1 := by
+theorem noNewSource_parent {ctx : Context} {s s1 : Gloas.BeaconState P} {blk : Gloas.BeaconBlock P}
+    (h : Gloas.processParentExecutionPayload ctx s blk = .ok s1) : NoNewSource s s1 := by
   rcases processParentExecutionPayload_cases h with ⟨rfl, _⟩ | ⟨_, a, d, e, ha, hd, he, hs⟩
-  · exact SourceLe.refl _
+  · exact NoNewSource.refl _
   obtain ⟨x, fx, hx⟩ := applyParentPrefix_split ha
-  have hsx : SourceLe s x := by
+  have hsx : NoNewSource s x := by
     rcases hx with ⟨idx, hset⟩ | ⟨hv, rfl, _⟩ | rfl
     · obtain ⟨-, p, hp, hpos, hnpos, hemp, hoth⟩ := settleBuilderPayment_frame hset
       have hL := (settleBuilderPayment_core s idx x hset).2.1
@@ -516,18 +516,18 @@ theorem sourceLe_parent {ctx : Context} {s s1 : Gloas.BeaconState P} {blk : Gloa
         · exact Or.inr (Or.inr ⟨hv, rfl⟩)
       · exact Or.inr (Or.inl hy)
       · exact Or.inr (Or.inr hy)
-    · exact SourceLe.refl _
-  have hxa := sourceLe_of_invariant fx
-  have hda : SourceLe a d := by
-    refine forIn_yield_invariant (fun m => SourceLe a m) _ (fun m r m' hI hm' => ?_) _ a d hd (SourceLe.refl a)
+    · exact NoNewSource.refl _
+  have hxa := noNewSource_of_invariant fx
+  have hda : NoNewSource a d := by
+    refine forIn_yield_invariant (fun m => NoNewSource a m) _ (fun m r m' hI hm' => ?_) _ a d hd (NoNewSource.refl a)
     have hm := (depositRequest_cases hm').1
-    exact hI.trans (sourceLe_of_equalities (by rw [hm]) (by rw [hm]) (by rw [hm]))
-  have hed : SourceLe d e := by
-    refine forIn_yield_invariant (fun m => SourceLe d m) _ (fun m r m' hI hm' => ?_) _ d e he (SourceLe.refl d)
+    exact hI.trans (noNewSource_of_equalities (by rw [hm]) (by rw [hm]) (by rw [hm]))
+  have hed : NoNewSource d e := by
+    refine forIn_yield_invariant (fun m => NoNewSource d m) _ (fun m r m' hI hm' => ?_) _ d e he (NoNewSource.refl d)
     have hm := (exitRequest_cases hm').1
-    exact hI.trans (sourceLe_of_equalities (by rw [hm]) (by rw [hm]) (by rw [hm]))
+    exact hI.trans (noNewSource_of_equalities (by rw [hm]) (by rw [hm]) (by rw [hm]))
   obtain ⟨-, hp1, hw1, hL1, -⟩ := applyParentSuffix_post hs
-  exact hsx.trans (hxa.trans (hda.trans (hed.trans (sourceLe_of_equalities hw1 hp1 hL1))))
+  exact hsx.trans (hxa.trans (hda.trans (hed.trans (noNewSource_of_equalities hw1 hp1 hL1))))
 
 /-- A paying bid passes the builder checks, including its signature under the context's BLS
 switch. -/
@@ -577,7 +577,7 @@ theorem source_bid {ctx : Context} {s s' : Gloas.BeaconState P} {sb : Gloas.Sign
     · rw [hpz hv] at hj; exact Or.inl (Or.inr (Or.inl ⟨j, p, hj, hne, hpx⟩))
   · rw [hL] at hv hx; exact Or.inr ⟨hx, hv⟩
 
-theorem sourceLe_operations {s s' : Gloas.BeaconState P} (h : OperationsRelation s s') : SourceLe s s' := by
+theorem noNewSource_operations {s s' : Gloas.BeaconState P} (h : OperationsRelation s s') : NoNewSource s s' := by
   obtain ⟨c, hq, hpay⟩ := h
   intro x hx
   rcases hx with hx | ⟨j, p, hj, hne, hpx⟩ | ⟨hv, hx⟩
@@ -619,7 +619,7 @@ theorem rotation_fate {cfg : Config} {a b : Gloas.BeaconState P}
       have hsz := a.builder_pending_payments.size_eq
       have : (a.builder_pending_payments.toArray.extract 0 P.SLOTS_PER_EPOCH)[j]? = some p := by
         rw [Array.getElem?_extract]; simp only [Nat.zero_add]; rw [if_pos (by simp; omega)]; exact hp
-      exact mem_of_getElem?' this
+      exact mem_toList_of_getElem? this
     · exact Or.inr hw
   · by_cases hj : P.SLOTS_PER_EPOCH ≤ j
     · exact Or.inr hj
@@ -964,24 +964,24 @@ theorem GloasStepView.source_step
             b.message.body.signed_execution_payload_bid.signature = true) := by
   obtain ⟨s1, s2, s3, s4, s5, s6, s7, h1, h2, h3, h4, h5, h6, h7, h8⟩ :=
     processBlock_phases V.processBlock
-  have hpre : SourceLe preB s3 := by
+  have hpre : NoNewSource preB s3 := by
     obtain ⟨_, _, hm2⟩ := processBlockHeader_post h2
     have w3 := processWithdrawals_withdrawalsFrame _ _ h3
-    have hw3 : SourceLe s2 s3 := by
+    have hw3 : NoNewSource s2 s3 := by
       rcases processWithdrawals_cases h3 with rfl | ⟨ex, t, -, -, -, hp', hw'⟩
-      · exact SourceLe.refl _
+      · exact NoNewSource.refl _
       · intro y hy
         rcases hy with hy | hy | ⟨hv, hy⟩
         · rw [hw'] at hy; exact Or.inl (List.mem_of_mem_drop hy)
         · rw [hp'] at hy; exact Or.inr (Or.inl hy)
         · rw [w3.1] at hv hy; exact Or.inr (Or.inr ⟨hv, hy⟩)
-    exact (sourceLe_processSlots quorumPositive V.slots).trans ((sourceLe_parent h1).trans
-      ((sourceLe_of_equalities (by rw [hm2]) (by rw [hm2]) (by rw [hm2])).trans hw3))
-  have hpost : SourceLe s4 postB :=
-    (sourceLe_of_invariant (processRandao_invariantFrame _ _ _ _ h5)).trans
-      ((sourceLe_of_invariant (processEth1Data_invariantFrame _ _ _ h6)).trans
-        ((sourceLe_operations (processOperations_operations _ _ _ _ _ h7)).trans
-          (sourceLe_of_invariant (processSyncAggregate_invariantFrame _ _ _ _ h8))))
+    exact (sourceLe_processSlots quorumPositive V.slots).trans ((noNewSource_parent h1).trans
+      ((noNewSource_of_equalities (by rw [hm2]) (by rw [hm2]) (by rw [hm2])).trans hw3))
+  have hpost : NoNewSource s4 postB :=
+    (noNewSource_of_invariant (processRandao_invariantFrame _ _ _ _ h5)).trans
+      ((noNewSource_of_invariant (processEth1Data_invariantFrame _ _ _ h6)).trans
+        ((noNewSource_operations (processOperations_operations _ _ _ _ _ h7)).trans
+          (noNewSource_of_invariant (processSyncAggregate_invariantFrame _ _ _ _ h8))))
   rcases source_bid h4 x (hpost x hx) with h | ⟨rfl, hv⟩
   · exact Or.inl (hpre x h)
   · obtain ⟨builder, dom, hb, hd, hsig⟩ := processExecutionPayloadBid_signature h4 hv
@@ -1022,8 +1022,8 @@ theorem GloasStepView.debit_provenance
     have vb' : s3.validators.toArray.size = s2.validators.toArray.size :=
       processWithdrawals_validatorsLength _ _ h3
     omega
-  have hsrc : SourceLe preB s2 := (sourceLe_processSlots quorumPositive V.slots).trans
-    ((sourceLe_parent h1).trans (sourceLe_of_equalities (by rw [hm2]) (by rw [hm2]) (by rw [hm2])))
+  have hsrc : NoNewSource preB s2 := (sourceLe_processSlots quorumPositive V.slots).trans
+    ((noNewSource_parent h1).trans (noNewSource_of_equalities (by rw [hm2]) (by rw [hm2]) (by rw [hm2])))
   simp only [stepWithdrawals, h1, h2, bind, Except.bind] at hws
   split at hws
   · cases hws; simp at hw
@@ -1046,7 +1046,7 @@ theorem GloasStepView.debit_provenance
     obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hw
     have hk' : k < bw.size := by simpa using hk
     obtain ⟨e, he, ha, hm, hcv⟩ := prov k hk'
-    refine Or.inl ⟨e, hsrc e (Or.inl (mem_of_getElem?' he)), by simpa using ha, by simpa using hm,
+    refine Or.inl ⟨e, hsrc e (Or.inl (mem_toList_of_getElem? he)), by simpa using ha, by simpa using hm,
       by simpa using hcv⟩
   · exact (hval pw (getPendingPartialWithdrawals_inRange _ _ _ _ e2) hw).elim
   · -- the builders sweep

@@ -144,7 +144,7 @@ theorem commonSubstep_frame {s s' : BeaconState P f}
   commonSubstep_of_sizes (by rw [hv]) (by rw [hb]) hsl hlbh hlep hpc hpd
 
 theorem commonSubstep_set_validators {T X : BeaconState P f}
-    {V : SszList Validator P.VALIDATOR_REGISTRY_LIMIT} {i : Nat} {v' : Validator} {site : String}
+    {V : Ssz.List Validator P.VALIDATOR_REGISTRY_LIMIT} {i : Nat} {v' : Validator} {site : String}
     (hX : X.validators = V) (hb : X.balances = T.balances)
     (hsl : X.slot = T.slot) (hlbh : X.latest_block_header = T.latest_block_header)
     (hlep : X.latest_execution_payload_header = T.latest_execution_payload_header)
@@ -155,7 +155,7 @@ theorem commonSubstep_set_validators {T X : BeaconState P f}
   exact commonSubstep_of_sizes (by rw [hX, hVe, Array.size_set]) (by rw [hb]) hsl hlbh hlep hpc hpd
 
 theorem commonSubstep_set_balances {T X : BeaconState P f}
-    {B : SszList Gwei P.VALIDATOR_REGISTRY_LIMIT} {i : Nat} {b' : Gwei} {site : String}
+    {B : Ssz.List Gwei P.VALIDATOR_REGISTRY_LIMIT} {i : Nat} {b' : Gwei} {site : String}
     (hv : X.validators = T.validators) (hX : X.balances = B)
     (hsl : X.slot = T.slot) (hlbh : X.latest_block_header = T.latest_block_header)
     (hlep : X.latest_execution_payload_header = T.latest_execution_payload_header)
@@ -165,16 +165,16 @@ theorem commonSubstep_set_balances {T X : BeaconState P f}
   obtain ⟨_, hBe⟩ := set_ok hB
   exact commonSubstep_of_sizes (by rw [hv]) (by rw [hX, hBe, Array.size_set]) hsl hlbh hlep hpc hpd
 
-theorem modify_size_eq {α : Type} {n : Nat} {xs ys : SszList α n} {i : Nat} {g : α → Fallible α}
+theorem modify_size_eq {α : Type} {n : Nat} {xs ys : Ssz.List α n} {i : Nat} {g : α → Fallible α}
     {site : String} (h : xs.modify i g site = .ok ys) : ys.toArray.size = xs.toArray.size := by
-  unfold SszList.modify at h
+  unfold Ssz.List.modify at h
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨_, heq⟩ := set_ok h
   rw [heq, Array.size_set]
 
 theorem commonSubstep_modify_validators {T X : BeaconState P f}
-    {V : SszList Validator P.VALIDATOR_REGISTRY_LIMIT} {i : Nat}
+    {V : Ssz.List Validator P.VALIDATOR_REGISTRY_LIMIT} {i : Nat}
     {g : Validator → Fallible Validator} {site : String}
     (hX : X.validators = V) (hb : X.balances = T.balances)
     (hsl : X.slot = T.slot) (hlbh : X.latest_block_header = T.latest_block_header)
@@ -185,7 +185,7 @@ theorem commonSubstep_modify_validators {T X : BeaconState P f}
   commonSubstep_of_sizes (by rw [hX, modify_size_eq hV]) (by rw [hb]) hsl hlbh hlep hpc hpd
 
 theorem commonSubstep_modify_balances {T X : BeaconState P f}
-    {B : SszList Gwei P.VALIDATOR_REGISTRY_LIMIT} {i : Nat}
+    {B : Ssz.List Gwei P.VALIDATOR_REGISTRY_LIMIT} {i : Nat}
     {g : Gwei → Fallible Gwei} {site : String}
     (hv : X.validators = T.validators) (hX : X.balances = B)
     (hsl : X.slot = T.slot) (hlbh : X.latest_block_header = T.latest_block_header)
@@ -202,7 +202,7 @@ theorem commonSubstep_ite {s a b : BeaconState P f} {c : Prop} [Decidable c]
   · exact h1
   · exact h2
 
-theorem okTrans_commonSubstep {γ : Type} {s s1 : BeaconState P f} {g : γ → BeaconState P f} {c : Fallible γ}
+theorem ok_trans_commonSubstep {γ : Type} {s s1 : BeaconState P f} {g : γ → BeaconState P f} {c : Fallible γ}
     (hp : CommonSubstep s s1) (h : Ok c (fun r => CommonSubstep s1 (g r))) :
     Ok c (fun r => CommonSubstep s (g r)) :=
   fun a ha => hp.trans (h a ha)
@@ -264,7 +264,7 @@ private def commonSubstepParts (α Q : Expr) : MetaM (Expr × Expr) :=
     if A.containsFVar r.fvarId! then throwError "post-condition base depends on the result"
     pure (A, ← mkLambdaFVars #[r] (qr.getArg! 3))
 
-private def mkPostCorpus (α σ g : Expr) : MetaM Expr := do
+private def commonSubstepPostcondition (α σ g : Expr) : MetaM Expr := do
   let post ← withLocalDeclD `r α fun r => do
     mkLambdaFVars #[r] (← mkAppM ``CommonSubstep #[σ, (mkApp g r).headBeta])
   pure post.eta
@@ -294,7 +294,7 @@ elab "jp_intro_c" : tactic => withMainContext do
     for y in ys do
       if let some stExpr ← findStateCorpus 8 y (← inferType y) then
         if ← isDefEq (← inferType stExpr) stTy then σ := stExpr
-    let post ← mkPostCorpus α σ gf
+    let post ← commonSubstepPostcondition α σ gf
     mkForallFVars ys (mkAppN t.getAppFn #[α, (mkAppN jp ys).headBeta, post])
   let hkTy ← mkH v
   let hk ← mkFreshExprSyntheticOpaqueMVar hkTy `jp_body
@@ -328,7 +328,7 @@ elab "jp_call_c" : tactic => withMainContext do
         let post ← instantiateMVars post
         let (σ, _) ← commonSubstepParts α post
         let hp ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``CommonSubstep #[A, σ]) `jp_csub
-        let pf ← mkAppM ``okTrans_commonSubstep #[hp, mkAppN d.toExpr mvs]
+        let pf ← mkAppM ``ok_trans_commonSubstep #[hp, mkAppN d.toExpr mvs]
         unless ← isDefEq (← inferType pf) t do throwError "type differs"
         g.assign (← instantiateMVars pf)
         pure (some hp.mvarId!)
@@ -374,8 +374,8 @@ elab "loop_csub " h:ident : tactic => withMainContext do
   let pf ← mkAppM lem #[π, hb, d.toExpr]
   let hp ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``CommonSubstep #[A, π.beta #[init]]) `loop_pre
   let rest ← mkFreshExprSyntheticOpaqueMVar
-    (mkAppN t.getAppFn #[α, c, ← mkPostCorpus α (π.beta #[out]) gf]) `loop_rest
-  let full ← mkAppM ``okTrans_commonSubstep #[← mkAppM ``CommonSubstep.trans #[hp, pf], rest]
+    (mkAppN t.getAppFn #[α, c, ← commonSubstepPostcondition α (π.beta #[out]) gf]) `loop_rest
+  let full ← mkAppM ``ok_trans_commonSubstep #[← mkAppM ``CommonSubstep.trans #[hp, pf], rest]
   unless ← isDefEq (← inferType full) t do throwError "loop_csub: type mismatch"
   g.assign full
   let (_, hbG) ← hb.mvarId!.introN 2
@@ -414,7 +414,7 @@ macro_rules | `(tactic| cstep) => `(tactic| first
   | with_reducible apply ok_bind_ite
   | (with_reducible apply ok_bind; intro _ hx; loop_csub hx; csub_close)
   | (with_reducible apply ok_bind; intro _ hx
-     first | (refine okTrans_commonSubstep (CommonSubstep.trans ?_ (by csub_of hx)) ?_; csub_close) | skip)
+     first | (refine ok_trans_commonSubstep (CommonSubstep.trans ?_ (by csub_of hx)) ?_; csub_close) | skip)
   | (with_reducible apply ok_ite <;> intro _)
   | (with_reducible apply ok_dite <;> intro _)
   | (set_option simprocs false in dsimp -zeta only)
@@ -447,7 +447,7 @@ theorem consolidationChurn_commonSubstep (cfg : Config) {s : BeaconState P f} {b
   exact commonSubstep_frame rfl rfl rfl rfl rfl rfl rfl
 
 theorem setPendingPartialWithdrawals_commonSubstep {s s' : BeaconState P f}
-    {l : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {l : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     (h : s.setPendingPartialWithdrawals l = .ok s') : CommonSubstep s s' := by
   unfold BeaconState.setPendingPartialWithdrawals at h
   obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
@@ -455,7 +455,7 @@ theorem setPendingPartialWithdrawals_commonSubstep {s s' : BeaconState P f}
   exact commonSubstep_frame rfl rfl rfl rfl rfl rfl rfl
 
 theorem setProposerLookahead_commonSubstep {s s' : BeaconState P f}
-    {l : SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)}
+    {l : Ssz.Vector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)}
     (h : s.setProposerLookahead l = .ok s') : CommonSubstep s s' := by
   unfold BeaconState.setProposerLookahead at h
   obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
@@ -489,9 +489,9 @@ theorem addValidatorToRegistry_commonSubstep {s s' : BeaconState P f} {pk : BLSP
   unfold BalancesMatchValidators at hbm ⊢
   unfold setOrAppendList at hV hB
   have hcv : (idx.toNat == s.validators.length) = true := by
-    simp only [SszList.length, hn, beq_self_eq_true]
+    simp only [Ssz.List.length, hn, beq_self_eq_true]
   have hcb : (idx.toNat == s.balances.length) = true := by
-    simp only [SszList.length, hbm, hn, beq_self_eq_true]
+    simp only [Ssz.List.length, hbm, hn, beq_self_eq_true]
   rw [ite_eq_left hcv] at hV
   rw [ite_eq_left hcb] at hB
   show B.toArray.size = V.toArray.size
@@ -685,7 +685,7 @@ theorem processEffectiveBalanceUpdates_commonSubstep (cfg : Config) {s s' : Beac
   repeat (first | ok_head | (with_reducible apply ok_bind; intro _ _))
   refine ok_pure (commonSubstep_of_sizes ?_ rfl rfl rfl rfl rfl rfl)
   refine list_forIn_relation
-    (fun V V' : SszList Validator P.VALIDATOR_REGISTRY_LIMIT => V'.toArray.size = V.toArray.size)
+    (fun V V' : Ssz.List Validator P.VALIDATOR_REGISTRY_LIMIT => V'.toArray.size = V.toArray.size)
     (fun _ => rfl) (fun _ _ _ h1 h2 => h2.trans h1) _ ?_ _ _ _ (by assumption)
   intro i V r hb
   simp only [bind, Except.bind, pure, Except.pure] at hb
@@ -1089,7 +1089,7 @@ theorem processPendingConsolidations_corpusPreservation_and_frame (hf : f.atLeas
   have hq_arr : q.toArray =
       (ForkField.get hf s.pending_consolidations).toArray.extract out.2
         (ForkField.get hf s.pending_consolidations).length := by
-    unfold SszList.ofArray at hq
+    unfold Ssz.List.ofArray at hq
     split at hq
     · cases hq; rfl
     · cases hq

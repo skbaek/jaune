@@ -33,57 +33,57 @@ open Jaune (Bytes U256)
 
 /-! ## Collection and gated-field operations -/
 
-namespace SszList
+namespace Ssz.List
 variable {α : Type} {n : Nat}
 
 /-- `xs[i]`, rejecting out of range. -/
-@[inline] def get (xs : SszList α n) (i : Nat) (site : String) : Fallible α := getAt xs.toArray i site
+@[inline] def get (xs : Ssz.List α n) (i : Nat) (site : String) : Fallible α := getAt xs.toArray i site
 
 /-- `xs[i] = v`, rejecting out of range. -/
-def set (xs : SszList α n) (i : Nat) (v : α) (site : String) : Fallible (SszList α n) :=
+def set (xs : Ssz.List α n) (i : Nat) (v : α) (site : String) : Fallible (Ssz.List α n) :=
   if h : i < xs.toArray.size then
     pure ⟨xs.toArray.set i v h, by simpa using xs.size_le⟩
   else throw (.index site i xs.toArray.size)
 
 /-- `xs[i] = g(xs[i])`. -/
-def modify (xs : SszList α n) (i : Nat) (g : α → Fallible α) (site : String) : Fallible (SszList α n) := do
+def modify (xs : Ssz.List α n) (i : Nat) (g : α → Fallible α) (site : String) : Fallible (Ssz.List α n) := do
   let v ← xs.get i site
   xs.set i (← g v) site
 
 /-- `xs.append(v)`, rejecting past the limit (remerkleable raises). -/
-def push (xs : SszList α n) (v : α) (site : String) : Fallible (SszList α n) :=
+def push (xs : Ssz.List α n) (v : α) (site : String) : Fallible (Ssz.List α n) :=
   if h : xs.toArray.size + 1 ≤ n then pure ⟨xs.toArray.push v, by simpa using h⟩
   else throw (.limit site n (xs.toArray.size + 1))
 
 /-- `len(xs)`. -/
-@[inline] def length (xs : SszList α n) : Nat := xs.toArray.size
+@[inline] def length (xs : Ssz.List α n) : Nat := xs.toArray.size
 
 /-- The empty list. -/
-def empty : SszList α n := ⟨#[], Nat.zero_le _⟩
+def empty : Ssz.List α n := ⟨#[], Nat.zero_le _⟩
 
 /-- A list from an array, rejecting past the limit. -/
-def ofArray (xs : Array α) (site : String) : Fallible (SszList α n) :=
+def ofArray (xs : Array α) (site : String) : Fallible (Ssz.List α n) :=
   if h : xs.size ≤ n then pure ⟨xs, h⟩ else throw (.limit site n xs.size)
 
-end SszList
+end Ssz.List
 
-namespace SszVector
+namespace Ssz.Vector
 variable {α : Type} {n : Nat}
 
 /-- `xs[i]`, rejecting out of range. -/
-@[inline] def get (xs : SszVector α n) (i : Nat) (site : String) : Fallible α := getAt xs.toArray i site
+@[inline] def get (xs : Ssz.Vector α n) (i : Nat) (site : String) : Fallible α := getAt xs.toArray i site
 
 /-- `xs[i] = v`, rejecting out of range. -/
-def set (xs : SszVector α n) (i : Nat) (v : α) (site : String) : Fallible (SszVector α n) :=
+def set (xs : Ssz.Vector α n) (i : Nat) (v : α) (site : String) : Fallible (Ssz.Vector α n) :=
   if h : i < xs.toArray.size then
     pure ⟨xs.toArray.set i v h, by simpa using xs.size_eq⟩
   else throw (.index site i xs.toArray.size)
 
 /-- A vector from an array of exactly `n` elements. -/
-def ofArray (xs : Array α) (site : String) : Fallible (SszVector α n) :=
+def ofArray (xs : Array α) (site : String) : Fallible (Ssz.Vector α n) :=
   if h : xs.size = n then pure ⟨xs, h⟩ else throw (.assert site)
 
-end SszVector
+end Ssz.Vector
 
 namespace ForkField
 variable {α : Type}
@@ -140,16 +140,16 @@ def consolidationBalanceToConsume (s : BeaconState P f) : Fallible Gwei :=
   ForkField.read s.consolidation_balance_to_consume "consolidation_balance_to_consume"
 def earliestConsolidationEpoch (s : BeaconState P f) : Fallible Epoch :=
   ForkField.read s.earliest_consolidation_epoch "earliest_consolidation_epoch"
-def pendingDeposits (s : BeaconState P f) : Fallible (SszList PendingDeposit P.PENDING_DEPOSITS_LIMIT) :=
+def pendingDeposits (s : BeaconState P f) : Fallible (Ssz.List PendingDeposit P.PENDING_DEPOSITS_LIMIT) :=
   ForkField.read s.pending_deposits "pending_deposits"
 def pendingPartialWithdrawals (s : BeaconState P f) :
-    Fallible (SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT) :=
+    Fallible (Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT) :=
   ForkField.read s.pending_partial_withdrawals "pending_partial_withdrawals"
 def pendingConsolidations (s : BeaconState P f) :
-    Fallible (SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT) :=
+    Fallible (Ssz.List PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT) :=
   ForkField.read s.pending_consolidations "pending_consolidations"
 def proposerLookahead (s : BeaconState P f) :
-    Fallible (SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)) :=
+    Fallible (Ssz.Vector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)) :=
   ForkField.read s.proposer_lookahead "proposer_lookahead"
 
 def setDepositRequestsStartIndex (s : BeaconState P f) (v : U64) : Fallible (BeaconState P f) := do
@@ -165,18 +165,18 @@ def setConsolidationBalanceToConsume (s : BeaconState P f) (v : Gwei) : Fallible
     ← ForkField.write _ v "consolidation_balance_to_consume" }
 def setEarliestConsolidationEpoch (s : BeaconState P f) (v : Epoch) : Fallible (BeaconState P f) := do
   pure { s with earliest_consolidation_epoch := ← ForkField.write _ v "earliest_consolidation_epoch" }
-def setPendingDeposits (s : BeaconState P f) (v : SszList PendingDeposit P.PENDING_DEPOSITS_LIMIT) :
+def setPendingDeposits (s : BeaconState P f) (v : Ssz.List PendingDeposit P.PENDING_DEPOSITS_LIMIT) :
     Fallible (BeaconState P f) := do
   pure { s with pending_deposits := ← ForkField.write _ v "pending_deposits" }
 def setPendingPartialWithdrawals (s : BeaconState P f)
-    (v : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT) :
+    (v : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT) :
     Fallible (BeaconState P f) := do
   pure { s with pending_partial_withdrawals := ← ForkField.write _ v "pending_partial_withdrawals" }
 def setPendingConsolidations (s : BeaconState P f)
-    (v : SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT) : Fallible (BeaconState P f) := do
+    (v : Ssz.List PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT) : Fallible (BeaconState P f) := do
   pure { s with pending_consolidations := ← ForkField.write _ v "pending_consolidations" }
 def setProposerLookahead (s : BeaconState P f)
-    (v : SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)) :
+    (v : Ssz.Vector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)) :
     Fallible (BeaconState P f) := do
   pure { s with proposer_lookahead := ← ForkField.write _ v "proposer_lookahead" }
 
@@ -548,7 +548,7 @@ def getAttestingIndices (state : BeaconState P f) (attestation : Attestation P f
 def getIndexedAttestation (state : BeaconState P f) (attestation : Attestation P f) :
     Fallible (IndexedAttestation P f) := do
   let indices ← getAttestingIndices state attestation
-  pure { attesting_indices := ← SszList.ofArray indices "IndexedAttestation.attesting_indices"
+  pure { attesting_indices := ← Ssz.List.ofArray indices "IndexedAttestation.attesting_indices"
          data := attestation.data
          signature := attestation.signature }
 

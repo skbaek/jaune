@@ -60,11 +60,11 @@ abbrev SeenWithStore (P : Preset) := Seen (GloasStoreSeen P)
 def DOMAIN_PROPOSER_PREFERENCES : DomainType := #v[0x0D, 0x00, 0x00, 0x00]
 
 /-- `d[k] = v` on an association list. -/
-def assocSet {κ α : Type} [BEq κ] (d : List (κ × α)) (k : κ) (v : α) : List (κ × α) :=
+def associationListSet {κ α : Type} [BEq κ] (d : List (κ × α)) (k : κ) (v : α) : List (κ × α) :=
   (d.filter (·.1 != k)) ++ [(k, v)]
 
 /-- `d.get(k)` on an association list. -/
-def assocGet {κ α : Type} [BEq κ] (d : List (κ × α)) (k : κ) : Option α :=
+def associationListGet {κ α : Type} [BEq κ] (d : List (κ × α)) (k : κ) : Option α :=
   (d.find? (·.1 == k)).map (·.2)
 
 /-! ## Helpers -/
@@ -163,7 +163,7 @@ def validateBeaconBlockGossip (ctx : Context) (seen : SeenWithStore P) (store : 
   let bid := block.body.signed_execution_payload_bid.message
   -- [IGNORE] The block is the first block with valid signature received for the slot and proposer
   let proposerSlotKey := (block.slot, block.proposer_index)
-  if seen.ext.proposer_slots.contains proposerSlotKey then
+  if seen.extension.proposer_slots.contains proposerSlotKey then
     ignore "block is not the first valid block for this slot and proposer"
   -- [IGNORE] The block is not from a future slot
   if ← isFutureSlot cfg store.genesis_time_ms block.slot currentTimeMs then
@@ -218,8 +218,8 @@ def validateBeaconBlockGossip (ctx : Context) (seen : SeenWithStore P) (store : 
     if bid.parent_block_hash != parentState.latest_block_hash then
       reject "bid does not build on the parent's execution head"
   -- Mark this block as seen
-  pure { seen with ext := { seen.ext with
-    proposer_slots := seen.ext.proposer_slots ++ [proposerSlotKey] } }
+  pure { seen with extension := { seen.extension with
+    proposer_slots := seen.extension.proposer_slots ++ [proposerSlotKey] } }
 
 /-! ## `beacon_aggregate_and_proof`, `beacon_attestation_{subnet_id}` -/
 
@@ -241,14 +241,14 @@ def validateBeaconAggregateAndProofGossip (ctx : Context) (seen : SeenWithStore 
   -- [IGNORE] A valid aggregate with a superset of aggregation bits has not already been seen
   let aggregateDataRoot : Root := Ssz.hashTreeRoot aggregate.data
   let aggregateCacheKey := (aggregateDataRoot, index)
-  let seenBits := lookupSet seen.ext.aggregate_data_roots aggregateCacheKey
+  let seenBits := lookupSet seen.extension.aggregate_data_roots aggregateCacheKey
   if ← isNonStrictSuperset seenBits aggregationBits then
     ignore "already seen aggregate for this data"
   -- [IGNORE] This is the first valid aggregate for this epoch and aggregator
   let aggregatorIndex := aggregateAndProof.aggregator_index
   let targetEpoch := aggregate.data.target.epoch
   let aggregatorEpochKey := (targetEpoch, aggregatorIndex)
-  if seen.ext.aggregator_epochs.contains aggregatorEpochKey then
+  if seen.extension.aggregator_epochs.contains aggregatorEpochKey then
     ignore "already seen aggregate for this epoch and aggregator"
   -- [IGNORE] The block being voted for has been seen (via gossip or non-gossip sources)
   let blockRoot := aggregate.data.beacon_block_root
@@ -308,10 +308,10 @@ def validateBeaconAggregateAndProofGossip (ctx : Context) (seen : SeenWithStore 
   -- The attested payload status is consistent with the block's execution payload
   verifyAttestationPayloadStatus store aggregate.data blockPayloadStatuses
   -- Mark this aggregate as seen
-  pure { seen with ext := { seen.ext with
-    aggregator_epochs := seen.ext.aggregator_epochs ++ [aggregatorEpochKey]
+  pure { seen with extension := { seen.extension with
+    aggregator_epochs := seen.extension.aggregator_epochs ++ [aggregatorEpochKey]
     aggregate_data_roots :=
-      addToSet seen.ext.aggregate_data_roots aggregateCacheKey aggregationBits } }
+      addToSet seen.extension.aggregate_data_roots aggregateCacheKey aggregationBits } }
 
 /-- `validate_beacon_attestation_gossip` (Gloas, `:1187`). -/
 def validateBeaconAttestationGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
@@ -324,7 +324,7 @@ def validateBeaconAttestationGossip (ctx : Context) (seen : SeenWithStore P) (st
   let targetEpoch := data.target.epoch
   -- [IGNORE] No other valid attestation seen for this target epoch and validator
   let attestationEpochKey := (targetEpoch, attesterIndex)
-  if seen.ext.attestation_validator_epochs.contains attestationEpochKey then
+  if seen.extension.attestation_validator_epochs.contains attestationEpochKey then
     ignore "already seen attestation for this epoch and validator"
   -- [REJECT] The attestation's data index is 0 or 1
   if data.index > U64.one then reject "attestation data index must be 0 or 1"
@@ -372,8 +372,8 @@ def validateBeaconAttestationGossip (ctx : Context) (seen : SeenWithStore P) (st
   -- The attested payload status is consistent with the block's execution payload
   verifyAttestationPayloadStatus store data blockPayloadStatuses
   -- Mark this attestation as seen
-  pure { seen with ext := { seen.ext with
-    attestation_validator_epochs := seen.ext.attestation_validator_epochs ++ [attestationEpochKey] } }
+  pure { seen with extension := { seen.extension with
+    attestation_validator_epochs := seen.extension.attestation_validator_epochs ++ [attestationEpochKey] } }
 
 /-! ## `execution_payload`, `payload_attestation_message` -/
 
@@ -385,7 +385,7 @@ def validateExecutionPayloadEnvelopeGossip (ctx : Context) (seen : SeenWithStore
   let blockRoot := envelope.beacon_block_root
   -- [IGNORE] The node has not seen another valid envelope for this block root from this builder
   let envelopeKey := (blockRoot, envelope.builder_index)
-  if seen.ext.execution_payload_envelopes.contains envelopeKey then
+  if seen.extension.execution_payload_envelopes.contains envelopeKey then
     ignore "already seen envelope for this block root from this builder"
   -- [IGNORE] The envelope's block root has been seen (via gossip or non-gossip sources)
   if !store.blocks.contains blockRoot then ignore "envelope's block has not been seen"
@@ -419,9 +419,9 @@ def validateExecutionPayloadEnvelopeGossip (ctx : Context) (seen : SeenWithStore
   if !(← verifyExecutionPayloadEnvelopeSignatureWithBls ctx.blsActive state signedEnvelope) then
     reject "invalid envelope signature"
   -- Mark this envelope as seen and store its payload
-  pure { seen with ext := { seen.ext with
-    execution_payload_envelopes := seen.ext.execution_payload_envelopes ++ [envelopeKey]
-    execution_payloads := assocSet seen.ext.execution_payloads payload.block_hash payload } }
+  pure { seen with extension := { seen.extension with
+    execution_payload_envelopes := seen.extension.execution_payload_envelopes ++ [envelopeKey]
+    execution_payloads := associationListSet seen.extension.execution_payloads payload.block_hash payload } }
 
 /-- `validate_payload_attestation_message_gossip` (`:891`). -/
 def validatePayloadAttestationMessageGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
@@ -434,7 +434,7 @@ def validatePayloadAttestationMessageGossip (ctx : Context) (seen : SeenWithStor
     reject "payload attestation's slot is pre-gloas"
   -- [IGNORE] This is the first valid payload attestation from this validator index
   let payloadAttestationKey := (data.slot, validatorIndex)
-  if seen.ext.payload_attestation_validators.contains payloadAttestationKey then
+  if seen.extension.payload_attestation_validators.contains payloadAttestationKey then
     ignore "already seen payload attestation from this validator"
   -- [IGNORE] The payload attestation's slot is for the current slot
   if !(← isCurrentSlot cfg store.genesis_time_ms data.slot currentTimeMs) then
@@ -463,9 +463,9 @@ def validatePayloadAttestationMessageGossip (ctx : Context) (seen : SeenWithStor
       message.signature then
     reject "invalid payload attestation signature"
   -- Mark this payload_attestation as seen
-  pure { seen with ext := { seen.ext with
+  pure { seen with extension := { seen.extension with
     payload_attestation_validators :=
-      seen.ext.payload_attestation_validators ++ [payloadAttestationKey] } }
+      seen.extension.payload_attestation_validators ++ [payloadAttestationKey] } }
 
 /-! ## `execution_payload_bid`, `proposer_preferences` -/
 
@@ -476,11 +476,11 @@ def validateExecutionPayloadBidGossip (ctx : Context) (seen : SeenWithStore P) (
   let bid := signedBid.message
   -- [IGNORE] This is the first bid for this slot, parent, and builder
   let bidKey := (bid.slot, bid.parent_block_hash, bid.parent_block_root, bid.builder_index)
-  if seen.ext.execution_payload_bids.contains bidKey then
+  if seen.extension.execution_payload_bids.contains bidKey then
     ignore "already seen valid bid for this slot, parent, and builder"
   -- [IGNORE] This is the highest value bid seen for the slot and parent
   let bestBidKey := (bid.slot, bid.parent_block_hash, bid.parent_block_root)
-  if let some best := assocGet seen.ext.best_execution_payload_bid bestBidKey then
+  if let some best := associationListGet seen.extension.best_execution_payload_bid bestBidKey then
     if bid.value ≤ best then
       ignore "bid is not the highest value bid seen for this slot and parent"
   -- [IGNORE] The bid's slot is the current slot or the next slot
@@ -513,13 +513,13 @@ def validateExecutionPayloadBidGossip (ctx : Context) (seen : SeenWithStore P) (
     ignore "bid's slot is past the parent's proposer lookahead"
   -- [IGNORE] The matching proposer preferences have been seen
   let dependentRoot ← getShufflingDependentRoot store bid.parent_block_root proposalEpoch
-  let some proposerPreferences := assocGet seen.ext.proposer_preferences (bid.slot, dependentRoot)
+  let some proposerPreferences := associationListGet seen.extension.proposer_preferences (bid.slot, dependentRoot)
     | ignore "matching proposer preferences have not been seen"
   -- [IGNORE] The bid's fee recipient matches the proposer's preference
   if bid.fee_recipient != proposerPreferences.fee_recipient then
     ignore "bid's fee recipient does not match the proposer's preference"
   -- [IGNORE] The bid's parent block hash is the hash of a known execution payload
-  let some parentPayload := assocGet seen.ext.execution_payloads bid.parent_block_hash
+  let some parentPayload := associationListGet seen.extension.execution_payloads bid.parent_block_hash
     | ignore "bid's parent block hash is not a known execution payload"
   -- [IGNORE] The bid's gas limit is compatible with the proposer's target gas limit
   if !(← isGasLimitTargetCompatible parentPayload.gas_limit bid.gas_limit
@@ -553,9 +553,9 @@ def validateExecutionPayloadBidGossip (ctx : Context) (seen : SeenWithStore P) (
   -- [REJECT] The bid signature is valid
   if !(← verifyExecutionPayloadBidSignature ctx state signedBid) then reject "invalid bid signature"
   -- Mark this bid as seen and update the highest-value bid for this slot/parent
-  pure { seen with ext := { seen.ext with
-    execution_payload_bids := seen.ext.execution_payload_bids ++ [bidKey]
-    best_execution_payload_bid := assocSet seen.ext.best_execution_payload_bid bestBidKey bid.value } }
+  pure { seen with extension := { seen.extension with
+    execution_payload_bids := seen.extension.execution_payload_bids ++ [bidKey]
+    best_execution_payload_bid := associationListSet seen.extension.best_execution_payload_bid bestBidKey bid.value } }
 
 /-- `validate_proposer_preferences_gossip` (`:1103`). -/
 def validateProposerPreferencesGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P)
@@ -564,7 +564,7 @@ def validateProposerPreferencesGossip (ctx : Context) (seen : SeenWithStore P) (
   let preferences := signed.message
   -- [IGNORE] These are the first valid preferences seen for this dependent root and slot
   let prefsKey := (preferences.proposal_slot, preferences.dependent_root)
-  if (assocGet seen.ext.proposer_preferences prefsKey).isSome then
+  if (associationListGet seen.extension.proposer_preferences prefsKey).isSome then
     ignore "already seen preferences for this dependent root and proposal slot"
   -- [IGNORE] The proposal epoch is after the Gloas upgrade
   let proposalEpoch ← computeEpochAtSlot P preferences.proposal_slot
@@ -612,8 +612,8 @@ def validateProposerPreferencesGossip (ctx : Context) (seen : SeenWithStore P) (
       signed.signature then
     reject "invalid proposer preferences signature"
   -- Mark these preferences as seen
-  pure { seen with ext := { seen.ext with
-    proposer_preferences := assocSet seen.ext.proposer_preferences prefsKey preferences } }
+  pure { seen with extension := { seen.extension with
+    proposer_preferences := associationListSet seen.extension.proposer_preferences prefsKey preferences } }
 
 /-! ## Sidecars -/
 
@@ -623,7 +623,7 @@ def validateDataColumnSidecarGossip (ctx : Context) (seen : SeenWithStore P) (st
   let cfg := ctx.config
   -- [IGNORE] This is the first sidecar seen for this block root and column index
   let sidecarKey := (sidecar.beacon_block_root, sidecar.index)
-  if seen.ext.data_column_sidecar_tuples.contains sidecarKey then
+  if seen.extension.data_column_sidecar_tuples.contains sidecarKey then
     ignore "already seen sidecar for this block root and index"
   -- [REJECT] The sidecar is for the correct subnet
   if (← computeSubnetForDataColumnSidecar cfg sidecar.index) != subnetId then
@@ -648,8 +648,8 @@ def validateDataColumnSidecarGossip (ctx : Context) (seen : SeenWithStore P) (st
   if !(← verifyDataColumnSidecarKzgProofs sidecar commitments) then
     reject "invalid sidecar kzg proofs"
   -- Mark this data column sidecar as seen
-  pure { seen with ext := { seen.ext with
-    data_column_sidecar_tuples := seen.ext.data_column_sidecar_tuples ++ [sidecarKey] } }
+  pure { seen with extension := { seen.extension with
+    data_column_sidecar_tuples := seen.extension.data_column_sidecar_tuples ++ [sidecarKey] } }
 
 /-- `verify_partial_data_column_sidecar_kzg_proofs(sidecar, all_commitments, column_index)`
 (Fulu's, over the Gloas partial sidecar): `all_commitments[index]` raises past the end. -/

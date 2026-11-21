@@ -1,4 +1,4 @@
-import Jaune.MessageCall.CheckedState
+import Jaune.MessageCall.State
 
 /-! Restricted-effect table rows for `SSTORE` and `TSTORE`.
 
@@ -9,7 +9,7 @@ flags and cost/refund arithmetic over `(cold, newVal, origVal, currVal, oldRefun
 all non-machine side effects through `StoreTouch` and `Frame.State.liftStore`. `TstoreRow` covers
 `TSTORE` in the same style. -/
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -203,4 +203,4 @@ def TstoreRow.step (row : TstoreRow) (opcodes : OpcodeRules) (isStatic : Bool) (
           else
             .ok (m₃, { write := some (.transient key newVal) })
 
-end Jaune.Checked
+end Jaune

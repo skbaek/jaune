@@ -20,7 +20,7 @@ def Option.toIO {ξ} (o : Option ξ)
 
 def IO.throw {ξ} (s : String) : IO ξ := MonadExcept.throw <| IO.Error.userError s
 
-def IO.remove0x (s : String) : IO String :=
+def IO.removeHexPrefix (s : String) : IO String :=
   match s.toList with
   | '0' :: 'x' :: cs => return String.ofList cs
   | _ => IO.throw "prefix not 0x"

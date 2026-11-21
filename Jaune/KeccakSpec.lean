@@ -50,7 +50,7 @@ namespace Keccak.FIPS
 def w : Nat := 64
 
 /-- FIPS 202 §3.1, Table 1: `ℓ = log₂(w) = 6`. -/
-def ℓ : Nat := 6
+def ell : Nat := 6
 
 /-- FIPS 202 §3.1: the state of Keccak-p[1600, nᵣ] is a string `S` of
 `b = 1600` bits, `S[0] … S[1599]`. -/
@@ -82,7 +82,7 @@ def toState (a : Fin 5 → Fin 5 → Fin 64 → Bool) : State :=
 2. `D[x, z] = C[(x − 1) mod 5, z] ⊕ C[(x + 1) mod 5, (z − 1) mod w]`;
 3. `A′[x, y, z] = A[x, y, z] ⊕ D[x, z]`.
 Arithmetic on `Fin 5` and `Fin 64` is modulo 5 and modulo `w`. -/
-def θ (S : State) : State :=
+def theta (S : State) : State :=
   let C (x : Fin 5) (z : Fin 64) : Bool :=
     A S x 0 z ^^ A S x 1 z ^^ A S x 2 z ^^ A S x 3 z ^^ A S x 4 z
   let D (x : Fin 5) (z : Fin 64) : Bool := C (x - 1) z ^^ C (x + 1) (z - 1)
@@ -91,9 +91,9 @@ def θ (S : State) : State :=
 /-- FIPS 202 §3.2.2, Algorithm 2, step 3: the coordinates visited by ρ's loop,
 starting from `(x, y) = (1, 0)` and updated by `(x, y) = (y, (2x + 3y) mod 5)`
 after each of the 24 iterations. `ρPos t` is `(x, y)` at iteration `t`. -/
-def ρPos : Nat → Fin 5 × Fin 5
+def rhoPosition : Nat → Fin 5 × Fin 5
   | 0 => (1, 0)
-  | t + 1 => let p := ρPos t; (p.2, 2 * p.1 + 3 * p.2)
+  | t + 1 => let p := rhoPosition t; (p.2, 2 * p.1 + 3 * p.2)
 
 /-- FIPS 202 §3.2.2, Algorithm 2, ρ(A):
 1. for all `z`, `A′[0, 0, z] = A[0, 0, z]`;
@@ -103,24 +103,24 @@ def ρPos : Nat → Fin 5 × Fin 5
 The array `A′` is built by the same sequence of assignments: lane `(0, 0)`
 first (the other lanes start unassigned, written `false`, and every one of
 them is assigned by the loop), then one lane per iteration of the loop. -/
-def ρ (S : State) : State :=
+def rho (S : State) : State :=
   let A₀ : Fin 5 → Fin 5 → Fin 64 → Bool :=
     fun x y z => if x = 0 ∧ y = 0 then A S 0 0 z else false
   let step (A' : Fin 5 → Fin 5 → Fin 64 → Bool) (t : Nat) :
       Fin 5 → Fin 5 → Fin 64 → Bool :=
-    let p := ρPos t
+    let p := rhoPosition t
     fun x y z =>
       if x = p.1 ∧ y = p.2 then A S p.1 p.2 (z - Fin.ofNat 64 ((t + 1) * (t + 2) / 2))
       else A' x y z
   toState ((List.range 24).foldl step A₀)
 
 /-- FIPS 202 §3.2.3, Algorithm 3, π(A): `A′[x, y, z] = A[(x + 3y) mod 5, x, z]`. -/
-def π (S : State) : State :=
+def pi (S : State) : State :=
   toState fun x y z => A S (x + 3 * y) x z
 
 /-- FIPS 202 §3.2.4, Algorithm 4, χ(A):
 `A′[x, y, z] = A[x, y, z] ⊕ ((A[(x + 1) mod 5, y, z] ⊕ 1) ⋅ A[(x + 2) mod 5, y, z])`. -/
-def χ (S : State) : State :=
+def chi (S : State) : State :=
   toState fun x y z => A S x y z ^^ ((A S (x + 1) y z ^^ true) && A S (x + 2) y z)
 
 /-- FIPS 202 §3.2.5, Algorithm 5, one iteration of step 3 on the eight-bit
@@ -149,21 +149,21 @@ def rc (t : Nat) : Bool :=
 /-- FIPS 202 §3.2.5, Algorithm 6, steps 2–3: the round constant `RC`, a string
 of `w` zero bits in which `RC[2^j − 1] = rc(j + 7iᵣ)` for `j` from 0 to `ℓ`. -/
 def RC (ir : Nat) : List Bool :=
-  (List.range (ℓ + 1)).foldl (fun RC j => RC.set (2 ^ j - 1) (rc (j + 7 * ir)))
+  (List.range (ell + 1)).foldl (fun RC j => RC.set (2 ^ j - 1) (rc (j + 7 * ir)))
     (List.replicate w false)
 
 /-- FIPS 202 §3.2.5, Algorithm 6, ι(A, iᵣ):
 1. `A′[x, y, z] = A[x, y, z]` for all triples;
 2.–3. the round constant `RC` (see `RC`);
 4. for all `z`, `A′[0, 0, z] = A′[0, 0, z] ⊕ RC[z]`. -/
-def ι (S : State) (ir : Nat) : State :=
+def iota (S : State) (ir : Nat) : State :=
   toState fun x y z =>
     if x = 0 ∧ y = 0 then A S x y z ^^ (RC ir).getD z.val false else A S x y z
 
 /-! ## §3.3 — Keccak-p[1600, nᵣ] -/
 
 /-- FIPS 202 §3.3: `Rnd(A, iᵣ) = ι(χ(π(ρ(θ(A)))), iᵣ)`. -/
-def Rnd (S : State) (ir : Nat) : State := ι (χ (π (ρ (θ S)))) ir
+def Rnd (S : State) (ir : Nat) : State := iota (chi (pi (rho (theta S)))) ir
 
 /-- FIPS 202 §3.3, Algorithm 7, Keccak-p[1600, nᵣ](S):
 1. convert `S` into a state array `A` (§3.1.2);
@@ -172,7 +172,7 @@ def Rnd (S : State) (ir : Nat) : State := ι (χ (π (ρ (θ S)))) ir
 The state is kept as the string throughout, read through `A`; steps 1 and 3
 are the views `A` and `toState` inside each step mapping. -/
 def keccakP (nr : Nat) (S : State) : State :=
-  (List.range' (12 + 2 * ℓ - nr) nr).foldl Rnd S
+  (List.range' (12 + 2 * ell - nr) nr).foldl Rnd S
 
 /-- FIPS 202 §3.4: Keccak-f[1600] = Keccak-p[1600, 24]. -/
 def keccakF (S : State) : State := keccakP 24 S
@@ -270,11 +270,11 @@ theorem A_toState (a : Fin 5 → Fin 5 → Fin 64 → Bool) (x y : Fin 5) (z : F
   simp only [A, toState, w, Vector.getElem_ofFn]
   congr 1 <;> [skip; skip; skip] <;> ext <;> simp <;> omega
 
-theorem rol_getLsbD (v : UInt64) (n : Nat) (hn : n < 64) (z : Fin 64) :
-    (KECCAK.UInt64.rol v n).toBitVec.getLsbD z.val =
+theorem leftRotation_getLsbD (v : UInt64) (n : Nat) (hn : n < 64) (z : Fin 64) :
+    (KECCAK.UInt64.leftRotation v n).toBitVec.getLsbD z.val =
       v.toBitVec.getLsbD (z - Fin.ofNat 64 n).val := by
   obtain ⟨z, hz⟩ := z
-  simp only [KECCAK.UInt64.rol, Fin.sub_def, Fin.ofNat]
+  simp only [KECCAK.UInt64.leftRotation, Fin.sub_def, Fin.ofNat]
   simp [Nat.mod_eq_of_lt hn, hz]
   rcases Nat.eq_zero_or_pos n with h0 | hpos
   · subst h0; simp [Nat.mod_eq_of_lt hz, BitVec.getLsbD_eq_getElem hz]
@@ -285,10 +285,10 @@ theorem rol_getLsbD (v : UInt64) (n : Nat) (hn : n < 64) (z : Fin 64) :
       simp [hzn, h1, BitVec.getLsbD_of_ge v.toBitVec (64 - n + z) (by omega),
         BitVec.getLsbD_eq_getElem (by omega : z - n < 64)]
 
-theorem rol_getElem (v : UInt64) (n : Nat) (hn : n < 64) (z : Fin 64) :
-    (KECCAK.UInt64.rol v n).toBitVec[z.val] =
+theorem leftRotation_getElem (v : UInt64) (n : Nat) (hn : n < 64) (z : Fin 64) :
+    (KECCAK.UInt64.leftRotation v n).toBitVec[z.val] =
       v.toBitVec[(z - Fin.ofNat 64 n).val] := by
-  have := rol_getLsbD v n hn z
+  have := leftRotation_getLsbD v n hn z
   simpa [BitVec.getLsbD_eq_getElem] using this
 
 theorem A_ofLanes (v : Vector UInt64 25) (x y : Fin 5) (z : Fin 64) :
@@ -301,17 +301,17 @@ theorem ofLanes_eq (u : Vector UInt64 25) (g : Fin 5 → Fin 5 → Fin 64 → Bo
   congrArg toState (funext fun x => funext fun y => funext fun z => h x y z)
 
 theorem theta_ofLanes (v : Vector UInt64 25) :
-    ofLanes (KECCAK.θ KECCAK.UInt64.rol v) = θ (ofLanes v) := by
-  have h := KECCAK.theta_lit v[0] v[1] v[2] v[3] v[4] v[5] v[6] v[7] v[8] v[9] v[10] v[11] v[12] v[13] v[14] v[15] v[16] v[17] v[18] v[19] v[20] v[21] v[22] v[23] v[24]
-  rw [← KECCAK.vec_eta v] at h
-  rw [h, θ]
+    ofLanes (KECCAK.theta KECCAK.UInt64.leftRotation v) = theta (ofLanes v) := by
+  have h := KECCAK.theta_literal v[0] v[1] v[2] v[3] v[4] v[5] v[6] v[7] v[8] v[9] v[10] v[11] v[12] v[13] v[14] v[15] v[16] v[17] v[18] v[19] v[20] v[21] v[22] v[23] v[24]
+  rw [← KECCAK.vector_eta v] at h
+  rw [h, theta]
   clear h
   refine ofLanes_eq _ _ ?_
   intro x y z
   simp only [A_ofLanes]
   rcases x with ⟨_ | _ | _ | _ | _ | x, hx⟩ <;>
     rcases y with ⟨_ | _ | _ | _ | _ | y, hy⟩ <;> try omega
-  all_goals simp [UInt64.toBitVec_xor, rol_getElem]
+  all_goals simp [UInt64.toBitVec_xor, leftRotation_getElem]
   all_goals rfl
 
 theorem fin64_sub_zero (z : Fin 64) : z - 0 = z := by
@@ -320,12 +320,12 @@ theorem fin64_sub_zero (z : Fin 64) : z - 0 = z := by
 /-- The ρ offsets of FIPS 202 Table 2, reduced mod 64, indexed by `x + 5y`.
 Proof-side only: the specification computes them with Algorithm 2's loop, and
 `ρ_eq` checks that loop against this table. -/
-def ρOff (x y : Fin 5) : Fin 64 :=
+def rhoOffset (x y : Fin 5) : Fin 64 :=
   (#v[0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43, 25, 39, 41, 45, 15, 21, 8,
       18, 2, 61, 56, 14] : Vector (Fin 64) 25)[x.val + 5 * y.val]'(by omega)
 
-theorem ρ_eq (S : State) : ρ S = toState fun x y z => A S x y (z - ρOff x y) := by
-  unfold ρ
+theorem rho_eq (S : State) : rho S = toState fun x y z => A S x y (z - rhoOffset x y) := by
+  unfold rho
   refine congrArg toState (funext fun x => funext fun y => funext fun z => ?_)
   rcases x with ⟨_ | _ | _ | _ | _ | x, hx⟩ <;>
     rcases y with ⟨_ | _ | _ | _ | _ | y, hy⟩ <;> try omega
@@ -333,25 +333,25 @@ theorem ρ_eq (S : State) : ρ S = toState fun x y z => A S x y (z - ρOff x y) 
     | rfl
     | exact (congrArg (A S _ _) (fin64_sub_zero z)).symm
 
-theorem rhopi_ofLanes (v : Vector UInt64 25) :
-    ofLanes (KECCAK.ρπ KECCAK.UInt64.rol v) = π (ρ (ofLanes v)) := by
-  have h := KECCAK.rhopi_lit v[0] v[1] v[2] v[3] v[4] v[5] v[6] v[7] v[8] v[9] v[10] v[11] v[12] v[13] v[14] v[15] v[16] v[17] v[18] v[19] v[20] v[21] v[22] v[23] v[24]
-  rw [← KECCAK.vec_eta v] at h
-  rw [h, π, ρ_eq]
+theorem rhoPi_ofLanes (v : Vector UInt64 25) :
+    ofLanes (KECCAK.rhoPi KECCAK.UInt64.leftRotation v) = pi (rho (ofLanes v)) := by
+  have h := KECCAK.rhoPi_literal v[0] v[1] v[2] v[3] v[4] v[5] v[6] v[7] v[8] v[9] v[10] v[11] v[12] v[13] v[14] v[15] v[16] v[17] v[18] v[19] v[20] v[21] v[22] v[23] v[24]
+  rw [← KECCAK.vector_eta v] at h
+  rw [h, pi, rho_eq]
   clear h
   refine ofLanes_eq _ _ ?_
   intro x y z
   simp only [A_toState, A_ofLanes]
   rcases x with ⟨_ | _ | _ | _ | _ | x, hx⟩ <;>
     rcases y with ⟨_ | _ | _ | _ | _ | y, hy⟩ <;> try omega
-  all_goals simp [rol_getElem, ρOff]
+  all_goals simp [leftRotation_getElem, rhoOffset]
   all_goals rfl
 
 theorem chi_ofLanes (v : Vector UInt64 25) :
-    ofLanes (KECCAK.χ v) = χ (ofLanes v) := by
-  have h := KECCAK.chi_lit v[0] v[1] v[2] v[3] v[4] v[5] v[6] v[7] v[8] v[9] v[10] v[11] v[12] v[13] v[14] v[15] v[16] v[17] v[18] v[19] v[20] v[21] v[22] v[23] v[24]
-  rw [← KECCAK.vec_eta v] at h
-  rw [h, χ]
+    ofLanes (KECCAK.chi v) = chi (ofLanes v) := by
+  have h := KECCAK.chi_literal v[0] v[1] v[2] v[3] v[4] v[5] v[6] v[7] v[8] v[9] v[10] v[11] v[12] v[13] v[14] v[15] v[16] v[17] v[18] v[19] v[20] v[21] v[22] v[23] v[24]
+  rw [← KECCAK.vector_eta v] at h
+  rw [h, chi]
   clear h
   refine ofLanes_eq _ _ ?_
   intro x y z
@@ -363,73 +363,73 @@ theorem chi_ofLanes (v : Vector UInt64 25) :
 /-- Algorithm 5 and 6's round constants agree, bit for bit, with the kernel's
 `rndc` table. Decided by evaluating the LFSR in the kernel. -/
 theorem RC_eq : ∀ r : Fin 24,
-    RC r.val = (List.range 64).map fun z => (KECCAK.rndc[r.val]).toBitVec.getLsbD z := by
+    RC r.val = (List.range 64).map fun z => (KECCAK.roundConstants[r.val]).toBitVec.getLsbD z := by
   decide +kernel
 
 theorem RC_getD (r : Nat) (h : r < 24) (z : Fin 64) :
-    (RC r).getD z.val false = (KECCAK.rndc[r]).toBitVec[z.val] := by
+    (RC r).getD z.val false = (KECCAK.roundConstants[r]).toBitVec[z.val] := by
   have := RC_eq ⟨r, h⟩
   simp only at this
   rw [this]
   simp [BitVec.getLsbD_eq_getElem]
 
 theorem iota_ofLanes (r : Nat) (h : r < 24) (v : Vector UInt64 25) :
-    ofLanes (KECCAK.ι r h KECCAK.rndc v) = ι (ofLanes v) r := by
-  rw [ι]
+    ofLanes (KECCAK.iota r h KECCAK.roundConstants v) = iota (ofLanes v) r := by
+  rw [iota]
   refine ofLanes_eq _ _ ?_
   intro x y z
   simp only [A_ofLanes]
   by_cases hxy : x = 0 ∧ y = 0
   · obtain ⟨rfl, rfl⟩ := hxy
-    simp [KECCAK.ι, KECCAK.xorLane]
+    simp [KECCAK.iota, KECCAK.xorLane]
     rw [← List.getD_eq_getElem?_getD, RC_getD r h z]
   · have hne : x.val + 5 * y.val ≠ 0 := by
       intro h0; apply hxy; constructor <;> ext <;> simp <;> omega
-    simp [KECCAK.ι, KECCAK.xorLane, Ne.symm hne, hxy]
+    simp [KECCAK.iota, KECCAK.xorLane, Ne.symm hne, hxy]
 
 theorem round_ofLanes (r : Nat) (h : r < 24) (v : Vector UInt64 25) :
-    ofLanes (KECCAK.ι r h KECCAK.rndc
-        (KECCAK.χ (KECCAK.ρπ KECCAK.UInt64.rol (KECCAK.θ KECCAK.UInt64.rol v)))) =
+    ofLanes (KECCAK.iota r h KECCAK.roundConstants
+        (KECCAK.chi (KECCAK.rhoPi KECCAK.UInt64.leftRotation (KECCAK.theta KECCAK.UInt64.leftRotation v)))) =
       Rnd (ofLanes v) r := by
-  rw [iota_ofLanes, chi_ofLanes, rhopi_ofLanes, theta_ofLanes, Rnd]
+  rw [iota_ofLanes, chi_ofLanes, rhoPi_ofLanes, theta_ofLanes, Rnd]
 
-theorem f_aux_ofLanes (n : Nat) (hn : n ≤ 24) (v : Vector UInt64 25) :
-    ofLanes (KECCAK.f.aux KECCAK.rndc KECCAK.UInt64.rol n hn v) =
+theorem referencePermutation_go_ofLanes (n : Nat) (hn : n ≤ 24) (v : Vector UInt64 25) :
+    ofLanes (KECCAK.referencePermutation.go KECCAK.roundConstants KECCAK.UInt64.leftRotation n hn v) =
       (List.range' (24 - n) n).foldl Rnd (ofLanes v) := by
   induction n generalizing v with
   | zero => rfl
   | succ n ih =>
-    rw [KECCAK.f.aux, ih, round_ofLanes,
+    rw [KECCAK.referencePermutation.go, ih, round_ofLanes,
       show 24 - (n + 1) = 23 - n by omega, List.range'_succ,
       show 23 - n + 1 = 24 - n by omega, List.foldl_cons]
 
 /-- **The kernel's permutation is Keccak-p[1600, 24].** Under the §3.1.2
 packing of the 25 lanes into the state string (`ofLanes`), `KECCAK.f1600`
 computes FIPS 202's Keccak-p[1600, 24] (Algorithm 7) on every state. -/
-theorem f1600_eq_keccakP (ws : Vector UInt64 25) :
-    ofLanes (KECCAK.f1600 ws) = keccakP 24 (ofLanes ws) := by
-  rw [KECCAK.f1600_eq, KECCAK.f, f_aux_ofLanes]
+theorem permutation_eq_keccakP (ws : Vector UInt64 25) :
+    ofLanes (KECCAK.permutation ws) = keccakP 24 (ofLanes ws) := by
+  rw [KECCAK.permutation_eq_referencePermutation, KECCAK.referencePermutation, referencePermutation_go_ofLanes]
   rfl
 
 /-! ### Bytes, bits, and lanes -/
 
 /-- Bit `n` of a byte string in Appendix B.1 order: bit `n mod 8` of byte
 `n / 8`, and `false` past the end. -/
-def bbit (B : List UInt8) (n : Nat) : Bool := (B.getD (n / 8) 0).toNat.testBit (n % 8)
+def byteStringBit (B : List UInt8) (n : Nat) : Bool := (B.getD (n / 8) 0).toNat.testBit (n % 8)
 
-theorem h2b_getD (B : List UInt8) (n : Nat) : (h2b B).getD n false = bbit B n := by
+theorem h2b_getD (B : List UInt8) (n : Nat) : (h2b B).getD n false = byteStringBit B n := by
   induction B generalizing n with
-  | nil => simp [h2b, bbit]
+  | nil => simp [h2b, byteStringBit]
   | cons b B ih =>
     have ih' := ih (n - 8)
     simp only [h2b, List.flatMap_cons] at ih' ⊢
     by_cases hn : n < 8
     · simp only [List.getD_eq_getElem?_getD] at ih' ⊢
       rw [List.getElem?_append_left (by simpa using hn)]
-      simp [bbit, Nat.div_eq_of_lt hn, Nat.mod_eq_of_lt hn, hn]
+      simp [byteStringBit, Nat.div_eq_of_lt hn, Nat.mod_eq_of_lt hn, hn]
     · simp only [List.getD_eq_getElem?_getD] at ih' ⊢
       rw [List.getElem?_append_right (by simp; omega)]
-      simp only [List.length_map, List.length_range, ih', bbit]
+      simp only [List.length_map, List.length_range, ih', byteStringBit]
       have h1 : n / 8 = (n - 8) / 8 + 1 := by omega
       have h2 : n % 8 = (n - 8) % 8 := by omega
       rw [h1, h2]
@@ -452,21 +452,21 @@ theorem xorState_getElem (S : State) (T : List Bool) (n : Nat) (hn : n < 1600) :
 
 theorem ofBytes_getLsbD (a0 a1 a2 a3 a4 a5 a6 a7 : UInt8) (z : Nat) (hz : z < 64) :
     (UInt64.ofBytes a7 a6 a5 a4 a3 a2 a1 a0).toBitVec.getLsbD z =
-      bbit [a0, a1, a2, a3, a4, a5, a6, a7] z := by
+      byteStringBit [a0, a1, a2, a3, a4, a5, a6, a7] z := by
   have hc : z / 8 = 0 ∨ z / 8 = 1 ∨ z / 8 = 2 ∨ z / 8 = 3 ∨ z / 8 = 4 ∨ z / 8 = 5 ∨
       z / 8 = 6 ∨ z / 8 = 7 := by omega
-  simp only [UInt64.ofBytes, bbit]
+  simp only [UInt64.ofBytes, byteStringBit]
   simp [BitVec.getLsbD_or, BitVec.getLsbD_shiftLeft]
   rcases hc with h | h | h | h | h | h | h | h <;>
     simp (disch := omega) [h, decide_eq_true, decide_eq_false] <;>
     simp [BitVec.getElem_eq_testBit_toNat] <;> congr 1 <;> omega
 
-theorem bbit_of_le (P : List UInt8) (n : Nat) (h : P.length ≤ n / 8) : bbit P n = false := by
-  simp [bbit, List.getD_eq_getElem?_getD, List.getElem?_eq_none h]
+theorem byteStringBit_of_le (P : List UInt8) (n : Nat) (h : P.length ≤ n / 8) : byteStringBit P n = false := by
+  simp [byteStringBit, List.getD_eq_getElem?_getD, List.getElem?_eq_none h]
 
-theorem bbit_append (P Q : List UInt8) (n : Nat) :
-    bbit (P ++ Q) n = if n / 8 < P.length then bbit P n else bbit Q (n - 8 * P.length) := by
-  unfold bbit
+theorem byteStringBit_append (P Q : List UInt8) (n : Nat) :
+    byteStringBit (P ++ Q) n = if n / 8 < P.length then byteStringBit P n else byteStringBit Q (n - 8 * P.length) := by
+  unfold byteStringBit
   split
   · simp only [List.getD_eq_getElem?_getD]
     rw [List.getElem?_append_left (by omega)]
@@ -492,16 +492,16 @@ theorem ofLanes_xorLane_bytes (ws : Vector UInt64 25) (S : State) (pend : Bytes)
   intro n hn
   have hn' := congrArg (·[n]'hn) h
   simp only [ofLanes_getElem, xorState_getElem, h2b_getD] at hn' ⊢
-  rw [getElem_xorLane, bbit_append, hp]
+  rw [getElem_xorLane, byteStringBit_append, hp]
   by_cases hl : wc = n / 64
   · subst hl
     have hc : ¬ (n / 8 < 8 * (n / 64)) := by omega
     simp only [↓reduceIte, hc, UInt64.toBitVec_xor, BitVec.getLsbD_xor]
     rw [hn', ofBytes_getLsbD _ _ _ _ _ _ _ _ _ (Nat.mod_lt _ (by decide)),
-      bbit_of_le _ _ (by omega)]
+      byteStringBit_of_le _ _ (by omega)]
     have h1 : n % 64 / 8 = (n - 8 * (8 * (n / 64))) / 8 := by omega
     have h2 : n % 64 % 8 = (n - 8 * (8 * (n / 64))) % 8 := by omega
-    simp [bbit, h1, h2]
+    simp [byteStringBit, h1, h2]
   · simp only [hl, ↓reduceIte]
     rw [hn']
     by_cases hlt : n / 64 < wc
@@ -509,7 +509,7 @@ theorem ofLanes_xorLane_bytes (ws : Vector UInt64 25) (S : State) (pend : Bytes)
       simp only [hc, ↓reduceIte]
     · have hc : ¬ (n / 8 < 8 * wc) := by omega
       simp only [hc, ↓reduceIte]
-      rw [bbit_of_le _ _ (by omega), bbit_of_le _ _ (by simp; omega)]
+      rw [byteStringBit_of_le _ _ (by omega), byteStringBit_of_le _ _ (by simp; omega)]
 
 theorem pad101_eq (m : Nat) (hm : m ≤ 1086) :
     pad101 1088 m = true :: List.replicate (1086 - m) false ++ [true] := by
@@ -534,19 +534,19 @@ theorem pad_getD (j k : Nat) :
 theorem shift_getLsbD : ∀ z, z < 64 → ((8 : UInt64) <<< 60).toBitVec.getLsbD z = decide (z = 63) := by
   decide
 
-theorem bbit_single_one (i : Nat) : bbit [1] i = decide (i = 0) := by
+theorem byteStringBit_single_one (i : Nat) : byteStringBit [1] i = decide (i = 0) := by
   rcases Nat.lt_or_ge i 8 with h | h
-  · have key : ∀ i, i < 8 → bbit [1] i = decide (i = 0) := by decide
+  · have key : ∀ i, i < 8 → byteStringBit [1] i = decide (i = 0) := by decide
     exact key i h
-  · rw [bbit_of_le _ _ (by simp; omega)]; simp; omega
+  · rw [byteStringBit_of_le _ _ (by simp; omega)]; simp; omega
 
-theorem bbit_one (bs : Bytes) (k : Nat) :
-    bbit (bs ++ [1]) k =
-      if k / 8 < bs.length then bbit bs k else decide (k = 8 * bs.length) := by
-  rw [bbit_append]
+theorem byteStringBit_one (bs : Bytes) (k : Nat) :
+    byteStringBit (bs ++ [1]) k =
+      if k / 8 < bs.length then byteStringBit bs k else decide (k = 8 * bs.length) := by
+  rw [byteStringBit_append]
   split
   · rfl
-  · rw [bbit_single_one]; simp; omega
+  · rw [byteStringBit_single_one]; simp; omega
 
 theorem getD_append' {α : Type} (l₁ l₂ : List α) (n : Nat) (d : α) :
     (l₁ ++ l₂).getD n d = if n < l₁.length then l₁.getD n d else l₂.getD (n - l₁.length) d := by
@@ -567,21 +567,21 @@ theorem ofLanes_final (ws : Vector UInt64 25) (S : State) (pend bs : Bytes)
         16 (by omega) ((8 : UInt64) <<< 60)) =
       xorState S (h2b (pend ++ bs) ++ pad101 1088 (8 * (pend ++ bs).length)) := by
   have hL : (pend ++ bs).length = 8 * wc + bs.length := by simp [hp]
-  have hu' : ∀ k, k < 64 → bbit [u0, u1, u2, u3, u4, u5, u6, u7] k = bbit (bs ++ [1]) k := by
-    intro k hk; simp only [bbit]; rw [hu _ (by omega)]
+  have hu' : ∀ k, k < 64 → byteStringBit [u0, u1, u2, u3, u4, u5, u6, u7] k = byteStringBit (bs ++ [1]) k := by
+    intro k hk; simp only [byteStringBit]; rw [hu _ (by omega)]
   apply Vector.ext
   intro n hn
   have hn' := congrArg (·[n]'hn) h
   simp only [ofLanes_getElem, xorState_getElem, h2b_getD] at hn' ⊢
   rw [getElem_xorLane, getElem_xorLane, getElem_xorLane, hL, pad101_eq _ (by omega),
-    getD_append', length_h2b, hL, h2b_getD, pad_getD, bbit_append, hp]
+    getD_append', length_h2b, hL, h2b_getD, pad_getD, byteStringBit_append, hp]
   have hz := Nat.mod_lt n (by decide : 64 > 0)
   by_cases h16 : 16 = n / 64 <;> by_cases hw : wc = n / 64 <;>
     simp only [h16, hw, ↓reduceIte, UInt64.toBitVec_xor, BitVec.getLsbD_xor, hn',
-      ofBytes_getLsbD _ _ _ _ _ _ _ _ _ hz, hu' _ hz, bbit_one, shift_getLsbD _ hz]
+      ofBytes_getLsbD _ _ _ _ _ _ _ _ _ hz, hu' _ hz, byteStringBit_one, shift_getLsbD _ hz]
   all_goals
     split_ifs <;>
-    simp (disch := omega) [bbit_of_le, decide_eq_true, decide_eq_false]
+    simp (disch := omega) [byteStringBit_of_le, decide_eq_true, decide_eq_false]
   all_goals first
     | omega
     | (congr 1; omega)
@@ -594,7 +594,7 @@ theorem run_cons8 (wc : Fin 17) (b0 b1 b2 b3 b4 b5 b6 b7 : UInt8) (bs : Bytes)
     KECCAK.Bytes.run wc (b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: bs) ws =
       KECCAK.Bytes.run (wc + 1) bs
         (if wc = 16 then
-          KECCAK.f1600 (KECCAK.xorLane ws wc.val (by omega)
+          KECCAK.permutation (KECCAK.xorLane ws wc.val (by omega)
             (UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0))
         else KECCAK.xorLane ws wc.val (by omega) (UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0)) :=
   rfl
@@ -609,9 +609,9 @@ def runTail (wc : Fin 17) (bs : Bytes) (ws : Vector UInt64 25) : U256 :=
   let s : UInt64 := (8 : UInt64) <<< 60
   let temp0 := KECCAK.xorLane ws wc.val (by omega) t
   let temp1 := KECCAK.xorLane temp0 16 (by omega) s
-  let ws' := KECCAK.f1600 temp1
-  ⟨ ⟨UInt64.byteswap (ws'[0]), UInt64.byteswap (ws'[1])⟩,
-    ⟨UInt64.byteswap (ws'[2]), UInt64.byteswap (ws'[3])⟩ ⟩
+  let ws' := KECCAK.permutation temp1
+  ⟨ ⟨UInt64.byteSwap (ws'[0]), UInt64.byteSwap (ws'[1])⟩,
+    ⟨UInt64.byteSwap (ws'[2]), UInt64.byteSwap (ws'[3])⟩ ⟩
 
 theorem run_short (wc : Fin 17) (bs : Bytes) (ws : Vector UInt64 25) (h : bs.length < 8) :
     KECCAK.Bytes.run wc bs ws = runTail wc bs ws := by
@@ -634,8 +634,8 @@ theorem byte_testBit (f : Nat → Bool) (j : Nat) (hj : j < 8) :
   refine (key (f 0) (f 1) (f 2) (f 3) (f 4) (f 5) (f 6) (f 7) j hj).trans ?_
   rcases j with _ | _ | _ | _ | _ | _ | _ | _ | j <;> first | rfl | omega
 
-theorem byteswap_getLsbD (w : UInt64) (z : Nat) (hz : z < 64) :
-    (UInt64.byteswap w).toBitVec.getLsbD z = w.toBitVec.getLsbD (8 * (7 - z / 8) + z % 8) := by
+theorem byteSwap_getLsbD (w : UInt64) (z : Nat) (hz : z < 64) :
+    (UInt64.byteSwap w).toBitVec.getLsbD z = w.toBitVec.getLsbD (8 * (7 - z / 8) + z % 8) := by
   have m0 : ∀ z, z < 64 → (0xFF00000000000000 : UInt64).toBitVec.getLsbD z = decide (z / 8 = 7) := by
     decide
   have m1 : ∀ z, z < 64 → (0x00FF000000000000 : UInt64).toBitVec.getLsbD z = decide (z / 8 = 6) := by
@@ -652,7 +652,7 @@ theorem byteswap_getLsbD (w : UInt64) (z : Nat) (hz : z < 64) :
     decide
   have m7 : ∀ z, z < 64 → (0x00000000000000FF : UInt64).toBitVec.getLsbD z = decide (z / 8 = 0) := by
     decide
-  simp only [UInt64.byteswap, UInt64.toBitVec_or, UInt64.toBitVec_and, BitVec.getLsbD_or,
+  simp only [UInt64.byteSwap, UInt64.toBitVec_or, UInt64.toBitVec_and, BitVec.getLsbD_or,
     BitVec.getLsbD_and, m0 z hz, m1 z hz, m2 z hz, m3 z hz, m4 z hz, m5 z hz, m6 z hz, m7 z hz]
   have hc : z / 8 = 0 ∨ z / 8 = 1 ∨ z / 8 = 2 ∨ z / 8 = 3 ∨ z / 8 = 4 ∨ z / 8 = 5 ∨
       z / 8 = 6 ∨ z / 8 = 7 := by omega
@@ -676,12 +676,12 @@ theorem digest_bit (u : Vector UInt64 25) (i j : Nat) (hi : i < 32) (hj : j < 8)
   simp only [h1, h2]
 
 theorem word_digest (u : Vector UInt64 25) (l : Nat) (hl : l < 4) :
-    word (b2h ((ofLanes u).toList.take 256)) l = UInt64.byteswap (u[l]'(by omega)) := by
+    word (b2h ((ofLanes u).toList.take 256)) l = UInt64.byteSwap (u[l]'(by omega)) := by
   apply UInt64.toBitVec_inj.1
   apply BitVec.eq_of_getLsbD_eq
   intro z hz
-  rw [word, ofBytes_getLsbD _ _ _ _ _ _ _ _ _ hz, byteswap_getLsbD _ _ hz]
-  simp only [bbit]
+  rw [word, ofBytes_getLsbD _ _ _ _ _ _ _ _ _ hz, byteSwap_getLsbD _ _ hz]
+  simp only [byteStringBit]
   have hc : z / 8 = 0 ∨ z / 8 = 1 ∨ z / 8 = 2 ∨ z / 8 = 3 ∨ z / 8 = 4 ∨ z / 8 = 5 ∨
       z / 8 = 6 ∨ z / 8 = 7 := by omega
   have e : ∀ k, k < 8 → ∀ j, j < 8 →
@@ -713,8 +713,8 @@ def out (T : State) : U256 :=
   ⟨⟨word d 0, word d 1⟩, ⟨word d 2, word d 3⟩⟩
 
 theorem out_ofLanes (u : Vector UInt64 25) :
-    out (ofLanes u) = ⟨⟨UInt64.byteswap u[0], UInt64.byteswap u[1]⟩,
-      ⟨UInt64.byteswap u[2], UInt64.byteswap u[3]⟩⟩ := by
+    out (ofLanes u) = ⟨⟨UInt64.byteSwap u[0], UInt64.byteSwap u[1]⟩,
+      ⟨UInt64.byteSwap u[2], UInt64.byteSwap u[3]⟩⟩ := by
   simp only [out, word_digest u 0 (by decide), word_digest u 1 (by decide),
     word_digest u 2 (by decide), word_digest u 3 (by decide)]
   rfl
@@ -799,7 +799,7 @@ theorem run_short_eq (bs : Bytes) (hb : bs.length < 8) (wc : Fin 17)
       first | omega | (simp only [List.getD_cons_succ, List.getD_cons_zero, us,
         Vector.getElem_mk, List.getElem_toArray]; rw [takeD_getElem])
   rw [← ofLanes_final ws S pend bs wc.val wc.isLt hp hb h _ _ _ _ _ _ _ _ hu,
-    ← f1600_eq_keccakP, out_ofLanes]
+    ← permutation_eq_keccakP, out_ofLanes]
 
 /-- The kernel's absorb loop computes the sponge: from any lane counter `wc`
 whose `8·wc` already-absorbed bytes `pend` sit XORed into the state over a
@@ -828,11 +828,11 @@ theorem run_eq (n : Nat) : ∀ (bs : Bytes), bs.length ≤ n → ∀ (wc : Fin 1
     by_cases hw : wc = 16
     · subst hw
       simp only [↓reduceIte]
-      have hS : ofLanes (KECCAK.f1600 (KECCAK.xorLane ws (16 : Fin 17).val (by omega)
+      have hS : ofLanes (KECCAK.permutation (KECCAK.xorLane ws (16 : Fin 17).val (by omega)
           (UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0))) =
           xorState (keccakP 24 (xorState S (h2b (pend ++ [b0, b1, b2, b3, b4, b5, b6, b7]))))
             (h2b []) := by
-        rw [f1600_eq_keccakP, hstep]
+        rw [permutation_eq_keccakP, hstep]
         exact (xorState_nil _).symm
       rw [ih rest hrest _ _ _ [] rfl hS]
       have hQ : (h2b (pend ++ [b0, b1, b2, b3, b4, b5, b6, b7])).length = 1088 := by
@@ -886,10 +886,10 @@ theorem drop_take_eight (l : List UInt8) (k m : Nat) (h : k + m + 8 ≤ l.length
     List.drop_eq_getElem_cons (by omega), List.drop_eq_getElem_cons (by omega)]
   simp only [List.take_succ_cons, Nat.add_assoc]
 
-theorem aux_getD (x : Nat) (y : ByteArray) (z : Nat) (bnd : Nat) (bs : ByteArray)
+theorem byteArray_run_go_getD (x : Nat) (y : ByteArray) (z : Nat) (bnd : Nat) (bs : ByteArray)
     (hb : bnd ≤ bs.size) :
     ∀ (k m : Nat) (hm : m ≤ bnd) (i : Nat), i < k →
-      (KECCAK.ByteArray.run.aux x y z bnd bs hb m hm k).getD i 0 =
+      (KECCAK.ByteArray.run.go x y z bnd bs hb m hm k).getD i 0 =
         ((bs.data.toList.drop (bnd - m)).take m ++ [1]).getD i 0 := by
   intro k
   induction k with
@@ -897,12 +897,12 @@ theorem aux_getD (x : Nat) (y : ByteArray) (z : Nat) (bnd : Nat) (bs : ByteArray
   | succ k ih =>
     intro m hm i hi
     rcases m with _ | m
-    · rw [KECCAK.ByteArray.run.aux.eq_def]
+    · rw [KECCAK.ByteArray.run.go.eq_def]
       rcases i with _ | i
       · simp
       · simp [List.getD_eq_getElem?_getD, List.getElem?_replicate]
         split <;> rfl
-    · rw [KECCAK.ByteArray.run.aux.eq_def]
+    · rw [KECCAK.ByteArray.run.go.eq_def]
       simp only []
       rw [List.drop_eq_getElem_cons (by simp; omega), List.take_succ_cons]
       rcases i with _ | i
@@ -939,9 +939,9 @@ theorem byteArray_run_eq (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
     have hlen : ((bs.data.toList.drop (bnd - n)).take n).length < 8 := by simp; omega
     rw [run_short _ _ _ hlen, runTail]
     have hg : ∀ i, i < 8 →
-        (KECCAK.ByteArray.run.aux bnd bs n bnd bs hb n hn 8).getD i 0 =
+        (KECCAK.ByteArray.run.go bnd bs n bnd bs hb n hn 8).getD i 0 =
           ((bs.data.toList.drop (bnd - n)).take n ++ [1]).getD i 0 :=
-      fun i hi => aux_getD bnd bs n bnd bs hb 8 n hn i hi
+      fun i hi => byteArray_run_go_getD bnd bs n bnd bs hb 8 n hn i hi
     simp only [hg 0 (by decide), hg 1 (by decide), hg 2 (by decide), hg 3 (by decide),
       hg 4 (by decide), hg 5 (by decide), hg 6 (by decide), hg 7 (by decide),
       Vector.getElem_mk, List.getElem_toArray, takeD_getElem]

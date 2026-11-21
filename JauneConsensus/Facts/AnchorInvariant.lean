@@ -247,26 +247,26 @@ theorem array_forIn_relation {α β : Type} (R : β → β → Prop) (hrefl : �
 
 /-! ## Collection lemmas -/
 
-theorem get_ok {α : Type} {n : Nat} {xs : SszList α n} {i : Nat} {site : String} {x : α}
+theorem get_ok {α : Type} {n : Nat} {xs : Ssz.List α n} {i : Nat} {site : String} {x : α}
     (h : xs.get i site = .ok x) : xs.toArray[i]? = some x := by
-  unfold SszList.get getAt at h
+  unfold Ssz.List.get getAt at h
   split at h
   · cases h; assumption
   · cases h
 
-theorem set_ok {α : Type} {n : Nat} {xs ys : SszList α n} {i : Nat} {v : α} {site : String}
+theorem set_ok {α : Type} {n : Nat} {xs ys : Ssz.List α n} {i : Nat} {v : α} {site : String}
     (h : xs.set i v site = .ok ys) :
     ∃ hi : i < xs.toArray.size, ys.toArray = xs.toArray.set i v hi := by
-  unfold SszList.set at h
+  unfold Ssz.List.set at h
   split at h
   · rename_i hi
     cases h
     exact ⟨hi, rfl⟩
   · cases h
 
-theorem push_ok {α : Type} {n : Nat} {xs ys : SszList α n} {v : α} {site : String}
+theorem push_ok {α : Type} {n : Nat} {xs ys : Ssz.List α n} {v : α} {site : String}
     (h : xs.push v site = .ok ys) : ys.toArray = xs.toArray.push v := by
-  unfold SszList.push at h
+  unfold Ssz.List.push at h
   split at h
   · cases h; rfl
   · cases h
@@ -588,7 +588,7 @@ theorem forkField_write_read {α : Type} {c : Bool} {x : α} {g : ForkField c α
   | true => cases h; rfl
 
 theorem setPending_ok {s s' : BeaconState P f}
-    {l : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {l : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     (h : s.setPendingPartialWithdrawals l = .ok s') :
     s'.validators = s.validators ∧ s'.pendingPartialWithdrawals = .ok l := by
   unfold BeaconState.setPendingPartialWithdrawals at h
@@ -598,7 +598,7 @@ theorem setPending_ok {s s' : BeaconState P f}
 
 /-- The partial path of `process_withdrawal_request`: one pending entry for a compounding validator. -/
 theorem partial_preservation {s s' T : BeaconState P f}
-    {l l' : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {l l' : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     {e : PendingPartialWithdrawal} {v : Validator} {site site2 : String} {b1 b2 : Bool}
     (h : T.setPendingPartialWithdrawals l' = .ok s')
     (hpush : l.push e site = .ok l')
@@ -638,15 +638,15 @@ theorem processWithdrawalRequest_preservation (cfg : Config) {s s' : BeaconState
 /-! ## `process_consolidation_request` -/
 
 theorem setPendingConsolidations_frame {s s' : BeaconState P f}
-    {l : SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT}
+    {l : Ssz.List PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT}
     (h : s.setPendingConsolidations l = .ok s') : Frame s s' := by
   unfold BeaconState.setPendingConsolidations at h
   obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
   cases h; exact ⟨rfl, rfl⟩
 
 /-- The main path of `process_consolidation_request`: the source's exit and withdrawable epochs. -/
-theorem consolidation_leaf {s T S s' : BeaconState P f} {V : SszList Validator P.VALIDATOR_REGISTRY_LIMIT}
-    {pc : SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT} {i : Nat} {src : Validator}
+theorem consolidation_leaf {s T S s' : BeaconState P f} {V : Ssz.List Validator P.VALIDATOR_REGISTRY_LIMIT}
+    {pc : Ssz.List PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT} {i : Nat} {src : Validator}
     {q d w : U64} {site site2 site3 : String}
     (h : S.setPendingConsolidations pc = .ok s')
     (hS : S = { T with validators := V })
@@ -694,7 +694,7 @@ macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processWit
 macro_rules | `(tactic| pres_of $h) => `(tactic| with_reducible exact processConsolidationRequest_preservation _ $h)
 
 /-- A validator write at one index that keeps credentials and the exit invariant. -/
-theorem preservation_set_field {T X : BeaconState P f} {V : SszList Validator P.VALIDATOR_REGISTRY_LIMIT}
+theorem preservation_set_field {T X : BeaconState P f} {V : Ssz.List Validator P.VALIDATOR_REGISTRY_LIMIT}
     {i : Nat} {v v' : Validator} {site site' : String}
     (hX : X.validators = V) (hP : X.pending_partial_withdrawals = T.pending_partial_withdrawals)
     (hV : T.validators.set i v' site = .ok V) (hv : T.validators.get i site' = .ok v)
@@ -703,7 +703,7 @@ theorem preservation_set_field {T X : BeaconState P f} {V : SszList Validator P.
   exact preservation_of_validatorRelation (validatorRelation_set (st' := X) rfl hi (by rw [hX]; exact hVe) (get_ok hv) hk hx)
     (pendingStep_same hP)
 
-theorem okTrans {f1 f2 f3 : ConsensusFork} {γ : Type} {s : BeaconState P f1} {s1 : BeaconState P f2}
+theorem ok_trans {f1 f2 f3 : ConsensusFork} {γ : Type} {s : BeaconState P f1} {s1 : BeaconState P f2}
     {g : γ → BeaconState P f3} {c : Fallible γ} (hp : Preservation s s1) (h : Ok c (fun r => Preservation s1 (g r))) :
     Ok c (fun r => Preservation s (g r)) :=
   fun a ha => hp.trans (h a ha)
@@ -730,7 +730,7 @@ macro "pres_step" : tactic => `(tactic| first
   | (refine ok_of fun _ hh => ?_; have h2 := by pres_of hh
      exact Preservation.trans (by pres_close) h2)
   | (with_reducible apply ok_bind; intro _ hx
-     first | (refine okTrans (Preservation.trans ?_ (by pres_of hx)) ?_; pres_close) | skip)
+     first | (refine ok_trans (Preservation.trans ?_ (by pres_of hx)) ?_; pres_close) | skip)
   | (with_reducible apply ok_ite <;> intro _)
   | (with_reducible apply ok_dite <;> intro _)
   | (set_option simprocs false in dsimp only)
@@ -770,7 +770,7 @@ theorem array_forIn_preservation_fst {α γ : Type} {xs : Array α} {init out : 
 /-! ## Setters and the registry -/
 
 theorem setPendingDeposits_frame {s s' : BeaconState P f}
-    {l : SszList PendingDeposit P.PENDING_DEPOSITS_LIMIT}
+    {l : Ssz.List PendingDeposit P.PENDING_DEPOSITS_LIMIT}
     (h : s.setPendingDeposits l = .ok s') : Frame s s' := by
   unfold BeaconState.setPendingDeposits at h
   obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h
@@ -816,7 +816,7 @@ theorem addValidatorToRegistry_preservation {s s' : BeaconState P f} {pk : BLSPu
   have hn : idx.toNat = s.validators.toArray.size := U64.toNat_ofNat? hidx
   unfold setOrAppendList at hV
   have hc : (idx.toNat == s.validators.length) = true := by
-    simp only [SszList.length, hn, beq_self_eq_true]
+    simp only [Ssz.List.length, hn, beq_self_eq_true]
   rw [if_pos hc] at hV
   exact preservation_of_validatorRelation (validatorRelation_push (push_ok hV) (getValidatorFromDeposit_exitOk hv))
     (pendingStep_same rfl)
@@ -908,17 +908,17 @@ macro_rules | `(tactic| pres_of $h) => `(tactic|
 
 /-- The pending queue rewritten to a slice of itself. -/
 theorem setPending_extract_preservation {T s' : BeaconState P f}
-    {l l' : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT} {a b : Nat}
+    {l l' : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT} {a b : Nat}
     {site : String}
     (h : T.setPendingPartialWithdrawals l' = .ok s')
     (hl : T.pendingPartialWithdrawals = .ok l)
-    (ho : SszList.ofArray (l.toArray.extract a b) site = .ok l') : Preservation T s' := by
+    (ho : Ssz.List.ofArray (l.toArray.extract a b) site = .ok l') : Preservation T s' := by
   obtain ⟨hV, hl'⟩ := setPending_ok h
   refine preservation_of_validatorRelation (validatorRelation_same (by rw [hV])) ?_
   intro m hm p hp
   rw [hl'] at hm
   cases hm
-  unfold SszList.ofArray at ho
+  unfold Ssz.List.ofArray at ho
   split at ho
   · cases ho
     left
@@ -960,7 +960,7 @@ theorem processRegistryUpdatesElectra_preservation (cfg : Config) {s s' : Beacon
   apply ok_bind; intro _ _
   dsimp only
   apply ok_bind; intro r hr
-  refine okTrans (list_forIn_preservation (fun _ _ => ?_) hr) ?_
+  refine ok_trans (list_forIn_preservation (fun _ _ => ?_) hr) ?_
   · repeat pres_step
   · repeat pres_step
 
@@ -1065,7 +1065,7 @@ theorem upgradeToFulu_preservation (cfg : Config) {pre : BeaconState P .electra}
 /-! ## Block steps and remaining epoch steps -/
 
 theorem setProposerLookahead_frame {s s' : BeaconState P f}
-    {l : SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)}
+    {l : Ssz.Vector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)}
     (h : s.setProposerLookahead l = .ok s') : Frame s s' := by
   unfold BeaconState.setProposerLookahead at h
   obtain ⟨g, _, h⟩ := bind_eq_ok_iff.mp h

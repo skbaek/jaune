@@ -285,7 +285,7 @@ theorem bid_cover {ctx : Context} {s3 s4 : GloasState P}
       have hk := bidIndex_of_slot (s := s4) (by rw [hL, hs4]; exact hslot)
       rw [hs4] at hk
       exact ⟨_, _, hk, hidx, by rw [hL]⟩
-    rw [exposure_le_live hlive, Nat.add_zero]
+    rw [exposure_eq_zero_of_bidLive hlive, Nat.add_zero]
     have hp4 : pendingBalance s4 i + withdrawalAmount i x.withdrawal =
         pendingBalance s3 i + withdrawalAmount i (bidWithdrawal sb.message) := by
       unfold pendingBalance; rw [hw4]; simp only [] at hP; omega
@@ -369,14 +369,14 @@ theorem operations_cover {s s' : GloasState P} (h : OperationsRelation s s') (i 
       pendingPaymentBalance s.builder_pending_payments.toArray.toList i := rfl
   have hexpo' : exposure s' i ≤ withdrawalAmount i (bidWithdrawal s.latest_execution_payload_bid) := by
     by_cases hl : BidLive s'
-    · rw [exposure_le_live hl]; exact Nat.zero_le _
+    · rw [exposure_eq_zero_of_bidLive hl]; exact Nat.zero_le _
     · rw [exposure_of_not_live hl, hL]
   by_cases hl : BidLive s
   · obtain ⟨k, E, hk, hE, hEw⟩ := hl
-    rw [exposure_le_live ⟨k, E, hk, hE, hEw⟩]
+    rw [exposure_eq_zero_of_bidLive ⟨k, E, hk, hE, hEw⟩]
     rcases hp k with e | e | ⟨p0, p1, hp0, hp1, hst, _⟩
     · have hl' : BidLive s' := ⟨k, E, by rw [hbi]; exact hk, by rw [e]; exact hE, by rw [hL]; exact hEw⟩
-      rw [exposure_le_live hl']; omega
+      rw [exposure_eq_zero_of_bidLive hl']; omega
     · have hdrop : pendingPaymentBalance s'.builder_pending_payments.toArray.toList i + withdrawalAmount i E.withdrawal ≤
           pendingPaymentBalance s.builder_pending_payments.toArray.toList i :=
         list_sum_le_of_entries_at (fun p : JauneConsensus.Gloas.BuilderPendingPayment => withdrawalAmount i p.withdrawal)
@@ -389,7 +389,7 @@ theorem operations_cover {s s' : GloasState P} (h : OperationsRelation s s') (i 
       omega
     · rw [hE] at hp0; cases hp0
       have hl' : BidLive s' := ⟨k, p1, by rw [hbi]; exact hk, hp1, by rw [hL, hst.1]; exact hEw⟩
-      rw [exposure_le_live hl']; omega
+      rw [exposure_eq_zero_of_bidLive hl']; omega
   · rw [exposure_of_not_live hl]; omega
 
 /-! ## The block and the state transition -/

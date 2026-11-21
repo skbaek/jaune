@@ -17,7 +17,7 @@ open Jaune
 #guard twist ⟨⟨trimZero [0, 5]⟩, ⟨trimZero [0, 7]⟩⟩
         = twist ⟨⟨[0, 5]⟩, ⟨[0, 7]⟩⟩
 #guard twist ⟨⟨[]⟩, ⟨[]⟩⟩ = twist ⟨⟨[0, 0]⟩, ⟨[0, 0]⟩⟩
-#guard trimZero [(0 : Bn254Fp), 5] = [(5 : Bn254Fp)]
+#guard trimZero [(0 : AltBn128Fp), 5] = [(5 : AltBn128Fp)]
 
 -- The base point is on the curve, and multiplying it by the stated group order
 -- reaches infinity: a transcription error in any of the six curve literals
@@ -27,7 +27,7 @@ open Jaune
   = secp256r1.infinity
 #guard EllipticCurve.mulBy secp256r1.generator (secp256r1.curveOrder + 1)
   = secp256r1.generator
-#guard secp256r1.coeffA.val + 3 = secp256r1.prime
+#guard secp256r1.a.val + 3 = secp256r1.prime
 
 end Jaune
 

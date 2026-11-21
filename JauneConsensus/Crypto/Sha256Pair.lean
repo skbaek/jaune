@@ -35,7 +35,7 @@ def padBlock : Array UInt8 :=
 /-- The FIPS 180-4 §6.2.2 compression with its message schedule given rather than computed:
 `FIPS.compress H M` is `compressScheduled H (FIPS.schedule M)` by definition. -/
 def compressScheduled (H : Vector UInt32 8) (W : Array UInt32) : Vector UInt32 8 :=
-  let v : FIPS.Vars :=
+  let v : FIPS.WorkingVariables :=
     (List.range 64).foldl (FIPS.step W)
       { a := H[0], b := H[1], c := H[2], d := H[3],
         e := H[4], f := H[5], g := H[6], h := H[7] }

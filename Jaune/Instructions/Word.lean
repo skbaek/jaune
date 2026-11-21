@@ -1,7 +1,7 @@
-import Jaune.MessageCall.CheckedState
-import Jaune.MessageCall.CheckedContext
+import Jaune.MessageCall.State
+import Jaune.MessageCall.Context
 
-namespace Jaune.Checked
+namespace Jaune
 
 /-- Operands in EVM pop order, with one type for each supported arity. -/
 def Words : Fin 4 → Type
@@ -70,4 +70,4 @@ def WordRow.step (row : WordRow) (opcodes : OpcodeRules) (env : Word.Env) (m : M
   | none => return m
   | some f => m.push (f args ⟨env, m.memory.size, m.returnData, m.gasLeft⟩)
 
-end Jaune.Checked
+end Jaune

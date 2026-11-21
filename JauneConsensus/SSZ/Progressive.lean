@@ -51,16 +51,16 @@ inductive Spine where
 chunk; otherwise the spine node of `merkleize_progressive(chunks[num_leaves:], num_leaves * 4)`
 and `merkleize(chunks[:num_leaves], num_leaves)`. Total by fuel (`chunks.length + 1` suffices,
 since every non-empty step consumes at least one chunk). -/
-def merkleizeProgressiveAux (s : Spine) : Nat → List Jaune.U256 → Nat → Jaune.U256
+def merkleizeProgressiveFueled (s : Spine) : Nat → List Jaune.U256 → Nat → Jaune.U256
   | 0, _, _ => zeroChunk
   | _ + 1, [], _ => zeroChunk
   | fuel + 1, cs, numLeaves =>
-    s.node (merkleizeProgressiveAux s fuel (cs.drop numLeaves) (numLeaves * 4))
+    s.node (merkleizeProgressiveFueled s fuel (cs.drop numLeaves) (numLeaves * 4))
       (merkleizeDepth (cs.take numLeaves) (depthOf numLeaves))
 
 /-- `merkleize_progressive(chunks)` with the default `num_leaves=1`. -/
 def merkleizeProgressive (chunks : List Jaune.U256) (s : Spine := .successorLeft) : Jaune.U256 :=
-  merkleizeProgressiveAux s (chunks.length + 1) chunks 1
+  merkleizeProgressiveFueled s (chunks.length + 1) chunks 1
 
 /-- `mix_in_active_fields(root, active_fields)`: `hash(root, pack_bits(active_fields))`, with
 `active_fields` restricted to at most 256 bits ("Merkleization": `active_fields` is restricted
@@ -217,7 +217,7 @@ macro_rules
 `value.selector.to_bytes(1, "little") + serialize(value.data)`. The selector is a declared
 option in `1..127` by construction (the value's constructor fixes it), so rejection of an
 out-of-range or undeclared selector lives in `deserializeUnion`, which sees untrusted bytes. -/
-def serializeUnion (selector : Nat) (data : Bytes) : Bytes := leBytes 1 selector ++ data
+def serializeUnion (selector : Nat) (data : Bytes) : Bytes := littleEndianBytes 1 selector ++ data
 
 /-- Deserialization of a compatible union: the first byte is the selector, which must lie in
 `1..127` ("Illegal types": a selector outside `uint8(1)` through `uint8(127)` is illegal) and

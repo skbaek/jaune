@@ -29,7 +29,7 @@ def g2Identity : Bls12G2 := ⟨0, 0⟩
 /-- Coefficients `(c0, c1)` of `c0 + c1 * I` (the pairing-friendly-curves draft's
 `(x_0, x_1)`). -/
 def fp2Coefficients (x : Bls12Fp2) : Nat × Nat :=
-  let cs := List.takeRightV 2 x.val (0 : Bls12Fp)
+  let cs := List.takeRightVector 2 x.val (0 : Bls12Fp)
   (cs[1].val, cs[0].val)
 
 /-- `sign_GF_p(y)`: 1 if `y > (p - 1) / 2`, else 0 (draft C, notation). -/
@@ -103,8 +103,8 @@ def signatureToPoint (sig : Bytes) : Except String Bls12G2 := do
   if x0 ≥ blsPrime ∨ x1 ≥ blsPrime then throw "G2 x coordinate not in field"
   let x := Bls12Fp2.mk x0 x1
   -- 7. y2 = x^3 + 4(u + 1); INVALID if not square, else y = sqrt(y2).
-  let y2 := x ^ 3 + blsB2
-  let (isRoot, y) := sqrtDivisionFQ2 y2 1
+  let y2 := x ^ 3 + blsTwistCoefficient
+  let (isRoot, y) := sqrtDivisionFp2 y2 1
   if !isRoot then throw "G2 x coordinate not on curve"
   -- 8. choose the root whose sign is S_bit.
   return ⟨x, if signFp2 y = sBit then y else -y⟩
@@ -133,7 +133,7 @@ def pairingCheck (pairs : List (Bls12G1 × Bls12G2)) : Bool :=
 
 /-- `pairingCheck` on Jaune's reference pairing (`blsPairingRef`, plain final power). -/
 def pairingCheckReference (pairs : List (Bls12G1 × Bls12G2)) : Bool :=
-  let loops := pairs.mapM fun (p, q) => blsPairingRef q p (finalExp := false)
+  let loops := pairs.mapM fun (p, q) => blsPairingReference q p (finalExp := false)
   match loops with
   | some fs => fs.foldl (· * ·) (1 : Bls12Fp12) ^ blsFinalExponent = 1
   | none => false

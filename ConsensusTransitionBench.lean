@@ -23,7 +23,7 @@ def bench (P : Preset) (f : ConsensusFork) (dir : System.FilePath) : IO Unit := 
   let some b ← readSsz (SignedBeaconBlock P f) (dir / "blocks_0.ssz_snappy") | IO.println "block decode failed"
   let cfg := if P.SLOTS_PER_EPOCH == 8 then Config.minimal else Config.mainnet
   IO.println s!"validators: {s.validators.toArray.size}, attestations in block 0: {b.message.body.attestations.toArray.size}, slot {s.slot} -> {b.message.slot}"
-  timeIt "hash_tree_root(state)" (fun (st : BeaconState P f) => (Ssz.hashTreeRoot st : Root)) s toString
+  timeIt "hash_tree_root(state)" (fun (st : BeaconState P f) => (Ssz.hashTreeRoot st : JauneConsensus.Root)) s toString
   timeIt "process_slot" processSlot s (fun r => toString r.toBool)
   let ctxOn : Context := { config := cfg, blsActive := true }
   let ctxOff : Context := { config := cfg, blsActive := false }

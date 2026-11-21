@@ -106,7 +106,7 @@ versioned_hashes.append(kzg_commitment_to_versioned_hash(commitment))`. `Version
 `List[VersionedHash, MAX_BLOB_COMMITMENTS_PER_BLOCK]`, so an append past the limit raises
 (`Reject.limit`); the commitments themselves are a `ProgressiveList` with no limit. -/
 def blobVersionedHashes (commitments : ProgressiveListRightSpine KZGCommitment) :
-    Fallible (SszList Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK) :=
+    Fallible (Ssz.List Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK) :=
   let hashes := commitments.toArray.map fun c => kzgCommitmentToVersionedHash c.toArray.toList
   if h : hashes.size ≤ P.MAX_BLOB_COMMITMENTS_PER_BLOCK then pure ⟨hashes, h⟩
   else throw (.limit "VersionedHashes.append" P.MAX_BLOB_COMMITMENTS_PER_BLOCK hashes.size)

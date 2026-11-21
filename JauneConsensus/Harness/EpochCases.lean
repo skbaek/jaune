@@ -270,8 +270,8 @@ def epochProcessingCase (c : Case) (alsoFullEpoch : Bool := false) : IO (Option 
 /-- `Deltas` (`tests/formats/rewards/README.md`): the rewards and penalties a deltas function
 returns, one entry per validator. -/
 ssz_container DeltasFile (P : Preset) where
-  rewards : (SszList Gwei P.VALIDATOR_REGISTRY_LIMIT)
-  penalties : (SszList Gwei P.VALIDATOR_REGISTRY_LIMIT)
+  rewards : (Ssz.List Gwei P.VALIDATOR_REGISTRY_LIMIT)
+  penalties : (Ssz.List Gwei P.VALIDATOR_REGISTRY_LIMIT)
 
 /-- The recorded `Deltas` file against a computed one. -/
 def checkDeltas (P : Preset) (c : Case) (file : String) (got : Fallible Deltas) : IO (Option String) := do

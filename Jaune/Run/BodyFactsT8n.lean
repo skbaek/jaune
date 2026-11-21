@@ -1,5 +1,5 @@
 import Jaune.T8n
-import Jaune.FrameRun.CheckedFacts
+import Jaune.FrameRun.Facts
 
 /-!
 # The transition tool's driver keeps the receipts so far (goal `jaune-shape-and-names-v1`, W2 cut F)
@@ -30,10 +30,10 @@ theorem foldTransactions_receipts (block : BlockContext) :
     exact foldTransactions_receipts block rest p _ inc rcpts q rej' inc' hp h
   | ⟨i, .ok tx⟩ :: rest, p, rej, inc, rcpts, q, rej', inc', hp, h => by
     rw [foldTransactions, foldTransactionsWith] at h
-    cases hs : Checked.Body.step block p (.transaction tx inc.length) with
+    cases hs : Body.step block p (.transaction tx inc.length) with
     | ok p' =>
       simp only [hs] at h
-      obtain ⟨receipt, hp', -, -⟩ := Checked.Body.Prefix.Receipts.step_transaction hp hs
+      obtain ⟨receipt, hp', -, -⟩ := Body.Prefix.Receipts.step_transaction hp hs
       have hp'' : p'.Receipts (inc ++ [tx]).length (rcpts ++ [receipt]) := by simpa using hp'
       obtain ⟨rs, hq⟩ := foldTransactions_receipts block rest p' rej (inc ++ [tx]) _ q rej' inc' hp''
         (by rw [foldTransactions]; exact h)

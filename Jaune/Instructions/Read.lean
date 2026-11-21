@@ -1,5 +1,5 @@
-import Jaune.MessageCall.CheckedState
-import Jaune.MessageCall.CheckedContext
+import Jaune.MessageCall.State
+import Jaune.MessageCall.Context
 
 /-! The Read family as rows (goal `jaune-shape-and-names-v1`, S4).
 
@@ -13,7 +13,7 @@ outside the machine are a `ReadTouch`: a key warmed and a read recorded. `Frame.
 applies the touch on both channels, so by its type a read keeps the world, the logs, the
 refund, the self-destructs, the touched accounts and the created accounts. -/
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -60,7 +60,7 @@ def ReadTarget.readKey (ctx : CallContext) : (t : ReadTarget) → t.Key → Opti
 /-- Read-only input of a read: the world and the two accessed sets. -/
 structure ReadView where
   world : World
-  accessedAddresses : AdrSet
+  accessedAddresses : AddressSet
   accessedStorageKeys : KeySet
 
 /-- A frame state's read view. -/
@@ -125,11 +125,11 @@ def ReadResult.finish : {t : ReadTarget} → ReadResult t → CallContext → Wo
     Except (ExceptionalHalt × Machine × ReadTouch) (Machine × ReadTouch)
   | _, .push f, ctx, w, key, price, warmed, read, m =>
     match m.chargeGas price with
-    | .error (e, m') => .error (e, m', { warmed })
+    | .error (e, m') => .error (e, m', { warmed := warmed })
     | .ok m₁ =>
       match m₁.push (f ctx w key) with
-      | .error (e, m') => .error (e, m', { warmed, read })
-      | .ok m₂ => .ok (m₂, { warmed, read })
+      | .error (e, m') => .error (e, m', { warmed := warmed, read := read })
+      | .ok m₂ => .ok (m₂, { warmed := warmed, read := read })
   | _, .copyCode perWord, _, w, a, price, warmed, read, m =>
     match m.popToNat with
     | .error (e, m') => .error (e, m', {})
@@ -140,12 +140,12 @@ def ReadResult.finish : {t : ReadTarget} → ReadResult t → CallContext → Wo
         match m₂.popToNat with
         | .error (e, m') => .error (e, m', {})
         | .ok (n, m₃) =>
-          match m₃.chargeGas (price + perWord * ceilDiv n 32 + m₃.extCost [(d, n)]) with
-          | .error (e, m') => .error (e, m', { warmed })
+          match m₃.chargeGas (price + perWord * ceilDiv n 32 + m₃.memoryExpansionCost [(d, n)]) with
+          | .error (e, m') => .error (e, m', { warmed := warmed })
           | .ok m₄ =>
-            .ok (m₄.memWrite d
+            .ok (m₄.writeMemory d
               ((Jaune.State.get w.state a).code.sliceD o n (HaltOp.toUInt8 .stop)),
-              { warmed, read })
+              { warmed := warmed, read := read })
 
 /-- The one step of the Read family: availability, the key's pop, the quote, then the result. -/
 def ReadRow.step (row : ReadRow) (rules : ForkRules) (ctx : CallContext) (v : ReadView)
@@ -178,4 +178,4 @@ def Frame.State.liftRead (rules : ForkRules)
   | .error (e, m, t) => .error (e, (s.withMachine m).applyReadTouch rules t)
   | .ok (m, t) => .ok ((s.withMachine m).applyReadTouch rules t)
 
-end Jaune.Checked
+end Jaune

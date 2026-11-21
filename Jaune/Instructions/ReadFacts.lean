@@ -3,7 +3,7 @@ import Jaune.Instructions.MemoryFacts
 
 /-! Laws and bridges of the Read family. -/
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -19,10 +19,10 @@ def ReadResult.Done : {t : ReadTarget} → ReadResult t → CallContext → Worl
       out = { m with gasLeft := m.gasLeft - price, stack := f ctx w key :: m.stack }
   | _, .copyCode perWord, _, w, (a : Address), price, m, out =>
     ∃ d o n rest, m.stack = d :: o :: n :: rest ∧
-      price + perWord * ceilDiv n.toNat 32 + m.extCost [(d.toNat, n.toNat)] ≤ m.gasLeft ∧
+      price + perWord * ceilDiv n.toNat 32 + m.memoryExpansionCost [(d.toNat, n.toNat)] ≤ m.gasLeft ∧
       out = { m with
         stack := rest
-        gasLeft := m.gasLeft - (price + perWord * ceilDiv n.toNat 32 + m.extCost [(d.toNat, n.toNat)])
+        gasLeft := m.gasLeft - (price + perWord * ceilDiv n.toNat 32 + m.memoryExpansionCost [(d.toNat, n.toNat)])
         memory := m.memory.write d.toNat
           ((Jaune.State.get w.state a).code.sliceD o.toNat n.toNat (HaltOp.toUInt8 .stop)) }
 
@@ -33,7 +33,7 @@ private theorem popToNat_ok {m out : Machine} {x : Nat} (h : m.popToNat = .ok (x
   · cases h
   · rename_i w m' hp
     cases h
-    obtain ⟨rest, hs, rfl⟩ := MemoryReadFacts.pop_ok_inv hp
+    obtain ⟨rest, hs, rfl⟩ := MemoryReadFacts.pop_ok_inversion hp
     exact ⟨w, rest, hs, rfl, rfl⟩
 
 private theorem popToNat_error {m out : Machine} {e : ExceptionalHalt}
@@ -42,14 +42,14 @@ private theorem popToNat_error {m out : Machine} {e : ExceptionalHalt}
   split at h
   · rename_i err hp
     cases h
-    obtain ⟨rfl, -, rfl⟩ := MemoryReadFacts.pop_error_inv hp
+    obtain ⟨rfl, -, rfl⟩ := MemoryReadFacts.pop_error_inversion hp
     exact ⟨rfl, rfl⟩
   · cases h
 
 theorem ReadResult.finish_ok {t : ReadTarget} {r : ReadResult t} {ctx : CallContext} {w : World}
     {key : t.Key} {price : Nat} {warmed read : Option ReadAccessKey} {m out : Machine}
     {touch : ReadTouch} (h : r.finish ctx w key price warmed read m = .ok (out, touch)) :
-    touch = { warmed, read } ∧ out.stateGas = m.stateGas ∧ out.returnData = m.returnData ∧
+    touch = { warmed := warmed, read := read } ∧ out.stateGas = m.stateGas ∧ out.returnData = m.returnData ∧
       r.Done ctx w key price m out := by
   cases r with
   | push f =>
@@ -57,11 +57,11 @@ theorem ReadResult.finish_ok {t : ReadTarget} {r : ReadResult t} {ctx : CallCont
     split at h
     · cases h
     · rename_i m₁ hc
-      obtain ⟨enough, rfl⟩ := MemoryReadFacts.chargeGas_ok_inv hc
+      obtain ⟨enough, rfl⟩ := MemoryReadFacts.chargeGas_ok_inversion hc
       split at h
       · cases h
       · rename_i m₂ hq
-        obtain ⟨hlen, rfl⟩ := MemoryReadFacts.push_ok_inv hq
+        obtain ⟨hlen, rfl⟩ := MemoryReadFacts.push_ok_inversion hq
         cases h
         exact ⟨rfl, rfl, rfl, enough, hlen, rfl⟩
   | copyCode perWord =>
@@ -81,7 +81,7 @@ theorem ReadResult.finish_ok {t : ReadTarget} {r : ReadResult t} {ctx : CallCont
           split at h
           · cases h
           · rename_i m₄ hc
-            obtain ⟨enough, rfl⟩ := MemoryReadFacts.chargeGas_ok_inv hc
+            obtain ⟨enough, rfl⟩ := MemoryReadFacts.chargeGas_ok_inversion hc
             cases h
             simp only at hs2 hs3
             subst hs2 hs3
@@ -93,22 +93,22 @@ theorem ReadResult.finish_error {t : ReadTarget} {r : ReadResult t} {ctx : CallC
     (h : r.finish ctx w key price warmed read m = .error (e, out, touch)) :
     out.stateGas = m.stateGas ∧ out.returnData = m.returnData ∧
       ((e = .stackUnderflow .none ∧ touch = {}) ∨
-       (e = .outOfGas .none ∧ touch = { warmed }) ∨
-       (e = .stackOverflow .none ∧ touch = { warmed, read })) := by
+       (e = .outOfGas .none ∧ touch = { warmed := warmed }) ∨
+       (e = .stackOverflow .none ∧ touch = { warmed := warmed, read := read })) := by
   cases r with
   | push f =>
     simp only [ReadResult.finish] at h
     split at h
     · rename_i e' m' hc
       cases h
-      obtain ⟨rfl, -, rfl⟩ := MemoryReadFacts.chargeGas_error_inv hc
+      obtain ⟨rfl, -, rfl⟩ := MemoryReadFacts.chargeGas_error_inversion hc
       exact ⟨rfl, rfl, Or.inr (Or.inl ⟨rfl, rfl⟩)⟩
     · rename_i m₁ hc
-      obtain ⟨-, rfl⟩ := MemoryReadFacts.chargeGas_ok_inv hc
+      obtain ⟨-, rfl⟩ := MemoryReadFacts.chargeGas_ok_inversion hc
       split at h
       · rename_i e' m' hq
         cases h
-        obtain ⟨rfl, -, rfl⟩ := MemoryReadFacts.push_error_inv hq
+        obtain ⟨rfl, -, rfl⟩ := MemoryReadFacts.push_error_inversion hq
         exact ⟨rfl, rfl, Or.inr (Or.inr ⟨rfl, rfl⟩)⟩
       · cases h
   | copyCode perWord =>
@@ -137,7 +137,7 @@ theorem ReadResult.finish_error {t : ReadTarget} {r : ReadResult t} {ctx : CallC
           split at h
           · rename_i e' m' hc
             cases h
-            obtain ⟨rfl, -, rfl⟩ := MemoryReadFacts.chargeGas_error_inv hc
+            obtain ⟨rfl, -, rfl⟩ := MemoryReadFacts.chargeGas_error_inversion hc
             exact ⟨rfl, rfl, Or.inr (Or.inl ⟨rfl, rfl⟩)⟩
           · cases h
 
@@ -147,7 +147,7 @@ theorem ReadTarget.pop_ok {t : ReadTarget} {m out : Machine} {key : t.Key}
   cases t with
   | recipient => cases h; rfl
   | slot | transient =>
-    obtain ⟨rest, hs, rfl⟩ := MemoryReadFacts.pop_ok_inv h
+    obtain ⟨rest, hs, rfl⟩ := MemoryReadFacts.pop_ok_inversion h
     rfl
   | account =>
     simp only [ReadTarget.pop, Machine.popToAddress] at h
@@ -155,7 +155,7 @@ theorem ReadTarget.pop_ok {t : ReadTarget} {m out : Machine} {key : t.Key}
     · cases h
     · rename_i x m' hp
       cases h
-      obtain ⟨rest, hs, rfl⟩ := MemoryReadFacts.pop_ok_inv hp
+      obtain ⟨rest, hs, rfl⟩ := MemoryReadFacts.pop_ok_inversion hp
       rfl
 
 theorem ReadTarget.pop_error {t : ReadTarget} {m out : Machine} {e : ExceptionalHalt}
@@ -163,13 +163,13 @@ theorem ReadTarget.pop_error {t : ReadTarget} {m out : Machine} {e : Exceptional
     e = .stackUnderflow .none ∧ m.stack = [] ∧ out = { m with stack := [] } := by
   cases t with
   | recipient => cases h
-  | slot | transient => exact MemoryReadFacts.pop_error_inv h
+  | slot | transient => exact MemoryReadFacts.pop_error_inversion h
   | account =>
     simp only [ReadTarget.pop, Machine.popToAddress] at h
     split at h
     · rename_i err hp
       cases h
-      exact MemoryReadFacts.pop_error_inv hp
+      exact MemoryReadFacts.pop_error_inversion hp
     · cases h
 
 /-! ### The Read family's effect law -/
@@ -363,4 +363,4 @@ theorem PlainOp.read_run_congr_fork {op : Jaune.PlainOp} (hread : (PlainOp.readR
       simp only [h1, h2, h3, h4]
       rfl
 
-end Jaune.Checked
+end Jaune

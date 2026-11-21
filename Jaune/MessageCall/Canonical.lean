@@ -1,0 +1,656 @@
+import Jaune.MessageCall.Totality
+import Jaune.Instructions.LogFacts
+import Jaune.Instructions.ReadFacts
+import Jaune.MessageCall.WorldCanonical
+import Jaune.MessageCall.Records
+
+/-! Canonicality of the world and original state through the native grouped frame driver. -/
+namespace Jaune
+
+/-- The current state and transient storage are canonical. -/
+abbrev Frame.State.Canonical (s : Frame.State) : Prop := s.world.Canonical
+
+/-- The original and current states within a running frame are canonical. -/
+def Frame.Running.Canonical (r : Frame.Running) : Prop := Jaune.State.Canonical r.context.tx.originalState ∧ Frame.State.Canonical r.state
+
+abbrev Frame.Exit.Canonical (e : Frame.Exit) : Prop := Frame.State.Canonical e.state
+
+/-- A frame's checkpoint world and its block's original state are canonical
+(`Frame.Canonical` over the checked frame). -/
+def Frame.Canonical (f : Frame) : Prop :=
+  World.Canonical f.checkpoint.world ∧ Jaune.State.Canonical f.message.context.tx.originalState
+
+theorem Frame.enteredWorld_canonical {f : Frame} (hf : f.Canonical) : f.enteredWorld.Canonical := by
+  unfold Frame.enteredWorld
+  split
+  · exact hf.1
+  · exact World.Canonical.createSetUp hf.1 _
+
+/-- The world after the frame: the result's on success, the checkpoint's otherwise
+(`Frame.worldAfter` over the checked frame). -/
+def Frame.worldAfter (f : Frame) : Frame.Result → World
+  | .success _ _ _ world _ _ => world
+  | _ => f.checkpoint.world
+
+private theorem liftCanonical {ε : Type} {s : Frame.State} (h : Frame.State.Canonical s)
+    (f : Machine → Except (ε × Machine) Machine) :
+    Walk Frame.State.Canonical Frame.State.Canonical (s.liftMachine f) := by
+  unfold Frame.State.liftMachine
+  split <;> exact h
+
+private theorem liftValueCanonical {ε α : Type} {s : Frame.State} (h : Frame.State.Canonical s)
+    (f : Machine → Except (ε × Machine) (α × Machine)) :
+    Walk Frame.State.Canonical (fun p => Frame.State.Canonical p.2) (s.liftMachineValue f) := by
+  unfold Frame.State.liftMachineValue
+  split <;> exact h
+
+private theorem storageValue_canonical {s : Frame.State} (h : Frame.State.Canonical s) (a : Address) (k v : U256) :
+    Frame.State.Canonical (s.setStorageValue a k v) :=
+  ⟨h.1.setStorageValue _ _ _, h.2⟩
+
+private theorem transientValue_canonical {s : Frame.State} (h : Frame.State.Canonical s) (a : Address) (k v : U256) :
+    Frame.State.Canonical (s.setTransientValue a k v) :=
+  ⟨h.1, h.2.setStorageValue _ _ _⟩
+
+private theorem incrementNonce_canonical {s : Frame.State} (h : Frame.State.Canonical s) (a : Address) :
+    Frame.State.Canonical (s.incrementNonce a) :=
+  ⟨h.1.incrementNonce _, h.2⟩
+
+private theorem accessDelegation_world (rules : ForkRules) (s : Frame.State) (a : Address) :
+    (ForkRules.accessDelegation rules s a).2.2.2.2.world = s.world := by
+  unfold ForkRules.accessDelegation GasSchedule.accessDelegation
+  split
+  · dsimp only
+    split <;> rfl
+  · rfl
+
+private theorem completeDelegation_world (s : Frame.State) (b : Bool) (a : Address) :
+    (completeDelegationAccess s b a).2.world = s.world := by
+  cases b <;> rfl
+
+local macro "canonical_leaf" : tactic => `(tactic| first
+  | assumption
+  | (with_reducible apply storageValue_canonical; assumption)
+  | (with_reducible apply transientValue_canonical; assumption)
+  | (with_reducible apply incrementNonce_canonical; assumption)
+  | (solve | simp only [Frame.State.Canonical, accessDelegation_world, completeDelegation_world,
+      Frame.State.addAccessedAddress, Frame.State.recordAccountRead, Frame.State.withTrail,
+      Frame.State.withSubstate] at * <;> assumption)
+  | exact True.intro)
+
+private theorem canonical_push (x : U256) {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical Frame.State.Canonical (s.push x) :=
+  liftCanonical h _
+
+private theorem canonical_pop {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical (fun p => Frame.State.Canonical p.2) (s.pop) :=
+  liftValueCanonical h _
+
+private theorem canonical_chargeGas (cost : Nat) {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical Frame.State.Canonical (s.chargeGas cost) :=
+  liftCanonical h _
+
+private theorem canonical_chargeStateGas (amount : Nat) {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical Frame.State.Canonical (s.chargeStateGas amount) :=
+  liftCanonical h _
+
+private theorem canonical_popToNat {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical (fun p => Frame.State.Canonical p.2) (s.popToNat) :=
+  liftValueCanonical h _
+
+private theorem canonical_popToAddress {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical (fun p => Frame.State.Canonical p.2) (s.popToAddress) :=
+  liftValueCanonical h _
+
+private theorem canonical_popList (k : Nat) {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical (fun p => Frame.State.Canonical p.2) (s.popList k) :=
+  liftValueCanonical h _
+
+private theorem canonical_pushItem (x : U256) (cost : Nat) {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical Frame.State.Canonical (s.pushItem x cost) :=
+  liftCanonical h _
+
+private theorem canonical_applyUnary (f : U256 → U256) (cost : Nat) {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical Frame.State.Canonical (s.applyUnary f cost) :=
+  liftCanonical h _
+
+private theorem canonical_applyBinary (f : U256 → U256 → U256) (cost : Nat) {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical Frame.State.Canonical (s.applyBinary f cost) :=
+  liftCanonical h _
+
+private theorem canonical_applyTernary (f : U256 → U256 → U256 → U256) (cost : Nat) {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical Frame.State.Canonical (s.applyTernary f cost) :=
+  liftCanonical h _
+
+private theorem canonical_assertDynamic (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical (fun _ => True) (s.assertDynamic ctx) := Walk.assert h
+
+open Lean Elab Tactic Meta in
+elab "canonical_primitive" : tactic => withMainContext do
+  let target ← instantiateMVars (← getMainTarget)
+  unless target.isAppOf ``Walk do throwError "expected a state walk"
+  let x := target.appArg!.headBeta
+  let bound := x.isAppOf ``Bind.bind
+  let op := if bound then (x.getArg! 4).headBeta else x
+  let some head := op.getAppFn.constName? | throwError "expected a primitive"
+  if head == ``Frame.State.liftMachine && !bound then
+    evalTactic (← `(tactic| exact liftCanonical (by canonical_leaf) _))
+    return
+  let some (rule, arity, pair) :=
+      (if head == ``Frame.State.push then some (``canonical_push, 1, false)
+      else if head == ``Frame.State.pop then some (``canonical_pop, 0, true)
+      else if head == ``Frame.State.chargeGas then some (``canonical_chargeGas, 1, false)
+      else if head == ``Frame.State.chargeStateGas then some (``canonical_chargeStateGas, 1, false)
+      else if head == ``Frame.State.popToNat then some (``canonical_popToNat, 0, true)
+      else if head == ``Frame.State.popToAddress then some (``canonical_popToAddress, 0, true)
+      else if head == ``Frame.State.popList then some (``canonical_popList, 1, true)
+      else if head == ``Frame.State.pushItem then some (``canonical_pushItem, 2, false)
+      else if head == ``Frame.State.applyUnary then some (``canonical_applyUnary, 2, false)
+      else if head == ``Frame.State.applyBinary then some (``canonical_applyBinary, 2, false)
+      else if head == ``Frame.State.applyTernary then some (``canonical_applyTernary, 2, false)
+      else if head == ``Frame.State.assertDynamic then some (``canonical_assertDynamic, 1, false)
+      else if head == ``Except.assert then some (``Walk.assert, 0, false)
+      else none : Option (Name × Nat × Bool))
+    | throwError "expected a machine or state operation"
+  let rule := mkIdent rule
+  let fact ← match arity with
+    | 0 => `($rule (by canonical_leaf))
+    | 1 => `($rule _ (by canonical_leaf))
+    | _ => `($rule _ _ (by canonical_leaf))
+  let combinator := mkIdent (if bound then ``Walk.bind else ``Walk.mono)
+  if pair then
+    evalTactic (← `(tactic| (refine $combinator $fact ?_; intro ⟨_, _⟩ _; try dsimp only at *)))
+  else
+    evalTactic (← `(tactic| (refine $combinator $fact ?_; intro _ _; try dsimp only at *)))
+
+local macro "canonical_walk" : tactic => `(tactic| repeat' first
+  | canonical_primitive
+  | simp only [Walk.ok_iff, Walk.error_iff]
+  | canonical_leaf
+  | dsimp only
+  | split)
+
+private theorem applyStoreTouch_canonical (rules : ForkRules) (a : Address) (t : StoreTouch)
+    {s : Frame.State} (h : Frame.State.Canonical s) :
+    Frame.State.Canonical (s.applyStoreTouch rules a t) := by
+  rcases t with ⟨readStorage, warmKey, newRefund, readAccount, write⟩
+  have hp : Frame.State.Canonical
+      (let s := match readStorage with | none => s | some k => s.recordStorageRead rules a k
+       let s := match warmKey with | none => s | some k => s.addAccessedStorageKey a k
+       let s := match newRefund with | none => s | some r => s.withRefund r
+       if readAccount then s.recordAccountRead rules a else s) := by
+    rcases readStorage with _ | k <;> rcases warmKey with _ | k' <;> rcases newRefund with _ | r <;>
+      cases readAccount <;> exact h
+  unfold Frame.State.applyStoreTouch
+  dsimp only at hp ⊢
+  rcases write with _ | ⟨k, v⟩ | ⟨k, v⟩
+  · exact hp
+  · exact storageValue_canonical hp _ _ _
+  · exact transientValue_canonical hp _ _ _
+
+private theorem liftStore_canonical (rules : ForkRules) (a : Address)
+    (core : Machine → Except (ExceptionalHalt × Machine × StoreTouch) (Machine × StoreTouch))
+    {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical Frame.State.Canonical (s.liftStore rules a core) := by
+  unfold Frame.State.liftStore
+  split
+  · exact applyStoreTouch_canonical rules a _ (s := s.withMachine _) h
+  · exact applyStoreTouch_canonical rules a _ (s := s.withMachine _) h
+
+/-- Every family step keeps the world canonical: the machine lifts and the log lift keep the world,
+a read's touch keeps it, and a store's touch writes at most one slot (S4: the lift types). -/
+theorem Family.run_canonical (f : Family) {x : Frame.Running}
+    (h : Frame.State.Canonical x.state) :
+    Walk Frame.State.Canonical Frame.State.Canonical (f.run x) := by
+  cases f with
+  | word row => exact liftCanonical h _
+  | shuffle row => exact liftCanonical h _
+  | memory row => exact liftCanonical h _
+  | log row =>
+    have hk := Frame.State.liftLog_keeps x.state (row.step x.context x.state.machine)
+    show Walk _ _ (x.state.liftLog (row.step x.context x.state.machine))
+    revert hk
+    generalize x.state.liftLog (row.step x.context x.state.machine) = r
+    intro hk
+    cases r with
+    | error p =>
+      obtain ⟨e, s'⟩ := p
+      show s'.world.Canonical
+      rw [show s'.world = x.state.world from hk.1]; exact h
+    | ok s' =>
+      show s'.world.Canonical
+      rw [show s'.world = x.state.world from hk.1]; exact h
+  | read row =>
+    have hk := Frame.State.liftRead_keeps x.context.block.rules
+      (row.step x.context.block.rules x.context x.state.readView) x.state
+    show Walk _ _ (x.state.liftRead x.context.block.rules
+      (row.step x.context.block.rules x.context x.state.readView))
+    revert hk
+    generalize x.state.liftRead x.context.block.rules
+      (row.step x.context.block.rules x.context x.state.readView) = r
+    intro hk
+    cases r with
+    | error p =>
+      obtain ⟨e, s'⟩ := p
+      show s'.world.Canonical
+      rw [show s'.world = x.state.world from hk.1]; exact h
+    | ok s' =>
+      show s'.world.Canonical
+      rw [show s'.world = x.state.world from hk.1]; exact h
+  | store kind => cases kind <;> exact liftStore_canonical _ _ _ h
+
+theorem PlainOp.runCore_canonical (pc : Nat) (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s)
+    (op : Jaune.PlainOp) : Walk Frame.State.Canonical Frame.State.Canonical (PlainOp.runCore pc ctx s op) :=
+  Family.run_canonical (PlainOp.family op) (x := ⟨pc, ctx, s⟩) h
+
+theorem JumpOp.runCore_canonical (pc : Nat) (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s)
+    (op : Jaune.JumpOp) :
+    Walk Frame.State.Canonical (fun p => Frame.State.Canonical p.2) (JumpOp.runCore pc ctx s op) := by
+  cases op <;> simp only [JumpOp.runCore] <;> canonical_walk
+
+private def ExitCanonical : Except Fault Frame.Exit → Prop
+  | .error _ => True
+  | .ok e => Frame.Exit.Canonical e
+
+private theorem catchHalt_canonical {body : Except (ExceptionalHalt × Frame.State) (Except Fault Frame.Exit)}
+    (h : Walk Frame.State.Canonical ExitCanonical body) : ExitCanonical (Frame.Exit.catchHalt body) := by
+  cases body with
+  | error e => cases e; exact h
+  | ok result => exact h
+
+private theorem creditBeneficiary_canonical {s : Frame.State} (h : Frame.State.Canonical s) (rules : ForkRules)
+    (a : Address) (v : U256) : Frame.State.Canonical (s.creditBeneficiary rules a v) := by
+  unfold Frame.State.creditBeneficiary
+  split
+  · exact World.Canonical.addBalance h _ _
+  · exact ⟨h.1.setPresent a (ac := (s.world.state.get a).withBalance (s.world.state.balance a + v))
+        (h.1.storage a), h.2⟩
+
+private theorem setBalance_canonical {s : Frame.State} (h : Frame.State.Canonical s)
+    (a : Address) (v : U256) : Frame.State.Canonical (s.setBalance a v) :=
+  ⟨h.1.setBalance a v, h.2⟩
+
+private theorem selfdestructRefund_canonical {s : Frame.State} (h : Frame.State.Canonical s)
+    (rules : ForkRules) (p : Prop) [Decidable p] (a : Address) :
+    Frame.State.Canonical ((s.addSelfDestruct a).creditSelfdestructRefund rules p) := by
+  unfold Frame.State.creditSelfdestructRefund
+  split <;> exact h
+
+private theorem selfdestruct_canonical (ctx : CallContext) {s : Frame.State} (h : Frame.State.Canonical s) :
+    ExitCanonical (HaltOp.run ctx s .selfdestruct) := by
+  cases hs : ctx.block.rules.stateGas with
+  | none =>
+    simp only [HaltOp.run, hs]
+    apply catchHalt_canonical
+    refine Walk.bind (liftValueCanonical h _) ?_
+    rintro ⟨donee, t⟩ ht
+    cases ctx.block.rules.access <;> simp only
+    all_goals repeat' split
+    all_goals
+      refine Walk.bind (liftCanonical (by exact ht) _) ?_
+      intro u hu
+      refine Walk.bind (Walk.assert (H := Frame.State.Canonical) hu) ?_
+      intro _ _
+      unfold Frame.State.subtractBalance
+      cases hb : u.world.subtractBalance ctx.recipient _ with
+      | none => trivial
+      | some w =>
+        simp only [Option.map]
+        have hw : Frame.State.Canonical (u.withWorld w) := World.Canonical.subtractBalance hu hb
+        -- Dispatch each branch by its shape and leave the credited value to unification: a
+        -- failed or value-checking `exact` would `whnf` through `State.writeAccount` inside
+        -- `creditBeneficiary`.
+        split
+        · exact selfdestructRefund_canonical
+            (setBalance_canonical (creditBeneficiary_canonical hw _ _ _) _ _) _ _ _
+        · exact creditBeneficiary_canonical hw _ _ _
+  | some state =>
+    simp only [HaltOp.run, hs]
+    apply catchHalt_canonical
+    refine Walk.bind (Walk.assert (H := Frame.State.Canonical) h) ?_
+    intro _ _
+    refine Walk.bind (liftValueCanonical h _) ?_
+    rintro ⟨donee, t⟩ ht
+    refine Walk.bind (Walk.assert (H := Frame.State.Canonical) ht) ?_
+    intro _ _
+    split <;> refine Walk.bind (liftCanonical (by exact ht) _) ?_ <;>
+      intro u hu <;> refine Walk.bind (liftCanonical hu _) ?_ <;> intro v hv
+    all_goals
+      unfold Frame.State.subtractBalance
+      cases hb : v.world.subtractBalance ctx.recipient _ with
+      | none => trivial
+      | some w =>
+        simp only [Option.map]
+        have hw := World.Canonical.subtractBalance hv hb
+        unfold Frame.State.emitTransferLog
+        repeat' split
+        all_goals exact World.Canonical.addBalance hw _ _
+
+theorem HaltOp.run_canonical (ctx : CallContext) {s : Frame.State} (hs : Frame.State.Canonical s)
+    (op : Jaune.HaltOp) {e : Frame.Exit} (h : HaltOp.run ctx s op = .ok e) : Frame.Exit.Canonical e := by
+  suffices hp : ExitCanonical (HaltOp.run ctx s op) by rw [h] at hp; exact hp
+  cases op with
+  | stop => exact hs
+  | selfdestruct => exact selfdestruct_canonical _ hs
+  | revert | return_ => apply catchHalt_canonical; canonical_walk
+
+/-- Canonicality of a completed instruction or the saved checkpoint of a child. -/
+def MessageOp.Outcome.Canonical : MessageOp.Outcome → Prop
+  | .done x => Walk Frame.State.Canonical Frame.State.Canonical x
+  | .spawn child _ => Frame.Canonical child
+
+theorem MessageOp.Outcome.ofExcept_canonical {x : Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
+    (h : Walk Frame.State.Canonical MessageOp.Outcome.Canonical x) : (MessageOp.Outcome.ofExcept x).Canonical := by
+  cases x <;> exact h
+
+private theorem pushZero_canonical {s : Frame.State} (h : Frame.State.Canonical s) :
+    Walk Frame.State.Canonical MessageOp.Outcome.Canonical (do
+      let t ← s.push 0
+      return .done (.ok t)) := by
+  refine Walk.bind (liftCanonical h _) ?_
+  intro t ht
+  exact ht
+
+theorem prepareCall.step_canonical (ctx : CallContext) (s : Frame.State) (gas : Nat) (value : U256)
+    (caller target codeAddress : Address) (transfersValue isStaticcall : Bool)
+    (inputIndex inputSize outputIndex outputSize : Nat) (code : ByteArray) (disablePrecompiles : Bool)
+    (hc : Jaune.State.Canonical ctx.tx.originalState) (h : Frame.State.Canonical s) :
+    MessageOp.Outcome.Canonical (prepareCall.step ctx s gas value caller target codeAddress transfersValue
+      isStaticcall inputIndex inputSize outputIndex outputSize code disablePrecompiles) := by
+  unfold prepareCall.step
+  split
+  · apply MessageOp.Outcome.ofExcept_canonical
+    exact pushZero_canonical h
+  · exact ⟨h, hc⟩
+
+theorem prepareCallAmsterdam.step_canonical (ctx : CallContext) (state : StateGasRules)
+    (s : Frame.State) (gas reservoir : Nat) (value : U256) (caller target codeAddress : Address)
+    (transfersValue isStaticcall : Bool) (inputIndex inputSize outputIndex outputSize : Nat)
+    (code : ByteArray) (disablePrecompiles newAccountCharged insufficientBalance : Bool) (hc : Jaune.State.Canonical ctx.tx.originalState) (h : Frame.State.Canonical s) :
+    MessageOp.Outcome.Canonical (prepareCallAmsterdam.step ctx state
+      s gas reservoir value caller target codeAddress transfersValue isStaticcall inputIndex
+      inputSize outputIndex outputSize code disablePrecompiles newAccountCharged insufficientBalance) := by
+  unfold prepareCallAmsterdam.step
+  split
+  · apply MessageOp.Outcome.ofExcept_canonical
+    cases newAccountCharged <;> exact pushZero_canonical h
+  · exact ⟨h, hc⟩
+
+theorem prepareCreate.step_canonical (ctx : CallContext) (s : Frame.State) (endowment : U256)
+    (address : Address) (offset size : Nat) (hc : Jaune.State.Canonical ctx.tx.originalState) (h : Frame.State.Canonical s) :
+    MessageOp.Outcome.Canonical (prepareCreate.step ctx s endowment address offset size) := by
+  unfold prepareCreate.step
+  apply MessageOp.Outcome.ofExcept_canonical
+  refine Walk.bind (Walk.assert (H := Frame.State.Canonical) h) ?_
+  intro _ _
+  refine Walk.bind (Walk.assert (H := Frame.State.Canonical) h) ?_
+  intro _ _
+  dsimp only
+  split
+  · exact pushZero_canonical h
+  · split
+    · exact pushZero_canonical (incrementNonce_canonical h _)
+    · exact ⟨incrementNonce_canonical h _, hc⟩
+
+theorem prepareCreateAmsterdam.step_canonical (ctx : CallContext) (rules : StateGasRules)
+    (s : Frame.State) (endowment : U256) (address : Address) (offset size : Nat) (hc : Jaune.State.Canonical ctx.tx.originalState) (h : Frame.State.Canonical s) :
+    MessageOp.Outcome.Canonical (prepareCreateAmsterdam.step ctx rules s endowment address offset size) := by
+  unfold prepareCreateAmsterdam.step
+  apply MessageOp.Outcome.ofExcept_canonical
+  dsimp only
+  split
+  · exact pushZero_canonical h
+  · split
+    · refine Walk.bind (canonical_chargeStateGas _ (by exact h)) ?_
+      intro t ht
+      split
+      · exact pushZero_canonical (incrementNonce_canonical ht _)
+      · exact ⟨incrementNonce_canonical ht _, hc⟩
+    · simp only [bind, Except.bind]
+      split
+      · exact pushZero_canonical (incrementNonce_canonical h _)
+      · exact ⟨incrementNonce_canonical h _, hc⟩
+
+private theorem bind_ok {ε α β : Type} (a : α) (f : α → Except ε β) :
+    ((Except.ok a : Except ε α) >>= f) = f a := rfl
+
+/-- Unfold one dispatch arm and carry the canonical world across its stack pops and charges.
+Keep each opcode a separate kernel declaration. -/
+local macro "canonical_message " name:ident " for " op:term : command =>
+  `(private theorem $name (ctx : CallContext) (s : Frame.State) (hc : Jaune.State.Canonical ctx.tx.originalState)
+      (h : Frame.State.Canonical s) : (MessageOp.step ctx s $op).Canonical := by
+    simp only [MessageOp.step]
+    repeat' first
+      | canonical_primitive
+      | simp only [pure, Except.pure, Walk.ok_iff, Walk.error_iff]
+      | (with_reducible apply MessageOp.Outcome.ofExcept_canonical)
+      | (solve | canonical_leaf)
+      | simp only [bind_ok]
+      | dsimp only
+      | split
+    all_goals first
+      | (apply prepareCall.step_canonical <;> assumption)
+      | (apply prepareCallAmsterdam.step_canonical <;> assumption)
+      | (apply prepareCreate.step_canonical <;> assumption)
+      | (apply prepareCreateAmsterdam.step_canonical <;> assumption))
+
+canonical_message canonical_call for .call
+canonical_message canonical_callcode for .callcode
+canonical_message canonical_delegatecall for .delegatecall
+canonical_message canonical_staticcall for .staticcall
+canonical_message canonical_create for .create
+canonical_message canonical_create2 for .create2
+
+theorem MessageOp.step_canonical (ctx : CallContext) (s : Frame.State) (hc : Jaune.State.Canonical ctx.tx.originalState)
+    (h : Frame.State.Canonical s) (op : Jaune.MessageOp) : (MessageOp.step ctx s op).Canonical := by
+  cases op with
+  | call => exact canonical_call _ _ hc h
+  | callcode => exact canonical_callcode _ _ hc h
+  | delegatecall => exact canonical_delegatecall _ _ hc h
+  | staticcall => exact canonical_staticcall _ _ hc h
+  | create => exact canonical_create _ _ hc h
+  | create2 => exact canonical_create2 _ _ hc h
+
+def Step.Canonical : Step → Prop
+  | .next _ s => Frame.State.Canonical s
+  | .exit e => Frame.Exit.Canonical e
+  | .spawn child _ _ => Frame.Canonical child
+
+theorem Step.ofHalt_canonical {pc : Nat} {x}
+    (h : Walk Frame.State.Canonical Frame.State.Canonical x) : (Step.ofHalt pc x).Canonical := by
+  cases x with
+  | error e => cases e; exact h
+  | ok _ => exact h
+
+theorem MessageOp.Outcome.toStep_canonical {pc : Nat} {o : MessageOp.Outcome}
+    (h : o.Canonical) : (o.toStep pc).Canonical := by
+  cases o with
+  | done _ => exact Step.ofHalt_canonical h
+  | spawn _ _ => exact h
+
+theorem NextOp.step_canonical {r : Frame.Running} (h : Frame.Running.Canonical r) (op : Jaune.NextOp) :
+    (NextOp.step r op).Canonical := by
+  have hstate := h.2
+  cases op with
+  | plain p => exact Step.ofHalt_canonical (PlainOp.runCore_canonical _ _ h.2 p)
+  | message m => exact MessageOp.Outcome.toStep_canonical (MessageOp.step_canonical _ _ h.1 h.2 m)
+  | push xs _ => exact Step.ofHalt_canonical (Family.run_canonical _ h.2)
+  | dupn imm | swapn imm | exchange imm => exact Step.ofHalt_canonical (Family.run_canonical _ h.2)
+
+theorem step_canonical {r : Frame.Running} (h : Frame.Running.Canonical r) {out : Step}
+    (hs : step r = .ok out) : out.Canonical := by
+  unfold step at hs
+  split at hs
+  · cases hs; exact h.2
+  · cases hs; exact NextOp.step_canonical h _
+  · rename_i j _
+    have hj := JumpOp.runCore_canonical r.pc r.context h.2 j
+    unfold JumpOp.run at hs
+    split at hs
+    · rename_i p he; rw [he] at hj; cases hs; cases p; exact hj
+    · rename_i pc s he; rw [he] at hj; cases hs; exact hj
+  · rename_i op _
+    cases he : HaltOp.run r.context r.state op with
+    | error f => rw [he] at hs; cases hs
+    | ok exit => rw [he] at hs; cases hs; exact HaltOp.run_canonical _ h.2 op he
+
+/-- Charging the deposit affects only the machine. -/
+theorem chargeDeposit_world {rules : ForkRules} {code : Bytes} {s t : Frame.State}
+    (h : chargeDeposit rules code s = .ok t) : t.world = s.world := by
+  have onlyWorld {a : Frame.State} {f : Machine → Except (ExceptionalHalt × Machine) Machine} :
+      Walk (fun _ => True) (fun b => b.world = a.world) (a.liftMachine f) := by
+    unfold Frame.State.liftMachine
+    split <;> trivial
+  have chargeSize (bytes : Bytes) : Walk (fun _ => True) (fun b => b.world = s.world) (do
+      let v ← s.chargeGas (bytes.length * Gas.codeDeposit)
+      if rules.code.maxCodeSize < bytes.length then .error (.outOfGas .none, v) else .ok v) := by
+    refine Walk.bind onlyWorld ?_
+    intro v hv
+    split <;> first | exact hv | trivial
+  have world : Walk (fun _ => True) (fun b => b.world = s.world) (chargeDeposit rules code s) := by
+    unfold chargeDeposit
+    dsimp only
+    repeat' first | trivial | apply chargeSize | split
+    all_goals
+      refine Walk.bind onlyWorld ?_
+      intro v hv
+      exact Walk.mono onlyWorld (fun _ hw => hw.trans hv)
+  rw [h] at world
+  exact world
+
+theorem settle_canonical {f : Frame} {e : Frame.Exit} (hi : Frame.Exit.Canonical e) {r : Frame.Result}
+    (h : settle f e = .ok r) : r.Canonical := by
+  cases e with
+  | halted reason s => cases h; trivial
+  | reverted bytes s => cases h; trivial
+  | finished bytes s =>
+    simp only [settle] at h
+    split at h
+    · cases h; exact hi
+    · split at h
+      · rename_i t ht
+        unfold depositCode at ht
+        cases hd : chargeDeposit _ _ _ with
+        | error p => rw [hd] at ht; cases ht
+        | ok w =>
+          rw [hd] at ht
+          cases ht; cases h
+          have hw : Frame.State.Canonical w := by
+            unfold Frame.State.Canonical; rw [chargeDeposit_world hd]; exact hi
+          exact ⟨hw.1.setCode _ _, hw.2⟩
+      · cases h; trivial
+
+def Frame.Entry.Canonical : Frame.Entry → Prop
+  | .run r => Frame.Running.Canonical r
+  | .done (.ok result) => result.Canonical
+  | .done (.error _) => True
+
+private theorem runPrecompile_canonical {run : Frame.Running} (a : Address) {e : Frame.Exit}
+    (hi : Frame.State.Canonical run.state) (h : runPrecompile run a = .ok e) : Frame.Exit.Canonical e := by
+  unfold runPrecompile Frame.Exit.ofPrecompileResult at h
+  split at h
+  · cases h; exact hi
+  · split at h <;> cases h <;> exact hi
+
+theorem enterWith_canonical {f : Frame} (hf : f.Canonical) (start : Frame.State) :
+    (enterWith f start).Canonical := by
+  unfold enterWith
+  dsimp only
+  split
+  · trivial
+  · rename_i world hw
+    have hi : Frame.Running.Canonical (Frame.entered f start world) :=
+      ⟨hf.2, by
+        have h := Frame.enteredWorld_canonical hf
+        unfold Message.transfer at hw
+        split at hw
+        · split at hw
+          · nomatch hw
+          · rename_i w1 h1
+            cases hw
+            exact World.Canonical.addBalance (World.Canonical.subtractBalance h h1) _ _
+        · cases hw; exact h⟩
+    split
+    · split
+      · rename_i hp
+        cases he : runPrecompile (Frame.entered f start world) _ with
+        | error fault => trivial
+        | ok e =>
+          change Frame.Entry.Canonical (.done (settle f e))
+          cases hs : settle f e with
+          | error fault => trivial
+          | ok r => exact settle_canonical (runPrecompile_canonical _ hi.2 he) hs
+      · exact hi
+    · exact hi
+
+theorem enter_canonical {f : Frame} (hf : f.Canonical) : (enter f).Canonical := enterWith_canonical hf _
+
+theorem resume_canonical {rules : ForkRules} {p : Pending} {saved : Frame.State} {r : Frame.Result}
+    (hs : Frame.State.Canonical saved) (hr : r.Canonical) {x}
+    (h : resume rules p saved r = .ok x) : Walk Frame.State.Canonical Frame.State.Canonical x := by
+  unfold resume at h
+  simp only [bind, Except.bind, pure, Except.pure] at h
+  repeat' split at h
+  all_goals cases h
+  all_goals first | exact hs | exact hr
+
+theorem execFueled_run_canonical (fuel : Nat) (run : Frame.Running) (hi : Frame.Running.Canonical run)
+    {e : Frame.Exit} (h : (execFueled run fuel).run = some (.ok e)) : Frame.Exit.Canonical e := by
+  induction fuel generalizing run e with
+  | zero => nomatch h
+  | succ fuel ih =>
+    rw [execFueled] at h
+    rcases hs : step run with fault | exit | ⟨pc, s⟩ | ⟨child, p, pc⟩ <;> rw [hs] at h
+    · cases h
+    · cases h; exact step_canonical hi hs
+    · exact ih ⟨pc, run.context, s⟩ ⟨hi.1, step_canonical hi hs⟩ h
+    · have hf : Frame.Canonical child := step_canonical hi hs
+      have hent := enter_canonical hf
+      have resultCanonical : ∀ res, (match enter child with
+          | .done result => some result
+          | .run cr => (execFueled cr fuel).run.map (· >>= settle child)) = some (.ok res) → res.Canonical := by
+        intro res hres
+        rcases he : enter child with cr | result <;> simp only [he] at hres hent
+        · rcases hx : (execFueled cr fuel).run with _ | err | exit <;> rw [hx] at hres
+          · cases hres
+          · cases hres
+          · exact settle_canonical (ih cr hent hx) (Option.some.inj hres)
+        · cases hres; exact hent
+      dsimp only at h
+      split at h
+      · cases h
+      · cases h
+      · rename_i res he
+        have hr := resultCanonical res he
+        split at h
+        · cases h
+        · rename_i reason s hres
+          cases h
+          exact resume_canonical hf.1 hr hres
+        · rename_i s hres
+          exact ih ⟨pc, run.context, s⟩ ⟨hi.1, resume_canonical hf.1 hr hres⟩ h
+
+theorem exec_canonical {run : Frame.Running} (h : Frame.Running.Canonical run)
+    {e : Frame.Exit} (he : exec run = .ok e) : Frame.Exit.Canonical e :=
+  execFueled_run_canonical _ run h ((execFueled_run_sufficientFuel run).trans (congrArg some he))
+
+/-- Running an entire frame and selecting its committed world preserves canonicality. -/
+theorem Frame.runTop_canonical {f : Frame} (hf : f.Canonical) {r : Frame.Result}
+    (h : Frame.runTop f = .ok r) : (f.worldAfter r).Canonical := by
+  have hr : r.Canonical := by
+    rw [Frame.runTop_eq] at h
+    have hi := enterWith_canonical hf f.checkpoint
+    cases he : enterWith f f.checkpoint with
+    | done result => rw [he] at h hi; cases h; exact hi
+    | run run =>
+      rw [he] at h hi
+      dsimp only at h
+      cases hx : exec run with
+      | error fault => rw [hx] at h; cases h
+      | ok exit => rw [hx] at h; exact settle_canonical (exec_canonical hi hx) h
+  unfold Frame.worldAfter
+  split
+  · exact hr
+  · exact hf.1
+
+end Jaune

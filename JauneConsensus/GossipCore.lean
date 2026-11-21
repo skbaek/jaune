@@ -86,10 +86,10 @@ structure Seen (Ext : Type) where
   sync_contribution_data : List ((Slot × Root × U64) × List (List Bool)) := []
   sync_message_validator_slots : List (Slot × ValidatorIndex × U64) := []
   bls_to_execution_change_indices : List ValidatorIndex := []
-  ext : Ext
+  extension : Ext
 
 /-- The empty cache. -/
-def Seen.empty {Ext : Type} (ext : Ext) : Seen Ext := { ext }
+def Seen.empty {Ext : Type} (ext : Ext) : Seen Ext := { extension := ext }
 
 /-- `d.get(key, set())` on an association list. -/
 def lookupSet {κ : Type} [BEq κ] (d : List (κ × List (List Bool))) (k : κ) : List (List Bool) :=

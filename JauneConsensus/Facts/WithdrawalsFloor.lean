@@ -160,11 +160,11 @@ theorem maxEffectiveBalance_ge_minActivationBalance (v : Validator)
   · simp [hc]
 
 /-- `SszList.get` after `SszList.set` at the same index. -/
-theorem ssz_get_set_eq {α : Type} {n : Nat} (xs : SszList α n) (i : Nat) (v : α) (site1 site2 : String)
-    (ys : SszList α n) (hset : xs.set i v site1 = .ok ys) (x : α)
+theorem ssz_get_set_eq {α : Type} {n : Nat} (xs : Ssz.List α n) (i : Nat) (v : α) (site1 site2 : String)
+    (ys : Ssz.List α n) (hset : xs.set i v site1 = .ok ys) (x : α)
     (hget : ys.get i site2 = .ok x) : x = v := by
   have hArr : ys.toArray[i]? = some x := get_ok hget
-  unfold SszList.set at hset
+  unfold Ssz.List.set at hset
   split at hset
   · rename_i hi
     cases hset
@@ -175,12 +175,12 @@ theorem ssz_get_set_eq {α : Type} {n : Nat} (xs : SszList α n) (i : Nat) (v : 
   · cases hset
 
 /-- `SszList.get` after `SszList.set` at a different index. -/
-theorem ssz_get_set_ne {α : Type} {n : Nat} (xs : SszList α n) (i j : Nat) (v : α) (site1 site2 : String)
-    (ys : SszList α n) (hset : xs.set i v site1 = .ok ys) (hne : i ≠ j) (x y : α)
+theorem ssz_get_set_ne {α : Type} {n : Nat} (xs : Ssz.List α n) (i j : Nat) (v : α) (site1 site2 : String)
+    (ys : Ssz.List α n) (hset : xs.set i v site1 = .ok ys) (hne : i ≠ j) (x y : α)
     (hgetOld : xs.get j site2 = .ok x) (hgetNew : ys.get j site2 = .ok y) : y = x := by
   have hNewArr : ys.toArray[j]? = some y := get_ok hgetNew
   have hOldArr : xs.toArray[j]? = some x := get_ok hgetOld
-  unfold SszList.set at hset
+  unfold Ssz.List.set at hset
   split at hset
   · rename_i hi
     cases hset
@@ -686,7 +686,7 @@ theorem decreaseBalance_nat (s s' : BeaconState P f) (idx : ValidatorIndex) (d :
   unfold decreaseBalance at h
   obtain ⟨mid, hmod, hpure⟩ := bind_ok_elim h
   cases hpure
-  unfold SszList.modify at hmod
+  unfold Ssz.List.modify at hmod
   obtain ⟨b, hget, hrest⟩ := bind_ok_elim hmod
   obtain ⟨newVal, hg, hset⟩ := bind_ok_elim hrest
   by_cases he : j = idx.toNat
@@ -785,10 +785,10 @@ theorem decreaseBalance_length (s s' : BeaconState P f) (idx : ValidatorIndex) (
   unfold decreaseBalance at h
   obtain ⟨mid, hmod, hpure⟩ := bind_ok_elim h
   cases hpure
-  unfold SszList.modify at hmod
+  unfold Ssz.List.modify at hmod
   obtain ⟨b, hget, hrest⟩ := bind_ok_elim hmod
   obtain ⟨newVal, hg, hset⟩ := bind_ok_elim hrest
-  unfold SszList.set at hset
+  unfold Ssz.List.set at hset
   split at hset
   · rename_i hi
     cases hset
@@ -883,7 +883,7 @@ theorem foldlM_balances (l : List Withdrawal) (st mid : BeaconState P f)
 
 /-- `setPendingPartialWithdrawals` preserves `balances.toArray`. -/
 theorem setPendingPartialWithdrawals_balances_toArray (s s' : BeaconState P f)
-    (v : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT)
+    (v : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT)
     (h : s.setPendingPartialWithdrawals v = .ok s') :
     s'.balances.toArray = s.balances.toArray := by
   unfold BeaconState.setPendingPartialWithdrawals at h

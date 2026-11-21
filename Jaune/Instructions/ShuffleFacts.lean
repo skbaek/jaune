@@ -1,14 +1,14 @@
 import Jaune.Instructions.Shuffle
 import Jaune.Instructions.MachineSteps
 import Jaune.Instructions.WordFacts
-import Jaune.MessageCall.CheckedStep
+import Jaune.MessageCall.Step
 
 /-! The Shuffle family's effect law, proved once, its per-row table lemmas, and the lemmas that the
 checked interpreter reads its rows: `Checked.PlainOp.run` for `DUP`/`SWAP` and
 `Checked.NextOp.step` for `DUPN`/`SWAPN`/`EXCHANGE`, for every input and every `Fork`. The rows'
 agreement with the per-opcode arms is in `Jaune.Bridge.G2b.CheckedRowAgreement`. -/
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -18,7 +18,7 @@ theorem Shuffle.run_eq (sh : Shuffle) (m : Machine) :
       | none => .error (.stackUnderflow .none, m)
       | some stack =>
         if sh.grows ∧ ¬ m.stack.length < 1024 then .error (.stackOverflow .none, m)
-        else .ok { m with stack } := by
+        else .ok { m with stack := stack } := by
   cases sh with
   | dup index =>
     simp only [Shuffle.run, Shuffle.apply, Shuffle.grows, true_and]
@@ -41,7 +41,7 @@ theorem ShuffleRow.step_ok {row : ShuffleRow} {opcodes : OpcodeRules} {m out : M
     row.available opcodes = true ∧ row.cost ≤ m.gasLeft ∧
       ∃ sh stack, row.shuffle = some sh ∧ sh.apply m.stack = some stack ∧
         (sh.grows = true → m.stack.length < 1024) ∧
-        out = { m with gasLeft := m.gasLeft - row.cost, stack } := by
+        out = { m with gasLeft := m.gasLeft - row.cost, stack := stack } := by
   cases ha : row.available opcodes with
   | false => simp [ShuffleRow.step, ha, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
   | true =>
@@ -50,7 +50,7 @@ theorem ShuffleRow.step_ok {row : ShuffleRow} {opcodes : OpcodeRules} {m out : M
     cases hc : m.chargeGas row.cost with
     | error e => simp [hc] at h
     | ok charged =>
-      obtain ⟨enough, rfl⟩ := InstrStep.chargeGas_eq_ok hc
+      obtain ⟨enough, rfl⟩ := InstructionStep.chargeGas_eq_ok hc
       simp only [hc] at h
       refine ⟨enough, ?_⟩
       cases hs : row.shuffle with
@@ -98,10 +98,10 @@ theorem ShuffleRow.step_error {row : ShuffleRow} {opcodes : OpcodeRules} {m out 
     | error err =>
       simp only [hc] at h
       cases h
-      obtain ⟨rfl, hlt, rfl⟩ := InstrStep.chargeGas_eq_error hc
+      obtain ⟨rfl, hlt, rfl⟩ := InstructionStep.chargeGas_eq_error hc
       exact Or.inr (Or.inl ⟨rfl, hlt, rfl, rfl⟩)
     | ok charged =>
-      obtain ⟨enough, rfl⟩ := InstrStep.chargeGas_eq_ok hc
+      obtain ⟨enough, rfl⟩ := InstructionStep.chargeGas_eq_ok hc
       simp only [hc] at h
       cases hs : row.shuffle with
       | none =>
@@ -134,7 +134,7 @@ theorem ShuffleRow.step_frame (row : ShuffleRow) (opcodes : OpcodeRules) (m : Ma
     (match row.step opcodes m with
       | .ok out | .error (_, out) =>
         ∃ (stack : List U256) (gasLeft : Nat), gasLeft ≤ m.gasLeft ∧
-          out = { m with stack, gasLeft }) := by
+          out = { m with stack := stack, gasLeft := gasLeft }) := by
   cases h : row.step opcodes m with
   | ok out =>
     obtain ⟨_, _, sh, stack, _, _, _, rfl⟩ := ShuffleRow.step_ok h
@@ -268,4 +268,4 @@ theorem NextOp.shuffle_step_congr_fork {n : Jaune.NextOp}
     simp only [ShuffleRow.step, NextOp.shuffleRow?_available hr, BlockContext.rules] at h ⊢
     rw [h]
 
-end Jaune.Checked
+end Jaune

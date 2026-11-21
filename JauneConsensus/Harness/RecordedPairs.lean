@@ -44,7 +44,7 @@ private def jsonDecimal (j : Json) (k : String) : Except RecordedPairsError Nat 
 /-- A beacon-API `0x`-hex field as bytes. -/
 private def jsonHex (j : Json) (k : String) : Except RecordedPairsError Bytes := do
   let s ← jsonString j k
-  match Hex.toBytes (remove0x s) with
+  match Hex.toBytes (removeHexPrefix s) with
   | some bs => pure bs
   | none => throw s!"field '{k}' is not 0x hex"
 
@@ -66,26 +66,26 @@ private def jsonU64 (j : Json) (k : String) : Except RecordedPairsError U64 := d
 
 private def jsonU256 (j : Json) (k : String) : Except RecordedPairsError U256 := do
   let n ← jsonDecimal j k
-  (UIntN.ofNat? n k : Fallible U256).mapError (fun _ => s!"field '{k}' overflows uint256")
+  (UnsignedInteger.ofNat? n k : Fallible U256).mapError (fun _ => s!"field '{k}' overflows uint256")
 
 /-- An exact-size byte vector, checked against `n`. -/
-private def mkVector (n : Nat) (bs : Bytes) (what : String) :
-    Except RecordedPairsError (SszVector UInt8 n) :=
+private def checkedVector (n : Nat) (bs : Bytes) (what : String) :
+    Except RecordedPairsError (Ssz.Vector UInt8 n) :=
   if h : bs.toArray.size = n then .ok ⟨bs.toArray, h⟩
   else .error s!"{what}: want {n} bytes, got {bs.length}"
 
 /-- A size-limited list, checked against `limit`. -/
-private def mkList (xs : List α) (limit : Nat) (what : String) :
-    Except RecordedPairsError (SszList α limit) :=
+private def checkedList (xs : List α) (limit : Nat) (what : String) :
+    Except RecordedPairsError (Ssz.List α limit) :=
   let arr := xs.toArray
   if h : arr.size ≤ limit then .ok ⟨arr, h⟩
   else .error s!"{what}: {xs.length} entries exceed limit {limit}"
 
 private def jsonPubkey (j : Json) (k : String) : Except RecordedPairsError BLSPubkey := do
-  mkVector 48 (← jsonHex j k) s!"field '{k}'"
+  checkedVector 48 (← jsonHex j k) s!"field '{k}'"
 
 private def jsonSignature (j : Json) (k : String) : Except RecordedPairsError BLSSignature := do
-  mkVector 96 (← jsonHex j k) s!"field '{k}'"
+  checkedVector 96 (← jsonHex j k) s!"field '{k}'"
 
 private def parseDepositRequest (j : Json) : Except RecordedPairsError DepositRequest := do
   let pubkey ← jsonPubkey j "pubkey"
@@ -118,33 +118,33 @@ private def parseTransaction (t : Json) : Except RecordedPairsError (Transaction
   let s ← match t.getStr? with
     | .ok s => pure s
     | .error _ => throw "transaction is not a string"
-  let bs ← match Hex.toBytes (remove0x s) with
+  let bs ← match Hex.toBytes (removeHexPrefix s) with
     | some bs => pure bs
     | none => throw "transaction is not 0x hex"
-  mkList bs _ "transaction bytes"
+  checkedList bs _ "transaction bytes"
 
 private def parseExecutionRequests (j : Json) :
     Except RecordedPairsError (ExecutionRequests Preset.mainnet) := do
-  let deposits : SszList DepositRequest Preset.mainnet.MAX_DEPOSIT_REQUESTS_PER_PAYLOAD ←
-    mkList (← (← jsonArray j "deposits").mapM parseDepositRequest) _ "deposits"
-  let withdrawals : SszList WithdrawalRequest Preset.mainnet.MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD ←
-    mkList (← (← jsonArray j "withdrawals").mapM parseWithdrawalRequest) _ "withdrawal requests"
+  let deposits : Ssz.List DepositRequest Preset.mainnet.MAX_DEPOSIT_REQUESTS_PER_PAYLOAD ←
+    checkedList (← (← jsonArray j "deposits").mapM parseDepositRequest) _ "deposits"
+  let withdrawals : Ssz.List WithdrawalRequest Preset.mainnet.MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD ←
+    checkedList (← (← jsonArray j "withdrawals").mapM parseWithdrawalRequest) _ "withdrawal requests"
   let consolidations :
-      SszList ConsolidationRequest Preset.mainnet.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD ←
-    mkList (← (← jsonArray j "consolidations").mapM parseConsolidationRequest) _ "consolidations"
+      Ssz.List ConsolidationRequest Preset.mainnet.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD ←
+    checkedList (← (← jsonArray j "consolidations").mapM parseConsolidationRequest) _ "consolidations"
   pure { deposits, withdrawals, consolidations }
 
 private def parseExecutionPayload (j : Json) :
     Except RecordedPairsError (ExecutionPayload Preset.mainnet) := do
-  let transactions : SszList (Transaction Preset.mainnet)
+  let transactions : Ssz.List (Transaction Preset.mainnet)
       Preset.mainnet.MAX_TRANSACTIONS_PER_PAYLOAD ←
-    mkList (← (← jsonArray j "transactions").mapM parseTransaction) _ "transactions"
-  let withdrawals : SszList Withdrawal Preset.mainnet.MAX_WITHDRAWALS_PER_PAYLOAD ←
-    mkList (← (← jsonArray j "withdrawals").mapM parseWithdrawal) _ "withdrawals"
-  let logs_bloom : SszVector UInt8 Preset.mainnet.BYTES_PER_LOGS_BLOOM ←
-    mkVector _ (← jsonHex j "logs_bloom") "logs_bloom"
-  let extra_data : SszList UInt8 Preset.mainnet.MAX_EXTRA_DATA_BYTES ←
-    mkList (← jsonHex j "extra_data") _ "extra_data"
+    checkedList (← (← jsonArray j "transactions").mapM parseTransaction) _ "transactions"
+  let withdrawals : Ssz.List Withdrawal Preset.mainnet.MAX_WITHDRAWALS_PER_PAYLOAD ←
+    checkedList (← (← jsonArray j "withdrawals").mapM parseWithdrawal) _ "withdrawals"
+  let logs_bloom : Ssz.Vector UInt8 Preset.mainnet.BYTES_PER_LOGS_BLOOM ←
+    checkedVector _ (← jsonHex j "logs_bloom") "logs_bloom"
+  let extra_data : Ssz.List UInt8 Preset.mainnet.MAX_EXTRA_DATA_BYTES ←
+    checkedList (← jsonHex j "extra_data") _ "extra_data"
   let parent_hash ← jsonBytes32 j "parent_hash"
   let fee_recipient ← jsonAddress j "fee_recipient"
   let state_root ← jsonBytes32 j "state_root"
@@ -208,7 +208,7 @@ private def flipFirstWithdrawal (r : ExecutionRequests Preset.mainnet) :
   let arr := r.withdrawals.toArray
   let some w := arr[0]? | .error "negative control needs a withdrawal request"
   let some b := w.validator_pubkey.toArray[0]? | .error "negative control: empty pubkey"
-  let pk' : SszVector UInt8 48 :=
+  let pk' : Ssz.Vector UInt8 48 :=
     ⟨w.validator_pubkey.toArray.setIfInBounds 0 (b ^^^ 1),
       by rw [Array.size_setIfInBounds, w.validator_pubkey.size_eq]⟩
   let w' : WithdrawalRequest := { w with validator_pubkey := pk' }

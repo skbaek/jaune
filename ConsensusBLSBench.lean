@@ -24,20 +24,20 @@ def main (args : List String) : IO Unit := do
   let some mono := kzgSetupG1Monomial.toOption | IO.println "setup failed"
   let t1 ← IO.monoMsNow
   IO.println s!"setup decode (8192 G1 points): {t1 - t0} ms"
-  let scal : Array Fr := (List.range 4096).toArray.map fun i => FinField.ofNat (i * 0x9e3779b97f4a7c15f39cc0605cedc834 + k)
-  timeIt "g1Msm 4096 (Pippenger)" (fun (x : Array Fr) => g1Msm lag (x.map (·.val))) scal (fun r => toString r.x.val)
-  timeIt "naive MSM 64 (g1MsmSum)" (fun (x : Array Fr) => g1MsmSum ((lag.toList.take 64).zip (x.toList.map (·.val)))) scal (fun r => toString r.x.val)
-  timeIt "g1Msm 64 (Pippenger)" (fun (x : Array Fr) => g1Msm (lag.extract 0 64) ((x.extract 0 64).map (·.val))) scal (fun r => toString r.x.val)
+  let scal : Array BLSFieldElement := (List.range 4096).toArray.map fun i => FieldElement.ofNat (i * 0x9e3779b97f4a7c15f39cc0605cedc834 + k)
+  timeIt "g1Msm 4096 (Pippenger)" (fun (x : Array BLSFieldElement) => g1Msm lag (x.map (·.val))) scal (fun r => toString r.x.val)
+  timeIt "naive MSM 64 (g1MsmSum)" (fun (x : Array BLSFieldElement) => bls12G1MsmSum ((lag.toList.take 64).zip (x.toList.map (·.val)))) scal (fun r => toString r.x.val)
+  timeIt "g1Msm 64 (Pippenger)" (fun (x : Array BLSFieldElement) => g1Msm (lag.extract 0 64) ((x.extract 0 64).map (·.val))) scal (fun r => toString r.x.val)
   match cosetForCell 5 with
   | .ok coset =>
-    timeIt "evaluate 4096-coeff poly at 64 coset points (Horner)" (fun (c : Array Fr) => coset.map (evaluatePolynomialcoeff c)) scal (fun r => toString r.size)
+    timeIt "evaluate 4096-coeff poly at 64 coset points (Horner)" (fun (c : Array BLSFieldElement) => coset.map (evaluatePolynomialcoeff c)) scal (fun r => toString r.size)
     match vanishingPolynomialcoeff coset with
     | .ok zp =>
-      timeIt "divide 4096-coeff poly by 64-point vanishing poly" (fun (c : Array Fr) => dividePolynomialcoeff c zp) scal (fun r => toString (r.toOption.map (·.size)))
+      timeIt "divide 4096-coeff poly by 64-point vanishing poly" (fun (c : Array BLSFieldElement) => dividePolynomialcoeff c zp) scal (fun r => toString (r.toOption.map (·.size)))
     | .error e => IO.println e
-    timeIt "compute_kzg_proof_multi_impl (one cell)" (fun (c : Array Fr) => computeKzgProofMultiImpl c coset) scal (fun r => toString (r.toOption.map (·.2.size)))
-    timeIt "interpolate 64 points (quadratic)" (fun (c : Array Fr) => interpolatePolynomialcoeff coset (c.extract 0 64)) scal (fun r => toString (r.toOption.map (·.size)))
-    timeIt "interpolate 64 points (spec, cubic)" (fun (c : Array Fr) => interpolatePolynomialcoeffSpec coset (c.extract 0 64)) scal (fun r => toString (r.toOption.map (·.size)))
+    timeIt "compute_kzg_proof_multi_impl (one cell)" (fun (c : Array BLSFieldElement) => computeKzgProofMultiImpl c coset) scal (fun r => toString (r.toOption.map (·.2.size)))
+    timeIt "interpolate 64 points (quadratic)" (fun (c : Array BLSFieldElement) => interpolatePolynomialcoeff coset (c.extract 0 64)) scal (fun r => toString (r.toOption.map (·.size)))
+    timeIt "interpolate 64 points (spec, cubic)" (fun (c : Array BLSFieldElement) => interpolatePolynomialcoeffSpec coset (c.extract 0 64)) scal (fun r => toString (r.toOption.map (·.size)))
   | .error e => IO.println e
   timeIt "FK20 table (64 G1 FFTs of 128, once per process)" (fun (_ : Nat) => fk20Table.get) k
     (fun r => toString (r.toOption.map (·.size)))
@@ -46,15 +46,15 @@ def main (args : List String) : IO Unit := do
   IO.println s!"fk20HFft = fk20H on this polynomial: {decide ((fk20PointsFft scal).toOption = (fk20Points scal).toOption)}"
   timeIt "computeCellsAndKzgProofsPolynomialcoeff (FFT cells + FK20), one blob"
     computeCellsAndKzgProofsPolynomialcoeff scal (fun r => toString (r.toOption.map (·.2.size)))
-  timeIt "cellsFromCoeff (FFT), one blob" cellsFromCoeff scal (fun r => toString (r.toOption.map (·.size)))
+  timeIt "cellsFromCoeff (FFT), one blob" cellsFromCoefficients scal (fun r => toString (r.toOption.map (·.size)))
   let _ := mono
   let reps := 1
   for _ in List.range reps do
     timeIt "pairing (full)" (fun (qp : Bls12G2 × Bls12G1) => blsPairing qp.1 qp.2) (q, p)
       (fun r => toString (r.map (·.val.length)))
-    timeIt "pairing (reference: blsPairingRef)" (fun (qp : Bls12G2 × Bls12G1) => blsPairingRef qp.1 qp.2) (q, p)
+    timeIt "pairing (reference: blsPairingRef)" (fun (qp : Bls12G2 × Bls12G1) => blsPairingReference qp.1 qp.2) (q, p)
       (fun r => toString (r.map (·.val.length)))
-    timeIt "miller loop only (reference)" (fun (qp : Bls12G2 × Bls12G1) => blsPairingRef qp.1 qp.2 false) (q, p)
+    timeIt "miller loop only (reference)" (fun (qp : Bls12G2 × Bls12G1) => blsPairingReference qp.1 qp.2 false) (q, p)
       (fun r => toString (r.map (·.val.length)))
     timeIt "miller loop only" (fun (qp : Bls12G2 × Bls12G1) => blsPairing qp.1 qp.2 false) (q, p)
       (fun r => toString (r.map (·.val.length)))
@@ -74,9 +74,9 @@ def main (args : List String) : IO Unit := do
     timeIt "G2 decompress" signatureToPoint (g2Compress q) (fun r => toString r.toOption.isSome)
     let u : Bls12Fp2 := Bls12Fp2.mk (k + 12345) (k + 678)
     timeIt "map_to_curve G2 (swu + iso, no cofactor)"
-      (fun t => isoMapG2 (optimizedSwuG2 t)) u (fun r => toString r.x.val)
+      (fun t => blsMapFp2ToG2.isoMap (blsMapFp2ToG2.mapToCurveSimpleSwu t)) u (fun r => toString r.x.val)
     timeIt "clear_cofactor G2 (mulBy hEffG2)"
-      (fun (t : Bls12G2) => t.mulBy BLSConst.hEffG2) (isoMapG2 (optimizedSwuG2 u))
+      (fun (t : Bls12G2) => t.mulBy BLSConstants.MapFp2ToG2.hEff) (blsMapFp2ToG2.isoMap (blsMapFp2ToG2.mapToCurveSimpleSwu u))
       (fun r => toString r.x.val)
     timeIt "blsMapFp2ToG2 (EIP-2537 map incl. cofactor)" blsMapFp2ToG2 u
       (fun r => toString r.x.val)

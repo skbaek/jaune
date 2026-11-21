@@ -24,8 +24,8 @@ def g2SetupMonomial1 : Bytes := hexNat 0xb5bfd7dd8cdeb128843bc287230af3892618707
 #guard (pubkeyToPoint g1SetupMonomial1).map g1Compress = .ok g1SetupMonomial1
 #guard signatureToPoint g2SetupMonomial0 = .ok blsG2Generator
 #guard g2Compress blsG2Generator = g2SetupMonomial0
-#guard signatureToPoint g2SetupMonomial1 = .ok kzgSetupG2Monomial1P
-#guard g2Compress kzgSetupG2Monomial1P = g2SetupMonomial1
+#guard signatureToPoint g2SetupMonomial1 = .ok kzgSetupG2Monomial1Point
+#guard g2Compress kzgSetupG2Monomial1Point = g2SetupMonomial1
 -- Both signs of y round-trip.
 #guard signatureToPoint (g2Compress (-blsG2Generator)) = .ok (-blsG2Generator)
 #guard pubkeyToPoint (g1Compress (-blsG1Generator)) = .ok (-blsG1Generator)

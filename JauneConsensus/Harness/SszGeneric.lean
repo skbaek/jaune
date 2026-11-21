@@ -39,17 +39,17 @@ instance : FromYaml U64 where
     let n ← natOf y
     if h : n < 2 ^ 64 then pure (U64.ofNatLt n h) else throw (.shape "uint64 out of range")
 
-instance {n : Nat} : FromYaml (UIntN n) where
+instance {n : Nat} : FromYaml (UnsignedInteger n) where
   fromYaml y := do
     let v ← natOf y
     if h : v < 2 ^ (8 * n) then pure ⟨v, h⟩ else throw (.shape "uintN out of range")
 
-instance {α : Type} {n : Nat} [FromYaml α] : FromYaml (SszVector α n) where
+instance {α : Type} {n : Nat} [FromYaml α] : FromYaml (Ssz.Vector α n) where
   fromYaml y := do
     let xs := (← (← y.asSequence).mapM fromYaml).toArray
     if h : xs.size = n then pure ⟨xs, h⟩ else throw (.shape "vector of the wrong length")
 
-instance {α : Type} {n : Nat} [FromYaml α] : FromYaml (SszList α n) where
+instance {α : Type} {n : Nat} [FromYaml α] : FromYaml (Ssz.List α n) where
   fromYaml y := do
     let xs := (← (← y.asSequence).mapM fromYaml).toArray
     if h : xs.size ≤ n then pure ⟨xs, h⟩ else throw (.shape "list beyond its limit")
@@ -60,13 +60,13 @@ instance : FromYaml UInt8 where
     if v < 256 then pure v.toUInt8 else throw (.shape "byte out of range")
 
 /-- `List[byte, N]` / `ByteList[N]` are given as `0x`-prefixed bytes ("JSON mapping"). -/
-instance (priority := high) {n : Nat} : FromYaml (SszList UInt8 n) where
+instance (priority := high) {n : Nat} : FromYaml (Ssz.List UInt8 n) where
   fromYaml y := do
     let bs := (← y.asHex).toArray
     if h : bs.size ≤ n then pure ⟨bs, h⟩ else throw (.shape "byte list beyond its limit")
 
 /-- `ByteVector[N]` / `BytesN`, likewise. -/
-instance (priority := high) {n : Nat} : FromYaml (SszVector UInt8 n) where
+instance (priority := high) {n : Nat} : FromYaml (Ssz.Vector UInt8 n) where
   fromYaml y := do
     let bs := (← y.asHex).toArray
     if h : bs.size = n then pure ⟨bs, h⟩ else throw (.shape "byte vector of the wrong length")
@@ -200,23 +200,23 @@ def withBasic (name : String)
     Option TypeChecks :=
   match name with
   | "bool" => some (k Bool)
-  | "uint8" => some (k (UIntN 1))
-  | "uint16" => some (k (UIntN 2))
-  | "uint32" => some (k (UIntN 4))
+  | "uint8" => some (k (UnsignedInteger 1))
+  | "uint16" => some (k (UnsignedInteger 2))
+  | "uint32" => some (k (UnsignedInteger 4))
   | "uint64" => some (k U64)
-  | "uint128" => some (k (UIntN 16))
-  | "uint256" => some (k (UIntN 32))
+  | "uint128" => some (k (UnsignedInteger 16))
+  | "uint256" => some (k (UnsignedInteger 32))
   | _ => none
 
 /-- The `uintN` type for `uint_{N}`. -/
 def uintChecks (bits : String) : Option TypeChecks :=
   match bits with
-  | "8" => some (.of (UIntN 1))
-  | "16" => some (.of (UIntN 2))
-  | "32" => some (.of (UIntN 4))
+  | "8" => some (.of (UnsignedInteger 1))
+  | "16" => some (.of (UnsignedInteger 2))
+  | "32" => some (.of (UnsignedInteger 4))
   | "64" => some (.of U64)
-  | "128" => some (.of (UIntN 16))
-  | "256" => some (.of (UIntN 32))
+  | "128" => some (.of (UnsignedInteger 16))
+  | "256" => some (.of (UnsignedInteger 32))
   | _ => none
 
 /-- The type of a case, from its handler and directory name
@@ -229,7 +229,7 @@ def typeOfCase (handler caseName : String) : Option TypeChecks :=
   | "bitvector", "bitvec" :: n :: _ => n.toNat?.map fun n => .of (Bitvector n)
   | "bitlist", "bitlist" :: n :: _ => n.toNat?.map fun n => .of (Bitlist n)
   | "basic_vector", "vec" :: elem :: n :: _ =>
-    n.toNat?.bind fun n => withBasic elem fun α => .of (SszVector α n)
+    n.toNat?.bind fun n => withBasic elem fun α => .of (Ssz.Vector α n)
   | _, _ => none
 
 end JauneConsensus.Harness

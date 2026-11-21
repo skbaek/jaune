@@ -2,13 +2,13 @@
   "schema": "jaune-assurance-manifest/1",
   "axiom_file": "scripts/ExecutionAxioms.lean",
   "coverage_modules": [
-    "Jaune/CheckedSymbolicPush.lean",
-    "Jaune/CheckedSymbolicArith.lean"
+    "Jaune/SymbolicPush.lean",
+    "Jaune/SymbolicArithmetic.lean"
   ],
   "coverage_rule": "every non-private theorem or lemma, and every def whose header mentions Frame.Run, in a coverage module has an #expect_axioms row; data definitions carry no proof of their own and are reached through the rows that use them",
   "entries": [
     {
-      "declaration": "Jaune.Checked.Frame.raw_commits_of_settlementCommits",
+      "declaration": "Jaune.Frame.raw_commits_of_settlementCommits",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -28,7 +28,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.descendantFrames_callRan_of_settles",
+      "declaration": "Jaune.Frame.Run.descendantFrames_callRan_of_settles",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -48,7 +48,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.descendantFrames_callRan_of_not_settles",
+      "declaration": "Jaune.Frame.Run.descendantFrames_callRan_of_not_settles",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -68,7 +68,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.descendantFrames_callRan_create_codeDepositRollback",
+      "declaration": "Jaune.Frame.Run.descendantFrames_callRan_create_codeDepositRollback",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -88,7 +88,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.committedFrames_eq_nil_of_not_commits",
+      "declaration": "Jaune.Frame.Run.committedFrames_eq_nil_of_not_commits",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -108,7 +108,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.settlementCommits_iff",
+      "declaration": "Jaune.Frame.settlementCommits_iff",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -128,7 +128,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.settlementCommits_ofCall_of_raw_commits",
+      "declaration": "Jaune.Frame.settlementCommits_ofCall_of_raw_commits",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -148,7 +148,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.retainedNodes_callRan_of_settles",
+      "declaration": "Jaune.Frame.Run.retainedNodes_callRan_of_settles",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -168,7 +168,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.retainedNodes_callRan_of_not_settles",
+      "declaration": "Jaune.Frame.Run.retainedNodes_callRan_of_not_settles",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -188,7 +188,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.stop",
+      "declaration": "Jaune.Frame.Run.stop",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -208,7 +208,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.enter_run_context",
+      "declaration": "Jaune.Frame.enter_run_context",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -228,7 +228,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.genericCall.step_spawn_context",
+      "declaration": "Jaune.prepareCall.step_spawn_context",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -248,7 +248,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.genericCreate.step_spawn_context",
+      "declaration": "Jaune.prepareCreate.step_spawn_context",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -268,7 +268,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.MessageOp.step_spawn_context",
+      "declaration": "Jaune.MessageOp.step_spawn_context",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -288,7 +288,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run",
+      "declaration": "Jaune.Frame.Run",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -302,7 +302,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.halt",
+      "declaration": "Jaune.Frame.Run.halt",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -316,7 +316,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.next",
+      "declaration": "Jaune.Frame.Run.next",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -330,7 +330,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.callDoneEnd",
+      "declaration": "Jaune.Frame.Run.callDoneEnd",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -344,7 +344,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.callDone",
+      "declaration": "Jaune.Frame.Run.callDone",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -358,7 +358,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.callRanEnd",
+      "declaration": "Jaune.Frame.Run.callRanEnd",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -372,7 +372,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.callRan",
+      "declaration": "Jaune.Frame.Run.callRan",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -386,7 +386,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.exec_iff",
+      "declaration": "Jaune.Frame.Run.exec_iff",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -400,7 +400,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.strong_rec",
+      "declaration": "Jaune.Frame.Run.strongRec",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -414,7 +414,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.Node.strongRec",
+      "declaration": "Jaune.Frame.Run.Node.strongRec",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -428,7 +428,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.Node.parentNext_unique",
+      "declaration": "Jaune.Frame.Run.Node.parentNext_unique",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -442,7 +442,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.rawNodes",
+      "declaration": "Jaune.Frame.Run.rawNodes",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -456,7 +456,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.Frame.Run.retainedNodes",
+      "declaration": "Jaune.Frame.Run.retainedNodes",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -470,7 +470,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.SymbolicPush.step_success",
+      "declaration": "Jaune.SymbolicPush.step_success",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -484,7 +484,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.SymbolicPush.step_outOfGas",
+      "declaration": "Jaune.SymbolicPush.step_outOfGas",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -498,7 +498,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.SymbolicPush.step_stackOverflow",
+      "declaration": "Jaune.SymbolicPush.step_stackOverflow",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -512,7 +512,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.SymbolicPush.prepend",
+      "declaration": "Jaune.SymbolicPush.prepend",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -526,7 +526,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Execution.execution",
+      "declaration": "Examples.Execution.execution",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -540,7 +540,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Execution.interpreter",
+      "declaration": "Examples.Execution.interpreter",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -554,7 +554,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Execution.final_stack",
+      "declaration": "Examples.Execution.final_stack",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -568,7 +568,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Execution.final_gas",
+      "declaration": "Examples.Execution.final_gas",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -582,7 +582,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Execution.final_world",
+      "declaration": "Examples.Execution.final_world",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -596,7 +596,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Execution.final_substate_trail",
+      "declaration": "Examples.Execution.final_substate_trail",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -610,7 +610,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.SymbolicArith.step_eq",
+      "declaration": "Jaune.SymbolicArithmetic.step_eq",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -624,7 +624,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.SymbolicArith.step_success",
+      "declaration": "Jaune.SymbolicArithmetic.step_success",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -638,7 +638,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.SymbolicArith.step_outOfGas",
+      "declaration": "Jaune.SymbolicArithmetic.step_outOfGas",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -652,7 +652,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.SymbolicArith.step_stackUnderflow",
+      "declaration": "Jaune.SymbolicArithmetic.step_stackUnderflow",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -666,7 +666,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Jaune.Checked.SymbolicArith.prepend",
+      "declaration": "Jaune.SymbolicArithmetic.prepend",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -680,7 +680,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Arithmetic.execution",
+      "declaration": "Examples.Arithmetic.execution",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -694,7 +694,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Arithmetic.next",
+      "declaration": "Examples.Arithmetic.next",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -708,7 +708,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Arithmetic.result",
+      "declaration": "Examples.Arithmetic.result",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -722,7 +722,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Arithmetic.interpreter",
+      "declaration": "Examples.Arithmetic.interpreter",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -736,7 +736,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Arithmetic.final_stack",
+      "declaration": "Examples.Arithmetic.final_stack",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -750,7 +750,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Arithmetic.final_sum",
+      "declaration": "Examples.Arithmetic.final_sum",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -764,7 +764,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Arithmetic.final_gas",
+      "declaration": "Examples.Arithmetic.final_gas",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -778,7 +778,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Arithmetic.final_world",
+      "declaration": "Examples.Arithmetic.final_world",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -792,7 +792,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Arithmetic.final_substate_trail",
+      "declaration": "Examples.Arithmetic.final_substate_trail",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",
@@ -806,7 +806,7 @@
       "destination_check": "scripts/ExecutionAxioms.lean `#expect_axioms` (Jaune.AxiomAudit.walk), built by the default Assurance target"
     },
     {
-      "declaration": "Examples.Checked.Arithmetic.concrete",
+      "declaration": "Examples.Arithmetic.concrete",
       "expected_axioms": [
         "Classical.choice",
         "Quot.sound",

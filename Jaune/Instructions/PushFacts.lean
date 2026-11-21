@@ -1,13 +1,13 @@
 import Jaune.Instructions.Push
 import Jaune.Instructions.WordFacts
-import Jaune.MessageCall.CheckedStep
+import Jaune.MessageCall.Step
 
 /-! The push rows' table lemmas and the lemma that `Checked.NextOp.step` reads them, for every
 input and every `Fork`. The effect law is the Word family's (`WordRow.step_ok`,
 `WordRow.step_error`). The rows' agreement with the per-opcode arms is in
 `Jaune.Bridge.G2b.CheckedRowAgreement`. -/
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -77,4 +77,4 @@ theorem NextOp.push_step_congr_fork (xs : Bytes) (hxs : xs.length ≤ 32) (r : F
   rw [NextOp.pushRow_step_irrel xs (Fork.ruleSet f').opcodes
     (Fork.ruleSet r.context.block.fork).opcodes _ ⟨r.pc, r.context⟩ h.symm]
 
-end Jaune.Checked
+end Jaune

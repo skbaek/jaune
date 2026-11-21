@@ -20,7 +20,7 @@ frame-opening message operations (`MessageOp`) keep explicit equations
 non-message operations, `NextOp.family?` gives `PUSH0`–`PUSH32` their Word row and `DUPN`,
 `SWAPN` and `EXCHANGE` their Shuffle rows. -/
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -97,7 +97,7 @@ def PlainOp.family : Jaune.PlainOp → Family
   | .and => .word (.binary U256.and Gas.veryLow)
   | .or => .word (.binary U256.or Gas.veryLow)
   | .xor => .word (.binary U256.xor Gas.veryLow)
-  | .signextend => .word (.binary U256.signext Gas.low)
+  | .signextend => .word (.binary U256.signextend Gas.low)
   | .byte => .word (.binary (fun x y => (List.getD y.toBytes x.toNat 0).toU256) Gas.veryLow)
   | .add => .word (.binary (· + ·) Gas.veryLow)
   | .sub => .word (.binary (· - ·) Gas.veryLow)
@@ -110,12 +110,12 @@ def PlainOp.family : Jaune.PlainOp → Family
   | .mulmod => .word (.ternary U256.mulmod Gas.mid)
   | .shl => .word { WordRow.binary (fun x y => y <<< x.toNat) Gas.veryLow with available := OpcodeRules.shifts }
   | .shr => .word { WordRow.binary (fun x y => y >>> x.toNat) Gas.veryLow with available := OpcodeRules.shifts }
-  | .sar => .word { WordRow.binary (fun x y => U256.arithShiftRight y x.toNat) Gas.veryLow with
+  | .sar => .word { WordRow.binary (fun x y => U256.arithmeticShiftRight y x.toNat) Gas.veryLow with
       available := OpcodeRules.shifts }
   | .clz => .word { WordRow.unary (fun x => (U256.leadingZeros x).toU256) Gas.low with
       available := OpcodeRules.clz }
   | .exp => .word {
-      arity := 2, cost := fun (_, exponent) => Gas.exp + Gas.expByte * exponent.bytecount,
+      arity := 2, cost := fun (_, exponent) => Gas.exp + Gas.expByte * exponent.significantByteCount,
       result := some fun (base, exponent) _ => U256.exp base exponent }
   | .pop => .word { arity := 1, cost := fun _ => Gas.base, result := none }
   /- Shuffle family. -/
@@ -152,18 +152,18 @@ def PlainOp.family : Jaune.PlainOp → Family
       target := .account,
       price := .account (fun r => Gas.warmStorageReadCost + r.gas.codeReadSurcharge)
         (fun r => r.gas.coldAccountAccess + r.gas.codeReadSurcharge)
-        (fun r g => g.extCode + r.gas.codeReadSurcharge),
+        (fun r g => g.extcodesizeAndExtcodecopy + r.gas.codeReadSurcharge),
       result := .push fun _ w a => (Jaune.State.get w.state a).code.size.toU256 }
   | .extcodecopy => .read {
       target := .account,
       price := .account (fun r => Gas.warmStorageReadCost + r.gas.codeReadSurcharge)
         (fun r => r.gas.coldAccountAccess + r.gas.codeReadSurcharge)
-        (fun r g => g.extCode + r.gas.codeReadSurcharge),
+        (fun r g => g.extcodesizeAndExtcodecopy + r.gas.codeReadSurcharge),
       result := .copyCode Gas.copy }
   | .extcodehash => .read {
-      available := OpcodeRules.extCodeHash, target := .account,
+      available := OpcodeRules.extcodehash, target := .account,
       price := .account (fun _ => Gas.warmStorageReadCost) (fun r => r.gas.coldAccountAccess)
-        (fun _ g => g.extCodeHash),
+        (fun _ g => g.extcodehash),
       result := .push fun _ w a =>
         let account := Jaune.State.get w.state a
         if account.isEmpty then 0 else ByteArray.keccak 0 account.code.size account.code }
@@ -223,4 +223,4 @@ def NextOp.family? : Jaune.NextOp → Option Family
   | .exchange imm => some (.shuffle (NextOp.exchangeRow imm))
   | .message _ => none
 
-end Jaune.Checked
+end Jaune

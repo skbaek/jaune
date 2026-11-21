@@ -523,13 +523,13 @@ namespace BlockAccessListAccount
 
 /-- Replace the entry at `idx` or append: only the final value per index is
 kept (`add_storage_write`, `add_balance_change`, `add_code_change`). -/
-def upsert {α : Type} (l : List (Nat × α)) (idx : Nat) (v : α) : List (Nat × α) :=
+def replaceOrAppend {α : Type} (l : List (Nat × α)) (idx : Nat) (v : α) : List (Nat × α) :=
   if l.any (·.1 = idx) then l.map (fun c => if c.1 = idx then (idx, v) else c)
   else l ++ [(idx, v)]
 
 def addStorageWrite (acc : BlockAccessListAccount) (slot : U256) (idx : Nat) (v : U256) : BlockAccessListAccount :=
   {acc with storageChanges :=
-    acc.storageChanges.insert slot (upsert (acc.storageChanges.getD slot []) idx v)}
+    acc.storageChanges.insert slot (replaceOrAppend (acc.storageChanges.getD slot []) idx v)}
 
 def addStorageRead (acc : BlockAccessListAccount) (slot : U256) : BlockAccessListAccount :=
   {acc with storageReads := acc.storageReads.insert slot ()}
@@ -541,7 +541,7 @@ def removeStorageWrite (acc : BlockAccessListAccount) (slot : U256) (idx : Nat) 
     else acc.storageChanges.insert slot changes}
 
 def addBalanceChange (acc : BlockAccessListAccount) (idx : Nat) (v : U256) : BlockAccessListAccount :=
-  {acc with balanceChanges := upsert acc.balanceChanges idx v}
+  {acc with balanceChanges := replaceOrAppend acc.balanceChanges idx v}
 
 def removeBalanceChange (acc : BlockAccessListAccount) (idx : Nat) : BlockAccessListAccount :=
   {acc with balanceChanges := acc.balanceChanges.filter (fun c => c.1 != idx)}
@@ -550,14 +550,14 @@ def removeBalanceChange (acc : BlockAccessListAccount) (idx : Nat) : BlockAccess
 def addNonceChange (acc : BlockAccessListAccount) (idx : Nat) (n : UInt64) : BlockAccessListAccount :=
   {acc with nonceChanges :=
     match acc.nonceChanges.find? (·.1 = idx) with
-    | some ⟨_, old⟩ => if old < n then upsert acc.nonceChanges idx n else acc.nonceChanges
+    | some ⟨_, old⟩ => if old < n then replaceOrAppend acc.nonceChanges idx n else acc.nonceChanges
     | none => acc.nonceChanges ++ [(idx, n)]}
 
 def removeNonceChange (acc : BlockAccessListAccount) (idx : Nat) : BlockAccessListAccount :=
   {acc with nonceChanges := acc.nonceChanges.filter (fun c => c.1 != idx)}
 
 def addCodeChange (acc : BlockAccessListAccount) (idx : Nat) (code : ByteArray) : BlockAccessListAccount :=
-  {acc with codeChanges := upsert acc.codeChanges idx code}
+  {acc with codeChanges := replaceOrAppend acc.codeChanges idx code}
 
 def removeCodeChange (acc : BlockAccessListAccount) (idx : Nat) : BlockAccessListAccount :=
   {acc with codeChanges := acc.codeChanges.filter (fun c => c.1 != idx)}
@@ -661,18 +661,18 @@ def BlockAccessListBuilder.build (b : BlockAccessListBuilder) : BlockAccessList 
 
 /-- RLP of an unsigned integer: minimal big-endian bytes, `0` as the empty
 string -- how the pinned `rlp.encode` writes `U256`, `U64` and `Uint`. -/
-private def natRlpItem (n : Nat) : Rlp.Item := .bytes n.toBytes
+private def Nat.toRlpItem (n : Nat) : Rlp.Item := .bytes n.toBytes
 
 def BlockAccessListAccountChanges.toRlpItem (c : BlockAccessListAccountChanges) : Rlp.Item :=
   .list [
     .bytes c.address.toBytes,
     .list (c.storageChanges.map fun ⟨slot, cs⟩ =>
-      .list [natRlpItem slot.toNat,
-             .list (cs.map fun ⟨i, v⟩ => .list [natRlpItem i, natRlpItem v.toNat])]),
-    .list (c.storageReads.map fun k => natRlpItem k.toNat),
-    .list (c.balanceChanges.map fun ⟨i, v⟩ => .list [natRlpItem i, natRlpItem v.toNat]),
-    .list (c.nonceChanges.map fun ⟨i, n⟩ => .list [natRlpItem i, natRlpItem n.toNat]),
-    .list (c.codeChanges.map fun ⟨i, code⟩ => .list [natRlpItem i, .bytes code.toList]) ]
+      .list [Nat.toRlpItem slot.toNat,
+             .list (cs.map fun ⟨i, v⟩ => .list [Nat.toRlpItem i, Nat.toRlpItem v.toNat])]),
+    .list (c.storageReads.map fun k => Nat.toRlpItem k.toNat),
+    .list (c.balanceChanges.map fun ⟨i, v⟩ => .list [Nat.toRlpItem i, Nat.toRlpItem v.toNat]),
+    .list (c.nonceChanges.map fun ⟨i, n⟩ => .list [Nat.toRlpItem i, Nat.toRlpItem n.toNat]),
+    .list (c.codeChanges.map fun ⟨i, code⟩ => .list [Nat.toRlpItem i, .bytes code.toList]) ]
 
 def BlockAccessList.toRlpItem (l : BlockAccessList) : Rlp.Item := .list (l.map BlockAccessListAccountChanges.toRlpItem)
 
@@ -695,13 +695,13 @@ list that is right in content but wrong in form (the corpus's
 `INCORRECT_BLOCK_FORMAT`: accounts reversed, an account duplicated) from one
 whose content is wrong (`INVALID_BLOCK_ACCESS_LIST`). Consensus never calls
 it: the block carries only the hash, and a built list is already canonical. -/
-def BlockAccessList.canonicalise (l : BlockAccessList) : BlockAccessList :=
-  dedupAdjacent (l.mergeSort fun a b => (compare a.address b.address).isLE)
+def BlockAccessList.toCanonical (l : BlockAccessList) : BlockAccessList :=
+  eraseAdjacentDuplicates (l.mergeSort fun a b => (compare a.address b.address).isLE)
 where
-  dedupAdjacent : BlockAccessList → BlockAccessList
+  eraseAdjacentDuplicates : BlockAccessList → BlockAccessList
     | a :: b :: rest =>
-      if a.toRlpItem.toBytes = b.toRlpItem.toBytes then dedupAdjacent (b :: rest)
-      else a :: dedupAdjacent (b :: rest)
+      if a.toRlpItem.toBytes = b.toRlpItem.toBytes then eraseAdjacentDuplicates (b :: rest)
+      else a :: eraseAdjacentDuplicates (b :: rest)
     | l => l
 
 structure BlockOutput : Type where
@@ -808,7 +808,7 @@ def checkTransactionAuthorizationList (tx : Transaction) : Except TransactionVal
 
 /-- A legacy `v` that encodes a chain identifier wider than 64 bits never names
 the chain: sender recovery refuses it as a bad signature. -/
-theorem recoverSender_error_of_wide_legacy_v (chainId : UInt64) (tx : Transaction)
+theorem recoverSender_error_of_wide_legacy_chainId (chainId : UInt64) (tx : Transaction)
     {gasPrice : Nat} {receiver : Option Address}
     (htype : tx.type = .legacy gasPrice receiver) (hwide : 2 ^ 64 ≤ (tx.v - 35) / 2) :
     ∃ d, recoverSender chainId tx = .error (.invalidSignature d) := by
@@ -905,11 +905,11 @@ theorem checkTransactionSenderAccountFor_error (rules : ForkRules)
 
 /-- Prague's intrinsic-cost switches: 16-gas nonzero bytes, calldata floor on,
 coinbase pre-warmed. -/
-@[simp] theorem pragueRules_txr_dataNonZero : pragueRules.transactionRules.dataNonZero = 16 := rfl
+@[simp] theorem pragueRules_transactionRules_dataNonZero : pragueRules.transactionRules.dataNonZero = 16 := rfl
 
-@[simp] theorem pragueRules_txr_calldataFloor : pragueRules.transactionRules.calldataFloor = true := rfl
+@[simp] theorem pragueRules_transactionRules_calldataFloor : pragueRules.transactionRules.calldataFloor = true := rfl
 
-@[simp] theorem pragueRules_txr_warmCoinbase : pragueRules.transactionRules.warmCoinbase = true := rfl
+@[simp] theorem pragueRules_transactionRules_warmCoinbase : pragueRules.transactionRules.warmCoinbase = true := rfl
 
 /-- The transaction's intrinsic cost and its calldata floor.
 
@@ -1294,7 +1294,7 @@ def clearAccountPreservingBalance (state : State) (address : Address) : State :=
 
 /-- Select the fork's SELFDESTRUCT settlement semantics once, outside the
 transaction proof's monadic spine. -/
-def settleSelfdestructs (rules : ForkRules) (addresses : List Address)
+def settleSelfDestructs (rules : ForkRules) (addresses : List Address)
     (state : State) : State :=
   match rules.stateGas with
   | none => addresses.foldl destroyAccount state
@@ -1318,7 +1318,7 @@ def processWithdrawalsTrie (tr : Std.TreeMap Bytes Withdrawal compare)
 
 def processWithdrawalsState (st : State) (wds : List Withdrawal) : State :=
   List.foldl
-    (λ acc wd => acc.addBal wd.address (wd.amount * (10 ^ 9).toU256))
+    (λ acc wd => acc.addBalance wd.address (wd.amount * (10 ^ 9).toU256))
     st
     wds
 
@@ -1393,11 +1393,11 @@ theorem Rlp.Item.toExceptAuthorization_wireWellFormed {blt : Rlp.Item} {a : Auth
 
 /-- The strict field decoders, lifted to the transaction-decode carrier. Every
 per-field reason stays a `DecodeError`; this wrapper only names the channel. -/
-private def dec {α : Type} : Except DecodeError α → Except TransitionError α :=
+private def liftDecodeError {α : Type} : Except DecodeError α → Except TransitionError α :=
   Except.mapError TransitionError.decode
 
-private theorem dec_eq_ok {α : Type} {x : Except DecodeError α} {a : α}
-    (h : dec x = .ok a) : x = .ok a := Except.mapError_eq_ok_iff.mp h
+private theorem liftDecodeError_eq_ok {α : Type} {x : Except DecodeError α} {a : α}
+    (h : liftDecodeError x = .ok a) : x = .ok a := Except.mapError_eq_ok_iff.mp h
 
 def Bytes.toExceptTransaction : Bytes → Except TransitionError Transaction
   | [] =>
@@ -1422,16 +1422,16 @@ def Bytes.toExceptTransaction : Bytes → Except TransitionError Transaction
         .bytes r,
         .bytes s
       ]) => do
-      let chainId ← dec <| chainId.toRlpUInt64 "type-1 transaction chainId"
-      let nonce ← dec <| nonce.toRlpUInt64 "type-1 transaction nonce"
-      let gasPrice ← dec <| gasPrice.toRlpNat "type-1 transaction gasPrice" 32
-      let gas ← dec <| gas.toRlpNat "type-1 transaction gas" 32
-      let receiver ← dec <| receiver.toRlpReceiver "type-1 transaction receiver"
-      let value ← dec <| value.toRlpNat "type-1 transaction value" 32
-      let accessList ← dec accessList.toExceptAccessList
-      let yParity ← dec <| yParity.toRlpNat "type-1 transaction yParity" 32
-      let _ ← dec <| r.toRlpU256 "type-1 transaction r"
-      let _ ← dec <| s.toRlpU256 "type-1 transaction s"
+      let chainId ← liftDecodeError <| chainId.toRlpUInt64 "type-1 transaction chainId"
+      let nonce ← liftDecodeError <| nonce.toRlpUInt64 "type-1 transaction nonce"
+      let gasPrice ← liftDecodeError <| gasPrice.toRlpNat "type-1 transaction gasPrice" 32
+      let gas ← liftDecodeError <| gas.toRlpNat "type-1 transaction gas" 32
+      let receiver ← liftDecodeError <| receiver.toRlpReceiver "type-1 transaction receiver"
+      let value ← liftDecodeError <| value.toRlpNat "type-1 transaction value" 32
+      let accessList ← liftDecodeError accessList.toExceptAccessList
+      let yParity ← liftDecodeError <| yParity.toRlpNat "type-1 transaction yParity" 32
+      let _ ← liftDecodeError <| r.toRlpU256 "type-1 transaction r"
+      let _ ← liftDecodeError <| s.toRlpU256 "type-1 transaction s"
       .ok {
         nonce := nonce,
         gasLimit := gas,
@@ -1459,17 +1459,17 @@ def Bytes.toExceptTransaction : Bytes → Except TransitionError Transaction
         .bytes r,
         .bytes s
       ]) => do
-      let chainId ← dec <| chainId.toRlpUInt64 "type-2 transaction chainId"
-      let nonce ← dec <| nonce.toRlpUInt64 "type-2 transaction nonce"
-      let maxPriorityFee ← dec <| maxPriorityFee.toRlpNat "type-2 transaction maxPriorityFee" 32
-      let maxFee ← dec <| maxFee.toRlpNat "type-2 transaction maxFee" 32
-      let gas ← dec <| gas.toRlpNat "type-2 transaction gas" 32
-      let receiver ← dec <| receiver.toRlpReceiver "type-2 transaction receiver"
-      let value ← dec <| value.toRlpNat "type-2 transaction value" 32
-      let accessList ← dec accessList.toExceptAccessList
-      let yParity ← dec <| yParity.toRlpNat "type-2 transaction yParity" 32
-      let _ ← dec <| r.toRlpU256 "type-2 transaction r"
-      let _ ← dec <| s.toRlpU256 "type-2 transaction s"
+      let chainId ← liftDecodeError <| chainId.toRlpUInt64 "type-2 transaction chainId"
+      let nonce ← liftDecodeError <| nonce.toRlpUInt64 "type-2 transaction nonce"
+      let maxPriorityFee ← liftDecodeError <| maxPriorityFee.toRlpNat "type-2 transaction maxPriorityFee" 32
+      let maxFee ← liftDecodeError <| maxFee.toRlpNat "type-2 transaction maxFee" 32
+      let gas ← liftDecodeError <| gas.toRlpNat "type-2 transaction gas" 32
+      let receiver ← liftDecodeError <| receiver.toRlpReceiver "type-2 transaction receiver"
+      let value ← liftDecodeError <| value.toRlpNat "type-2 transaction value" 32
+      let accessList ← liftDecodeError accessList.toExceptAccessList
+      let yParity ← liftDecodeError <| yParity.toRlpNat "type-2 transaction yParity" 32
+      let _ ← liftDecodeError <| r.toRlpU256 "type-2 transaction r"
+      let _ ← liftDecodeError <| s.toRlpU256 "type-2 transaction s"
       .ok {
         nonce := nonce,
         gasLimit := gas,
@@ -1499,11 +1499,11 @@ def Bytes.toExceptTransaction : Bytes → Except TransitionError Transaction
         .bytes r,
         .bytes s
       ]) => do
-      let chainId ← dec <| chainId.toRlpUInt64 "type-3 transaction chainId"
-      let nonce ← dec <| nonce.toRlpUInt64 "type-3 transaction nonce"
-      let maxPriorityFee ← dec <| maxPriorityFee.toRlpNat "type-3 transaction maxPriorityFee" 32
-      let maxFee ← dec <| maxFee.toRlpNat "type-3 transaction maxFee" 32
-      let gas ← dec <| gas.toRlpNat "type-3 transaction gas" 32
+      let chainId ← liftDecodeError <| chainId.toRlpUInt64 "type-3 transaction chainId"
+      let nonce ← liftDecodeError <| nonce.toRlpUInt64 "type-3 transaction nonce"
+      let maxPriorityFee ← liftDecodeError <| maxPriorityFee.toRlpNat "type-3 transaction maxPriorityFee" 32
+      let maxFee ← liftDecodeError <| maxFee.toRlpNat "type-3 transaction maxFee" 32
+      let gas ← liftDecodeError <| gas.toRlpNat "type-3 transaction gas" 32
       -- A type-3 receiver is a mandatory address at the RLP level; the
       -- semantic contract-creation rejection downstream remains as defense
       -- in depth for transactions that arrive already decoded.  Empty is the
@@ -1512,14 +1512,14 @@ def Bytes.toExceptTransaction : Bytes → Except TransitionError Transaction
       if receiver.isEmpty then
         .error <| .transaction <| .type3ContractCreation <|
           .text "type-3 transaction receiver is empty"
-      let receiver ← dec <| receiver.toRlpAddress "type-3 transaction receiver"
-      let value ← dec <| value.toRlpNat "type-3 transaction value" 32
-      let accessList ← dec accessList.toExceptAccessList
-      let maxBlobFee ← dec <| maxBlobFee.toRlpNat "type-3 transaction maxBlobFee" 32
-      let blobHashes ← dec <| List.mapM Rlp.Item.toExceptBlobHash blobHashes
-      let yParity ← dec <| yParity.toRlpNat "type-3 transaction yParity" 32
-      let _ ← dec <| r.toRlpU256 "type-3 transaction r"
-      let _ ← dec <| s.toRlpU256 "type-3 transaction s"
+      let receiver ← liftDecodeError <| receiver.toRlpAddress "type-3 transaction receiver"
+      let value ← liftDecodeError <| value.toRlpNat "type-3 transaction value" 32
+      let accessList ← liftDecodeError accessList.toExceptAccessList
+      let maxBlobFee ← liftDecodeError <| maxBlobFee.toRlpNat "type-3 transaction maxBlobFee" 32
+      let blobHashes ← liftDecodeError <| List.mapM Rlp.Item.toExceptBlobHash blobHashes
+      let yParity ← liftDecodeError <| yParity.toRlpNat "type-3 transaction yParity" 32
+      let _ ← liftDecodeError <| r.toRlpU256 "type-3 transaction r"
+      let _ ← liftDecodeError <| s.toRlpU256 "type-3 transaction s"
       .ok {
         nonce := nonce,
         gasLimit := gas,
@@ -1550,21 +1550,21 @@ def Bytes.toExceptTransaction : Bytes → Except TransitionError Transaction
         .bytes r,
         .bytes s
       ]) => do
-      let chainId ← dec <| chainId.toRlpUInt64 "type-4 transaction chainId"
-      let nonce ← dec <| nonce.toRlpUInt64 "type-4 transaction nonce"
-      let maxPriorityFee ← dec <| maxPriorityFee.toRlpNat "type-4 transaction maxPriorityFee" 32
-      let maxFee ← dec <| maxFee.toRlpNat "type-4 transaction maxFee" 32
-      let gas ← dec <| gas.toRlpNat "type-4 transaction gas" 32
+      let chainId ← liftDecodeError <| chainId.toRlpUInt64 "type-4 transaction chainId"
+      let nonce ← liftDecodeError <| nonce.toRlpUInt64 "type-4 transaction nonce"
+      let maxPriorityFee ← liftDecodeError <| maxPriorityFee.toRlpNat "type-4 transaction maxPriorityFee" 32
+      let maxFee ← liftDecodeError <| maxFee.toRlpNat "type-4 transaction maxFee" 32
+      let gas ← liftDecodeError <| gas.toRlpNat "type-4 transaction gas" 32
       if receiver.isEmpty then
         .error <| .transaction <| .type4ContractCreation <|
           .text "type-4 transaction receiver is empty"
-      let receiver ← dec <| receiver.toRlpAddress "type-4 transaction receiver"
-      let value ← dec <| value.toRlpNat "type-4 transaction value" 32
-      let accessList ← dec accessList.toExceptAccessList
-      let auths ← dec <| List.mapM Rlp.Item.toExceptAuthorization auths
-      let yParity ← dec <| yParity.toRlpNat "type-4 transaction yParity" 32
-      let _ ← dec <| r.toRlpU256 "type-4 transaction r"
-      let _ ← dec <| s.toRlpU256 "type-4 transaction s"
+      let receiver ← liftDecodeError <| receiver.toRlpAddress "type-4 transaction receiver"
+      let value ← liftDecodeError <| value.toRlpNat "type-4 transaction value" 32
+      let accessList ← liftDecodeError accessList.toExceptAccessList
+      let auths ← liftDecodeError <| List.mapM Rlp.Item.toExceptAuthorization auths
+      let yParity ← liftDecodeError <| yParity.toRlpNat "type-4 transaction yParity" 32
+      let _ ← liftDecodeError <| r.toRlpU256 "type-4 transaction r"
+      let _ ← liftDecodeError <| s.toRlpU256 "type-4 transaction s"
       .ok {
         nonce := nonce,
         gasLimit := gas,
@@ -1602,8 +1602,8 @@ theorem Bytes.toExceptTransaction_wireWellFormed {xs : Bytes} {tx : Transaction}
       subst h
       refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
         first
-          | exact Bytes.toRlpNat_lt_two_pow_256 (dec_eq_ok (by assumption))
-          | exact Bytes.toRlpU256_eq_ok (dec_eq_ok (by assumption))
+          | exact Bytes.toRlpNat_lt_two_pow_256 (liftDecodeError_eq_ok (by assumption))
+          | exact Bytes.toRlpU256_eq_ok (liftDecodeError_eq_ok (by assumption))
     · exact absurd h (by simp)
     -- type 2 (EIP-1559)
     · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
@@ -1611,8 +1611,8 @@ theorem Bytes.toExceptTransaction_wireWellFormed {xs : Bytes} {tx : Transaction}
       subst h
       refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
         first
-          | exact Bytes.toRlpNat_lt_two_pow_256 (dec_eq_ok (by assumption))
-          | exact Bytes.toRlpU256_eq_ok (dec_eq_ok (by assumption))
+          | exact Bytes.toRlpNat_lt_two_pow_256 (liftDecodeError_eq_ok (by assumption))
+          | exact Bytes.toRlpU256_eq_ok (liftDecodeError_eq_ok (by assumption))
     · exact absurd h (by simp)
     -- type 3 (EIP-4844). The mandatory-receiver guard is a join point, so the
     -- chain has to be split at it before the remaining binds peel.
@@ -1626,8 +1626,8 @@ theorem Bytes.toExceptTransaction_wireWellFormed {xs : Bytes} {tx : Transaction}
         subst h
         refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
           first
-            | exact Bytes.toRlpNat_lt_two_pow_256 (dec_eq_ok (by assumption))
-            | exact Bytes.toRlpU256_eq_ok (dec_eq_ok (by assumption))
+            | exact Bytes.toRlpNat_lt_two_pow_256 (liftDecodeError_eq_ok (by assumption))
+            | exact Bytes.toRlpU256_eq_ok (liftDecodeError_eq_ok (by assumption))
     · exact absurd h (by simp)
     -- type 4 (EIP-7702)
     · repeat obtain ⟨_, _, h⟩ := Except.bind_eq_ok h
@@ -1642,12 +1642,12 @@ theorem Bytes.toExceptTransaction_wireWellFormed {xs : Bytes} {tx : Transaction}
         case auths =>
           intro a ha
           obtain ⟨blt, hblt⟩ :=
-            List.mapM_except_eq_ok_mem (dec_eq_ok (by assumption)) a ha
+            List.mapM_except_eq_ok_mem (liftDecodeError_eq_ok (by assumption)) a ha
           exact Rlp.Item.toExceptAuthorization_wireWellFormed hblt
         all_goals
           first
-            | exact Bytes.toRlpNat_lt_two_pow_256 (dec_eq_ok (by assumption))
-            | exact Bytes.toRlpU256_eq_ok (dec_eq_ok (by assumption))
+            | exact Bytes.toRlpNat_lt_two_pow_256 (liftDecodeError_eq_ok (by assumption))
+            | exact Bytes.toRlpU256_eq_ok (liftDecodeError_eq_ok (by assumption))
     · exact absurd h (by simp)
     · exact absurd h (by simp)
 
@@ -2198,7 +2198,7 @@ def Rlp.Item.toExceptLegacyTransaction : List Rlp.Item → Except DecodeError Tr
 /-- A transaction slot as a standalone value: a legacy list through the strict
 legacy decoder, typed-envelope bytes through the strict envelope decoder. -/
 def Rlp.Item.toExceptTransaction : Rlp.Item → Except TransitionError Transaction
-  | .list ls => dec (Rlp.Item.toExceptLegacyTransaction ls)
+  | .list ls => liftDecodeError (Rlp.Item.toExceptLegacyTransaction ls)
   | .bytes xs => xs.toExceptTransaction
 
 theorem State.Canonical.clearAccountPreservingBalance {state : State}
@@ -2207,10 +2207,10 @@ theorem State.Canonical.clearAccountPreservingBalance {state : State}
   unfold Jaune.clearAccountPreservingBalance
   exact State.Canonical.set h address Storage.canonical_empty
 
-theorem State.Canonical.settleSelfdestructs {state : State}
+theorem State.Canonical.settleSelfDestructs {state : State}
     (h : state.Canonical) (rules : ForkRules) (addresses : List Address) :
-    (settleSelfdestructs rules addresses state).Canonical := by
-  unfold Jaune.settleSelfdestructs
+    (settleSelfDestructs rules addresses state).Canonical := by
+  unfold Jaune.settleSelfDestructs
   split
   · exact State.Canonical.foldl_destroyAccount h
   · induction addresses generalizing state with
@@ -2239,6 +2239,6 @@ theorem processWithdrawalsState_canonical {st : State} (h : st.Canonical)
   unfold processWithdrawalsState
   induction wds generalizing st with
   | nil => exact h
-  | cons w l ih => exact ih (State.Canonical.addBal h _ _)
+  | cons w l ih => exact ih (State.Canonical.addBalance h _ _)
 
 end Jaune

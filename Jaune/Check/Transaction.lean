@@ -89,23 +89,23 @@ open Jaune
 -- pair is re-sorted, an exact duplicate collapses, and a canonical list is a
 -- fixed point -- while two entries at one address with different content are
 -- both kept, so a content defect can never pass as a format defect.
-private def guardBlockAccessListHi : BlockAccessListAccountChanges :=
+private def guardBeaconRootsAccountChanges : BlockAccessListAccountChanges :=
   { address := beaconRootsAddress, storageChanges := [], storageReads := [],
     balanceChanges := [], nonceChanges := [(1, 1)], codeChanges := [] }
-private def guardBlockAccessListLo : BlockAccessListAccountChanges :=
+private def guardHistoryStorageAccountChanges : BlockAccessListAccountChanges :=
   { address := historyStorageAddress, storageChanges := [], storageReads := [0x200b],
     balanceChanges := [], nonceChanges := [], codeChanges := [] }
-private def guardBlockAccessListLo' : BlockAccessListAccountChanges := { guardBlockAccessListLo with storageReads := [0x200c] }
+private def guardAlternativeHistoryStorageAccountChanges : BlockAccessListAccountChanges := { guardHistoryStorageAccountChanges with storageReads := [0x200c] }
 #guard compare historyStorageAddress beaconRootsAddress = .lt
-#guard BlockAccessList.encode (BlockAccessList.canonicalise [guardBlockAccessListHi, guardBlockAccessListLo]) =
-  BlockAccessList.encode [guardBlockAccessListLo, guardBlockAccessListHi]
-#guard BlockAccessList.encode (BlockAccessList.canonicalise [guardBlockAccessListLo, guardBlockAccessListHi, guardBlockAccessListHi]) =
-  BlockAccessList.encode [guardBlockAccessListLo, guardBlockAccessListHi]
-#guard BlockAccessList.encode (BlockAccessList.canonicalise [guardBlockAccessListLo, guardBlockAccessListHi]) =
-  BlockAccessList.encode [guardBlockAccessListLo, guardBlockAccessListHi]
-#guard BlockAccessList.encode (BlockAccessList.canonicalise [guardBlockAccessListLo, guardBlockAccessListLo', guardBlockAccessListHi]) =
-  BlockAccessList.encode [guardBlockAccessListLo, guardBlockAccessListLo', guardBlockAccessListHi]
-#guard BlockAccessList.encode (BlockAccessList.canonicalise []) = [0xC0]
+#guard BlockAccessList.encode (BlockAccessList.toCanonical [guardBeaconRootsAccountChanges, guardHistoryStorageAccountChanges]) =
+  BlockAccessList.encode [guardHistoryStorageAccountChanges, guardBeaconRootsAccountChanges]
+#guard BlockAccessList.encode (BlockAccessList.toCanonical [guardHistoryStorageAccountChanges, guardBeaconRootsAccountChanges, guardBeaconRootsAccountChanges]) =
+  BlockAccessList.encode [guardHistoryStorageAccountChanges, guardBeaconRootsAccountChanges]
+#guard BlockAccessList.encode (BlockAccessList.toCanonical [guardHistoryStorageAccountChanges, guardBeaconRootsAccountChanges]) =
+  BlockAccessList.encode [guardHistoryStorageAccountChanges, guardBeaconRootsAccountChanges]
+#guard BlockAccessList.encode (BlockAccessList.toCanonical [guardHistoryStorageAccountChanges, guardAlternativeHistoryStorageAccountChanges, guardBeaconRootsAccountChanges]) =
+  BlockAccessList.encode [guardHistoryStorageAccountChanges, guardAlternativeHistoryStorageAccountChanges, guardBeaconRootsAccountChanges]
+#guard BlockAccessList.encode (BlockAccessList.toCanonical []) = [0xC0]
 
 -- The `none` state-gas lanes -- `MessageOp`'s legacy call and create paths and the
 -- legacy top-level dispatch -- record no access-list reads. That is sound only
@@ -122,7 +122,7 @@ private def guardBlockAccessListLo' : BlockAccessListAccountChanges := { guardBl
 -- classifier.  They pin the validation order and the distinctions that used
 -- to be hidden behind `InvalidTransaction` and `NonceMismatchError`.
 
-private def fixtureTestTx : Transaction :=
+private def fixtureTestTransaction : Transaction :=
   {
     nonce := 0
     gasLimit := Gas.transaction
@@ -142,9 +142,9 @@ private def fixtureTestAccount
 the split that downstream t8n vectors observe. -/
 
 private def plainAmsterdamTransfer : Transaction :=
-  {fixtureTestTx with gasLimit := 30000000, value := 1, type := .legacy 10 (some 2)}
+  {fixtureTestTransaction with gasLimit := 30000000, value := 1, type := .legacy 10 (some 2)}
 
-private def fixtureTestAuth : Authorization :=
+private def fixtureTestAuthorization : Authorization :=
   {chainId := 0, address := 0, nonce := 0, yParity := 0, r := 0, s := 0}
 
 #guard Transaction.intrinsicGas amsterdamRules plainAmsterdamTransfer 1
@@ -153,22 +153,22 @@ private def fixtureTestAuth : Authorization :=
     {plainAmsterdamTransfer with type := .legacy 10 (some 1)} 1
   = ⟨12000, 12000⟩
 #guard Transaction.intrinsicGas amsterdamRules
-    {fixtureTestTx with gasLimit := 30000000, type := .legacy 10 none} 1
+    {fixtureTestTransaction with gasLimit := 30000000, type := .legacy 10 none} 1
   = ⟨24000, 24000⟩
 #guard Transaction.intrinsicGas amsterdamRules
-    {fixtureTestTx with gasLimit := 30000000, type := .eip2930 1 10 (some 2) [(3, [4])]} 1
+    {fixtureTestTransaction with gasLimit := 30000000, type := .eip2930 1 10 (some 2) [(3, [4])]} 1
   = ⟨23228, 18328⟩
 #guard (Transaction.intrinsicGas amsterdamRules
-    {fixtureTestTx with gasLimit := 30000000, type := .eip7702 1 1 10 2 [] [fixtureTestAuth]} 1).1
+    {fixtureTestTransaction with gasLimit := 30000000, type := .eip7702 1 1 10 2 [] [fixtureTestAuthorization]} 1).1
   = 12000 + 3000 + 7816
 
-private def amsterdamTxMaxGas : Nat :=
+private def amsterdamTransactionMaxGas : Nat :=
   amsterdamRules.tx.maxGas.getD 0
 
 #guard (validateTransaction amsterdamRules
-    {plainAmsterdamTransfer with gasLimit := amsterdamTxMaxGas + 1} 1).toOption.isSome
-#guard allocateEvmGas amsterdamRules (amsterdamTxMaxGas + 100) 21000
-  = ⟨amsterdamTxMaxGas - 21000, 100⟩
+    {plainAmsterdamTransfer with gasLimit := amsterdamTransactionMaxGas + 1} 1).toOption.isSome
+#guard allocateEvmGas amsterdamRules (amsterdamTransactionMaxGas + 100) 21000
+  = ⟨amsterdamTransactionMaxGas - 21000, 100⟩
 
 #guard settleTransactionGas pragueRules 1000 0 100 777 100 999
   = ⟨800, 200, 800, 0⟩
@@ -183,23 +183,23 @@ private def amsterdamTxMaxGas : Nat :=
 -- code and nonce remain independent collision controls.
 
 -- Constructor-level matcher for the transaction-validation boundary guards.
-private def txvFails {α : Type} (p : TransactionValidationError → Bool) :
+private def transactionValidationFails {α : Type} (p : TransactionValidationError → Bool) :
     Except TransactionValidationError α → Bool
   | .error e => p e
   | .ok _ => false
 
-#guard txvFails (fun | .intrinsicGasTooLow _ => true | _ => false) <|
-  validateTransaction pragueRules {fixtureTestTx with gasLimit := Gas.transaction - 1} 0
-#guard txvFails (fun | .nonceIsMax _ => true | _ => false) <|
-  validateTransaction pragueRules {fixtureTestTx with nonce := UInt64.max} 0
-#guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .intrinsicGasTooLow _ => true | _ => false) <|
+  validateTransaction pragueRules {fixtureTestTransaction with gasLimit := Gas.transaction - 1} 0
+#guard transactionValidationFails (fun | .nonceIsMax _ => true | _ => false) <|
+  validateTransaction pragueRules {fixtureTestTransaction with nonce := UInt64.max} 0
+#guard transactionValidationFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
   checkInitcodeSize pragueRules.code none (pragueRules.code.maxInitCodeSize + 1)
 
 -- EIP-8037 admits the total-cap boundary, rejects the next unit, and
 -- leaves EIP-7825 as the independent execution bound in `allocateEvmGas`.
 #guard (validateTransaction amsterdamRules
     {plainAmsterdamTransfer with gasLimit := 2 ^ 32 - 1} 1).toOption.isSome
-#guard txvFails (fun | .transactionGasLimitExceeded _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .transactionGasLimitExceeded _ => true | _ => false) <|
   validateTransaction amsterdamRules
     {plainAmsterdamTransfer with gasLimit := 2 ^ 32} 1
 #guard (checkTransactionTotalGasCap bpo2Rules.tx (2 ^ 32)).toOption.isSome
@@ -207,11 +207,11 @@ private def txvFails {α : Type} (p : TransactionValidationError → Bool) :
 -- EIP-7825 is inclusive at `2 ^ 24`, and absent at Prague.
 #guard (checkTransactionGasCap osakaRules.tx (2 ^ 24 - 1)).toOption.isSome
 #guard (checkTransactionGasCap osakaRules.tx (2 ^ 24)).toOption.isSome
-#guard txvFails (fun | .transactionGasLimitExceeded _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .transactionGasLimitExceeded _ => true | _ => false) <|
   checkTransactionGasCap osakaRules.tx (2 ^ 24 + 1)
 #guard (checkTransactionGasCap pragueRules.tx (2 ^ 24 + 1)).toOption.isSome
-#guard txvFails (fun | .transactionGasLimitExceeded _ => true | _ => false) <|
-  validateTransaction osakaRules {fixtureTestTx with gasLimit := 2 ^ 24 + 1} 0
+#guard transactionValidationFails (fun | .transactionGasLimitExceeded _ => true | _ => false) <|
+  validateTransaction osakaRules {fixtureTestTransaction with gasLimit := 2 ^ 24 + 1} 0
 
 -- The initcode bound comes from the rules record, not from a global: a smaller
 -- limit rejects an initcode the Prague limit accepts, at the same boundary.
@@ -220,33 +220,33 @@ private def guardTightCodeLimits : CodeLimits :=
 
 #guard (checkInitcodeSize pragueRules.code none 200).toOption.isSome
 #guard (checkInitcodeSize guardTightCodeLimits none 200).toOption.isSome
-#guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
   checkInitcodeSize guardTightCodeLimits none 201
 
 -- EIP-7954 (goal C, G5): the creation-transaction data check reads Amsterdam's
 -- raised limit through `rules.code` -- inclusive at 0x20000 -- while BPO2's
 -- 0xC000 limit is unchanged.
 #guard (checkInitcodeSize amsterdamRules.code none 0x20000).toOption.isSome
-#guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
   checkInitcodeSize amsterdamRules.code none (0x20000 + 1)
 #guard (checkInitcodeSize bpo2Rules.code none 0xC000).toOption.isSome
-#guard txvFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .initcodeSizeExceeded _ => true | _ => false) <|
   checkInitcodeSize bpo2Rules.code none (0xC000 + 1)
 #guard (checkInitcodeSize amsterdamRules.code (some 0x1234) (0x20000 + 1)).toOption.isSome
 -- A non-creation transaction is unaffected by the limit under either schedule.
 #guard (checkInitcodeSize guardTightCodeLimits (some 0) 100000).toOption.isSome
 
-#guard txvFails (fun | .priorityGreaterThanMaxFee _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .priorityGreaterThanMaxFee _ => true | _ => false) <|
   checkTransactionDynamicGasFee 1 1 2 1
-#guard txvFails (fun | .insufficientMaxFeePerGas _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .insufficientMaxFeePerGas _ => true | _ => false) <|
   checkTransactionDynamicGasFee 2 1 1 1
-#guard txvFails (fun | .gasPriceProductOverflow _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .gasPriceProductOverflow _ => true | _ => false) <|
   checkTransactionDynamicGasFee 0 2 0 (2 ^ 255)
-#guard txvFails (fun | .gasPriceProductOverflow _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .gasPriceProductOverflow _ => true | _ => false) <|
   checkTransactionLegacyGasFee 0 2 (2 ^ 255)
 
-private def amsterdamCapacityTx : Transaction :=
-  {plainAmsterdamTransfer with gasLimit := amsterdamTxMaxGas + 50}
+private def amsterdamCapacityTransaction : Transaction :=
+  {plainAmsterdamTransfer with gasLimit := amsterdamTransactionMaxGas + 50}
 
 private def amsterdamCapacityOutput : BlockOutput :=
   {BlockOutput.init with blockGasUsed := 100, blockStateGasUsed := 50}
@@ -255,27 +255,27 @@ private def amsterdamCapacityOutput : BlockOutput :=
   (List.replicate 5 (0 : U256))).toOption.isSome
 #guard (checkTransactionBlobCount osakaRules.tx
   (List.replicate 6 (0 : U256))).toOption.isSome
-#guard txvFails (fun | .type3BlobCountLimitExceeded _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .type3BlobCountLimitExceeded _ => true | _ => false) <|
   checkTransactionBlobCount osakaRules.tx (List.replicate 7 (0 : U256))
 #guard (checkTransactionBlobCount pragueRules.tx
   (List.replicate 7 (0 : U256))).toOption.isSome
 -- The blob-fee rejection renders its exact observed golden message.
 
-#guard txvFails (fun | .nonceMismatchTooLow _ => true | _ => false) <|
-  checkTransactionSenderAccount (fixtureTestAccount 2 100) fixtureTestTx 0
-#guard txvFails (fun | .nonceMismatchTooHigh _ => true | _ => false) <|
+#guard transactionValidationFails (fun | .nonceMismatchTooLow _ => true | _ => false) <|
+  checkTransactionSenderAccount (fixtureTestAccount 2 100) fixtureTestTransaction 0
+#guard transactionValidationFails (fun | .nonceMismatchTooHigh _ => true | _ => false) <|
   checkTransactionSenderAccount (fixtureTestAccount 0 100)
-    {fixtureTestTx with nonce := 1} 0
-#guard txvFails (fun | .insufficientAccountFunds _ => true | _ => false) <|
-  checkTransactionSenderAccount (fixtureTestAccount 0 0) fixtureTestTx 1
-#guard txvFails (fun | .senderNotEoa _ => true | _ => false) <|
+    {fixtureTestTransaction with nonce := 1} 0
+#guard transactionValidationFails (fun | .insufficientAccountFunds _ => true | _ => false) <|
+  checkTransactionSenderAccount (fixtureTestAccount 0 0) fixtureTestTransaction 1
+#guard transactionValidationFails (fun | .senderNotEoa _ => true | _ => false) <|
   checkTransactionSenderAccount
-    (fixtureTestAccount 0 100 (ByteArray.mk #[0x01])) fixtureTestTx 0
+    (fixtureTestAccount 0 100 (ByteArray.mk #[0x01])) fixtureTestTransaction 0
 
 --------------- GAS-LIMIT BOUNDARY CHECKS ----------------
 
 -- Constructor-level matcher for the block-validation boundary guards.
-private def blkFails {α : Type} (p : BlockValidationError → Bool) :
+private def blockValidationFails {α : Type} (p : BlockValidationError → Bool) :
     Except BlockValidationError α → Bool
   | .error e => p e
   | .ok _ => false
@@ -286,33 +286,33 @@ private def blkFails {α : Type} (p : BlockValidationError → Bool) :
 -- window *accepts* that block -- one step up from a parent of `2 ^ 63 - 1` is
 -- well within a delta of `(2 ^ 63 - 1) / 1024` -- so the absolute bound is the
 -- only rule that rejects it, and it must be the one that reports.
-#guard blkFails (fun | .gasLimitTooBig _ => true | _ => false)
+#guard blockValidationFails (fun | .gasLimitTooBig _ => true | _ => false)
   (checkGasLimit (2 ^ 63) (2 ^ 63 - 1))
-#guard ¬ blkFails (fun | .gasLimitAdjustment _ => true | _ => false)
+#guard ¬ blockValidationFails (fun | .gasLimitAdjustment _ => true | _ => false)
   (checkGasLimit (2 ^ 63) (2 ^ 63 - 1))
 -- One below the bound, same parent: accepted. This is the maximum gas limit any
 -- valid block in the corpus carries, so the bound may not be one lower.
 #guard (checkGasLimit (2 ^ 63 - 1) (2 ^ 63 - 1)).toOption.isSome
 -- Far above the bound, where the window would also reject: still too big.
-#guard blkFails (fun | .gasLimitTooBig _ => true | _ => false)
+#guard blockValidationFails (fun | .gasLimitTooBig _ => true | _ => false)
   (checkGasLimit (2 ^ 64) 3141592)
 
 -- The parent-relative window and the minimum, each at its boundary, all
 -- reporting the adjustment rule rather than the absolute one.
 #guard (checkGasLimit 3141592 3141592).toOption.isSome              -- unchanged
-#guard blkFails (fun | .gasLimitAdjustment _ => true | _ => false)
+#guard blockValidationFails (fun | .gasLimitAdjustment _ => true | _ => false)
   (checkGasLimit (3141592 + 3067) 3141592)
 #guard (checkGasLimit (3141592 + 3066) 3141592).toOption.isSome     -- just inside
-#guard blkFails (fun | .gasLimitAdjustment _ => true | _ => false)
+#guard blockValidationFails (fun | .gasLimitAdjustment _ => true | _ => false)
   (checkGasLimit (3141592 - 3067) 3141592)
 #guard (checkGasLimit (3141592 - 3066) 3141592).toOption.isSome     -- just inside
-#guard blkFails (fun | .gasLimitAdjustment _ => true | _ => false)
+#guard blockValidationFails (fun | .gasLimitAdjustment _ => true | _ => false)
   (checkGasLimit 4999 5000)                                         -- below minimum
 #guard (checkGasLimit gasLimitMinimum 5000).toOption.isSome
 
 #guard (checkBlockRlpSize osakaRules.block (8388608 - 1)).toOption.isSome
 #guard (checkBlockRlpSize osakaRules.block 8388608).toOption.isSome
-#guard blkFails (fun | .blockRlpSizeExceeded _ => true | _ => false) <|
+#guard blockValidationFails (fun | .blockRlpSizeExceeded _ => true | _ => false) <|
   checkBlockRlpSize osakaRules.block (8388608 + 1)
 #guard (checkBlockRlpSize pragueRules.block (8388608 + 1)).toOption.isSome
 
@@ -336,7 +336,7 @@ private def testRecipient : Bytes := List.replicate 20 0x11
 -- Constructor-level guard matchers: the discriminant is now the typed reason,
 -- so these boundary checks match constructors instead of reading rendered
 -- text back through a prefix classifier.
-private def decFails {α : Type} (p : DecodeError → Bool) :
+private def decodeFails {α : Type} (p : DecodeError → Bool) :
     Except DecodeError α → Bool
   | .error e => p e
   | .ok _ => false
@@ -346,34 +346,34 @@ private def txFails {α : Type} (p : TransitionError → Bool) :
   | .error e => p e
   | .ok _ => false
 
-private def txDecFails {α : Type} (p : DecodeError → Bool) :
+private def txDecodeFails {α : Type} (p : DecodeError → Bool) :
     Except TransitionError α → Bool :=
   txFails fun e => match e with | .decode d => p d | _ => false
 
-private def isFixedWidthD : DecodeError → Bool
+private def isFixedWidthDecodeError : DecodeError → Bool
   | .fixedWidth _ => true | _ => false
-private def isOverflow64D : DecodeError → Bool
+private def isOverflow64DecodeError : DecodeError → Bool
   | .fieldOverflow64 _ => true | _ => false
-private def isOverflow256D : DecodeError → Bool
+private def isOverflow256DecodeError : DecodeError → Bool
   | .fieldOverflow256 _ => true | _ => false
-private def isStructureD : DecodeError → Bool
+private def isStructureDecodeError : DecodeError → Bool
   | .rlpStructure _ => true | _ => false
-private def isWithdrawalsNotReadD : DecodeError → Bool
+private def isWithdrawalsNotReadDecodeError : DecodeError → Bool
   | .withdrawalsNotRead _ => true | _ => false
 private def txPreForkFails {α : Type} (type : Nat) : Except TransitionError α → Bool :=
   txFails fun e => match e with | .transaction (.typePreFork t _) => t == type | _ => false
 
 -- Both withdrawal index positions reject nine bytes at the field boundary;
 -- neither can reach the truncating `Bytes.toUInt64` conversion unchecked.
-#guard decFails isOverflow64D <|
+#guard decodeFails isOverflow64DecodeError <|
   Rlp.Item.toExceptWithdrawal <|
     withdrawalDecoderVector nineByteScalar [] testRecipient []
-#guard decFails isOverflow64D <|
+#guard decodeFails isOverflow64DecodeError <|
   Rlp.Item.toExceptWithdrawal <|
     withdrawalDecoderVector [] nineByteScalar testRecipient []
 #guard (Rlp.Item.toExceptWithdrawal <|
   withdrawalDecoderVector [] [] testRecipient []).toOption.isSome
-#guard decFails isFixedWidthD <|
+#guard decodeFails isFixedWidthDecodeError <|
   Rlp.Item.toExceptWithdrawal <|
     withdrawalDecoderVector [] [] (List.replicate 21 0x11) []
 -- The amount is a 64-bit Gwei scalar (EIP-4895): the exact eight-byte maximum
@@ -382,7 +382,7 @@ private def txPreForkFails {α : Type} (type : Nat) : Except TransitionError α 
 #guard (Rlp.Item.toExceptWithdrawal <|
   withdrawalDecoderVector [] [] testRecipient (List.replicate 8 0xFF)
   ).toOption.map (fun wd => wd.amount.toNat) = some (2 ^ 64 - 1)
-#guard decFails isOverflow64D <|
+#guard decodeFails isOverflow64DecodeError <|
   Rlp.Item.toExceptWithdrawal <|
     withdrawalDecoderVector [] [] testRecipient nineByteScalar
 
@@ -395,36 +395,36 @@ private def canonicalLegacyVector : Rlp.Item :=
     == some canonicalLegacyVector.toBytes
 
 -- Every legacy scalar is bounded before conversion or sender recovery.
-#guard txDecFails isOverflow64D <|
+#guard txDecodeFails isOverflow64DecodeError <|
   Rlp.Item.toExceptTransaction <|
     legacyDecoderVector nineByteScalar [] [] [] [] [] [] []
-#guard txDecFails isOverflow256D <|
+#guard txDecodeFails isOverflow256DecodeError <|
   Rlp.Item.toExceptTransaction <|
     legacyDecoderVector [] thirtyThreeByteScalar [] [] [] [] [] []
-#guard txDecFails isOverflow256D <|
+#guard txDecodeFails isOverflow256DecodeError <|
   Rlp.Item.toExceptTransaction <|
     legacyDecoderVector [] [] thirtyThreeByteScalar [] [] [] [] []
-#guard txDecFails isOverflow256D <|
+#guard txDecodeFails isOverflow256DecodeError <|
   Rlp.Item.toExceptTransaction <|
     legacyDecoderVector [] [] [] [] thirtyThreeByteScalar [] [] []
-#guard txDecFails isOverflow256D <|
+#guard txDecodeFails isOverflow256DecodeError <|
   Rlp.Item.toExceptTransaction <|
     legacyDecoderVector [] [] [] [] [] thirtyThreeByteScalar [] []
-#guard txDecFails isOverflow256D <|
+#guard txDecodeFails isOverflow256DecodeError <|
   Rlp.Item.toExceptTransaction <|
     legacyDecoderVector [] [] [] [] [] [] thirtyThreeByteScalar []
-#guard txDecFails isOverflow256D <|
+#guard txDecodeFails isOverflow256DecodeError <|
   Rlp.Item.toExceptTransaction <|
     legacyDecoderVector [] [] [] [] [] [] [] thirtyThreeByteScalar
-#guard txDecFails isFixedWidthD <|
+#guard txDecodeFails isFixedWidthDecodeError <|
   Rlp.Item.toExceptTransaction <|
     legacyDecoderVector [] [] [] (List.replicate 21 0x11) [] [] [] []
 
 -- The two block-list failures with dedicated meanings are separated before
 -- header decoding; arbitrary non-list input remains a structure error.
-#guard decFails isWithdrawalsNotReadD <|
+#guard decodeFails isWithdrawalsNotReadDecodeError <|
   Rlp.Item.toExceptBlock (.list [.bytes [], .list [], .list []])
-#guard decFails isStructureD <| Rlp.Item.toExceptBlock (.bytes [])
+#guard decodeFails isStructureDecodeError <| Rlp.Item.toExceptBlock (.bytes [])
 
 --------- STRICT TYPED-TRANSACTION DECODER REGRESSION CHECKS ----------
 
@@ -432,7 +432,7 @@ private def canonicalLegacyVector : Rlp.Item :=
 -- payload list. Each negative vector below is a one-field mutation of its
 -- type's positive vector, so the failing field is unambiguous.
 
-private def typedTxVector (type : UInt8) (fields : List Rlp.Item) : Bytes :=
+private def typedTransactionVector (type : UInt8) (fields : List Rlp.Item) : Bytes :=
   type :: Rlp.Item.toBytes (.list fields)
 
 private def testStorageKey : Bytes := List.replicate 32 0x22
@@ -444,37 +444,37 @@ private def fullWidthScalar : Bytes := 0x01 :: List.replicate 31 0x00
 private def accessListOf (adr key : Bytes) : Rlp.Item :=
   .list [.list [.bytes adr, .list [.bytes key]]]
 
-private def authOf (chainId adr nonce r s : Bytes) : Rlp.Item :=
+private def authorizationItem (chainId adr nonce r s : Bytes) : Rlp.Item :=
   .list [.bytes chainId, .bytes adr, .bytes nonce, .bytes [0x01], .bytes r, .bytes s]
 
 private def type1Vector (chainId nonce receiver r : Bytes) (accessList : Rlp.Item) : Bytes :=
-  typedTxVector 0x01 [
+  typedTransactionVector 0x01 [
     .bytes chainId, .bytes nonce, .bytes [0x0a], .bytes [0x52, 0x08], .bytes receiver,
     .bytes [], .bytes [], accessList, .bytes [0x01], .bytes r, .bytes [0x02]
   ]
 
 private def type2Vector (maxFee receiver s : Bytes) : Bytes :=
-  typedTxVector 0x02 [
+  typedTransactionVector 0x02 [
     .bytes [0x01], .bytes [0x01], .bytes [0x01], .bytes maxFee, .bytes [0x52, 0x08],
     .bytes receiver, .bytes [], .bytes [], .list [], .bytes [0x01], .bytes [0x01], .bytes s
   ]
 
 private def type3Vector (nonce receiver blobHash : Bytes) : Bytes :=
-  typedTxVector 0x03 [
+  typedTransactionVector 0x03 [
     .bytes [0x01], .bytes nonce, .bytes [0x01], .bytes [0x0a], .bytes [0x52, 0x08],
     .bytes receiver, .bytes [], .bytes [], .list [], .bytes [0x01],
     .list [.bytes blobHash], .bytes [0x01], .bytes [0x01], .bytes [0x02]
   ]
 
 private def type4Vector (receiver : Bytes) (auth : Rlp.Item) : Bytes :=
-  typedTxVector 0x04 [
+  typedTransactionVector 0x04 [
     .bytes [0x01], .bytes [0x01], .bytes [0x01], .bytes [0x0a], .bytes [0x52, 0x08],
     .bytes receiver, .bytes [], .bytes [], .list [], .list [auth],
     .bytes [0x01], .bytes [0x01], .bytes [0x02]
   ]
 
-private def goodAuth : Rlp.Item :=
-  authOf [0x01] testRecipient [0x01] fullWidthScalar fullWidthScalar
+private def validAuthorizationRlp : Rlp.Item :=
+  authorizationItem [0x01] testRecipient [0x01] fullWidthScalar fullWidthScalar
 
 -- One positive vector per type: it decodes, and it re-encodes to the exact
 -- input bytes, so trie bytes for valid transactions are unchanged.
@@ -486,7 +486,7 @@ private def reencodes (type : UInt8) (v : Bytes) : Bool :=
     (accessListOf testRecipient testStorageKey)
 #guard reencodes 0x02 <| type2Vector [0x0a] testRecipient [0x02]
 #guard reencodes 0x03 <| type3Vector [0x01] testRecipient testBlobHash
-#guard reencodes 0x04 <| type4Vector testRecipient goodAuth
+#guard reencodes 0x04 <| type4Vector testRecipient validAuthorizationRlp
 
 -- S5 admission through `decodeTx`: the envelope type must fit the rules'
 -- `maxType`, and a too-new envelope fails with `typePreFork` naming its type
@@ -507,9 +507,9 @@ private def reencodes (type : UInt8) (v : Bytes) : Bool :=
 #guard (decodeTransaction cancunRules (.inl
   (type3Vector [0x01] testRecipient testBlobHash))).toOption.isSome
 #guard txPreForkFails 4 <| decodeTransaction cancunRules (.inl
-  (type4Vector testRecipient goodAuth))
+  (type4Vector testRecipient validAuthorizationRlp))
 #guard (decodeTransaction pragueRules (.inl
-  (type4Vector testRecipient goodAuth))).toOption.isSome
+  (type4Vector testRecipient validAuthorizationRlp))).toOption.isSome
 
 -- An authorization signature scalar below 2^248 encodes canonically in fewer
 -- than thirty-two bytes. It must re-encode minimally: a fixed 32-byte
@@ -518,11 +518,11 @@ private def reencodes (type : UInt8) (v : Bytes) : Bool :=
 private def shortWidthScalar : Bytes := 0x01 :: List.replicate 30 0x00
 
 #guard reencodes 0x04 <| type4Vector testRecipient <|
-  authOf [0x01] testRecipient [0x01] shortWidthScalar fullWidthScalar
+  authorizationItem [0x01] testRecipient [0x01] shortWidthScalar fullWidthScalar
 #guard reencodes 0x04 <| type4Vector testRecipient <|
-  authOf [0x01] testRecipient [0x01] fullWidthScalar shortWidthScalar
+  authorizationItem [0x01] testRecipient [0x01] fullWidthScalar shortWidthScalar
 #guard reencodes 0x04 <| type4Vector testRecipient <|
-  authOf [0x01] testRecipient [0x01] [0x01] [0x02]
+  authorizationItem [0x01] testRecipient [0x01] [0x01] [0x02]
 
 -- A type-1/type-2 receiver may be empty, meaning contract creation...
 #guard (Bytes.toExceptTransaction (type2Vector [0x0a] [] [0x02])).toOption.isSome
@@ -531,70 +531,70 @@ private def shortWidthScalar : Bytes := 0x01 :: List.replicate 30 0x00
 #guard txFails (fun e => match e with
     | .transaction (.type3ContractCreation _) => true | _ => false) <|
   Bytes.toExceptTransaction <| type3Vector [0x01] [] testBlobHash
-#guard txDecFails isFixedWidthD <|
+#guard txDecodeFails isFixedWidthDecodeError <|
   Bytes.toExceptTransaction <| type3Vector [0x01] (List.replicate 19 0x11) testBlobHash
-#guard txDecFails isFixedWidthD <| Bytes.toExceptTransaction <|
+#guard txDecodeFails isFixedWidthDecodeError <| Bytes.toExceptTransaction <|
   type1Vector [0x01] [0x01] (List.replicate 21 0x11) [0x01] (.list [])
-#guard txDecFails isFixedWidthD <|
-  Bytes.toExceptTransaction <| type4Vector (List.replicate 19 0x11) goodAuth
+#guard txDecodeFails isFixedWidthDecodeError <|
+  Bytes.toExceptTransaction <| type4Vector (List.replicate 19 0x11) validAuthorizationRlp
 
 -- Oversized scalars are overflows at the field boundary, not truncations.
-#guard txDecFails isOverflow64D <| Bytes.toExceptTransaction <|
+#guard txDecodeFails isOverflow64DecodeError <| Bytes.toExceptTransaction <|
   type1Vector [0x01] nineByteScalar testRecipient [0x01] (.list [])
-#guard txDecFails isOverflow64D <| Bytes.toExceptTransaction <|
+#guard txDecodeFails isOverflow64DecodeError <| Bytes.toExceptTransaction <|
   type1Vector nineByteScalar [0x01] testRecipient [0x01] (.list [])
-#guard txDecFails isOverflow64D <|
+#guard txDecodeFails isOverflow64DecodeError <|
   Bytes.toExceptTransaction <| type3Vector nineByteScalar testRecipient testBlobHash
-#guard txDecFails isOverflow256D <|
+#guard txDecodeFails isOverflow256DecodeError <|
   Bytes.toExceptTransaction <| type2Vector thirtyThreeByteScalar testRecipient [0x02]
 -- The two fields the deleted `reverse.takeD 32` pattern used to truncate.
-#guard txDecFails isOverflow256D <| Bytes.toExceptTransaction <|
+#guard txDecodeFails isOverflow256DecodeError <| Bytes.toExceptTransaction <|
   type1Vector [0x01] [0x01] testRecipient thirtyThreeByteScalar (.list [])
-#guard txDecFails isOverflow256D <|
+#guard txDecodeFails isOverflow256DecodeError <|
   Bytes.toExceptTransaction <| type2Vector [0x0a] testRecipient thirtyThreeByteScalar
 
 -- Access lists: exact address and storage-key widths, and both list shapes.
-#guard txDecFails isFixedWidthD <| Bytes.toExceptTransaction <|
+#guard txDecodeFails isFixedWidthDecodeError <| Bytes.toExceptTransaction <|
   type1Vector [0x01] [0x01] testRecipient [0x01]
     (accessListOf (List.replicate 21 0x11) testStorageKey)
-#guard txDecFails isFixedWidthD <| Bytes.toExceptTransaction <|
+#guard txDecodeFails isFixedWidthDecodeError <| Bytes.toExceptTransaction <|
   type1Vector [0x01] [0x01] testRecipient [0x01]
     (accessListOf testRecipient (List.replicate 33 0x22))
-#guard txDecFails isFixedWidthD <| Bytes.toExceptTransaction <|
+#guard txDecodeFails isFixedWidthDecodeError <| Bytes.toExceptTransaction <|
   type1Vector [0x01] [0x01] testRecipient [0x01]
     (accessListOf testRecipient (List.replicate 31 0x22))
-#guard txDecFails isStructureD <| Bytes.toExceptTransaction <|
+#guard txDecodeFails isStructureDecodeError <| Bytes.toExceptTransaction <|
   type1Vector [0x01] [0x01] testRecipient [0x01] (.list [.bytes []])
-#guard txDecFails isStructureD <| Bytes.toExceptTransaction <|
+#guard txDecodeFails isStructureDecodeError <| Bytes.toExceptTransaction <|
   type1Vector [0x01] [0x01] testRecipient [0x01] (.bytes [])
 
 -- Blob versioned hashes: exactly thirty-two bytes, both sides.
-#guard txDecFails isFixedWidthD <| Bytes.toExceptTransaction <|
+#guard txDecodeFails isFixedWidthDecodeError <| Bytes.toExceptTransaction <|
   type3Vector [0x01] testRecipient (0x01 :: List.replicate 32 0x33)
-#guard txDecFails isFixedWidthD <|
+#guard txDecodeFails isFixedWidthDecodeError <|
   Bytes.toExceptTransaction <| type3Vector [0x01] testRecipient (List.replicate 31 0x33)
 
 -- Authorizations: exact address width, a uint256 chainId, bounded nonce and
 -- r/s, and the six-field list shape.
-#guard txDecFails isFixedWidthD <| Bytes.toExceptTransaction <| type4Vector testRecipient <|
-  authOf [0x01] (List.replicate 21 0x11) [0x01] fullWidthScalar fullWidthScalar
+#guard txDecodeFails isFixedWidthDecodeError <| Bytes.toExceptTransaction <| type4Vector testRecipient <|
+  authorizationItem [0x01] (List.replicate 21 0x11) [0x01] fullWidthScalar fullWidthScalar
 #guard (Bytes.toExceptTransaction <| type4Vector testRecipient <|
-  authOf nineByteScalar testRecipient [0x01] fullWidthScalar fullWidthScalar).toOption.isSome
-#guard txDecFails isOverflow64D <| Bytes.toExceptTransaction <| type4Vector testRecipient <|
-  authOf [0x01] testRecipient nineByteScalar fullWidthScalar fullWidthScalar
-#guard txDecFails isOverflow256D <| Bytes.toExceptTransaction <| type4Vector testRecipient <|
-  authOf [0x01] testRecipient [0x01] thirtyThreeByteScalar fullWidthScalar
-#guard txDecFails isOverflow256D <| Bytes.toExceptTransaction <| type4Vector testRecipient <|
-  authOf [0x01] testRecipient [0x01] fullWidthScalar thirtyThreeByteScalar
-#guard txDecFails isStructureD <| Bytes.toExceptTransaction <|
+  authorizationItem nineByteScalar testRecipient [0x01] fullWidthScalar fullWidthScalar).toOption.isSome
+#guard txDecodeFails isOverflow64DecodeError <| Bytes.toExceptTransaction <| type4Vector testRecipient <|
+  authorizationItem [0x01] testRecipient nineByteScalar fullWidthScalar fullWidthScalar
+#guard txDecodeFails isOverflow256DecodeError <| Bytes.toExceptTransaction <| type4Vector testRecipient <|
+  authorizationItem [0x01] testRecipient [0x01] thirtyThreeByteScalar fullWidthScalar
+#guard txDecodeFails isOverflow256DecodeError <| Bytes.toExceptTransaction <| type4Vector testRecipient <|
+  authorizationItem [0x01] testRecipient [0x01] fullWidthScalar thirtyThreeByteScalar
+#guard txDecodeFails isStructureDecodeError <| Bytes.toExceptTransaction <|
   type4Vector testRecipient (.list [.bytes [0x01], .bytes testRecipient])
 
 -- A wrong list shape for a known type byte is a structure error; an unknown
 -- type byte keeps its own failure; empty input is a structure error.
-#guard txDecFails isStructureD <| Bytes.toExceptTransaction (0x01 :: Rlp.Item.toBytes (.bytes []))
-#guard txDecFails isStructureD <| Bytes.toExceptTransaction (0x02 :: Rlp.Item.toBytes (.list []))
-#guard txDecFails isStructureD <| Bytes.toExceptTransaction []
-#guard ¬ txDecFails isStructureD (Bytes.toExceptTransaction [0x05])
+#guard txDecodeFails isStructureDecodeError <| Bytes.toExceptTransaction (0x01 :: Rlp.Item.toBytes (.bytes []))
+#guard txDecodeFails isStructureDecodeError <| Bytes.toExceptTransaction (0x02 :: Rlp.Item.toBytes (.list []))
+#guard txDecodeFails isStructureDecodeError <| Bytes.toExceptTransaction []
+#guard ¬ txDecodeFails isStructureDecodeError (Bytes.toExceptTransaction [0x05])
 #guard (Bytes.toExceptTransaction [0x05]).toOption.isNone
 -- Decision 16 (W2-T): an unknown envelope type byte is a transaction rejection
 -- (`typeNotSupported`), proved for all `x ∉ {1,2,3,4}` by
@@ -767,7 +767,7 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
   match f.rules with
   | .error _ => false
   | .ok rules =>
-    match addBlockToChainAtE f guardEmptyChain
+    match addBlockToChainAtTyped f guardEmptyChain
         (guardBlockAtRules rules 0).toRlpItem.toBytes with
     | .error (.support _) => false
     | _ => true)
@@ -775,7 +775,7 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
   match f.rules with
   | .error _ => false
   | .ok rules =>
-    match stateTransitionE f guardEmptyChain (guardBlockAtRules rules 0) with
+    match stateTransitionTyped f guardEmptyChain (guardBlockAtRules rules 0) with
     | .error (.internal _) => true
     | _ => false)
 
@@ -787,7 +787,7 @@ private def guardBlobParent (baseFee blobGasUsed : Nat) : Header :=
 -- supported fork when Amsterdam resolved. The later historical waves moved
 -- that refusal boundary to the five pre-Berlin forks; this candidate resolves
 -- their records too. This snapshot is not a conformance claim.
-#guard (match addBlockToChainAtE .amsterdam guardEmptyChain
+#guard (match addBlockToChainAtTyped .amsterdam guardEmptyChain
     (guardBlockAt 0).toRlpItem.toBytes with
   | .error (.support _) => false
   | _ => true)
@@ -839,16 +839,16 @@ private def guardHeader23 : Header :=
 private def guardHeader21 : Header :=
   { guardTestHeader with requestsHash := some guardRequestsHash }
 
-private def bltFields : Rlp.Item → Nat
+private def rlpFieldCount : Rlp.Item → Nat
   | .list l => l.length
   | .bytes _ => 0
 
 -- The encoder emits the current forks' widths: 20, 21 or 23 fields. (A
 -- requests hash with a block-access-list hash and no slot number would emit
 -- 22; the decoder refuses that width below.)
-#guard bltFields (Header.toRlpItem guardTestHeader) = 20
-#guard bltFields (Header.toRlpItem guardHeader21) = 21
-#guard bltFields (Header.toRlpItem guardHeader23) = 23
+#guard rlpFieldCount (Header.toRlpItem guardTestHeader) = 20
+#guard rlpFieldCount (Header.toRlpItem guardHeader21) = 21
+#guard rlpFieldCount (Header.toRlpItem guardHeader23) = 23
 
 -- Round trips at both live widths. `Except DecodeError Header` carries no
 -- `BEq`, so the comparison goes through the decoded value.
@@ -873,14 +873,14 @@ private def roundTrips (h : Header) : Bool :=
   | .error _ => false)
 
 -- 22 fields is refused, and refused as a *structure* error naming the widths.
-private def guardHeader22BLT : Rlp.Item :=
+private def guardHeader22RlpItem : Rlp.Item :=
   match Header.toRlpItem guardHeader23 with
   | .list l => .list (l.take 22)
   | b => b
 
-#guard bltFields guardHeader22BLT = 22
-#guard guardHeader22BLT.toExceptHeader.toOption.isNone
-#guard (match guardHeader22BLT.toExceptHeader with
+#guard rlpFieldCount guardHeader22RlpItem = 22
+#guard guardHeader22RlpItem.toExceptHeader.toOption.isNone
+#guard (match guardHeader22RlpItem.toExceptHeader with
   | .error e => e.render ==
       "RlpHeaderWidthError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 22"
   | .ok _ => false)
@@ -1067,7 +1067,7 @@ private def guardShapedIs16 (rules : ForkRules) : Bool :=
     (.list [Header.toRlpItem guardHeader16, .list [], .list []]) with
   | .ok b => b.withdrawals.isEmpty
   | .error _ => false)
-#guard decFails isWithdrawalsNotReadD <| Rlp.Item.toExceptBlockAt shanghaiRules
+#guard decodeFails isWithdrawalsNotReadDecodeError <| Rlp.Item.toExceptBlockAt shanghaiRules
   (.list [Header.toRlpItem guardHeader16, .list [], .list []])
 #guard (match Rlp.Item.toExceptBlockAt londonRules
     (.list [Header.toRlpItem guardHeader16, .list [], .list [], .list []]) with
@@ -1077,7 +1077,7 @@ private def guardShapedIs16 (rules : ForkRules) : Bool :=
 #guard ((guardBlockAt 0).toRlpItemAt pragueRules).toBytes
   == (guardBlockAt 0).toRlpItem.toBytes
 -- A London probe block round-trips through the fork-relative decoder.
-#guard (match rlpToBlockEAt londonRules
+#guard (match rlpToBlockTypedAt londonRules
     ((guardBlockAtRules londonRules 0).toRlpItemAt londonRules).toBytes with
   | .ok ⟨b, _⟩ => b.withdrawals.isEmpty
   | .error _ => false)
@@ -1086,9 +1086,9 @@ private def guardShapedIs16 (rules : ForkRules) : Bool :=
 private def guardHeader17 : Header :=
   { guardHeader16 with withdrawalsRoot := some 0 }
 
-#guard bltFields (Header.toRlpItem guardHeader15) = 15
-#guard bltFields (Header.toRlpItem guardHeader16) = 16
-#guard bltFields (Header.toRlpItem guardHeader17) = 17
+#guard rlpFieldCount (Header.toRlpItem guardHeader15) = 15
+#guard rlpFieldCount (Header.toRlpItem guardHeader16) = 16
+#guard rlpFieldCount (Header.toRlpItem guardHeader17) = 17
 #guard roundTrips guardHeader15
 #guard roundTrips guardHeader16
 #guard roundTrips guardHeader17
@@ -1108,28 +1108,28 @@ private def guardHeader17 : Header :=
 -- The nesting makes an incoherent record encode as the longest coherent
 -- prefix it carries: a withdrawals root without a base fee is not emitted, and
 -- neither is half of Cancun's triple. No 18- or 19-field encoding exists.
-#guard bltFields (Header.toRlpItem { guardHeader15 with withdrawalsRoot := some 0 }) = 15
-#guard bltFields (Header.toRlpItem { guardHeader17 with blobGasUsed := some 0 }) = 17
-#guard bltFields (Header.toRlpItem
+#guard rlpFieldCount (Header.toRlpItem { guardHeader15 with withdrawalsRoot := some 0 }) = 15
+#guard rlpFieldCount (Header.toRlpItem { guardHeader17 with blobGasUsed := some 0 }) = 17
+#guard rlpFieldCount (Header.toRlpItem
   { guardHeader17 with blobGasUsed := some 0, excessBlobGas := some 0 }) = 17
 
 -- 18 and 19 fields are refused on input, as header-width errors naming the
 -- width (`INCORRECT_BLOCK_FORMAT`; structure errors until goal U11a).
-private def guardHeaderPrefixBLT (n : Nat) : Rlp.Item :=
+private def guardHeaderPrefixRlpItem (n : Nat) : Rlp.Item :=
   match Header.toRlpItem guardTestHeader with
   | .list l => .list (l.take n)
   | b => b
 
-#guard (match (guardHeaderPrefixBLT 18).toExceptHeader with
+#guard (match (guardHeaderPrefixRlpItem 18).toExceptHeader with
   | .error e => e.render ==
       "RlpHeaderWidthError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 18"
   | .ok _ => false)
-#guard (match (guardHeaderPrefixBLT 19).toExceptHeader with
+#guard (match (guardHeaderPrefixRlpItem 19).toExceptHeader with
   | .error e => e.render ==
       "RlpHeaderWidthError : header : expected 15, 16, 17, 20, 21 or 23 fields, but found 19"
   | .ok _ => false)
 -- and 14 is refused as a malformed list.
-#guard (guardHeaderPrefixBLT 14).toExceptHeader.toOption.isNone
+#guard (guardHeaderPrefixRlpItem 14).toExceptHeader.toOption.isNone
 
 /-- A one-block chain ending at `parent`. -/
 private def guardChainAt (parent : Header) : BlockChain :=
@@ -1328,14 +1328,14 @@ private def ommersRejected : Except TransitionError Unit → Bool
     (guardPowBlockWith [guardPowGenesis]) [guardPowGenesis])       -- number 0
 -- Three valid-looking ommers are too many (the count is checked after each
 -- ommer's own header, as in EELS).
-private def guardPowOmmerN (ts : Nat) : Header :=
+private def guardPowOmmerAt (ts : Nat) : Header :=
   guardPowAt guardPowGenesis ts guardOmmerCoinbase
 #guard ommersRejected (validateOmmers byzantiumRules guardPowChain
-    (guardPowBlockWith [guardPowOmmerN 6, guardPowOmmerN 7, guardPowOmmerN 8])
-    [guardPowOmmerN 6, guardPowOmmerN 7, guardPowOmmerN 8])
+    (guardPowBlockWith [guardPowOmmerAt 6, guardPowOmmerAt 7, guardPowOmmerAt 8])
+    [guardPowOmmerAt 6, guardPowOmmerAt 7, guardPowOmmerAt 8])
 #guard (validateOmmers byzantiumRules guardPowChain
-    (guardPowBlockWith [guardPowOmmerN 6, guardPowOmmerN 7])
-    [guardPowOmmerN 6, guardPowOmmerN 7]).toOption.isSome
+    (guardPowBlockWith [guardPowOmmerAt 6, guardPowOmmerAt 7])
+    [guardPowOmmerAt 6, guardPowOmmerAt 7]).toOption.isSome
 -- Depth: on a line of eight blocks (numbers 0 to 7), a block numbered 8 may
 -- name a second child of block 1 (age 6, its parent among the seven most
 -- recent blocks), but not a second child of genesis (age 7).
@@ -1382,7 +1382,7 @@ private def guardPowLineOmmer (parentNumber : Nat) : Header :=
 -- contracts' storage empty and never asks for a parent hash, while Cancun's
 -- runs the beacon-roots call and still never asks for one (its history call
 -- is gated off too).
-private def guardSysCode : ByteArray := ⟨#[0x60, 0x01, 0x60, 0x00, 0x55, 0x00]⟩
+private def guardSystemCallCode : ByteArray := ⟨#[0x60, 0x01, 0x60, 0x00, 0x55, 0x00]⟩
 
 -- Under Prague's rules the same body runs every step: the request pass calls
 -- the request contracts, which this chain has not deployed.
@@ -1482,26 +1482,26 @@ private def errorText? {α : Type} : Except String α → Option String
 
 /-- The rule set an explicit fork or a schedule selects, applied through the
 typed transition core: what the fork-selection boundary guards compare. -/
-private def transitionAtE (f : Fork) (ch : BlockChain) (block : Block) :
+private def transitionAtTyped (f : Fork) (ch : BlockChain) (block : Block) :
     Except TransitionError BlockChain :=
-  stateTransitionE f ch block
+  stateTransitionTyped f ch block
 
-private def transitionUsingE (cfg : ChainConfig) (ch : BlockChain)
+private def transitionUsingTyped (cfg : ChainConfig) (ch : BlockChain)
     (block : Block) : Except TransitionError BlockChain :=
   match cfg.forkAt block.header.number block.header.timestamp with
   | .error _ => .error (.internal (.assertion .none))
-  | .ok f => stateTransitionE f ch block
+  | .ok f => stateTransitionTyped f ch block
 
 -- The explicit API applies the fork it is given, and only that fork accepts
 -- its own expected value.
 #guard ¬ transitionBlobVerdict
-  (transitionAtE .osaka guardParentChain (guardChildBlock 1 1966080))
+  (transitionAtTyped .osaka guardParentChain (guardChildBlock 1 1966080))
 #guard transitionBlobVerdict <|
-  transitionAtE .bpo1 guardParentChain (guardChildBlock 1 1966080)
+  transitionAtTyped .bpo1 guardParentChain (guardChildBlock 1 1966080)
 #guard ¬ transitionBlobVerdict
-  (transitionAtE .bpo1 guardParentChain (guardChildBlock 1 1441792))
+  (transitionAtTyped .bpo1 guardParentChain (guardChildBlock 1 1441792))
 #guard ¬ transitionBlobVerdict
-  (transitionAtE .bpo2 guardParentChain (guardChildBlock 1 917504))
+  (transitionAtTyped .bpo2 guardParentChain (guardChildBlock 1 917504))
 
 -- A configured chain selects rules from the block's own timestamp. Between
 -- these blocks nothing differs but the timestamp, and it alone decides which
@@ -1513,19 +1513,19 @@ private def guardChainSchedule : ChainConfig :=
   ChainConfig.mk 1 [.atTime .prague 0, .atTime .osaka 100, .atTime .bpo1 200, .atTime .bpo2 300]
 
 #guard ¬ transitionBlobVerdict
-  (transitionUsingE guardChainSchedule guardParentChain
+  (transitionUsingTyped guardChainSchedule guardParentChain
     (guardChildBlock 199 1966080))
 #guard transitionBlobVerdict <|
-  transitionUsingE guardChainSchedule guardParentChain
+  transitionUsingTyped guardChainSchedule guardParentChain
     (guardChildBlock 200 1966080)
 #guard ¬ transitionBlobVerdict
-  (transitionUsingE guardChainSchedule guardParentChain
+  (transitionUsingTyped guardChainSchedule guardParentChain
     (guardChildBlock 200 1441792))
 #guard transitionBlobVerdict <|
-  transitionUsingE guardChainSchedule guardParentChain
+  transitionUsingTyped guardChainSchedule guardParentChain
     (guardChildBlock 299 917504)
 #guard ¬ transitionBlobVerdict
-  (transitionUsingE guardChainSchedule guardParentChain
+  (transitionUsingTyped guardChainSchedule guardParentChain
     (guardChildBlock 300 917504))
 
 -- Across a sequence of blocks crossing all three activations, one fixed
@@ -1534,7 +1534,7 @@ private def guardChainSchedule : ChainConfig :=
 -- place the sequence changes.
 #guard [0, 99, 100, 199, 200, 299, 300, 400].map (fun timestamp =>
     !transitionBlobVerdict
-      (transitionUsingE guardChainSchedule guardParentChain
+      (transitionUsingTyped guardChainSchedule guardParentChain
         (guardChildBlock timestamp 1441792)))
   = [false, false, false, false, true, true, false, false]
 
@@ -1561,21 +1561,21 @@ private def guardOsakaToBpo1Config : ChainConfig :=
 private def guardChildRlp (timestamp excessBlobGas : Nat) : Bytes :=
   (guardChildBlock timestamp excessBlobGas).toRlpItem.toBytes
 
-#guard (match verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config
+#guard (match verdictOf (addBlockToChainUsingTyped guardOsakaToBpo1Config
     guardParentChain (guardChildRlp 15000 0)) with
   | some (.inr (.block (.excessBlobGas _))) => true
   | _ => false)
-#guard verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config guardParentChain
+#guard verdictOf (addBlockToChainUsingTyped guardOsakaToBpo1Config guardParentChain
     (guardChildRlp 15000 0))
-  = verdictOf (addBlockToChainAtE .bpo1 guardParentChain
+  = verdictOf (addBlockToChainAtTyped .bpo1 guardParentChain
     (guardChildRlp 15000 0))
-#guard verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config guardParentChain
+#guard verdictOf (addBlockToChainUsingTyped guardOsakaToBpo1Config guardParentChain
     (guardChildRlp 14999 0))
-  = verdictOf (addBlockToChainAtE .osaka guardParentChain
+  = verdictOf (addBlockToChainAtTyped .osaka guardParentChain
     (guardChildRlp 14999 0))
-#guard verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config guardParentChain
+#guard verdictOf (addBlockToChainUsingTyped guardOsakaToBpo1Config guardParentChain
     (guardChildRlp 15000 0))
-  ≠ verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config guardParentChain
+  ≠ verdictOf (addBlockToChainUsingTyped guardOsakaToBpo1Config guardParentChain
     (guardChildRlp 14999 0))
 
 -- A Prague-only configuration is the Prague wrapper, at every timestamp.
@@ -1603,12 +1603,12 @@ private def guardMismatchConfig : ChainConfig := ChainConfig.mk 7 [.atTime .prag
 #guard errorText?
     (stateTransitionUsing guardMismatchConfig guardEmptyChain (guardBlockAt 0))
   = some (ChainContextError.render (.chainIdMismatch 7 1))
-#guard verdictOf (addBlockToChainUsingE guardMismatchConfig guardParentChain [0xFF])
+#guard verdictOf (addBlockToChainUsingTyped guardMismatchConfig guardParentChain [0xFF])
   = some (.inl (.context (.chainIdMismatch 7 1)))
 -- The same malformed bytes, past a matching-ID configuration, are rejected on
 -- the ordinary decode channel instead -- confirming the mismatch guard above
 -- is what changed the verdict, not something incidental to the garbage input.
-#guard verdictOf (addBlockToChainUsingE guardOsakaToBpo1Config guardParentChain [0xFF])
+#guard verdictOf (addBlockToChainUsingTyped guardOsakaToBpo1Config guardParentChain [0xFF])
   = some (.inr (.decode
       (DecodeError.structure "block RLP" "cannot decode the outer RLP item")))
 
@@ -1668,12 +1668,12 @@ private def wireGuardWithdrawal (amount : U256) : Withdrawal :=
 -- payload, never the legacy list. This is what forecloses a direct trusted
 -- `.inr Tx` on the checked path.
 #guard (Rlp.Item.toExceptTransaction canonicalLegacyVector).toOption.map
-  (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some true
+  (fun tx => decide (TransactionEntry.WireWellFormed (.inr tx))) = some true
 #guard (Bytes.toExceptTransaction
     (type1Vector [0x01] [0x01] testRecipient [0x01] (.list []))).toOption.map
-  (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some false
+  (fun tx => decide (TransactionEntry.WireWellFormed (.inr tx))) = some false
 #guard (Bytes.toExceptTransaction (type2Vector [0x0a] testRecipient [0x02])).toOption.map
-  (fun tx => decide (TxEntry.WireWellFormed (.inr tx))) = some false
+  (fun tx => decide (TransactionEntry.WireWellFormed (.inr tx))) = some false
 
 --------------- CHECKED-CONSTRUCTOR AND ENVELOPE CHECKS ---------------
 
@@ -1695,11 +1695,11 @@ private def wireGuardWithdrawal (amount : U256) : Withdrawal :=
 -- pair of facts that leaves no direct trusted `.inr Tx` anywhere on the
 -- checked path.
 #guard (Rlp.Item.toExceptTransaction canonicalLegacyVector).toOption.map
-  (fun tx => (TxEnvelope.ofEntry? (.inr tx)).isSome) = some true
+  (fun tx => (BlockTransactionSlot.ofEntry? (.inr tx)).isSome) = some true
 #guard (Rlp.Item.toExceptTransaction canonicalLegacyVector).toOption.map
   (fun tx => (Transaction.toTypedEnvelope? tx).isSome) = some false
 #guard (Bytes.toExceptTransaction (type2Vector [0x0a] testRecipient [0x02])).toOption.map
-  (fun tx => (TxEnvelope.ofEntry? (.inr tx)).isSome) = some false
+  (fun tx => (BlockTransactionSlot.ofEntry? (.inr tx)).isSome) = some false
 #guard (Bytes.toExceptTransaction (type2Vector [0x0a] testRecipient [0x02])).toOption.map
   (fun tx => (Transaction.toTypedEnvelope? tx).isSome) = some true
 
@@ -1722,8 +1722,8 @@ private def typedEnvelopeBytes? (bs : Bytes) : Option Bytes :=
   = some (type2Vector [0x0a] testRecipient [0x02])
 #guard typedEnvelopeBytes? (type3Vector [0x01] testRecipient testBlobHash)
   = some (type3Vector [0x01] testRecipient testBlobHash)
-#guard typedEnvelopeBytes? (type4Vector testRecipient goodAuth)
-  = some (type4Vector testRecipient goodAuth)
+#guard typedEnvelopeBytes? (type4Vector testRecipient validAuthorizationRlp)
+  = some (type4Vector testRecipient validAuthorizationRlp)
 
 -- A block carrying a *typed* transaction as a decoded slot cannot be
 -- certified: its canonical encoding is not the legacy list it would be
@@ -1774,10 +1774,10 @@ private def typedEnvelopeBytes? (bs : Bytes) : Option Bytes :=
 -- is shown to file each incorporation under the index it is given, and the
 -- Glamsterdam corpus's multi-transaction blocks are the end-to-end evidence.
 
-private def blockAccessListGuardA : Address := 0x1000
-private def blockAccessListGuardB : Address := 0x2000
+private def blockAccessListGuardAddress1 : Address := 0x1000
+private def blockAccessListGuardAddress2 : Address := 0x2000
 private def blockAccessListGuardPre : State :=
-  ((State.setBal .empty blockAccessListGuardA 100).setStorVal blockAccessListGuardA 1 7).setStorVal blockAccessListGuardA 2 9
+  ((State.setBalance .empty blockAccessListGuardAddress1 100).setStorageValue blockAccessListGuardAddress1 1 7).setStorageValue blockAccessListGuardAddress1 2 9
 
 /-- The built list without its code changes, which carry no `DecidableEq`. -/
 private def blockAccessListGuardView (b : BlockAccessListBuilder) :
@@ -1789,67 +1789,67 @@ private def blockAccessListGuardView (b : BlockAccessListBuilder) :
 -- A slot written back to its original value is no change and -- because
 -- `SSTORE` recorded it -- surfaces as a read.
 #guard blockAccessListGuardView (({} : BlockAccessListBuilder).incorporate 1 blockAccessListGuardPre blockAccessListGuardPre
-    [blockAccessListGuardA] [(blockAccessListGuardA, 1)] [(blockAccessListGuardA, 1)]) ==
-  [(blockAccessListGuardA, [], [1], [], [])]
+    [blockAccessListGuardAddress1] [(blockAccessListGuardAddress1, 1)] [(blockAccessListGuardAddress1, 1)]) ==
+  [(blockAccessListGuardAddress1, [], [1], [], [])]
 
 -- A slot both read and written appears only among the changes.
 #guard blockAccessListGuardView (({} : BlockAccessListBuilder).incorporate 1 blockAccessListGuardPre
-    (blockAccessListGuardPre.setStorVal blockAccessListGuardA 1 8) [blockAccessListGuardA] [(blockAccessListGuardA, 1)] [(blockAccessListGuardA, 1)]) ==
-  [(blockAccessListGuardA, [(1, [(1, 8)])], [], [], [])]
+    (blockAccessListGuardPre.setStorageValue blockAccessListGuardAddress1 1 8) [blockAccessListGuardAddress1] [(blockAccessListGuardAddress1, 1)] [(blockAccessListGuardAddress1, 1)]) ==
+  [(blockAccessListGuardAddress1, [(1, [(1, 8)])], [], [], [])]
 
 -- Two calls at one index net against the index start, not against each other:
 -- the restored slot remains a read and the account entry remains present.
 #guard
   let st0 := blockAccessListGuardPre
-  let st1 := st0.setStorVal blockAccessListGuardA 1 8
-  let st2 := st1.setStorVal blockAccessListGuardA 1 7
-  let b := ({} : BlockAccessListBuilder).incorporate 0 st0 st1 [blockAccessListGuardA] [(blockAccessListGuardA, 1)] [(blockAccessListGuardA, 1)]
-  let b := b.incorporate 0 st1 st2 [blockAccessListGuardA] [(blockAccessListGuardA, 1)] [(blockAccessListGuardA, 1)]
-  blockAccessListGuardView b == [(blockAccessListGuardA, [], [1], [], [])]
+  let st1 := st0.setStorageValue blockAccessListGuardAddress1 1 8
+  let st2 := st1.setStorageValue blockAccessListGuardAddress1 1 7
+  let b := ({} : BlockAccessListBuilder).incorporate 0 st0 st1 [blockAccessListGuardAddress1] [(blockAccessListGuardAddress1, 1)] [(blockAccessListGuardAddress1, 1)]
+  let b := b.incorporate 0 st1 st2 [blockAccessListGuardAddress1] [(blockAccessListGuardAddress1, 1)] [(blockAccessListGuardAddress1, 1)]
+  blockAccessListGuardView b == [(blockAccessListGuardAddress1, [], [1], [], [])]
 
 -- Removing a later same-index slot change preserves that slot's earlier index
 -- entry, and its read remains excluded because it is still a change overall.
 #guard
   let st0 := blockAccessListGuardPre
-  let st1 := st0.setStorVal blockAccessListGuardA 1 8
-  let st2 := st1.setStorVal blockAccessListGuardA 1 9
-  let st3 := st2.setStorVal blockAccessListGuardA 1 8
-  let b := ({} : BlockAccessListBuilder).incorporate 1 st0 st1 [blockAccessListGuardA] [(blockAccessListGuardA, 1)] [(blockAccessListGuardA, 1)]
-  let b := b.incorporate 2 st1 st2 [blockAccessListGuardA] [(blockAccessListGuardA, 1)] [(blockAccessListGuardA, 1)]
-  let b := b.incorporate 2 st2 st3 [blockAccessListGuardA] [(blockAccessListGuardA, 1)] [(blockAccessListGuardA, 1)]
-  blockAccessListGuardView b == [(blockAccessListGuardA, [(1, [(1, 8)])], [], [], [])]
+  let st1 := st0.setStorageValue blockAccessListGuardAddress1 1 8
+  let st2 := st1.setStorageValue blockAccessListGuardAddress1 1 9
+  let st3 := st2.setStorageValue blockAccessListGuardAddress1 1 8
+  let b := ({} : BlockAccessListBuilder).incorporate 1 st0 st1 [blockAccessListGuardAddress1] [(blockAccessListGuardAddress1, 1)] [(blockAccessListGuardAddress1, 1)]
+  let b := b.incorporate 2 st1 st2 [blockAccessListGuardAddress1] [(blockAccessListGuardAddress1, 1)] [(blockAccessListGuardAddress1, 1)]
+  let b := b.incorporate 2 st2 st3 [blockAccessListGuardAddress1] [(blockAccessListGuardAddress1, 1)] [(blockAccessListGuardAddress1, 1)]
+  blockAccessListGuardView b == [(blockAccessListGuardAddress1, [(1, [(1, 8)])], [], [], [])]
 
 -- Full forwarding cancels only its own balance entry, while half forwarding
 -- retains its final balance and the preceding balance and slot entries.
 #guard
   let st0 := blockAccessListGuardPre
-  let stPrior := ((st0.setBal blockAccessListGuardB 9).setStorVal blockAccessListGuardA 1 8).setBal blockAccessListGuardA 110
-  let stCredited := stPrior.setBal blockAccessListGuardA 160
-  let stForwarded := stCredited.setBal blockAccessListGuardA 110
-  let stHalf := stCredited.setBal blockAccessListGuardA 135
-  let full := ({} : BlockAccessListBuilder).incorporate 1 st0 stPrior [blockAccessListGuardA, blockAccessListGuardB] [(blockAccessListGuardA, 1)] [(blockAccessListGuardA, 1)]
-  let full := full.incorporate 2 stPrior stCredited [blockAccessListGuardA] [] []
-  let full := full.incorporate 2 stCredited stForwarded [blockAccessListGuardA] [] []
-  let half := ({} : BlockAccessListBuilder).incorporate 1 st0 stPrior [blockAccessListGuardA, blockAccessListGuardB] [(blockAccessListGuardA, 1)] [(blockAccessListGuardA, 1)]
-  let half := half.incorporate 2 stPrior stCredited [blockAccessListGuardA] [] []
-  let half := half.incorporate 2 stCredited stHalf [blockAccessListGuardA] [] []
+  let stPrior := ((st0.setBalance blockAccessListGuardAddress2 9).setStorageValue blockAccessListGuardAddress1 1 8).setBalance blockAccessListGuardAddress1 110
+  let stCredited := stPrior.setBalance blockAccessListGuardAddress1 160
+  let stForwarded := stCredited.setBalance blockAccessListGuardAddress1 110
+  let stHalf := stCredited.setBalance blockAccessListGuardAddress1 135
+  let full := ({} : BlockAccessListBuilder).incorporate 1 st0 stPrior [blockAccessListGuardAddress1, blockAccessListGuardAddress2] [(blockAccessListGuardAddress1, 1)] [(blockAccessListGuardAddress1, 1)]
+  let full := full.incorporate 2 stPrior stCredited [blockAccessListGuardAddress1] [] []
+  let full := full.incorporate 2 stCredited stForwarded [blockAccessListGuardAddress1] [] []
+  let half := ({} : BlockAccessListBuilder).incorporate 1 st0 stPrior [blockAccessListGuardAddress1, blockAccessListGuardAddress2] [(blockAccessListGuardAddress1, 1)] [(blockAccessListGuardAddress1, 1)]
+  let half := half.incorporate 2 stPrior stCredited [blockAccessListGuardAddress1] [] []
+  let half := half.incorporate 2 stCredited stHalf [blockAccessListGuardAddress1] [] []
   blockAccessListGuardView full ==
-      [(blockAccessListGuardA, [(1, [(1, 8)])], [], [(1, 110)], []), (blockAccessListGuardB, [], [], [(1, 9)], [])] ∧
+      [(blockAccessListGuardAddress1, [(1, [(1, 8)])], [], [(1, 110)], []), (blockAccessListGuardAddress2, [], [], [(1, 9)], [])] ∧
     blockAccessListGuardView half ==
-      [(blockAccessListGuardA, [(1, [(1, 8)])], [], [(1, 110), (2, 135)], []),
-       (blockAccessListGuardB, [], [], [(1, 9)], [])]
+      [(blockAccessListGuardAddress1, [(1, [(1, 8)])], [], [(1, 110), (2, 135)], []),
+       (blockAccessListGuardAddress2, [], [], [(1, 9)], [])]
 
 -- Nonce and code use the same index-start rule. Restoring both leaves the
 -- touched account present without either stale change.
 #guard
   let st0 := blockAccessListGuardPre
   let changed : Account := {nonce := 1, balance := 0, storage := .empty, code := .mk (.mk [0x00])}
-  let st1 := st0.set blockAccessListGuardB changed
-  let st2 := st1.set blockAccessListGuardB .nil
-  let b := ({} : BlockAccessListBuilder).incorporate 0 st0 st1 [blockAccessListGuardB] [] []
-  let b := b.incorporate 0 st1 st2 [blockAccessListGuardB] [] []
+  let st1 := st0.set blockAccessListGuardAddress2 changed
+  let st2 := st1.set blockAccessListGuardAddress2 .nil
+  let b := ({} : BlockAccessListBuilder).incorporate 0 st0 st1 [blockAccessListGuardAddress2] [] []
+  let b := b.incorporate 0 st1 st2 [blockAccessListGuardAddress2] [] []
   match b.build with
-  | [c] => c.address == blockAccessListGuardB && c.storageChanges.isEmpty && c.storageReads.isEmpty &&
+  | [c] => c.address == blockAccessListGuardAddress2 && c.storageChanges.isEmpty && c.storageReads.isEmpty &&
       c.balanceChanges.isEmpty && c.nonceChanges.isEmpty && c.codeChanges.isEmpty
   | _ => false
 
@@ -1857,33 +1857,33 @@ private def blockAccessListGuardView (b : BlockAccessListBuilder) :
 -- against the block's cumulative state, after a system call at index 0.
 #guard
   let st0 := blockAccessListGuardPre
-  let stSys := st0.setStorVal blockAccessListGuardB 3 4
-  let st1 := stSys.setBal blockAccessListGuardA 90
-  let st2 := st1.setBal blockAccessListGuardA 80
-  let st3 := st2.setBal blockAccessListGuardA 70
-  let st4 := st3.setBal blockAccessListGuardA 170
-  let b := ({} : BlockAccessListBuilder).incorporate 0 st0 stSys [blockAccessListGuardB] [] [(blockAccessListGuardB, 3)]
-  let b := b.incorporate 1 stSys st1 [blockAccessListGuardA] [] []
-  let b := b.incorporate 2 st1 st2 [blockAccessListGuardA] [] []
-  let b := b.incorporate 3 st2 st3 [blockAccessListGuardA] [] []
-  let b := b.incorporate 4 st3 st4 [blockAccessListGuardA] [] []
+  let stSys := st0.setStorageValue blockAccessListGuardAddress2 3 4
+  let st1 := stSys.setBalance blockAccessListGuardAddress1 90
+  let st2 := st1.setBalance blockAccessListGuardAddress1 80
+  let st3 := st2.setBalance blockAccessListGuardAddress1 70
+  let st4 := st3.setBalance blockAccessListGuardAddress1 170
+  let b := ({} : BlockAccessListBuilder).incorporate 0 st0 stSys [blockAccessListGuardAddress2] [] [(blockAccessListGuardAddress2, 3)]
+  let b := b.incorporate 1 stSys st1 [blockAccessListGuardAddress1] [] []
+  let b := b.incorporate 2 st1 st2 [blockAccessListGuardAddress1] [] []
+  let b := b.incorporate 3 st2 st3 [blockAccessListGuardAddress1] [] []
+  let b := b.incorporate 4 st3 st4 [blockAccessListGuardAddress1] [] []
   blockAccessListGuardView b ==
-    [(blockAccessListGuardA, [], [], [(1, 90), (2, 80), (3, 70), (4, 170)], []),
-     (blockAccessListGuardB, [(3, [(0, 4)])], [], [], [])]
+    [(blockAccessListGuardAddress1, [], [], [(1, 90), (2, 80), (3, 70), (4, 170)], []),
+     (blockAccessListGuardAddress2, [(3, [(0, 4)])], [], [], [])]
 
 -- A created-then-self-destructed account has no surviving storage writes;
 -- the slots `SSTORE` recorded remain reads
 -- (the pinned `destroyStorage` conversion).
 #guard blockAccessListGuardView (({} : BlockAccessListBuilder).incorporate 1 blockAccessListGuardPre blockAccessListGuardPre
-    [blockAccessListGuardB] [(blockAccessListGuardB, 5)] []) ==
-  [(blockAccessListGuardB, [], [5], [], [])]
+    [blockAccessListGuardAddress2] [(blockAccessListGuardAddress2, 5)] []) ==
+  [(blockAccessListGuardAddress2, [], [5], [], [])]
 
 -- A failed child's reads survive the merge into its parent: `resume` takes the
 -- reverted child's trail.
 
 -- The item rule: `items > gasLimit / itemCost` rejects; at the limit it admits.
 private def blockAccessListGuardList (n : Nat) : BlockAccessList :=
-  [{ address := blockAccessListGuardA, storageChanges := [], storageReads := (List.range n).map (·.toU256),
+  [{ address := blockAccessListGuardAddress1, storageChanges := [], storageReads := (List.range n).map (·.toU256),
      balanceChanges := [], nonceChanges := [], codeChanges := [] }]
 #guard (blockAccessListGuardList 2).itemCount = 3
 #guard checkBlockAccessListGasLimit amsterdamRules 6000 (blockAccessListGuardList 2) matches .ok _
@@ -1899,8 +1899,8 @@ never stores an empty storage-less account, so "exists and is empty" is an
 account holding only storage: `touchE`, and 0x03 for the RIPEMD-160 quirk. -/
 
 private def touchParent : Address := 0x1000
-private def touchE : Address := 0x2000
-private def touchC : Address := 0x4000
+private def touchEmptyAccount : Address := 0x2000
+private def touchCodeAccount : Address := 0x4000
 
 /-- `CALL(gas, to, 0, 0, 0, 0, 0)`, then `POP` the success word. -/
 private def touchCall (dest gas : Nat) : List UInt8 :=
@@ -1911,9 +1911,9 @@ private def touchCall (dest gas : Nat) : List UInt8 :=
 private def touchRevert : List UInt8 := [0x60, 0, 0x60, 0, 0xFD]
 
 private def touchState (parentCode cCode : List UInt8) : State :=
-  let st := (State.setStorVal .empty touchE 1 1).setStorVal ripemd160Address 1 1
+  let st := (State.setStorageValue .empty touchEmptyAccount 1 1).setStorageValue ripemd160Address 1 1
   let st := State.setCode st touchParent ⟨parentCode.toArray⟩
-  State.setCode st touchC ⟨cCode.toArray⟩
+  State.setCode st touchCodeAccount ⟨cCode.toArray⟩
 
 -- A successful child's empty target is touched; Prague records nothing.
 -- A zero `SELFDESTRUCT` credit to the storage-only `touchE` (U6b,
@@ -1929,11 +1929,11 @@ private def touchState (parentCode cCode : List UInt8) : State :=
 
 -- The sweep erases a touched account that is still empty, keeps a touched
 -- account that is not, and is the identity without `touchedSweep`.
-#guard (sweepTouchedAccounts grayGlacierRules [touchE, touchParent]
-    (touchState [0x00] []))[touchE]?.isNone
-#guard (sweepTouchedAccounts grayGlacierRules [touchE, touchParent]
+#guard (sweepTouchedAccounts grayGlacierRules [touchEmptyAccount, touchParent]
+    (touchState [0x00] []))[touchEmptyAccount]?.isNone
+#guard (sweepTouchedAccounts grayGlacierRules [touchEmptyAccount, touchParent]
     (touchState [0x00] []))[touchParent]?.isSome
-#guard (sweepTouchedAccounts pragueRules [touchE] (touchState [0x00] []))[touchE]?.isSome
+#guard (sweepTouchedAccounts pragueRules [touchEmptyAccount] (touchState [0x00] []))[touchEmptyAccount]?.isSome
 
 /-- `CALL(gas, to, value, 0, 0, 0, 0)`, then `POP` the success word. -/
 private def touchCallValue (dest gas value : Nat) : List UInt8 :=

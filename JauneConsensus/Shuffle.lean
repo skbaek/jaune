@@ -26,14 +26,14 @@ open Jaune
 
 /-- One round of `compute_shuffled_index` (the spec's loop body), from `index`. -/
 def shuffleRound (seed : Jaune.U256) (indexCount : U64) (currentRound : Nat) (index : U64) : Fallible U64 := do
-  let round : U8 ← UIntN.ofNat? currentRound "compute_shuffled_index: uint8(current_round)"
+  let round : U8 ← UnsignedInteger.ofNat? currentRound "compute_shuffled_index: uint8(current_round)"
   let roundByte := uintToBytes 1 round.toNat
   let pivot ← (← bytesToUint64 ((hashBytes (seed.toBytes ++ roundByte)).take 8)).mod? indexCount
     "compute_shuffled_index: % index_count"
   let flip ← (← (← pivot.add? indexCount "compute_shuffled_index: pivot + index_count").sub?
     index "compute_shuffled_index: - index").mod? indexCount "compute_shuffled_index: % index_count"
   let position := if index.toNat ≥ flip.toNat then index else flip
-  let block : U32 ← UIntN.ofNat? (← position.div? (U64.literal 256) "position // 256").toNat
+  let block : U32 ← UnsignedInteger.ofNat? (← position.div? (U64.literal 256) "position // 256").toNat
     "compute_shuffled_index: uint32(position // 256)"
   let source := hashBytes (seed.toBytes ++ roundByte ++ uintToBytes 4 block.toNat)
   let byte ← getAt source.toArray (position.toNat % 256 / 8) "compute_shuffled_index: source"

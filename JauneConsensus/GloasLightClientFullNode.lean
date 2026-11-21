@@ -69,7 +69,7 @@ def blockToLightClientHeader (block : SignedBeaconBlock P) : Fallible LightClien
                      state_root := block.message.state_root,
                      body_root := hashTreeRoot block.message.body },
          execution_block_hash := block.message.body.signed_execution_payload_bid.message.parent_block_hash,
-         execution_branch := ← SszVector.ofArray branch.toArray "ExecutionBranch" }
+         execution_branch := ← Ssz.Vector.ofArray branch.toArray "ExecutionBranch" }
 
 /-- `state.latest_block_header` with `state_root = hash_tree_root(state)`. -/
 def stateBlockHeader (state : BeaconState P) : BeaconBlockHeader :=
@@ -86,7 +86,7 @@ def createLightClientBootstrap (cfg : Config) (state : BeaconState P) (block : S
     (← currentSyncCommitteeGindexAtSlot cfg P state.slot)
   pure { header := ← blockToLightClientHeader block,
          current_sync_committee := state.current_sync_committee,
-         current_sync_committee_branch := ← SszVector.ofArray branch.toArray
+         current_sync_committee_branch := ← Ssz.Vector.ofArray branch.toArray
            s!"{site}: CurrentSyncCommitteeBranch" }
 
 /-- `LightClientUpdate()`. -/
@@ -125,7 +125,7 @@ def createLightClientUpdate (cfg : Config) (state : BeaconState P) (block : Sign
       (← nextSyncCommitteeGindexAtSlot cfg P attestedState.slot)
     update := { update with
       next_sync_committee := attestedState.next_sync_committee
-      next_sync_committee_branch := ← SszVector.ofArray branch.toArray
+      next_sync_committee_branch := ← Ssz.Vector.ofArray branch.toArray
         s!"{site}: NextSyncCommitteeBranch" }
   -- Indicate finality whenever possible
   if let some finalizedBlock := finalizedBlock then
@@ -138,7 +138,7 @@ def createLightClientUpdate (cfg : Config) (state : BeaconState P) (block : Sign
     let branch ← computeMerkleProof attestedState.proofTree
       (← finalizedRootGindexAtSlot cfg P attestedState.slot)
     update := { update with
-      finality_branch := ← SszVector.ofArray branch.toArray s!"{site}: FinalityBranch" }
+      finality_branch := ← Ssz.Vector.ofArray branch.toArray s!"{site}: FinalityBranch" }
   pure { update with sync_aggregate := block.message.body.sync_aggregate,
                      signature_slot := block.message.slot }
 
@@ -167,8 +167,8 @@ def capellaHeaderOf (e : ExecutionPayloadHeader P) : CapellaExecutionPayloadHead
 
 /-- `ExecutionBranch(data=...)`: a vector of exactly `floorlog2(EXECUTION_BLOCK_HASH_GINDEX_GLOAS)`
 roots. -/
-private def branchVector {n : Nat} (xs : List Bytes32) (what : String) : Fallible (SszVector Bytes32 n) :=
-  SszVector.ofArray xs.toArray what
+private def branchVector {n : Nat} (xs : List Bytes32) (what : String) : Fallible (Ssz.Vector Bytes32 n) :=
+  Ssz.Vector.ofArray xs.toArray what
 
 /-- `upgrade_lc_header_to_gloas`. -/
 def upgradeLcHeaderToGloas (cfg : Config) (pre : JauneConsensus.LightClientHeader P) :

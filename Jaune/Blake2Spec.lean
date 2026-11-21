@@ -49,7 +49,7 @@ def R4 : UInt64 := 63
 /-- RFC 7693 §2.1: `ROTR^w(x; c)`, right rotation of a `w`-bit word by `c`,
 spelled out as the two shifts. Addition below is mod 2^64 throughout, which is
 what `UInt64` addition is. -/
-def rotR (x c : UInt64) : UInt64 := (x >>> c) ^^^ (x <<< (64 - c))
+def rotr64 (x c : UInt64) : UInt64 := (x >>> c) ^^^ (x <<< (64 - c))
 
 /-! ## §2.6 — the initialization vector -/
 
@@ -85,13 +85,13 @@ def sigmaRow (i : Nat) : Array Nat := sigma.getD (i % 10) #[]
 -/
 def G (v : Array UInt64) (a b c d : Nat) (x y : UInt64) : Array UInt64 :=
   let va : UInt64 := v.getD a 0 + v.getD b 0 + x
-  let vd : UInt64 := rotR (v.getD d 0 ^^^ va) R1
+  let vd : UInt64 := rotr64 (v.getD d 0 ^^^ va) R1
   let vc : UInt64 := v.getD c 0 + vd
-  let vb : UInt64 := rotR (v.getD b 0 ^^^ vc) R2
+  let vb : UInt64 := rotr64 (v.getD b 0 ^^^ vc) R2
   let va : UInt64 := va + vb + y
-  let vd : UInt64 := rotR (vd ^^^ va) R3
+  let vd : UInt64 := rotr64 (vd ^^^ va) R3
   let vc : UInt64 := vc + vd
-  let vb : UInt64 := rotR (vb ^^^ vc) R4
+  let vb : UInt64 := rotr64 (vb ^^^ vc) R4
   ((((v.setIfInBounds a va).setIfInBounds b vb).setIfInBounds c vc).setIfInBounds d vd)
 
 /-! ## §3.2 — the compression function F -/
@@ -138,13 +138,13 @@ def F (h m : Array UInt64) (t0 t1 : UInt64) (f : Bool) (n : Nat) : Array UInt64 
 /-! ## EIP-152 framing -/
 
 /-- EIP-152, Specification: one little-endian 64-bit word at byte offset `off`. -/
-def getLE (data : Bytes) (off : Nat) : UInt64 :=
+def getLittleEndianWord (data : Bytes) (off : Nat) : UInt64 :=
   Bytes.toUInt64 ((data.sliceD off 8 (0x00 : UInt8)).reverse)
 
 /-- EIP-152, Specification: `n` consecutive little-endian 64-bit words from byte
 offset `off`. -/
-def readLE (data : Bytes) (off n : Nat) : Array UInt64 :=
-  ((List.range n).map (fun i => getLE data (off + 8 * i))).toArray
+def readLittleEndianWords (data : Bytes) (off n : Nat) : Array UInt64 :=
+  ((List.range n).map (fun i => getLittleEndianWord data (off + 8 * i))).toArray
 
 /-- EIP-152, Specification: eight words as 64 little-endian bytes. -/
 def outBytes (h : Array UInt64) : Bytes :=
@@ -157,14 +157,14 @@ block is `h[0] ^= 0x01010000 ^ (kk << 8) ^ nn` with `kk = 0`, `nn = 64`; the
 message must fit in one 128-byte block, which is padded with zeros, compressed
 once with `t` set to the message length, `f` set (single final block), and the
 standard twelve rounds. Longer messages are out of scope (`none`). -/
-def blake2b512 (msg : Bytes) : Option Bytes :=
+def blake2b512SingleBlock (msg : Bytes) : Option Bytes :=
   if 128 < msg.length then none
   else
     let h : Array UInt64 :=
       #[iv.getD 0 0 ^^^ (0x01010000 : UInt64) ^^^ ((0 : UInt64) <<< 8) ^^^ (64 : UInt64),
         iv.getD 1 0, iv.getD 2 0, iv.getD 3 0,
         iv.getD 4 0, iv.getD 5 0, iv.getD 6 0, iv.getD 7 0]
-    let blk := readLE (msg ++ List.replicate (128 - msg.length) (0x00 : UInt8)) 0 16
+    let blk := readLittleEndianWords (msg ++ List.replicate (128 - msg.length) (0x00 : UInt8)) 0 16
     some (outBytes (F h blk msg.length.toUInt64 0 true 12))
 
 end Jaune.Blake2.Spec

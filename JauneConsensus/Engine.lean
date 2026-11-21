@@ -217,11 +217,11 @@ def engineVerdict (cfg : ChainConfig) (cf : ConsensusFork) (exec : BlockChain)
   let f ← (cfg.forkAt blk.header.number blk.header.timestamp).mapError .forkLookup
   if f.consensusFork? != some cf then throw (.unpairedFork f)
   (checkBlockRlpSize f.ruleSet.block blk.toRlpItem.toBytes.length).mapError .blockSize
-  let post ← match stateTransitionScheduledE cfg f exec blk with
+  let post ← match stateTransitionScheduledTyped cfg f exec blk with
     | .error e => throw (.forkLookup e)
     | .ok (.error e) => throw (.transition e)
     | .ok (.ok post) => pure post
-  let (_, bout) ← (Checked.applyBody (Checked.initBlockContext f exec blk.header) exec.state
+  let (_, bout) ← (applyBody (initBlockContext f exec blk.header) exec.state
     blk.transactions blk.ommers blk.withdrawals).mapError .body
   if bout.requests != req.executionRequests then throw .requestsMismatch
   pure post
@@ -258,7 +258,7 @@ def legacyPayloadExample : NewPayloadRequest Preset.mainnet :=
         receipts_root := zeroRoot, logs_bloom := ⟨Array.replicate 256 0, Array.size_replicate⟩,
         prev_randao := zeroRoot, block_number := U64.zero, gas_limit := U64.zero,
         gas_used := U64.zero, timestamp := U64.zero, extra_data := ⟨#[], Nat.zero_le _⟩,
-        base_fee_per_gas := UIntN.zero, block_hash := zeroRoot,
+        base_fee_per_gas := UnsignedInteger.zero, block_hash := zeroRoot,
         transactions := ⟨#[⟨legacyTransactionExample.toArray, by decide⟩], by decide⟩,
         withdrawals := ⟨#[], Nat.zero_le _⟩, blob_gas_used := U64.zero,
         excess_blob_gas := U64.zero }

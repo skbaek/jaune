@@ -18,42 +18,42 @@ abbrev altBn128CurveOrder : Nat :=
 abbrev bls12Prime : Nat :=
   4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787
 
-structure FinField (p : Nat) : Type where
+structure FieldElement (p : Nat) : Type where
   (val : Nat)
 deriving DecidableEq
 
-abbrev Bn254Fp : Type := FinField altBn128Prime
+abbrev AltBn128Fp : Type := FieldElement altBn128Prime
 
-instance {p} : ToString (FinField p) := ⟨fun x => toString x.val⟩
+instance {p} : ToString (FieldElement p) := ⟨fun x => toString x.val⟩
 
-def FinField.ofNat {p : Nat} (n : Nat) : FinField p := ⟨n % p⟩
+def FieldElement.ofNat {p : Nat} (n : Nat) : FieldElement p := ⟨n % p⟩
 
-def FinField.ofInt {p : Nat} : Int → FinField p
+def FieldElement.ofInt {p : Nat} : Int → FieldElement p
   | .ofNat n => .ofNat n
   | .negSucc n =>
     -- handle negative integers by wrapping around the field size
     .ofNat (p - n.succ % p)
 
-instance {p n : Nat} : OfNat (FinField p) n := ⟨.ofNat n⟩
+instance {p n : Nat} : OfNat (FieldElement p) n := ⟨.ofNat n⟩
 
 structure EllipticCurve (F : Type) (a b : F) : Type where
   (x : F)
   (y : F)
 deriving DecidableEq
 
-abbrev FinFields (p : Nat) : Type := List (FinField p)
+abbrev PolynomialCoefficients (p : Nat) : Type := List (FieldElement p)
 
-structure GaloisField (p : Nat) (m : FinFields p) : Type where
-  (val : FinFields p)
+structure GaloisField (p : Nat) (m : PolynomialCoefficients p) : Type where
+  (val : PolynomialCoefficients p)
 deriving DecidableEq
 
 instance {p m} : ToString (GaloisField p m) := ⟨
   fun x =>
-  String.joinln <|
+  String.joinLines <|
     "  [" :: (x.val.map <| fun y => "    " ++ toString y ++ ",") ++ ["  ]"]
 ⟩
 
-abbrev Bn254Fp2 : Type :=
+abbrev AltBn128Fp2 : Type :=
   GaloisField altBn128Prime [1, 0, 1]
 
 def GaloisField.ofNat {p} {m} : Nat → GaloisField p m
@@ -62,33 +62,33 @@ def GaloisField.ofNat {p} {m} : Nat → GaloisField p m
 
 instance {p m n} : OfNat (GaloisField p m) n := ⟨.ofNat n⟩
 
-def FinField.pow {p : Nat} (b : FinField p) (e : Nat) : FinField p :=
+def FieldElement.pow {p : Nat} (b : FieldElement p) (e : Nat) : FieldElement p :=
   ⟨Nat.powMod b.val e p⟩
 
-instance {p} : HPow (FinField p) Nat (FinField p) := ⟨FinField.pow⟩
+instance {p} : HPow (FieldElement p) Nat (FieldElement p) := ⟨FieldElement.pow⟩
 
-def FinField.add {p : Nat} (x y : FinField p) : FinField p :=
+def FieldElement.add {p : Nat} (x y : FieldElement p) : FieldElement p :=
   ⟨(x.val + y.val) % p⟩
 
-instance {p} : HAdd (FinField p) (FinField p) (FinField p) := ⟨FinField.add⟩
+instance {p} : HAdd (FieldElement p) (FieldElement p) (FieldElement p) := ⟨FieldElement.add⟩
 
-def FinField.sub {p : Nat} (x y : FinField p) : FinField p :=
+def FieldElement.sub {p : Nat} (x y : FieldElement p) : FieldElement p :=
   ⟨Int.natAbs <| (Int.ofNat x.val - Int.ofNat y.val) % p⟩
 
-instance {p} : HSub (FinField p) (FinField p) (FinField p) := ⟨FinField.sub⟩
+instance {p} : HSub (FieldElement p) (FieldElement p) (FieldElement p) := ⟨FieldElement.sub⟩
 
-def FinField.mul {p : Nat} (x y : FinField p) : FinField p :=
+def FieldElement.mul {p : Nat} (x y : FieldElement p) : FieldElement p :=
   ⟨(x.val * y.val) % p⟩
 
-instance {p} : HMul (FinField p) (FinField p) (FinField p) := ⟨FinField.mul⟩
+instance {p} : HMul (FieldElement p) (FieldElement p) (FieldElement p) := ⟨FieldElement.mul⟩
 
 def trimZero {ξ} [Zero ξ] [DecidableEq ξ] (xs : List ξ) : List ξ :=
   List.dropWhile (· = 0) xs
 
-def Bn254Fp2.mk (x y : Nat) : Bn254Fp2 :=
+def AltBn128Fp2.mk (x y : Nat) : AltBn128Fp2 :=
   ⟨trimZero [.ofNat x, .ofNat y]⟩
 
-def extEuclid (x y : Nat) : Int × Int × Nat :=
+def extendedEuclidean (x y : Nat) : Int × Int × Nat :=
   if hx : x > 0
   then
     if hy : y > 0
@@ -96,30 +96,30 @@ def extEuclid (x y : Nat) : Int × Int × Nat :=
       if _ : x < y
       then
         have _ : y % x < x := Nat.mod_lt _ hx
-        let ⟨cy, cx, d⟩ := extEuclid (y % x) x
+        let ⟨cy, cx, d⟩ := extendedEuclidean (y % x) x
         ⟨cx - (cy * (y / x)), cy, d⟩
       else
         if _ : y < x
         then
           have _ : x % y < y := Nat.mod_lt _ hy
-          let ⟨cy, cx, d⟩ := extEuclid y (x % y)
+          let ⟨cy, cx, d⟩ := extendedEuclidean y (x % y)
           ⟨cx, cy - (cx * (x / y)), d⟩
         else ⟨0, 1, x⟩
     else ⟨1, 0, x⟩
   else ⟨0, 1, y⟩
 termination_by (x + y)
 
-def FinField.inv {p : Nat} (x : FinField p) : FinField p :=
-  let ⟨c, _, _⟩ := extEuclid x.val p
+def FieldElement.inv {p : Nat} (x : FieldElement p) : FieldElement p :=
+  let ⟨c, _, _⟩ := extendedEuclidean x.val p
   ⟨(c % p).natAbs⟩
 
-instance {p} : Inv (FinField p) := ⟨FinField.inv⟩
+instance {p} : Inv (FieldElement p) := ⟨FieldElement.inv⟩
 
-def FinField.div {p : Nat} (x y : FinField p) : FinField p := x * (y⁻¹)
+def FieldElement.div {p : Nat} (x y : FieldElement p) : FieldElement p := x * (y⁻¹)
 
-instance {p} : HDiv (FinField p) (FinField p) (FinField p) := ⟨FinField.div⟩
+instance {p} : HDiv (FieldElement p) (FieldElement p) (FieldElement p) := ⟨FieldElement.div⟩
 
-instance {k} : Inhabited (FinField k) := ⟨0⟩
+instance {k} : Inhabited (FieldElement k) := ⟨0⟩
 
 def zipWithZero {ξ} [Zero ξ] : List ξ → List ξ → List (ξ × ξ)
   | [], [] => []
@@ -151,25 +151,25 @@ lemma trimZero_length {ξ} [Zero ξ] [DecidableEq ξ] (xs : List ξ) :
   (trimZero xs).length ≤ xs.length := by
   simp [trimZero, List.length_dropWhile_le]
 
-def FinFields.sub {p} (xs ys : FinFields p) : FinFields p :=
+def PolynomialCoefficients.sub {p} (xs ys : PolynomialCoefficients p) : PolynomialCoefficients p :=
   trimZero <| (zipWithZeroLeft xs ys).map (fun ⟨x, y⟩ => x - y)
 
-lemma FinFields.sub_length {p} (xs ys : FinFields p) :
-  (FinFields.sub xs ys).length ≤ max xs.length ys.length := by
+lemma PolynomialCoefficients.sub_length {p} (xs ys : PolynomialCoefficients p) :
+  (PolynomialCoefficients.sub xs ys).length ≤ max xs.length ys.length := by
   apply le_trans (trimZero_length _)
   simp [List.length_map, zipWithZeroLeft_length]
 
-def FinFields.add {p} (xs ys : FinFields p) : FinFields p :=
+def PolynomialCoefficients.add {p} (xs ys : PolynomialCoefficients p) : PolynomialCoefficients p :=
   trimZero <| (zipWithZeroLeft xs ys).map (fun ⟨x, y⟩ => x + y)
 
-def FinFields.mul {p} (xs : FinFields p) : FinFields p → FinFields p
+def PolynomialCoefficients.mul {p} (xs : PolynomialCoefficients p) : PolynomialCoefficients p → PolynomialCoefficients p
   | [] => []
   | y :: ys =>
-    let fromTail := FinFields.mul xs ys
+    let fromTail := PolynomialCoefficients.mul xs ys
     let fromHead := trimZero <| (xs.map (· * y)) ++ List.replicate ys.length 0
-    FinFields.add fromHead fromTail
+    PolynomialCoefficients.add fromHead fromTail
 
-def FinFields.divMod {p} (xs ys : FinFields p) : FinFields p × FinFields p :=
+def PolynomialCoefficients.divMod {p} (xs ys : PolynomialCoefficients p) : PolynomialCoefficients p × PolynomialCoefficients p :=
   match xs, ys with
   | [], _ => ([], [])
   | xs, [] => ([], xs) -- similar to x / 0 = 0, x % 0 = x for Nat
@@ -185,17 +185,17 @@ def FinFields.divMod {p} (xs ys : FinFields p) : FinFields p × FinFields p :=
       have cys_length : List.length cys = xs.length := by
         simp [cys, zeroes, List.length_append,  List.length_replicate, List.length_map];
         rw [← Nat.add_sub_assoc hle, Nat.add_sub_cancel_left];
-      let xs' := FinFields.sub xs cys
+      let xs' := PolynomialCoefficients.sub xs cys
       have h : xs'.length < (x :: xs).length := by
         rw [not_lt] at hlt; simp only [xs']
-        apply lt_of_le_of_lt (FinFields.sub_length xs cys)
+        apply lt_of_le_of_lt (PolynomialCoefficients.sub_length xs cys)
         simp [cys_length]
-      let (div, mod) := FinFields.divMod xs' (y :: ys)
-      (FinFields.add (c :: zeroes) div, mod)
+      let (div, mod) := PolynomialCoefficients.divMod xs' (y :: ys)
+      (PolynomialCoefficients.add (c :: zeroes) div, mod)
 termination_by xs.length
 
-lemma FinFields.divMod_snd_length {p} (xs) (len) (y) (ys : FinFields p) :
-  xs.length ≤ len → (FinFields.divMod xs (y :: ys)).snd.length ≤ ys.length := by
+lemma PolynomialCoefficients.divMod_snd_length {p} (xs) (len) (y) (ys : PolynomialCoefficients p) :
+  xs.length ≤ len → (PolynomialCoefficients.divMod xs (y :: ys)).snd.length ≤ ys.length := by
   revert xs
   induction len with
   | zero =>
@@ -211,42 +211,42 @@ lemma FinFields.divMod_snd_length {p} (xs) (len) (y) (ys : FinFields p) :
       simp [not_lt] at h_le'
       simp [List.length] at h_le
       apply ih
-      apply le_trans (FinFields.sub_length _ _)
+      apply le_trans (PolynomialCoefficients.sub_length _ _)
       simp [List.length_map, List.length_replicate, List.length_append, h_le]
       rw [← Nat.add_sub_assoc h_le', Nat.add_sub_cancel_left];
       apply h_le
 
-def FinFields.div {p} (xs ys : FinFields p) : FinFields p :=
-  (FinFields.divMod xs ys).fst
+def PolynomialCoefficients.div {p} (xs ys : PolynomialCoefficients p) : PolynomialCoefficients p :=
+  (PolynomialCoefficients.divMod xs ys).fst
 
-def FinFields.mod {p} (xs ys : FinFields p) : FinFields p :=
-  (FinFields.divMod xs ys).snd
+def PolynomialCoefficients.mod {p} (xs ys : PolynomialCoefficients p) : PolynomialCoefficients p :=
+  (PolynomialCoefficients.divMod xs ys).snd
 
-def GaloisField.add {p : Nat} {m : FinFields p}
+def GaloisField.add {p : Nat} {m : PolynomialCoefficients p}
   (xs ys : GaloisField p m) : GaloisField p m :=
-  ⟨FinFields.add xs.val ys.val⟩
+  ⟨PolynomialCoefficients.add xs.val ys.val⟩
 
 instance {p m} : HAdd (GaloisField p m) (GaloisField p m) (GaloisField p m) :=
   ⟨@GaloisField.add p m⟩
 
-def GaloisField.sub {p : Nat} {m : FinFields p}
+def GaloisField.sub {p : Nat} {m : PolynomialCoefficients p}
   (xs ys : GaloisField p m) : GaloisField p m :=
-  ⟨FinFields.sub xs.val ys.val⟩
+  ⟨PolynomialCoefficients.sub xs.val ys.val⟩
 
 instance {p m} : HSub (GaloisField p m) (GaloisField p m) (GaloisField p m) :=
   ⟨@GaloisField.sub p m⟩
 
-def GaloisField.mod {p : Nat} {m : FinFields p}
+def GaloisField.mod {p : Nat} {m : PolynomialCoefficients p}
   (xs ys : GaloisField p m) : GaloisField p m :=
-  ⟨FinFields.mod xs.val ys.val⟩
+  ⟨PolynomialCoefficients.mod xs.val ys.val⟩
 
 instance : HMod (GaloisField p m) (GaloisField p m) (GaloisField p m) :=
   ⟨GaloisField.mod⟩
 
-def GaloisField.mul {p : Nat} {m : FinFields p}
+def GaloisField.mul {p : Nat} {m : PolynomialCoefficients p}
   (xs ys : GaloisField p m) : GaloisField p m :=
-  let product := FinFields.mul xs.val ys.val
-  ⟨FinFields.mod product m⟩
+  let product := PolynomialCoefficients.mul xs.val ys.val
+  ⟨PolynomialCoefficients.mod product m⟩
 
 instance {p m} : HMul (GaloisField p m) (GaloisField p m) (GaloisField p m) :=
   ⟨@GaloisField.mul p m⟩
@@ -265,25 +265,25 @@ def GaloisField.pow {p} {m} (x : GaloisField p m) : Nat → GaloisField p m
 instance {p m} : HPow (GaloisField p m) Nat (GaloisField p m) :=
   ⟨@GaloisField.pow p m⟩
 
-instance {p} : HMul (FinFields p) (FinFields p) (FinFields p) :=
-  ⟨FinFields.mul⟩
+instance {p} : HMul (PolynomialCoefficients p) (PolynomialCoefficients p) (PolynomialCoefficients p) :=
+  ⟨PolynomialCoefficients.mul⟩
 
-instance {p} : HSub (FinFields p) (FinFields p) (FinFields p) :=
-  ⟨FinFields.sub⟩
+instance {p} : HSub (PolynomialCoefficients p) (PolynomialCoefficients p) (PolynomialCoefficients p) :=
+  ⟨PolynomialCoefficients.sub⟩
 
-instance {p} : HDiv (FinFields p) (FinFields p) (FinFields p) :=
-  ⟨FinFields.div⟩
+instance {p} : HDiv (PolynomialCoefficients p) (PolynomialCoefficients p) (PolynomialCoefficients p) :=
+  ⟨PolynomialCoefficients.div⟩
 
-instance {p} : HMod (FinFields p) (FinFields p) (FinFields p) :=
-  ⟨FinFields.mod⟩
+instance {p} : HMod (PolynomialCoefficients p) (PolynomialCoefficients p) (PolynomialCoefficients p) :=
+  ⟨PolynomialCoefficients.mod⟩
 
-lemma FinFields.mod_cons_length {p} (y) (xs ys : FinFields p) :
+lemma PolynomialCoefficients.mod_cons_length {p} (y) (xs ys : PolynomialCoefficients p) :
   (xs % (y :: ys)).length < (y :: ys).length := by
   simp [List.length]; apply Nat.lt_succ_of_le
-  apply FinFields.divMod_snd_length _ _ _ _ (le_refl _)
+  apply PolynomialCoefficients.divMod_snd_length _ _ _ _ (le_refl _)
 
-def FinFields.euclid {p} (xs ys : FinFields p) :
-  FinFields p × FinFields p × FinFields p :=
+def PolynomialCoefficients.extendedEuclidean {p} (xs ys : PolynomialCoefficients p) :
+  PolynomialCoefficients p × PolynomialCoefficients p × PolynomialCoefficients p :=
   match xs, ys with
   | [], [] => ([], [], [])
   | [], ys@(y :: _) => ([0], [y⁻¹], ys.map (· * y⁻¹))
@@ -291,13 +291,13 @@ def FinFields.euclid {p} (xs ys : FinFields p) :
   | xs@(_ :: _), ys@(_ :: _) =>
     have h : (xs % ys).length < ys.length := by
       rename (ys = _ :: _) => h_rw; rw [h_rw]
-      apply FinFields.mod_cons_length
-    let ⟨a, b, d⟩ := FinFields.euclid ys (xs % ys)
+      apply PolynomialCoefficients.mod_cons_length
+    let ⟨a, b, d⟩ := PolynomialCoefficients.extendedEuclidean ys (xs % ys)
     ⟨b, a - (b * (xs / ys)), d⟩
 termination_by ys.length
 
 def GaloisField.inv {p} {m} (xs : GaloisField p m) : GaloisField p m :=
-  let ⟨c, _, _⟩ := FinFields.euclid xs.val m
+  let ⟨c, _, _⟩ := PolynomialCoefficients.extendedEuclidean xs.val m
   ⟨c % m⟩
 
 instance {p m} : Inv (GaloisField p m) := ⟨GaloisField.inv⟩
@@ -308,11 +308,11 @@ def GaloisField.div {p} {m} (xs ys : GaloisField p m) : GaloisField p m :=
 instance {p m} : HDiv (GaloisField p m) (GaloisField p m) (GaloisField p m) :=
   ⟨GaloisField.div⟩
 
-abbrev Bn254G2 : Type := EllipticCurve Bn254Fp2 0 ((3 : Bn254Fp2) / ⟨[1, 9]⟩)
+abbrev AltBn128G2 : Type := EllipticCurve AltBn128Fp2 0 ((3 : AltBn128Fp2) / ⟨[1, 9]⟩)
 
-abbrev Bn254G1 : Type := EllipticCurve Bn254Fp (0 : Bn254Fp) (3 : Bn254Fp)
+abbrev AltBn128G1 : Type := EllipticCurve AltBn128Fp (0 : AltBn128Fp) (3 : AltBn128Fp)
 
-abbrev Bn254Fp12 : Type :=
+abbrev AltBn128Fp12 : Type :=
   GaloisField
     altBn128Prime
     [1, 0, 0, 0, 0, 0, .ofInt (-18 : Int), 0, 0, 0, 0, 0, 82]
@@ -322,7 +322,7 @@ abbrev Bls12Fp12 : Type :=
     bls12Prime
     [1, 0, 0, 0, 0, 0, .ofInt (-2 : Int), 0, 0, 0, 0, 0, 2]
 
-abbrev Bn254Fp12Pair : Type := EllipticCurve Bn254Fp12 (0 : Bn254Fp12) (3 : Bn254Fp12)
+abbrev AltBn128Fp12Pair : Type := EllipticCurve AltBn128Fp12 (0 : AltBn128Fp12) (3 : AltBn128Fp12)
 
 abbrev Bls12Fp12Pair : Type := EllipticCurve Bls12Fp12 (0 : Bls12Fp12) (4 : Bls12Fp12)
 
@@ -351,13 +351,13 @@ def EllipticCurve.mk? {F} [Zero F] [DecidableEq F]
   else
     none
 
-def Bn254G1.mk? (x : Nat) (y : Nat) : Option Bn254G1 :=
-  EllipticCurve.mk? (FinField.ofNat x) (FinField.ofNat y)
+def AltBn128G1.mk? (x : Nat) (y : Nat) : Option AltBn128G1 :=
+  EllipticCurve.mk? (FieldElement.ofNat x) (FieldElement.ofNat y)
 
-def FinField.neg {p} (x : FinField p) : FinField p :=
+def FieldElement.neg {p} (x : FieldElement p) : FieldElement p :=
   .ofNat (p - x.val)
 
-instance {p} : Neg (FinField p) := ⟨FinField.neg⟩
+instance {p} : Neg (FieldElement p) := ⟨FieldElement.neg⟩
 
 -- def double(self: T) -> T:
 def EllipticCurve.double {F} [Zero F] [DecidableEq F]
@@ -606,7 +606,7 @@ instance {F} [Zero F] [DecidableEq F] [HAdd F F F] [HSub F F F]
   HMul (EllipticCurve F a b) Nat (EllipticCurve F a b) :=
   ⟨EllipticCurve.mulBy⟩
 
-def Bn254G1.toBytes (p : Bn254G1) : Bytes :=
+def AltBn128G1.toBytes (p : AltBn128G1) : Bytes :=
   p.x.val.toBytes.pack 32 ++ p.y.val.toBytes.pack 32
 
 -- def twist(pt: Optimized_Point3D[FQP]) -> Optimized_Point3D[FQ12]:
@@ -619,16 +619,16 @@ def Bn254G1.toBytes (p : Bn254G1) : Bytes :=
 -- total. The former unpadded right-slice did neither: on a trimmed coordinate
 -- it read the surviving low coefficient as though it were the high one, and
 -- had no second entry to read at all.
-def twist (p : Bn254G2) : Bn254Fp12Pair :=
-  let xs := List.takeRightV 2 p.x.val (0 : Bn254Fp)
-  let ys := List.takeRightV 2 p.y.val (0 : Bn254Fp)
+def twist (p : AltBn128G2) : AltBn128Fp12Pair :=
+  let xs := List.takeRightVector 2 p.x.val (0 : AltBn128Fp)
+  let ys := List.takeRightVector 2 p.y.val (0 : AltBn128Fp)
   let x0 := xs[0]
   let x1 := xs[1]
   let y0 := ys[0]
   let y1 := ys[1]
-  let nx : Bn254Fp12 := ⟨[x0, 0, 0, 0, 0, 0, x1 - (x0 * 9)]⟩
-  let ny : Bn254Fp12 := ⟨[y0, 0, 0, 0, 0, 0, y1 - (y0 * 9)]⟩
-  let w : Bn254Fp12 := ⟨[1, 0]⟩
+  let nx : AltBn128Fp12 := ⟨[x0, 0, 0, 0, 0, 0, x1 - (x0 * 9)]⟩
+  let ny : AltBn128Fp12 := ⟨[y0, 0, 0, 0, 0, 0, y1 - (y0 * 9)]⟩
+  let w : AltBn128Fp12 := ⟨[1, 0]⟩
   ⟨nx * (w ^ 2), ny * (w ^ 3)⟩
 
 def pseudoBinaryEncoding : List Int :=
@@ -655,10 +655,10 @@ def linefunc(
 ) -> Optimized_Point2D[Optimized_Field]:
     zero = P1[0].zero()
 -/
-def linefunc : Bn254Fp12Pair →  Bn254Fp12Pair → Bn254Fp12Pair → Bn254Fp12Pair
+def linefunc : AltBn128Fp12Pair →  AltBn128Fp12Pair → AltBn128Fp12Pair → AltBn128Fp12Pair
   | ⟨x1, y1⟩, ⟨x2, y2⟩, ⟨xt, yt⟩ =>
-    let mNumerator : Bn254Fp12 := y2 - y1
-    let mDenominator : Bn254Fp12 := x2 - x1
+    let mNumerator : AltBn128Fp12 := y2 - y1
+    let mDenominator : AltBn128Fp12 := x2 - x1
     if mDenominator ≠ 0
     then
       ⟨
@@ -676,13 +676,13 @@ def linefunc : Bn254Fp12Pair →  Bn254Fp12Pair → Bn254Fp12Pair → Bn254Fp12P
         ⟩
       else ⟨xt - x1, 1⟩
 
-def FinFields.neg {p} (xs : FinFields p) : FinFields p :=
-  FinFields.sub [] xs
+def PolynomialCoefficients.neg {p} (xs : PolynomialCoefficients p) : PolynomialCoefficients p :=
+  PolynomialCoefficients.sub [] xs
 
-def GaloidField.neg {p} {m} (xs : GaloisField p m) : GaloisField p m := 0 - xs
+def GaloisField.neg {p} {m} (xs : GaloisField p m) : GaloisField p m := 0 - xs
 
 instance {p} {m} : Neg (GaloisField p m) where
-  neg := GaloidField.neg
+  neg := GaloisField.neg
 
 def EllipticCurve.neg {F} [Neg F] {a b} : EllipticCurve F a b → EllipticCurve F a b
   | ⟨x, y⟩ => ⟨x, -y⟩
@@ -704,10 +704,10 @@ instance {F} [Neg F] [Zero F] [DecidableEq F]
   HSub (EllipticCurve F a b) (EllipticCurve F a b) (EllipticCurve F a b) :=
   ⟨EllipticCurve.sub⟩
 
-def millerLoop (q p : Bn254Fp12Pair) (finalExp : Bool := true) : Option Bn254Fp12 := do
-  let mut r : Bn254Fp12Pair := q
-  let mut fNum : Bn254Fp12 := 1
-  let mut fDen : Bn254Fp12 := 1
+def millerLoop (q p : AltBn128Fp12Pair) (finalExp : Bool := true) : Option AltBn128Fp12 := do
+  let mut r : AltBn128Fp12Pair := q
+  let mut fNum : AltBn128Fp12 := 1
+  let mut fDen : AltBn128Fp12 := 1
   for v in (pseudoBinaryEncoding.take 64).reverse do
     let ⟨_n, _d⟩ := linefunc r r p
     fNum := fNum * fNum * _n
@@ -725,8 +725,8 @@ def millerLoop (q p : Bn254Fp12Pair) (finalExp : Bool := true) : Option Bn254Fp1
       fNum := fNum * _n
       fDen := fDen * _d
       r := r + nq
-  let q1 : Bn254Fp12Pair := ⟨q.x ^ altBn128Prime, q.y ^ altBn128Prime⟩
-  let nq2 : Bn254Fp12Pair := ⟨q1.x ^ altBn128Prime , (-q1.y) ^ altBn128Prime⟩
+  let q1 : AltBn128Fp12Pair := ⟨q.x ^ altBn128Prime, q.y ^ altBn128Prime⟩
+  let nq2 : AltBn128Fp12Pair := ⟨q1.x ^ altBn128Prime , (-q1.y) ^ altBn128Prime⟩
   let ⟨_n1, _d1⟩ := linefunc r q1 p
   r := r + q1
   let ⟨_n2, _d2⟩ := linefunc r nq2 p
@@ -737,15 +737,15 @@ def millerLoop (q p : Bn254Fp12Pair) (finalExp : Bool := true) : Option Bn254Fp1
     else f
   )
 
-def Bn254G1.toBn254Fp12Pair : Bn254G1 → Bn254Fp12Pair
+def AltBn128G1.toAltBn128Fp12Pair : AltBn128G1 → AltBn128Fp12Pair
   | ⟨x, y⟩ => ⟨⟨[x]⟩, ⟨[y]⟩⟩
 
-def pairing (q : Bn254G2) (p : Bn254G1) (finalExp : Bool := true) : Option Bn254Fp12 := do
+def pairing (q : AltBn128G2) (p : AltBn128G1) (finalExp : Bool := true) : Option AltBn128Fp12 := do
   guard q.isOnCurve
   guard p.isOnCurve
   if p = ⟨0, 0⟩ ∨ q = ⟨0, 0⟩ then
     return 1
-  millerLoop (twist q) (p.toBn254Fp12Pair) finalExp
+  millerLoop (twist q) (p.toAltBn128Fp12Pair) finalExp
 
 namespace secp256k1
 
@@ -755,9 +755,9 @@ def prime : Nat :=
 def curveOrder : Nat :=
   115792089237316195423570985008687907852837564279074904382605163141518161494337
 
-abbrev Coord : Type := FinField prime
+abbrev CoordinateField : Type := FieldElement prime
 
-abbrev Point : Type := EllipticCurve Coord 0 7
+abbrev Point : Type := EllipticCurve CoordinateField 0 7
 
 def generator : Point :=
   ⟨
@@ -768,7 +768,7 @@ def generator : Point :=
 def sqrtExp : Nat :=
   (prime + 1) / 4
 
-def sqrt (x : Coord) : Option Coord :=
+def sqrt (x : CoordinateField) : Option CoordinateField :=
   let y := x ^ sqrtExp
   if y * y = x then some y else none
 
@@ -777,20 +777,20 @@ def sqrt (x : Coord) : Option Coord :=
 and moving the historical `sR - zG = ∞` check would change public behavior. -/
 private def recoverAffine
     (h : U256) (v : Bool) (r : U256) (s : U256) : Option Address := do
-  let x : Coord := .ofNat r.toNat
-  let ySquared : Coord := (x * x) * x + 7
+  let x : CoordinateField := .ofNat r.toNat
+  let ySquared : CoordinateField := (x * x) * x + 7
   let yFst ← sqrt ySquared
-  let ySnd := FinField.neg yFst
-  let ⟨yOdd, yEven⟩ : Coord × Coord :=
+  let ySnd := FieldElement.neg yFst
+  let ⟨yOdd, yEven⟩ : CoordinateField × CoordinateField :=
     if yFst.val % 2 = 0 then ⟨ySnd, yFst⟩ else ⟨yFst, ySnd⟩
   let y := if v then yOdd else yEven
   let R : Point := ⟨x, y⟩
   let rInv : Nat :=
-    @FinField.val curveOrder <| FinField.inv <| .ofNat r.toNat
+    @FieldElement.val curveOrder <| FieldElement.inv <| .ofNat r.toNat
   let sR : Point := EllipticCurve.mulBy R <|
-    @FinField.val curveOrder <| .ofNat s.toNat
+    @FieldElement.val curveOrder <| .ofNat s.toNat
   let zG : Point := EllipticCurve.mulBy generator <|
-    @FinField.val curveOrder <| .ofNat h.toNat
+    @FieldElement.val curveOrder <| .ofNat h.toNat
   let O : Point := sR - zG
   if O = ⟨0, 0⟩ then none
   let Q : Point :=
@@ -814,8 +814,8 @@ performs one affine normalization after the loop.
 
 private def jointMulLoop
     (rPoint gPoint : Point)
-    (rgPoint : EllipticCurve.Jacobian.Point Coord) :
-    Nat → Nat → Nat → EllipticCurve.Jacobian.Point Coord
+    (rgPoint : EllipticCurve.Jacobian.Point CoordinateField) :
+    Nat → Nat → Nat → EllipticCurve.Jacobian.Point CoordinateField
   | 0, _, _ => EllipticCurve.Jacobian.infinity
   | fuel + 1, rScalar, gScalar =>
     let acc := jointMulLoop rPoint gPoint rgPoint fuel (rScalar / 2) (gScalar / 2)
@@ -831,7 +831,7 @@ private def jointMulLoop
 The result is deliberately left Jacobian so callers can inspect infinity and
 normalize exactly once. -/
 def jointMul (rPoint gPoint : Point) (rScalar gScalar : Nat) :
-    EllipticCurve.Jacobian.Point Coord :=
+    EllipticCurve.Jacobian.Point CoordinateField :=
   let rJacobian := EllipticCurve.Jacobian.ofAffine rPoint
   let gJacobian := EllipticCurve.Jacobian.ofAffine gPoint
   let rgJacobian := EllipticCurve.Jacobian.add rJacobian gJacobian
@@ -839,19 +839,19 @@ def jointMul (rPoint gPoint : Point) (rScalar gScalar : Nat) :
 
 def recover (h : U256) (v : Bool) (r : U256) (s : U256) : Option Address :=
   if 0 < r.toNat ∧ r.toNat < curveOrder then do
-    let x : Coord := .ofNat r.toNat
-    let ySquared : Coord := (x * x) * x + 7
+    let x : CoordinateField := .ofNat r.toNat
+    let ySquared : CoordinateField := (x * x) * x + 7
     let yFst ← sqrt ySquared
-    let ySnd := FinField.neg yFst
-    let ⟨yOdd, yEven⟩ : Coord × Coord :=
+    let ySnd := FieldElement.neg yFst
+    let ⟨yOdd, yEven⟩ : CoordinateField × CoordinateField :=
       if yFst.val % 2 = 0 then ⟨ySnd, yFst⟩ else ⟨yFst, ySnd⟩
     let y := if v then yOdd else yEven
     let R : Point := ⟨x, y⟩
-    let rInv : FinField curveOrder := FinField.inv <| .ofNat r.toNat
-    let sScalar : FinField curveOrder := .ofNat s.toNat
-    let hScalar : FinField curveOrder := .ofNat h.toNat
+    let rInv : FieldElement curveOrder := FieldElement.inv <| .ofNat r.toNat
+    let sScalar : FieldElement curveOrder := .ofNat s.toNat
+    let hScalar : FieldElement curveOrder := .ofNat h.toNat
     let rCoefficient := (rInv * sScalar).val
-    let gCoefficient := (FinField.neg (rInv * hScalar)).val
+    let gCoefficient := (FieldElement.neg (rInv * hScalar)).val
     let qJacobian := jointMul R generator rCoefficient gCoefficient
     if EllipticCurve.Jacobian.isInfinity qJacobian then none
     let Q : Point := EllipticCurve.Jacobian.toAffine qJacobian
@@ -883,17 +883,17 @@ def prime : Nat :=
 def curveOrder : Nat :=
   0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
 
-abbrev Coord : Type := FinField prime
+abbrev CoordinateField : Type := FieldElement prime
 
 /-- The curve coefficient `a`, which is `prime - 3`. -/
-abbrev coeffA : Coord :=
+abbrev a : CoordinateField :=
   .ofNat 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC
 
 /-- The curve coefficient `b`. -/
-abbrev coeffB : Coord :=
+abbrev b : CoordinateField :=
   .ofNat 0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B
 
-abbrev Point : Type := EllipticCurve Coord coeffA coeffB
+abbrev Point : Type := EllipticCurve CoordinateField a b
 
 /-- The infinity representative this file uses for every curve. -/
 abbrev infinity : Point := ⟨0, 0⟩
@@ -924,7 +924,7 @@ def verify (msgHash r s qx qy : Nat) : Bool :=
     let q : Point := ⟨.ofNat qx, .ofNat qy⟩
     if ¬ q.isOnCurve then false
     else
-      let sInv : FinField curveOrder := FinField.inv (.ofNat s)
+      let sInv : FieldElement curveOrder := FieldElement.inv (.ofNat s)
       let u1 : Nat := (sInv * .ofNat msgHash).val
       let u2 : Nat := (sInv * .ofNat r).val
       let p : Point :=

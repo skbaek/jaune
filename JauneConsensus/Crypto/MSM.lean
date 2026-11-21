@@ -19,8 +19,8 @@ open Jaune
 def fpSubFast (x y : Bls12Fp) : Bls12Fp := ⟨(x.val + blsPrime - y.val) % blsPrime⟩
 
 theorem fpSubFast_eq (x y : Bls12Fp) (hy : y.val ≤ blsPrime) : fpSubFast x y = x - y := by
-  show fpSubFast x y = FinField.sub x y
-  unfold fpSubFast FinField.sub
+  show fpSubFast x y = FieldElement.sub x y
+  unfold fpSubFast FieldElement.sub
   congr 1
   have h : ((x.val + blsPrime - y.val : Nat) : Int) = (x.val : Int) - y.val + blsPrime := by
     omega
@@ -34,7 +34,7 @@ theorem fpSubFast_eq (x y : Bls12Fp) (hy : y.val ≤ blsPrime) : fpSubFast x y =
 instantiated with `fpSubFast`; `fpSubFast_eq` says this changes no result on reduced
 inputs, and the MSM guards compare against Jaune's `g1MsmSum`, which uses
 `FinField.sub`. -/
-local instance (priority := high) fpSubFastInst : HSub Bls12Fp Bls12Fp Bls12Fp := ⟨fpSubFast⟩
+local instance (priority := high) fpSubFastInstance : HSub Bls12Fp Bls12Fp Bls12Fp := ⟨fpSubFast⟩
 
 /-- Jacobian G1 points, Jaune's representation. -/
 abbrev G1Jacobian : Type := EllipticCurve.JacobianPoint Bls12Fp

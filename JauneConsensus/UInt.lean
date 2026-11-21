@@ -123,69 +123,69 @@ end U64
 /-! ## `uintN` as a bounded natural number -/
 
 /-- The unsigned integer of `n` bytes (`8 * n` bits). -/
-structure UIntN (n : Nat) where
+structure UnsignedInteger (n : Nat) where
   toNat : Nat
   isLt : toNat < 2 ^ (8 * n)
 
-namespace UIntN
+namespace UnsignedInteger
 
 variable {n : Nat}
 
-theorem ext : ∀ {a b : UIntN n}, a.toNat = b.toNat → a = b
+theorem ext : ∀ {a b : UnsignedInteger n}, a.toNat = b.toNat → a = b
   | ⟨_, _⟩, ⟨_, _⟩, rfl => rfl
 
-instance : DecidableEq (UIntN n) := fun a b =>
+instance : DecidableEq (UnsignedInteger n) := fun a b =>
   if h : a.toNat = b.toNat then isTrue (ext h) else isFalse (fun e => h (e ▸ rfl))
 
-instance : Repr (UIntN n) := ⟨fun x _ => repr x.toNat⟩
-instance : ToString (UIntN n) := ⟨fun x => toString x.toNat⟩
+instance : Repr (UnsignedInteger n) := ⟨fun x _ => repr x.toNat⟩
+instance : ToString (UnsignedInteger n) := ⟨fun x => toString x.toNat⟩
 
 /-- `uintN(v)`: rejects with `Reject.overflow` when `v ≥ 2^(8n)`. -/
-@[inline] def ofNat? (v : Nat) (site : String := "uintN") : Fallible (UIntN n) :=
+@[inline] def ofNat? (v : Nat) (site : String := "uintN") : Fallible (UnsignedInteger n) :=
   if h : v < 2 ^ (8 * n) then pure ⟨v, h⟩ else throw (.overflow site)
 
-def zero : UIntN n := ⟨0, Nat.two_pow_pos _⟩
+def zero : UnsignedInteger n := ⟨0, Nat.two_pow_pos _⟩
 
-instance : Inhabited (UIntN n) := ⟨zero⟩
+instance : Inhabited (UnsignedInteger n) := ⟨zero⟩
 
 /-- The largest value, `2^(8n) - 1` (for example pyspec `UINT256_MAX`). -/
-def max : UIntN n := ⟨2 ^ (8 * n) - 1, Nat.sub_lt (Nat.two_pow_pos _) (by decide)⟩
+def max : UnsignedInteger n := ⟨2 ^ (8 * n) - 1, Nat.sub_lt (Nat.two_pow_pos _) (by decide)⟩
 
-@[inline] def add? (a b : UIntN n) (site : String := "uintN add") : Fallible (UIntN n) :=
+@[inline] def add? (a b : UnsignedInteger n) (site : String := "uintN add") : Fallible (UnsignedInteger n) :=
   ofNat? (a.toNat + b.toNat) site
 
-@[inline] def sub? (a b : UIntN n) (site : String := "uintN sub") : Fallible (UIntN n) :=
+@[inline] def sub? (a b : UnsignedInteger n) (site : String := "uintN sub") : Fallible (UnsignedInteger n) :=
   if b.toNat ≤ a.toNat then pure ⟨a.toNat - b.toNat, Nat.lt_of_le_of_lt (Nat.sub_le _ _) a.isLt⟩
   else throw (.underflow site)
 
-@[inline] def mul? (a b : UIntN n) (site : String := "uintN mul") : Fallible (UIntN n) :=
+@[inline] def mul? (a b : UnsignedInteger n) (site : String := "uintN mul") : Fallible (UnsignedInteger n) :=
   ofNat? (a.toNat * b.toNat) site
 
-@[inline] def div? (a b : UIntN n) (site : String := "uintN div") : Fallible (UIntN n) :=
+@[inline] def div? (a b : UnsignedInteger n) (site : String := "uintN div") : Fallible (UnsignedInteger n) :=
   if b.toNat = 0 then throw (.divByZero site)
   else pure ⟨a.toNat / b.toNat, Nat.lt_of_le_of_lt (Nat.div_le_self _ _) a.isLt⟩
 
-@[inline] def mod? (a b : UIntN n) (site : String := "uintN mod") : Fallible (UIntN n) :=
+@[inline] def mod? (a b : UnsignedInteger n) (site : String := "uintN mod") : Fallible (UnsignedInteger n) :=
   if b.toNat = 0 then throw (.divByZero site)
   else pure ⟨a.toNat % b.toNat, Nat.lt_of_le_of_lt (Nat.mod_le _ _) a.isLt⟩
 
-instance : LT (UIntN n) := ⟨fun a b => a.toNat < b.toNat⟩
-instance : LE (UIntN n) := ⟨fun a b => a.toNat ≤ b.toNat⟩
-instance (a b : UIntN n) : Decidable (a < b) := inferInstanceAs (Decidable (a.toNat < b.toNat))
-instance (a b : UIntN n) : Decidable (a ≤ b) := inferInstanceAs (Decidable (a.toNat ≤ b.toNat))
+instance : LT (UnsignedInteger n) := ⟨fun a b => a.toNat < b.toNat⟩
+instance : LE (UnsignedInteger n) := ⟨fun a b => a.toNat ≤ b.toNat⟩
+instance (a b : UnsignedInteger n) : Decidable (a < b) := inferInstanceAs (Decidable (a.toNat < b.toNat))
+instance (a b : UnsignedInteger n) : Decidable (a ≤ b) := inferInstanceAs (Decidable (a.toNat ≤ b.toNat))
 
-end UIntN
+end UnsignedInteger
 
 /-- `uint8` as a number (`byte` is `UInt8`, opaque data). -/
-abbrev U8 := UIntN 1
+abbrev U8 := UnsignedInteger 1
 /-- `uint16`. -/
-abbrev U16 := UIntN 2
+abbrev U16 := UnsignedInteger 2
 /-- `uint32`. -/
-abbrev U32 := UIntN 4
+abbrev U32 := UnsignedInteger 4
 /-- `uint128`. -/
-abbrev U128 := UIntN 16
+abbrev U128 := UnsignedInteger 16
 /-- `uint256`. -/
-abbrev U256 := UIntN 32
+abbrev U256 := UnsignedInteger 32
 
 /-! ## Reading a word from a byte array
 
@@ -400,7 +400,7 @@ theorem u16_ofBytes_toNat (a b : UInt8) :
   simp only [Jaune.UInt16.ofBytes, UInt16.toNat_or, UInt16.toNat_shiftLeft, UInt8.toNat_toUInt16]
   have h8 : UInt16.toNat 8 % 16 = 8 := rfl
   rw [h8, Nat.mod_eq_of_lt (by rw [Nat.shiftLeft_eq]; omega),
-    ← Jaune.Nat.mul_two_pow_add_eq_shl_or (by omega)]
+    ← Jaune.Nat.mul_two_pow_add_eq_shiftLeft_or (by omega)]
   rfl
 
 theorem u16_toBytes_ofBytes (a b : UInt8) :
@@ -424,7 +424,7 @@ theorem u32_toBytes_halves (x y : UInt16) :
     simp only [UInt32.toNat_or, UInt32.toNat_shiftLeft, UInt16.toNat_toUInt32]
     have h : UInt32.toNat 16 % 32 = 16 := rfl
     rw [h, Nat.mod_eq_of_lt (by rw [Nat.shiftLeft_eq]; omega),
-      ← Jaune.Nat.mul_two_pow_add_eq_shl_or (by omega)]
+      ← Jaune.Nat.mul_two_pow_add_eq_shiftLeft_or (by omega)]
   simp only [Jaune.UInt32.toBytes]
   congr 2
   · apply UInt16.toNat_inj.mp
@@ -442,7 +442,7 @@ theorem u64_toBytes_halves (x y : UInt32) :
     simp only [UInt64.toNat_or, UInt64.toNat_shiftLeft, UInt32.toNat_toUInt64]
     have h : UInt64.toNat 32 % 64 = 32 := rfl
     rw [h, Nat.mod_eq_of_lt (by rw [Nat.shiftLeft_eq]; omega),
-      ← Jaune.Nat.mul_two_pow_add_eq_shl_or (by omega)]
+      ← Jaune.Nat.mul_two_pow_add_eq_shiftLeft_or (by omega)]
   simp only [Jaune.UInt64.toBytes]
   congr 2
   · apply UInt32.toNat_inj.mp

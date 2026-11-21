@@ -26,21 +26,21 @@ def blsXi : Bls12Fp2 := Bls12Fp2.mk 1 1
 
 /-- The Frobenius `x ↦ x^p` on `Fp2`: `c0 + c1 u ↦ c0 - c1 u`. -/
 def fp2Frobenius (x : Bls12Fp2) : Bls12Fp2 :=
-  let cs := List.takeRightV 2 x.val (0 : Bls12Fp)
+  let cs := List.takeRightVector 2 x.val (0 : Bls12Fp)
   Bls12Fp2.mk cs[1].val (blsPrime - cs[0].val)
 
 /-- `psi`'s coefficients `xi^(-(p-1)/3)` and `xi^(-(p-1)/2)`: Jaune's twist divides by
 `w^2` and `w^3` with `w^6 = xi`, so untwisting, applying Frobenius and twisting back
 multiplies `x^p` by `w^(2 - 2p)` and `y^p` by `w^(3 - 3p)`. -/
-def psiCoefficientX : Bls12Fp2 := (blsXi ^ ((blsPrime - 1) / 3))⁻¹
-def psiCoefficientY : Bls12Fp2 := (blsXi ^ ((blsPrime - 1) / 2))⁻¹
+def psiCoefficient.x : Bls12Fp2 := (blsXi ^ ((blsPrime - 1) / 3))⁻¹
+def psiCoefficient.y : Bls12Fp2 := (blsXi ^ ((blsPrime - 1) / 2))⁻¹
 
 /-- The endomorphism `psi` on `E'`. -/
 def g2Psi (p : Bls12G2) : Bls12G2 :=
-  if p = ⟨0, 0⟩ then p else ⟨fp2Frobenius p.x * psiCoefficientX, fp2Frobenius p.y * psiCoefficientY⟩
+  if p = ⟨0, 0⟩ then p else ⟨fp2Frobenius p.x * psiCoefficient.x, fp2Frobenius p.y * psiCoefficient.y⟩
 
 /-- G2 membership for a point of `E'`: `psi(P) = [t] P` with `t = -blsAteLoopCount`. -/
 def g2SubgroupCheckFast (p : Bls12G2) : Bool :=
-  g2Psi p = -(p.mulBy blsAteLoopCount)
+  g2Psi p = -(p.mulBy blsMillerLoopScalar)
 
 end JauneConsensus

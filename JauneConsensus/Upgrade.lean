@@ -76,9 +76,9 @@ def upgradeToElectra (cfg : Config) (pre : BeaconState P .deneb) : Fallible (Bea
     consolidation_balance_to_consume := ForkField.mk h U64.zero
     earliest_consolidation_epoch :=
       ForkField.mk h (← computeActivationExitEpoch P (← getCurrentEpoch pre))
-    pending_deposits := ForkField.mk h SszList.empty
-    pending_partial_withdrawals := ForkField.mk h SszList.empty
-    pending_consolidations := ForkField.mk h SszList.empty
+    pending_deposits := ForkField.mk h Ssz.List.empty
+    pending_partial_withdrawals := ForkField.mk h Ssz.List.empty
+    pending_consolidations := ForkField.mk h Ssz.List.empty
     proposer_lookahead := () }
   let post ← post.setExitBalanceToConsume (← getActivationExitChurnLimit cfg post)
   let post ← post.setConsolidationBalanceToConsume (← getConsolidationChurnLimit cfg post)
@@ -167,7 +167,7 @@ def upgradeToFulu (cfg : Config) (pre : BeaconState P .electra) : Fallible (Beac
     pending_consolidations := ForkField.mk fulu_atLeast_electra (← pre.pendingConsolidations)
     -- [New in Fulu:EIP7917]
     proposer_lookahead :=
-      ForkField.mk fulu_atLeast_fulu (← SszVector.ofArray (← initializeProposerLookahead pre)
+      ForkField.mk fulu_atLeast_fulu (← Ssz.Vector.ofArray (← initializeProposerLookahead pre)
         "upgrade_to_fulu: proposer_lookahead") }
 
 end JauneConsensus

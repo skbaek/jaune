@@ -56,7 +56,7 @@ def initializePtcWindow (state : BeaconState P) : Fallible (PayloadTimelinessCom
     let startSlot ← computeStartSlotAtEpoch P epoch
     for index in [0:P.SLOTS_PER_EPOCH] do
       ptcs := ptcs.push (← computePtc state (← startSlot.add? (← U64.ofNat? index "Slot") site))
-  SszVector.ofArray (emptyPreviousEpoch ++ ptcs) site
+  Ssz.Vector.ofArray (emptyPreviousEpoch ++ ptcs) site
 
 /-! ## `onboard_builders_from_pending_deposits` -/
 
@@ -130,7 +130,7 @@ def allAvailable : ExecutionPayloadAvailability P :=
   ⟨Array.replicate P.SLOTS_PER_HISTORICAL_ROOT true, by simp⟩
 
 /-- `BuilderPendingPayments()`: the default vector. -/
-def emptyBuilderPendingPayments : SszVector BuilderPendingPayment (2 * P.SLOTS_PER_EPOCH) :=
+def emptyBuilderPendingPayments : Ssz.Vector BuilderPendingPayment (2 * P.SLOTS_PER_EPOCH) :=
   ⟨Array.replicate (2 * P.SLOTS_PER_EPOCH) BuilderPendingPayment.empty, by simp⟩
 
 /-- `PayloadTimelinessCommitteeWindow()`: the default vector (all-zero committees). It is a

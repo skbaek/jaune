@@ -18,7 +18,7 @@ the gossip driver (`Harness/GossipCases.lean`) through the handler table
 namespace JauneConsensus.Harness
 open Yaml
 
-private def nats (v : YamlValue) : Except String (List Nat) :=
+private def decimalSequence (v : YamlValue) : Except String (List Nat) :=
   ((v.asSequence).bind (·.mapM YamlValue.asNat)).mapError toString
 
 private def nat (v : YamlValue) (k : String) : Except String Nat :=
@@ -32,13 +32,13 @@ def networkingCase (cfg : Config) (c : Case) : IO (Except String Unit) := do
   let doc := (parse (← IO.FS.readBinFile (c.directory / "meta.yaml"))).mapError toString
   pure do
     let v ← doc
-    let want ← nats (← (v.field "result").mapError toString)
+    let want ← decimalSequence (← (v.field "result").mapError toString)
     let got ← match c.key.handler with
       | "get_custody_groups" =>
         v.expectKeys ["node_id", "custody_group_count", "result"] |>.mapError toString
         let nodeId ← nat v "node_id"
         let count ← nat v "custody_group_count"
-        let some nid := (UIntN.ofNat? nodeId : Fallible U256).toOption | throw "node_id out of range"
+        let some nid := (UnsignedInteger.ofNat? nodeId : Fallible U256).toOption | throw "node_id out of range"
         let some cnt := (U64.ofNat? count).toOption | throw "count out of range"
         match getCustodyGroups cfg nid cnt with
         | .ok r => pure (r.toList.map (·.toNat))

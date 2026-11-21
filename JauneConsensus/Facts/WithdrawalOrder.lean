@@ -33,7 +33,7 @@ variable {P : Preset} {f : ConsensusFork}
 
 /-- `bind` on an `ok` result, as a rewrite (cf `WithdrawalRequest.bind_ok_cons`,
 which is private to that file). -/
-private theorem bind_ok_cons {α β ε : Type} (a : α) (k : α → Except ε β) :
+private theorem bind_ok_constructor {α β ε : Type} (a : α) (k : α → Except ε β) :
     Bind.bind (Except.ok a) k = k a := rfl
 
 /-- Injection on `ok` results. Stated with `Except.ok` (not `pure`) so the
@@ -44,7 +44,7 @@ private theorem ok_inj_of_pure {ε α : Type} {a b : α}
   Except.ok.inj h
 
 /-- `bind` on an `error` result, as a rewrite (cf `WithdrawalRequest.bind_err_cons`). -/
-private theorem bind_error_cons {α β ε : Type} (e : ε) (k : α → Except ε β) :
+private theorem bind_error_constructor {α β ε : Type} (e : ε) (k : α → Except ε β) :
     Bind.bind (Except.error e) k = Except.error e := rfl
 
 /-- Inversion for one `bind` layer (cf `WithdrawalRequest.bind_ok_inv`). -/
@@ -52,7 +52,7 @@ private theorem bind_ok_invariant {α β ε : Type} {m : Except ε α} {f : α �
     {y : β} (h : Bind.bind m f = .ok y) : ∃ a, m = .ok a ∧ f a = .ok y := by
   cases m with
   | ok a => exact ⟨a, rfl, h⟩
-  | error e => rw [bind_error_cons] at h; cases h
+  | error e => rw [bind_error_constructor] at h; cases h
 
 /-- A successful `getAt` read pins the `Option` read. -/
 theorem getAt_some {α : Type} {arr : Array α} {i : Nat} {site : String} {x : α}
@@ -65,15 +65,15 @@ theorem getAt_some {α : Type} {arr : Array α} {i : Nat} {site : String} {x : �
     exact congrArg some (ok_inj_of_pure h)
 
 /-- Reading back a `SszList.set` at the same index returns the stored value. -/
-theorem SszList.get_set_eq {α : Type} {n : Nat} {xs : SszList α n} {i : Nat}
-    {a : α} {site1 site2 : String} {w : SszList α n}
+theorem Ssz.List.get_set_eq {α : Type} {n : Nat} {xs : Ssz.List α n} {i : Nat}
+    {a : α} {site1 site2 : String} {w : Ssz.List α n}
     (h : xs.set i a site1 = .ok w) : w.get i site2 = .ok a := by
-  unfold SszList.set at h
+  unfold Ssz.List.set at h
   by_cases hle : i < xs.toArray.size
   · rw [dite_eq_left hle] at h
     have hww := ok_inj_of_pure h
     simp only [hww.symm]
-    unfold SszList.get getAt
+    unfold Ssz.List.get getAt
     dsimp only
     rw [Array.getElem?_set_self]
     rfl
@@ -188,7 +188,7 @@ theorem applyPartial_push {cfg : Config} {s : BeaconState P f}
     {wp : WithdrawalRequest} {V : ValidatorIndex} {amt : Gwei}
     {s1 : BeaconState P f}
     (happ : applyWithdrawalOutcome cfg s wp (.partialWithdrawal V amt) = .ok s1) :
-    ∃ (sList pushed : SszList PendingPartialWithdrawal
+    ∃ (sList pushed : Ssz.List PendingPartialWithdrawal
         P.PENDING_PARTIAL_WITHDRAWALS_LIMIT) (wd : Epoch),
       s.pendingPartialWithdrawals = .ok sList ∧
       pushed.toArray = sList.toArray.push
@@ -214,11 +214,11 @@ theorem applyPartial_push {cfg : Config} {s : BeaconState P f}
   have hsread : s.pendingPartialWithdrawals = .ok midList :=
     hcongr.trans hmidread
   by_cases hle : midList.toArray.size + 1 ≤ P.PENDING_PARTIAL_WITHDRAWALS_LIMIT
-  · unfold SszList.push at hpushok
+  · unfold Ssz.List.push at hpushok
     rw [dite_eq_left hle] at hpushok
     have hparr : pushed.toArray = midList.toArray.push
         { validator_index := V, amount := amt, withdrawable_epoch := wd } :=
-      (congrArg SszList.toArray (ok_inj_of_pure hpushok)).symm
+      (congrArg Ssz.List.toArray (ok_inj_of_pure hpushok)).symm
     unfold BeaconState.setPendingPartialWithdrawals at hsetrest
     cases f with
     | deneb =>
@@ -246,7 +246,7 @@ theorem applyPartial_push {cfg : Config} {s : BeaconState P f}
         rfl
       refine ⟨midList, pushed, wd, hsread, ?_, hs1read, hframeV, hframeS, hle⟩
       rw [hparr]
-  · unfold SszList.push at hpushok
+  · unfold Ssz.List.push at hpushok
     rw [dite_eq_right hle] at hpushok
     simp at hpushok
 
@@ -270,14 +270,14 @@ theorem partial_applied_pending_pos {cfg : Config} {s : BeaconState P f}
         "pending_partial_withdrawals" = .ok pushed := hs1read
     unfold getPendingBalanceToWithdraw
     rw [hs1r]
-    simp only [bind_ok_cons]
+    simp only [bind_ok_constructor]
   rw [hps1, hparr, Array.foldlM_push]
   intro hcon
   cases hfoldS : sList.toArray.foldlM (fun acc w => if w.validator_index == V then
       U64.add? acc w.amount "get_pending_balance_to_withdraw"
       else pure acc) U64.zero with
   | error e =>
-    rw [hfoldS, bind_error_cons] at hcon
+    rw [hfoldS, bind_error_constructor] at hcon
     cases hcon
   | ok old =>
     rw [hfoldS] at hcon
@@ -305,7 +305,7 @@ theorem initiateExit_sets_epoch {cfg : Config} {s : BeaconState P f}
     (vc : Validator)
     (hgetc : s.validators.get V.toNat "process_withdrawal_request" = .ok vc)
     (hexit : vc.exit_epoch = FAR_FUTURE_EPOCH) :
-    ∃ (eqE delay wd : Epoch) (vl : SszList Validator P.VALIDATOR_REGISTRY_LIMIT),
+    ∃ (eqE delay wd : Epoch) (vl : Ssz.List Validator P.VALIDATOR_REGISTRY_LIMIT),
       u64Checked cfg.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok delay ∧
       U64.add? eqE delay "initiate_validator_exit" = .ok wd ∧
       s1.validators.get V.toNat "initiate_validator_exit" =
@@ -328,7 +328,7 @@ theorem initiateExit_sets_epoch {cfg : Config} {s : BeaconState P f}
   obtain ⟨wd, hwd, h4⟩ := bind_ok_invariant h3
   obtain ⟨vl, hset, h5⟩ := bind_ok_invariant h4
   have hs1 : s1 = { mid with validators := vl } := (Except.ok.inj h5).symm
-  have hback := SszList.get_set_eq (site1 := "initiate_validator_exit")
+  have hback := Ssz.List.get_set_eq (site1 := "initiate_validator_exit")
     (site2 := "initiate_validator_exit") hset
   exact ⟨eqE, delay, wd, vl, hcd, hwd, by rw [hs1]; exact hback⟩
 
@@ -397,7 +397,7 @@ theorem initiateValidatorExit_frame {cfg : Config}
 non-exit request. -/
 theorem classify_ignored_partialQueueFull {cfg : Config} {s : BeaconState P f}
     {wr : WithdrawalRequest}
-    {q : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {q : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     (hq : s.pendingPartialWithdrawals = .ok q)
     (hfull : (q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
       !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true) :
@@ -405,7 +405,7 @@ theorem classify_ignored_partialQueueFull {cfg : Config} {s : BeaconState P f}
   unfold classifyWithdrawalRequest
   dsimp only
   rw [hq]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_left hfull]
   rfl
 
@@ -413,7 +413,7 @@ theorem classify_ignored_partialQueueFull {cfg : Config} {s : BeaconState P f}
 (and the queue gate passes). -/
 theorem classify_ignored_unknownPubkey {cfg : Config} {s : BeaconState P f}
     {wr : WithdrawalRequest}
-    {q : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {q : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     (hq : s.pendingPartialWithdrawals = .ok q)
     (hempty : (q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
       !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = false)
@@ -422,10 +422,10 @@ theorem classify_ignored_unknownPubkey {cfg : Config} {s : BeaconState P f}
   unfold classifyWithdrawalRequest
   dsimp only
   rw [hq]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT && !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hempty])]
   rw [hlook]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rfl
 
 /-- The bad-credential-or-source reason fires when the validator lacks an
@@ -433,7 +433,7 @@ execution credential or the source is not the credential address. -/
 theorem classify_ignored_badCredentialOrSource {cfg : Config}
     {s : BeaconState P f} {wr : WithdrawalRequest} {V : ValidatorIndex}
     {v : Validator}
-    {q : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {q : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     (hq : s.pendingPartialWithdrawals = .ok q)
     (hempty : (q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
       !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = false)
@@ -447,10 +447,10 @@ theorem classify_ignored_badCredentialOrSource {cfg : Config}
   unfold classifyWithdrawalRequest
   dsimp only
   rw [hq, hlook]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT && !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hempty])]
   rw [hget]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_left (show ((!((hasExecutionWithdrawalCredential v) && (v.withdrawal_credentials.toBytes.drop 12 == wr.source_address.toBytes))) = true) from by simp [hbad])]
   rfl
 
@@ -458,7 +458,7 @@ theorem classify_ignored_badCredentialOrSource {cfg : Config}
 credentials. -/
 theorem classify_ignored_notActive {cfg : Config} {s : BeaconState P f}
     {wr : WithdrawalRequest} {V : ValidatorIndex} {v : Validator}
-    {q : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {q : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     {cur : Epoch}
     (hq : s.pendingPartialWithdrawals = .ok q)
     (hempty : (q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
@@ -474,20 +474,20 @@ theorem classify_ignored_notActive {cfg : Config} {s : BeaconState P f}
   unfold classifyWithdrawalRequest
   dsimp only
   rw [hq, hlook]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT && !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hempty])]
   rw [hget]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((!((hasExecutionWithdrawalCredential v) && (v.withdrawal_credentials.toBytes.drop 12 == wr.source_address.toBytes))) = true)) from by simp [hgood])]
   rw [hcur]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_left (show (((!(isActiveValidator v cur))) = true) from by simp [hact])]
   rfl
 
 /-- The already-exiting reason fires for an active validator whose exit is set. -/
 theorem classify_ignored_alreadyExiting {cfg : Config} {s : BeaconState P f}
     {wr : WithdrawalRequest} {V : ValidatorIndex} {v : Validator}
-    {q : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {q : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     {cur : Epoch}
     (hq : s.pendingPartialWithdrawals = .ok q)
     (hempty : (q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
@@ -504,13 +504,13 @@ theorem classify_ignored_alreadyExiting {cfg : Config} {s : BeaconState P f}
   unfold classifyWithdrawalRequest
   dsimp only
   rw [hq, hlook]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT && !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hempty])]
   rw [hget]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((!((hasExecutionWithdrawalCredential v) && (v.withdrawal_credentials.toBytes.drop 12 == wr.source_address.toBytes))) = true)) from by simp [hgood])]
   rw [hcur]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬((((!(isActiveValidator v cur))) = true)) from by simp [hact])]
   rw [ite_eq_left hexit]
   rfl
@@ -519,7 +519,7 @@ theorem classify_ignored_alreadyExiting {cfg : Config} {s : BeaconState P f}
 `SHARD_COMMITTEE_PERIOD`. -/
 theorem classify_ignored_tooEarly {cfg : Config} {s : BeaconState P f}
     {wr : WithdrawalRequest} {V : ValidatorIndex} {v : Validator}
-    {q : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {q : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     {cur period actSum : Epoch}
     (hq : s.pendingPartialWithdrawals = .ok q)
     (hempty : (q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
@@ -540,19 +540,19 @@ theorem classify_ignored_tooEarly {cfg : Config} {s : BeaconState P f}
   unfold classifyWithdrawalRequest
   dsimp only
   rw [hq, hlook]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT && !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hempty])]
   rw [hget]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((!((hasExecutionWithdrawalCredential v) && (v.withdrawal_credentials.toBytes.drop 12 == wr.source_address.toBytes))) = true)) from by simp [hgood])]
   rw [hcur]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬((((!(isActiveValidator v cur))) = true)) from by simp [hact])]
   rw [ite_eq_right (show ¬((((v.exit_epoch != FAR_FUTURE_EPOCH)) = true)) from by simp [hnoexit])]
   rw [hper]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [hsum]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_left hlt]
   rfl
 
@@ -561,7 +561,7 @@ pending balance remains. -/
 theorem classify_ignored_fullExitPendingBalance {cfg : Config}
     {s : BeaconState P f} {wr : WithdrawalRequest} {V : ValidatorIndex}
     {v : Validator}
-    {q : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {q : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     {cur period actSum : Epoch} {pb : Gwei}
     (hq : s.pendingPartialWithdrawals = .ok q)
     (hempty : (q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
@@ -586,22 +586,22 @@ theorem classify_ignored_fullExitPendingBalance {cfg : Config}
   unfold classifyWithdrawalRequest
   dsimp only
   rw [hq, hlook]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT && !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hempty])]
   rw [hget]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((!((hasExecutionWithdrawalCredential v) && (v.withdrawal_credentials.toBytes.drop 12 == wr.source_address.toBytes))) = true)) from by simp [hgood])]
   rw [hcur]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬((((!(isActiveValidator v cur))) = true)) from by simp [hact])]
   rw [ite_eq_right (show ¬((((v.exit_epoch != FAR_FUTURE_EPOCH)) = true)) from by simp [hnoexit])]
   rw [hper]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [hsum]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right hearly]
   rw [hpend]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_left hfull]
   rw [ite_eq_right (show ¬((((pb == U64.zero)) = true)) from by simp [hpb])]
   rfl
@@ -610,7 +610,7 @@ theorem classify_ignored_fullExitPendingBalance {cfg : Config}
 lacks a compounding credential (after the earlier gates pass). -/
 theorem classify_ignored_notCompounding {cfg : Config} {s : BeaconState P f}
     {wr : WithdrawalRequest} {V : ValidatorIndex} {v : Validator}
-    {q : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {q : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     {cur period actSum : Epoch} {pb minAct balance sum : Gwei}
     (hq : s.pendingPartialWithdrawals = .ok q)
     (hempty : (q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
@@ -637,27 +637,27 @@ theorem classify_ignored_notCompounding {cfg : Config} {s : BeaconState P f}
   unfold classifyWithdrawalRequest
   dsimp only
   rw [hq, hlook]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT && !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hempty])]
   rw [hget]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((!((hasExecutionWithdrawalCredential v) && (v.withdrawal_credentials.toBytes.drop 12 == wr.source_address.toBytes))) = true)) from by simp [hgood])]
   rw [hcur]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬((((!(isActiveValidator v cur))) = true)) from by simp [hact])]
   rw [ite_eq_right (show ¬((((v.exit_epoch != FAR_FUTURE_EPOCH)) = true)) from by simp [hnoexit])]
   rw [hper]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [hsum]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right hearly]
   rw [hpend]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬((((wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hnofull])]
   rw [hmin, hbal]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [hsum2]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((((hasCompoundingWithdrawalCredential v) && (decide (minAct ≤ v.effective_balance)) && (decide (sum < balance)))) = true)) from by simp [hcomp])]
   rw [ite_eq_left (show (((!(hasCompoundingWithdrawalCredential v))) = true) from by simp [hcomp])]
   rfl
@@ -667,7 +667,7 @@ withdrawal below `MIN_ACTIVATION_BALANCE`. -/
 theorem classify_ignored_insufficientEffectiveBalance {cfg : Config}
     {s : BeaconState P f} {wr : WithdrawalRequest} {V : ValidatorIndex}
     {v : Validator}
-    {q : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {q : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     {cur period actSum : Epoch} {pb minAct balance sum : Gwei}
     (hq : s.pendingPartialWithdrawals = .ok q)
     (hempty : (q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
@@ -696,27 +696,27 @@ theorem classify_ignored_insufficientEffectiveBalance {cfg : Config}
   unfold classifyWithdrawalRequest
   dsimp only
   rw [hq, hlook]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT && !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hempty])]
   rw [hget]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((!((hasExecutionWithdrawalCredential v) && (v.withdrawal_credentials.toBytes.drop 12 == wr.source_address.toBytes))) = true)) from by simp [hgood])]
   rw [hcur]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬((((!(isActiveValidator v cur))) = true)) from by simp [hact])]
   rw [ite_eq_right (show ¬((((v.exit_epoch != FAR_FUTURE_EPOCH)) = true)) from by simp [hnoexit])]
   rw [hper]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [hsum]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right hearly]
   rw [hpend]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬((((wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hnofull])]
   rw [hmin, hbal]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [hsum2]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((((hasCompoundingWithdrawalCredential v) && (decide (minAct ≤ v.effective_balance)) && (decide (sum < balance)))) = true)) from by simp [hcomp, hsuff])]
   rw [ite_eq_right (show ¬((((!(hasCompoundingWithdrawalCredential v))) = true)) from by simp [hcomp])]
   rw [ite_eq_left (show (((!(decide (minAct ≤ v.effective_balance)))) = true) from by simp [hsuff])]
@@ -726,7 +726,7 @@ theorem classify_ignored_insufficientEffectiveBalance {cfg : Config}
 sufficient effective balance but no excess balance. -/
 theorem classify_ignored_noExcess {cfg : Config} {s : BeaconState P f}
     {wr : WithdrawalRequest} {V : ValidatorIndex} {v : Validator}
-    {q : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
+    {q : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT}
     {cur period actSum : Epoch} {pb minAct balance sum : Gwei}
     (hq : s.pendingPartialWithdrawals = .ok q)
     (hempty : (q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
@@ -755,27 +755,27 @@ theorem classify_ignored_noExcess {cfg : Config} {s : BeaconState P f}
   unfold classifyWithdrawalRequest
   dsimp only
   rw [hq, hlook]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((q.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT && !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hempty])]
   rw [hget]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((!((hasExecutionWithdrawalCredential v) && (v.withdrawal_credentials.toBytes.drop 12 == wr.source_address.toBytes))) = true)) from by simp [hgood])]
   rw [hcur]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬((((!(isActiveValidator v cur))) = true)) from by simp [hact])]
   rw [ite_eq_right (show ¬((((v.exit_epoch != FAR_FUTURE_EPOCH)) = true)) from by simp [hnoexit])]
   rw [hper]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [hsum]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right hearly]
   rw [hpend]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬((((wr.amount == FULL_EXIT_REQUEST_AMOUNT)) = true)) from by simp [hnofull])]
   rw [hmin, hbal]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [hsum2]
-  simp only [bind_ok_cons]
+  simp only [bind_ok_constructor]
   rw [ite_eq_right (show ¬(((((hasCompoundingWithdrawalCredential v) && (decide (minAct ≤ v.effective_balance)) && (decide (sum < balance)))) = true)) from by simp [hcomp, hsuff, hexc])]
   rw [ite_eq_right (show ¬((((!(hasCompoundingWithdrawalCredential v))) = true)) from by simp [hcomp])]
   rw [ite_eq_right (show ¬((((!(decide (minAct ≤ v.effective_balance)))) = true)) from by simp [hsuff])]
@@ -891,7 +891,7 @@ theorem pending_after_partial_of_zero {cfg : Config} {s : BeaconState P f}
     have h0 := hpend
     unfold getPendingBalanceToWithdraw at h0
     rw [hsr] at h0
-    simpa only [bind_ok_cons] using h0
+    simpa only [bind_ok_constructor] using h0
   have hps1 : getPendingBalanceToWithdraw s1 V =
       pushed.toArray.foldlM (fun acc w => if w.validator_index == V then
         U64.add? acc w.amount "get_pending_balance_to_withdraw"
@@ -900,8 +900,8 @@ theorem pending_after_partial_of_zero {cfg : Config} {s : BeaconState P f}
         "pending_partial_withdrawals" = .ok pushed := hs1read
     unfold getPendingBalanceToWithdraw
     rw [hs1r]
-    simp only [bind_ok_cons]
-  rw [hps1, hparr, Array.foldlM_push, hs0, bind_ok_cons]
+    simp only [bind_ok_constructor]
+  rw [hps1, hparr, Array.foldlM_push, hs0, bind_ok_constructor]
   have hv : (({ validator_index := V, amount := amt, withdrawable_epoch := wd } :
       PendingPartialWithdrawal).validator_index == V) = true :=
     U64.beq_eq_true_iff.mpr rfl
@@ -948,7 +948,7 @@ theorem validatorIndexOf_pubkey {s : BeaconState P f} {p : BLSPubkey}
       rw [← hxV, hi, Array.getElem?_eq_getElem hlt]
       rfl
     · have hb : (s.validators.toArray[i].pubkey.toArray == p.toArray) = true := hpk
-      exact SszVector.ext (beq_iff_eq.mp hb)
+      exact Ssz.Vector.ext (beq_iff_eq.mp hb)
 
 /-- (c) P2 negative control (i), order sensitivity. Take a validator `V`, a
 partial withdrawal `wp` and a full exit `wf`, both classified against the same

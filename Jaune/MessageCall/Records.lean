@@ -20,14 +20,14 @@ end
 
 section
 open Jaune
-namespace Jaune.Staging
+namespace Jaune
 /-- What the caller waits with while its child runs, besides the saved caller itself. -/
 structure Pending : Type where
   /-- Where the child's result goes. -/
   target : ReturnTarget
   /-- Whether the spawn charged a new account's state gas, which a failed child refunds. -/
   newAccountCharged : Bool
-end Jaune.Staging
+end Jaune
 end
 
 section

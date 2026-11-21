@@ -177,8 +177,8 @@ def engineVerdictGloas (cfg : ChainConfig) (exec : BlockChain) (req : Gloas.NewP
   guardExcept (decide (f.consensusFork? = some .gloas)) (.engine (.unpairedFork f))
   (checkBlockRlpSize f.ruleSet.block blk.toRlpItem.toBytes.length).mapError
     (fun e => .engine (.blockSize e))
-  let post ← (transitionVerdict (stateTransitionScheduledE cfg f exec blk)).mapError .engine
-  let out ← (Checked.applyBody (Checked.initBlockContext f exec blk.header) exec.state
+  let post ← (transitionVerdict (stateTransitionScheduledTyped cfg f exec blk)).mapError .engine
+  let out ← (applyBody (initBlockContext f exec blk.header) exec.state
       blk.transactions blk.ommers blk.withdrawals).mapError
     (fun e => .engine (.body e))
   guardExcept (decide (out.2.requests = Gloas.getExecutionRequestsList req.execution_requests))

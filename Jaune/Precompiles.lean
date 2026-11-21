@@ -39,8 +39,8 @@ def modexpComplexity
     let maxLength := max baseLength modulusLength
     let words := ceilDiv maxLength 8
     match m.flatComplexity with
-    | some flat => if maxLength ≤ 32 then flat else m.complexityCoeff * words ^ 2
-    | none => m.complexityCoeff * words ^ 2
+    | some flat => if maxLength ≤ 32 then flat else m.complexityCoefficient * words ^ 2
+    | none => m.complexityCoefficient * words ^ 2
 
 -- def iterations
 def modexpIterations (m : ModexpRules) (expLength : Nat) (expHead : Nat) : Nat :=
@@ -53,7 +53,7 @@ def modexpIterations (m : ModexpRules) (expLength : Nat) (expHead : Nat) : Nat :
       else
         bitsPart
     else
-      let lengthPart := m.iterationCoeff * (expLength - 32)
+      let lengthPart := m.iterationCoefficient * (expLength - 32)
       lengthPart + bitsPart
 
   max count 1
@@ -80,11 +80,11 @@ def modexpLengthsInBounds
   | some bound =>
     baseLength ≤ bound && expLength ≤ bound && modulusLength ≤ bound
 
-def b2R1 : UInt64 := 32
-def b2R2 : UInt64 := 24
-def b2R3 : UInt64 := 16
-def b2R4 : UInt64 := 63
-def b2MaskBits : UInt64 := 0xFFFFFFFFFFFFFFFF
+def Blake2.R1 : UInt64 := 32
+def Blake2.R2 : UInt64 := 24
+def Blake2.R3 : UInt64 := 16
+def Blake2.R4 : UInt64 := 63
+def Blake2.maskBits : UInt64 := 0xFFFFFFFFFFFFFFFF
 
 def blake2IV : List UInt64 :=
   [
@@ -148,36 +148,36 @@ theorem size_blake2Sigma_get (r : Nat) :
   exact size_blake2Sigma_row _ h
 
 -- def spit_le_to_uint
-def readLeUInt64Words (data : Bytes) : Nat → Nat → List UInt64
+def readLittleEndianUInt64Words (data : Bytes) : Nat → Nat → List UInt64
   | _, 0 => []
   | start, num_words + 1 =>
     let wordBytes := data.sliceD start 8 (0x00 : UInt8)
     let word := Bytes.toUInt64 wordBytes.reverse
-    word :: readLeUInt64Words data (start + 8) num_words
+    word :: readLittleEndianUInt64Words data (start + 8) num_words
 
 /-- The reader produces exactly the number of words asked for, whatever the
 input length: it is the fact that lets `executeBlake2F`'s 213-byte check stand
 in for the chaining value and message widths `bCompress` requires. -/
-theorem length_readLeUInt64Words (data : Bytes) (start n : Nat) :
-    (readLeUInt64Words data start n).length = n := by
+theorem length_readLittleEndianUInt64Words (data : Bytes) (start n : Nat) :
+    (readLittleEndianUInt64Words data start n).length = n := by
   induction n generalizing start with
   | zero => rfl
-  | succ n ih => simp [readLeUInt64Words, ih]
+  | succ n ih => simp [readLittleEndianUInt64Words, ih]
 
 def getBlake2Parameters (data : Bytes) :
   Nat × List UInt64 × List UInt64 × UInt64 × UInt64 × Nat :=
   let rounds := Bytes.sliceToNat data 0 4
-  let h := readLeUInt64Words data 4 8
-  let m := readLeUInt64Words data 68 16
-  let t := readLeUInt64Words data 196 2
+  let h := readLittleEndianUInt64Words data 4 8
+  let m := readLittleEndianUInt64Words data 68 16
+  let t := readLittleEndianUInt64Words data 196 2
   let f := Bytes.toNat <| data.drop 212
   ⟨rounds, h, m, t.getD 0 0, t.getD 1 0, f⟩
 
 -- The left rotation amounts are `64 - b2R*`: one source of truth for the pair.
-def blake2R1 : UInt64 := 64 - b2R1
-def blake2R2 : UInt64 := 64 - b2R2
-def blake2R3 : UInt64 := 64 - b2R3
-def blake2R4 : UInt64 := 64 - b2R4
+def Blake2.wR1 : UInt64 := 64 - Blake2.R1
+def Blake2.wR2 : UInt64 := 64 - Blake2.R2
+def Blake2.wR3 : UInt64 := 64 - Blake2.R3
+def Blake2.wR4 : UInt64 := 64 - Blake2.R4
 
 -- `Blake2.g`, `Blake2.round`, and `Blake2.rounds` below are the readable
 -- reference specification of the compression round. They are no longer on the
@@ -198,16 +198,16 @@ private def Blake2.g (v : Array UInt64) (a b c d : Nat) (x y : UInt64) : Array U
   let vd : UInt64 := v[d]!
   let va : UInt64 := va + vb + x
   let s : UInt64 := vd ^^^ va
-  let vd : UInt64 := (s >>> b2R1) ^^^ (s <<< blake2R1)
+  let vd : UInt64 := (s >>> Blake2.R1) ^^^ (s <<< Blake2.wR1)
   let vc : UInt64 := vc + vd
   let s : UInt64 := vb ^^^ vc
-  let vb : UInt64 := (s >>> b2R2) ^^^ (s <<< blake2R2)
+  let vb : UInt64 := (s >>> Blake2.R2) ^^^ (s <<< Blake2.wR2)
   let va : UInt64 := va + vb + y
   let s : UInt64 := vd ^^^ va
-  let vd : UInt64 := (s >>> b2R3) ^^^ (s <<< blake2R3)
+  let vd : UInt64 := (s >>> Blake2.R3) ^^^ (s <<< Blake2.wR3)
   let vc : UInt64 := vc + vd
   let s : UInt64 := vb ^^^ vc
-  let vb : UInt64 := (s >>> b2R4) ^^^ (s <<< blake2R4)
+  let vb : UInt64 := (s >>> Blake2.R4) ^^^ (s <<< Blake2.wR4)
   (((v.set! a va).set! b vb).set! c vc).set! d vd
 
 -- One full mixing round, with `blake2MixTable` unrolled into literal word
@@ -236,18 +236,18 @@ scalars, so a compression round never touches the heap. `Array UInt64` stores
 a later free; a round is eight `Blake2.g` calls and therefore costs 32 of each.
 This mirrors `Jaune/Hash.lean`'s `State1600`, which holds keccak's 25 lanes the
 same way for the same reason. -/
-structure Blake2.Vec where
-  (v0 v1 v2 v3 : UInt64)
-  (v4 v5 v6 v7 : UInt64)
-  (v8 v9 v10 v11 : UInt64)
-  (v12 v13 v14 v15 : UInt64)
+structure Blake2.WorkingVector where
+  (word0 word1 word2 word3 : UInt64)
+  (word4 word5 word6 word7 : UInt64)
+  (word8 word9 word10 word11 : UInt64)
+  (word12 word13 word14 word15 : UInt64)
 
 /-- Bridge from the unboxed working vector to the `Array UInt64` the reference
 definitions operate on. It is used by the equivalence theorems and once per
 compression, never inside a round. -/
-def Blake2.Vec.toArray (w : Blake2.Vec) : Array UInt64 :=
-  #[w.v0, w.v1, w.v2, w.v3, w.v4, w.v5, w.v6, w.v7,
-    w.v8, w.v9, w.v10, w.v11, w.v12, w.v13, w.v14, w.v15]
+def Blake2.WorkingVector.toArray (w : Blake2.WorkingVector) : Array UInt64 :=
+  #[w.word0, w.word1, w.word2, w.word3, w.word4, w.word5, w.word6, w.word7,
+    w.word8, w.word9, w.word10, w.word11, w.word12, w.word13, w.word14, w.word15]
 
 /-- `Blake2.round` transliterated onto `Blake2.Vec`: the same eight mixes, in
 the same order, over the same literal word indices, with each `Blake2.g` body
@@ -255,155 +255,155 @@ inlined as scalar `let` bindings. The message and sigma words are still read
 out of arrays — a read does not allocate, only `set!` does. The mix temporary
 is named `q` rather than `Blake2.g`'s `s`, which here names the sigma row.
 `Blake2.roundVec_toArray` proves this agrees with `Blake2.round`. -/
-private def Blake2.roundVec (m : Array UInt64) (s : Array Nat) (w : Blake2.Vec) :
-    Blake2.Vec :=
-  let v0 := w.v0
-  let v1 := w.v1
-  let v2 := w.v2
-  let v3 := w.v3
-  let v4 := w.v4
-  let v5 := w.v5
-  let v6 := w.v6
-  let v7 := w.v7
-  let v8 := w.v8
-  let v9 := w.v9
-  let v10 := w.v10
-  let v11 := w.v11
-  let v12 := w.v12
-  let v13 := w.v13
-  let v14 := w.v14
-  let v15 := w.v15
+private def Blake2.roundWorkingVector (m : Array UInt64) (s : Array Nat) (w : Blake2.WorkingVector) :
+    Blake2.WorkingVector :=
+  let v0 := w.word0
+  let v1 := w.word1
+  let v2 := w.word2
+  let v3 := w.word3
+  let v4 := w.word4
+  let v5 := w.word5
+  let v6 := w.word6
+  let v7 := w.word7
+  let v8 := w.word8
+  let v9 := w.word9
+  let v10 := w.word10
+  let v11 := w.word11
+  let v12 := w.word12
+  let v13 := w.word13
+  let v14 := w.word14
+  let v15 := w.word15
   -- Blake2.g v 0 4 8 12 (m[s[0]!]!) (m[s[1]!]!)
   let x := m[s[0]!]!
   let y := m[s[1]!]!
   let v0 := v0 + v4 + x
   let q := v12 ^^^ v0
-  let v12 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v12 := (q >>> Blake2.R1) ^^^ (q <<< Blake2.wR1)
   let v8 := v8 + v12
   let q := v4 ^^^ v8
-  let v4 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v4 := (q >>> Blake2.R2) ^^^ (q <<< Blake2.wR2)
   let v0 := v0 + v4 + y
   let q := v12 ^^^ v0
-  let v12 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v12 := (q >>> Blake2.R3) ^^^ (q <<< Blake2.wR3)
   let v8 := v8 + v12
   let q := v4 ^^^ v8
-  let v4 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  let v4 := (q >>> Blake2.R4) ^^^ (q <<< Blake2.wR4)
   -- Blake2.g v 1 5 9 13 (m[s[2]!]!) (m[s[3]!]!)
   let x := m[s[2]!]!
   let y := m[s[3]!]!
   let v1 := v1 + v5 + x
   let q := v13 ^^^ v1
-  let v13 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v13 := (q >>> Blake2.R1) ^^^ (q <<< Blake2.wR1)
   let v9 := v9 + v13
   let q := v5 ^^^ v9
-  let v5 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v5 := (q >>> Blake2.R2) ^^^ (q <<< Blake2.wR2)
   let v1 := v1 + v5 + y
   let q := v13 ^^^ v1
-  let v13 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v13 := (q >>> Blake2.R3) ^^^ (q <<< Blake2.wR3)
   let v9 := v9 + v13
   let q := v5 ^^^ v9
-  let v5 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  let v5 := (q >>> Blake2.R4) ^^^ (q <<< Blake2.wR4)
   -- Blake2.g v 2 6 10 14 (m[s[4]!]!) (m[s[5]!]!)
   let x := m[s[4]!]!
   let y := m[s[5]!]!
   let v2 := v2 + v6 + x
   let q := v14 ^^^ v2
-  let v14 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v14 := (q >>> Blake2.R1) ^^^ (q <<< Blake2.wR1)
   let v10 := v10 + v14
   let q := v6 ^^^ v10
-  let v6 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v6 := (q >>> Blake2.R2) ^^^ (q <<< Blake2.wR2)
   let v2 := v2 + v6 + y
   let q := v14 ^^^ v2
-  let v14 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v14 := (q >>> Blake2.R3) ^^^ (q <<< Blake2.wR3)
   let v10 := v10 + v14
   let q := v6 ^^^ v10
-  let v6 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  let v6 := (q >>> Blake2.R4) ^^^ (q <<< Blake2.wR4)
   -- Blake2.g v 3 7 11 15 (m[s[6]!]!) (m[s[7]!]!)
   let x := m[s[6]!]!
   let y := m[s[7]!]!
   let v3 := v3 + v7 + x
   let q := v15 ^^^ v3
-  let v15 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v15 := (q >>> Blake2.R1) ^^^ (q <<< Blake2.wR1)
   let v11 := v11 + v15
   let q := v7 ^^^ v11
-  let v7 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v7 := (q >>> Blake2.R2) ^^^ (q <<< Blake2.wR2)
   let v3 := v3 + v7 + y
   let q := v15 ^^^ v3
-  let v15 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v15 := (q >>> Blake2.R3) ^^^ (q <<< Blake2.wR3)
   let v11 := v11 + v15
   let q := v7 ^^^ v11
-  let v7 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  let v7 := (q >>> Blake2.R4) ^^^ (q <<< Blake2.wR4)
   -- Blake2.g v 0 5 10 15 (m[s[8]!]!) (m[s[9]!]!)
   let x := m[s[8]!]!
   let y := m[s[9]!]!
   let v0 := v0 + v5 + x
   let q := v15 ^^^ v0
-  let v15 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v15 := (q >>> Blake2.R1) ^^^ (q <<< Blake2.wR1)
   let v10 := v10 + v15
   let q := v5 ^^^ v10
-  let v5 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v5 := (q >>> Blake2.R2) ^^^ (q <<< Blake2.wR2)
   let v0 := v0 + v5 + y
   let q := v15 ^^^ v0
-  let v15 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v15 := (q >>> Blake2.R3) ^^^ (q <<< Blake2.wR3)
   let v10 := v10 + v15
   let q := v5 ^^^ v10
-  let v5 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  let v5 := (q >>> Blake2.R4) ^^^ (q <<< Blake2.wR4)
   -- Blake2.g v 1 6 11 12 (m[s[10]!]!) (m[s[11]!]!)
   let x := m[s[10]!]!
   let y := m[s[11]!]!
   let v1 := v1 + v6 + x
   let q := v12 ^^^ v1
-  let v12 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v12 := (q >>> Blake2.R1) ^^^ (q <<< Blake2.wR1)
   let v11 := v11 + v12
   let q := v6 ^^^ v11
-  let v6 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v6 := (q >>> Blake2.R2) ^^^ (q <<< Blake2.wR2)
   let v1 := v1 + v6 + y
   let q := v12 ^^^ v1
-  let v12 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v12 := (q >>> Blake2.R3) ^^^ (q <<< Blake2.wR3)
   let v11 := v11 + v12
   let q := v6 ^^^ v11
-  let v6 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  let v6 := (q >>> Blake2.R4) ^^^ (q <<< Blake2.wR4)
   -- Blake2.g v 2 7 8 13 (m[s[12]!]!) (m[s[13]!]!)
   let x := m[s[12]!]!
   let y := m[s[13]!]!
   let v2 := v2 + v7 + x
   let q := v13 ^^^ v2
-  let v13 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v13 := (q >>> Blake2.R1) ^^^ (q <<< Blake2.wR1)
   let v8 := v8 + v13
   let q := v7 ^^^ v8
-  let v7 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v7 := (q >>> Blake2.R2) ^^^ (q <<< Blake2.wR2)
   let v2 := v2 + v7 + y
   let q := v13 ^^^ v2
-  let v13 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v13 := (q >>> Blake2.R3) ^^^ (q <<< Blake2.wR3)
   let v8 := v8 + v13
   let q := v7 ^^^ v8
-  let v7 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  let v7 := (q >>> Blake2.R4) ^^^ (q <<< Blake2.wR4)
   -- Blake2.g v 3 4 9 14 (m[s[14]!]!) (m[s[15]!]!)
   let x := m[s[14]!]!
   let y := m[s[15]!]!
   let v3 := v3 + v4 + x
   let q := v14 ^^^ v3
-  let v14 := (q >>> b2R1) ^^^ (q <<< blake2R1)
+  let v14 := (q >>> Blake2.R1) ^^^ (q <<< Blake2.wR1)
   let v9 := v9 + v14
   let q := v4 ^^^ v9
-  let v4 := (q >>> b2R2) ^^^ (q <<< blake2R2)
+  let v4 := (q >>> Blake2.R2) ^^^ (q <<< Blake2.wR2)
   let v3 := v3 + v4 + y
   let q := v14 ^^^ v3
-  let v14 := (q >>> b2R3) ^^^ (q <<< blake2R3)
+  let v14 := (q >>> Blake2.R3) ^^^ (q <<< Blake2.wR3)
   let v9 := v9 + v14
   let q := v4 ^^^ v9
-  let v4 := (q >>> b2R4) ^^^ (q <<< blake2R4)
+  let v4 := (q >>> Blake2.R4) ^^^ (q <<< Blake2.wR4)
   ⟨v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15⟩
 
 /-- `Blake2.rounds` over the unboxed working vector, with the same `k - (n + 1)`
 round index and the same sigma-row lookup. -/
-private def Blake2.roundsVec (m : Array UInt64) (k : Nat) :
-    Nat → Blake2.Vec → Blake2.Vec
+private def Blake2.roundsWorkingVector (m : Array UInt64) (k : Nat) :
+    Nat → Blake2.WorkingVector → Blake2.WorkingVector
   | 0, w => w
   | n + 1, w =>
     let r := k - (n + 1)
-    Blake2.roundsVec m k n
-      (Blake2.roundVec m (blake2Sigma[r % blake2Sigma.size]!) w)
+    Blake2.roundsWorkingVector m k n
+      (Blake2.roundWorkingVector m (blake2Sigma[r % blake2Sigma.size]!) w)
 
 -- The two theorems below use an explicit `simp only` set rather than a bare
 -- `simp`. A bare `simp` closes them too, but discharges the `0 < 16` / `1 < 16`
@@ -414,11 +414,11 @@ private def Blake2.roundsVec (m : Array UInt64) (k : Nat) :
 
 /-- The unboxed round agrees with the reference `Blake2.round`: bridging the
 working vector to an array commutes with a single round. -/
-theorem Blake2.roundVec_toArray (m : Array UInt64) (s : Array Nat)
-    (w : Blake2.Vec) :
-    (Blake2.roundVec m s w).toArray = Blake2.round m s w.toArray := by
+theorem Blake2.roundWorkingVector_toArray (m : Array UInt64) (s : Array Nat)
+    (w : Blake2.WorkingVector) :
+    (Blake2.roundWorkingVector m s w).toArray = Blake2.round m s w.toArray := by
   cases w
-  simp only [Blake2.Vec.toArray, Blake2.roundVec, Blake2.round, Blake2.g,
+  simp only [Blake2.WorkingVector.toArray, Blake2.roundWorkingVector, Blake2.round, Blake2.g,
     List.size_toArray, List.length_cons, List.length_nil, Nat.zero_add,
     Nat.reduceAdd, getElem!_pos, List.getElem_toArray,
     List.getElem_cons_zero, Nat.reduceLT, List.getElem_cons_succ,
@@ -427,18 +427,18 @@ theorem Blake2.roundVec_toArray (m : Array UInt64) (s : Array Nat)
 
 /-- The unboxed rounds loop agrees with the reference `Blake2.rounds`, for
 every round budget `k` and every count `n` of rounds remaining. -/
-theorem Blake2.roundsVec_toArray (m : Array UInt64) (k n : Nat)
-    (w : Blake2.Vec) :
-    (Blake2.roundsVec m k n w).toArray = Blake2.rounds m k n w.toArray := by
+theorem Blake2.roundsWorkingVector_toArray (m : Array UInt64) (k n : Nat)
+    (w : Blake2.WorkingVector) :
+    (Blake2.roundsWorkingVector m k n w).toArray = Blake2.rounds m k n w.toArray := by
   induction n generalizing w with
   | zero => rfl
   | succ n ih =>
-    simp only [Blake2.roundsVec, Blake2.rounds, ih, Blake2.roundVec_toArray]
+    simp only [Blake2.roundsWorkingVector, Blake2.rounds, ih, Blake2.roundWorkingVector_toArray]
 
 /-- The working vector bridged to an array always has sixteen entries: it is a
 sixteen-field structure, so this holds of the fields rather than of a length
 that has to be maintained. -/
-theorem Blake2.size_toArray (w : Blake2.Vec) : w.toArray.size = 16 := rfl
+theorem Blake2.size_toArray (w : Blake2.WorkingVector) : w.toArray.size = 16 := rfl
 
 -- compress
 --
@@ -452,7 +452,7 @@ theorem Blake2.size_toArray (w : Blake2.Vec) : w.toArray.size = 16 := rfl
 -- 213-byte check always satisfies it, and `size_blake2Sigma_get` /
 -- `blake2Sigma_lt` are the corresponding facts for the table the kernel
 -- indexes with.
-def bCompress (numRounds : Nat)
+def Blake2.compress (numRounds : Nat)
   (h m : List UInt64) (t0 t1 : UInt64) (f : Bool) : Option Bytes :=
   if hh : h.length = 8 then
     if hm : m.length = 16 then
@@ -469,13 +469,13 @@ def bCompress (numRounds : Nat)
             blake2IV.getD 2 0, blake2IV.getD 3 0,
             .xor t0 (blake2IV.getD 4 0),
             .xor t1 (blake2IV.getD 5 0),
-            if f then .xor v14 b2MaskBits else v14,
+            if f then .xor v14 Blake2.maskBits else v14,
             (blake2IV.getD 7 0) ]
-      let w : Blake2.Vec :=
+      let w : Blake2.WorkingVector :=
         ⟨v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7],
          v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15]⟩
       let out : Vector UInt64 16 :=
-        ⟨(Blake2.roundsVec mv.toArray numRounds numRounds w).toArray,
+        ⟨(Blake2.roundsWorkingVector mv.toArray numRounds numRounds w).toArray,
          Blake2.size_toArray _⟩
       let resultMsgWords : Vector UInt64 8 :=
         Vector.ofFn fun i => hv[i.val] ^^^ out[i.val] ^^^ out[i.val + 8]
@@ -506,7 +506,7 @@ def Bytes.toExceptBls12Fp (data : Bytes) : Except ExceptionalHalt Bls12Fp := do
   let x := Bytes.toNat data
   if x ≥ blsPrime then
     .error (.invalidParameter (.text "invalid field element"))
-  pure (FinField.ofNat x)
+  pure (FieldElement.ofNat x)
 
 -- def bytes_to_g1(data : Bytes) -> Point3D[FQ]:
 def Bytes.toExceptBls12G1 (data : Bytes) (subgroupCheck : Bool := false) :
@@ -544,7 +544,7 @@ def Bytes.toExceptBls12G2 (data : Bytes) (subgroupCheck : Bool := false) :
   pure p
 
 def decodeG1MsmPairs (data : Bytes) : Except ExceptionalHalt (List (Bls12G1 × Nat)) :=
-  let rec aux (fuel : Nat) (acc : List (Bls12G1 × Nat)) (bs : Bytes) :
+  let rec go (fuel : Nat) (acc : List (Bls12G1 × Nat)) (bs : Bytes) :
       Except ExceptionalHalt (List (Bls12G1 × Nat)) :=
     match fuel with
     | 0 => .ok acc.reverse
@@ -555,11 +555,11 @@ def decodeG1MsmPairs (data : Bytes) : Except ExceptionalHalt (List (Bls12G1 × N
       else do
         let p ← Bytes.toExceptBls12G1 (bs.take 128) true
         let s := Bytes.toNat ((bs.drop 128).take 32)
-        aux fuel' ((p, s) :: acc) (bs.drop 160)
-  aux data.length [] data
+        go fuel' ((p, s) :: acc) (bs.drop 160)
+  go data.length [] data
 
 def decodeG2MsmPairs (data : Bytes) : Except ExceptionalHalt (List (Bls12G2 × Nat)) :=
-  let rec aux (fuel : Nat) (acc : List (Bls12G2 × Nat)) (bs : Bytes) :
+  let rec go (fuel : Nat) (acc : List (Bls12G2 × Nat)) (bs : Bytes) :
       Except ExceptionalHalt (List (Bls12G2 × Nat)) :=
     match fuel with
     | 0 => .ok acc.reverse
@@ -570,8 +570,8 @@ def decodeG2MsmPairs (data : Bytes) : Except ExceptionalHalt (List (Bls12G2 × N
       else do
         let p ← Bytes.toExceptBls12G2 (bs.take 256) true
         let s := Bytes.toNat ((bs.drop 256).take 32)
-        aux fuel' ((p, s) :: acc) (bs.drop 288)
-  aux data.length [] data
+        go fuel' ((p, s) :: acc) (bs.drop 288)
+  go data.length [] data
 
 -- def decompress_G1(z: G1Compressed) -> G1Uncompressed:
 -- 48-byte compressed G1 point with the (c_flag, b_flag, a_flag, x) bit layout.
@@ -594,10 +594,10 @@ def decompressG1 (data : Bytes) : Except ExceptionalHalt Bls12G1 := do
     let x := z % blsTwoPow381
     if x ≥ blsPrime then
       .error (.invalidParameter (.text "x should be less than field modulus"))
-    let xf : Bls12Fp := FinField.ofNat x
+    let xf : Bls12Fp := FieldElement.ofNat x
     -- Y^2 = X^3 + b, b = 4; y = (x^3 + b)^((p+1)/4).
     let rhs := xf ^ 3 + 4
-    let y := rhs ^ blsPPlus1Div4
+    let y := rhs ^ blsPrimePlus1Div4
     if y ^ 2 ≠ rhs then
       .error (.invalidParameter (.text "the given point is not on G1"))
     -- Choose the y whose leftmost bit equals a_flag: (y * 2) // p.
@@ -636,7 +636,7 @@ def verifyKzgProof (commitment z y proof : Bytes) :
   let prf ← decodeKzgG1 proof
   pure (verifyKzgProofImpl comm zf yf prf)
 
-def gasPointEval : Nat := 50000
+def pointEvaluationPrecompileGas : Nat := 50000
 
 -- def point_evaluation(evm : Evm) -> None:
 
@@ -658,7 +658,7 @@ def gasBlsG2Map : Nat := 23800
 -- def bls12_map_fp_to_g1(evm : Evm) -> None :
 
 -- def bytes_to_g1(data : Bytes) -> Point3D[FQ]:
-def Bytes.toExceptBn254G1 (data : Bytes) : Except ExceptionalHalt Bn254G1 := do
+def Bytes.toExceptAltBn128G1 (data : Bytes) : Except ExceptionalHalt AltBn128G1 := do
   if data.length ≠ 64 then
     .error (.invalidParameter (.text "input should be 64 bytes long"))
   let x := data.sliceToNat 0 32
@@ -667,11 +667,11 @@ def Bytes.toExceptBn254G1 (data : Bytes) : Except ExceptionalHalt Bn254G1 := do
     .error (.invalidParameter (.text "invalid field element"))
   if y >= altBn128Prime then
     .error (.invalidParameter (.text "invalid field element"))
-  (EllipticCurve.mk? (FinField.ofNat x) (FinField.ofNat y)).toExcept
+  (EllipticCurve.mk? (FieldElement.ofNat x) (FieldElement.ofNat y)).toExcept
     (.invalidParameter (.text "point is not on curve"))
 
 -- def bytes_to_g2(data : Bytes) -> Point3D[FQ2]:
-def Bytes.toExceptBn254G2 (data : Bytes) : Except ExceptionalHalt Bn254G2 := do
+def Bytes.toExceptAltBn128G2 (data : Bytes) : Except ExceptionalHalt AltBn128G2 := do
   if data.length ≠ 128 then
     .error (.invalidParameter (.text "input should be 128 bytes long"))
   let x0 := data.sliceToNat 0 32
@@ -685,10 +685,10 @@ def Bytes.toExceptBn254G2 (data : Bytes) : Except ExceptionalHalt Bn254G2 := do
     y1 ≥ altBn128Prime
   ) then
     .error (.invalidParameter (.text "invalid field element"))
-  (EllipticCurve.mk? (Bn254Fp2.mk x0 x1) (Bn254Fp2.mk y0 y1)).toExcept
+  (EllipticCurve.mk? (AltBn128Fp2.mk x0 x1) (AltBn128Fp2.mk y0 y1)).toExcept
     (.invalidParameter (.text "point is not on curve"))
 
-def catchWithOOGPrecompile {ξ} (cost : Nat) (cond : ExceptionalHalt → Bool) :
+def catchWithOutOfGasPrecompile {ξ} (cost : Nat) (cond : ExceptionalHalt → Bool) :
   Except ExceptionalHalt ξ → Except (EvmError × Nat) ξ
   | .ok v => .ok v
   | .error e =>
@@ -702,10 +702,10 @@ def executeBls12PairingInner (data : Bytes) (cost : Nat) :
   let mut result : Bls12Fp12 := 1
   for i in List.range (data.length / 384) do
     let p : Bls12G1 ←
-      catchWithOOGPrecompile cost ExceptionalHalt.isInvalidParameter <|
+      catchWithOutOfGasPrecompile cost ExceptionalHalt.isInvalidParameter <|
         Bytes.toExceptBls12G1 (data.slice! (i * 384) 128) true
     let q : Bls12G2 ←
-      catchWithOOGPrecompile cost ExceptionalHalt.isInvalidParameter <|
+      catchWithOutOfGasPrecompile cost ExceptionalHalt.isInvalidParameter <|
         Bytes.toExceptBls12G2 (data.slice! (i * 384 + 128) 256) true
     let pairResult ← match blsPairing q p with
                      | some v => pure v
@@ -720,14 +720,14 @@ def executeBls12PairingInner (data : Bytes) (cost : Nat) :
 def executePairingCheckInner (data : Bytes) (cost : Nat) :
     Except (EvmError × Nat) (Nat × Bytes) := do
   if data.length % 192 ≠ 0 then throw ⟨.halt (.outOfGas .none), cost⟩
-  let mut result : Bn254Fp12 := 1
+  let mut result : AltBn128Fp12 := 1
   for i in List.range (data.length / 192) do
-    let p : Bn254G1 ←
-      catchWithOOGPrecompile cost ExceptionalHalt.isInvalidParameter <|
-        Bytes.toExceptBn254G1 (data.slice! (i * 192) 64)
-    let q : Bn254G2 ←
-      catchWithOOGPrecompile cost ExceptionalHalt.isInvalidParameter <|
-        Bytes.toExceptBn254G2 (data.slice! (i * 192 + 64) 128)
+    let p : AltBn128G1 ←
+      catchWithOutOfGasPrecompile cost ExceptionalHalt.isInvalidParameter <|
+        Bytes.toExceptAltBn128G1 (data.slice! (i * 192) 64)
+    let q : AltBn128G2 ←
+      catchWithOutOfGasPrecompile cost ExceptionalHalt.isInvalidParameter <|
+        Bytes.toExceptAltBn128G2 (data.slice! (i * 192 + 64) 128)
     if p * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨.halt (.outOfGas .none), cost⟩
     if q * altBn128CurveOrder ≠ ⟨0, 0⟩ then throw ⟨.halt (.outOfGas .none), cost⟩
     let pairResult ← match pairing q p with
