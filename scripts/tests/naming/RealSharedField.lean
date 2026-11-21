@@ -1,4 +1,4 @@
-import Jaune.MessageCall.CheckedContext
+import Jaune.MessageCall.Context
 
 /-! A downstream client of Jaune's actual transaction and message fields.
 The rename pilot applies the same semantic map to this file and the library.
@@ -13,14 +13,14 @@ def transaction : Transaction := {
   type := .legacy 0 none }
 
 def transactionGas (tx : Transaction) : Nat := tx.gasLimit
-def checkedMessageGas (msg : Checked.Message) : Nat := msg.gas
+def checkedMessageGas (msg : Message) : Nat := msg.gas
 def updateTransaction (tx : Transaction) : Transaction := { tx with gasLimit := tx.gasLimit + 1 }
-def updateCheckedMessage (msg : Checked.Message) : Checked.Message := { msg with gas := msg.gas + 2 }
+def updateCheckedMessage (msg : Message) : Message := { msg with gas := msg.gas + 2 }
 
 theorem transaction_update : transactionGas (updateTransaction transaction) = 12 := by
   simp [transactionGas, updateTransaction, transaction]
 
-theorem checkedMessage_update (msg : Checked.Message) : checkedMessageGas (updateCheckedMessage msg) = msg.gas + 2 := by
+theorem checkedMessage_update (msg : Message) : checkedMessageGas (updateCheckedMessage msg) = msg.gas + 2 := by
   simp [checkedMessageGas, updateCheckedMessage]
 
 end NamingRealField

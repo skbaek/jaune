@@ -127,8 +127,8 @@ of `verify_data_column_sidecar_inclusion_proof` (`specs/fulu/p2p-interface.md:24
 `verify_partial_data_column_header_inclusion_proof`
 (`specs/fulu/partial-columns/p2p-interface.md`). -/
 def verifyKzgCommitmentsInclusionProof
-    (commitments : SszList KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
-    (branch : SszVector Bytes32 P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH) (bodyRoot : Root) :
+    (commitments : Ssz.List KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+    (branch : Ssz.Vector Bytes32 P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH) (bodyRoot : Root) :
     Fallible Bool := do
   isValidMerkleBranch (Ssz.hashTreeRoot commitments) branch.toArray.toList
     (← u64Checked P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH) (← getSubtreeIndex blobKzgCommitmentsGindex)
@@ -149,7 +149,7 @@ def verifyPartialDataColumnHeaderInclusionProof (header : PartialDataColumnHeade
 (`specs/fulu/partial-columns/p2p-interface.md`): `all_commitments[index]` raises `IndexError`
 past the end. -/
 def verifyPartialDataColumnSidecarKzgProofs (sidecar : PartialDataColumnSidecar P)
-    (allCommitments : SszList KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+    (allCommitments : Ssz.List KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
     (columnIndex : ColumnIndex) : Fallible Bool := do
   -- Get the blob indices from the bitmap
   let blobIndices := ((sidecar.cells_present_bitmap.bits.toList.zipIdx).filter (·.1)).map (·.2)
@@ -181,7 +181,7 @@ def validateBeaconBlockGossip (ctx : Context) (seen : SeenWithStore P) (store : 
   let executionPayload := block.body.execution_payload
   -- [IGNORE] The block is the first block with valid signature received for the slot and proposer
   let proposerSlotKey := (block.slot, block.proposer_index)
-  if seen.ext.proposer_slots.contains proposerSlotKey then
+  if seen.extension.proposer_slots.contains proposerSlotKey then
     ignore "block is not the first valid block for this slot and proposer"
   -- [IGNORE] The block is not from a future slot
   if ← isFutureSlot cfg store.genesis_time_ms block.slot currentTimeMs then
@@ -237,8 +237,8 @@ def validateBeaconBlockGossip (ctx : Context) (seen : SeenWithStore P) (store : 
   if block.proposer_index != (← expectedProposer ctx store block.parent_root block.slot) then
     reject "block proposer_index does not match expected proposer"
   -- Mark this block as seen
-  pure { seen with ext := { seen.ext with
-    proposer_slots := seen.ext.proposer_slots ++ [proposerSlotKey] } }
+  pure { seen with extension := { seen.extension with
+    proposer_slots := seen.extension.proposer_slots ++ [proposerSlotKey] } }
 
 /-! ## `beacon_aggregate_and_proof`, `beacon_attestation_{subnet_id}` -/
 
@@ -262,14 +262,14 @@ def validateBeaconAggregateAndProofGossip (ctx : Context) (seen : SeenWithStore 
   -- [IGNORE] A valid aggregate with a superset of aggregation bits has not already been seen
   let aggregateDataRoot : Root := Ssz.hashTreeRoot aggregate.data
   let aggregateCacheKey := (aggregateDataRoot, index)
-  let seenBits := lookupSet seen.ext.aggregate_data_roots aggregateCacheKey
+  let seenBits := lookupSet seen.extension.aggregate_data_roots aggregateCacheKey
   if ← isNonStrictSuperset seenBits aggregationBits then
     ignore "already seen aggregate for this data"
   -- [IGNORE] This is the first valid aggregate for this epoch and aggregator
   let aggregatorIndex := aggregateAndProof.aggregator_index
   let targetEpoch := aggregate.data.target.epoch
   let aggregatorEpochKey := (targetEpoch, aggregatorIndex)
-  if seen.ext.aggregator_epochs.contains aggregatorEpochKey then
+  if seen.extension.aggregator_epochs.contains aggregatorEpochKey then
     ignore "already seen aggregate for this epoch and aggregator"
   -- [IGNORE] The block being voted for has been seen (via gossip or non-gossip sources)
   let blockRoot := aggregate.data.beacon_block_root
@@ -327,10 +327,10 @@ def validateBeaconAggregateAndProofGossip (ctx : Context) (seen : SeenWithStore 
   if finalizedCheckpointBlock != store.finalized_checkpoint.root then
     ignore "finalized checkpoint is not an ancestor of block"
   -- Mark this aggregate as seen
-  pure { seen with ext := { seen.ext with
-    aggregator_epochs := seen.ext.aggregator_epochs ++ [aggregatorEpochKey]
+  pure { seen with extension := { seen.extension with
+    aggregator_epochs := seen.extension.aggregator_epochs ++ [aggregatorEpochKey]
     aggregate_data_roots :=
-      addToSet seen.ext.aggregate_data_roots aggregateCacheKey aggregationBits } }
+      addToSet seen.extension.aggregate_data_roots aggregateCacheKey aggregationBits } }
 
 /-- `validate_beacon_attestation_gossip` (`specs/electra/p2p-interface.md:375`). -/
 def validateBeaconAttestationGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P f)
@@ -342,7 +342,7 @@ def validateBeaconAttestationGossip (ctx : Context) (seen : SeenWithStore P) (st
   let targetEpoch := data.target.epoch
   -- [IGNORE] No other valid attestation seen for this target epoch and validator
   let attestationEpochKey := (targetEpoch, attesterIndex)
-  if seen.ext.attestation_validator_epochs.contains attestationEpochKey then
+  if seen.extension.attestation_validator_epochs.contains attestationEpochKey then
     ignore "already seen attestation for this epoch and validator"
   -- [REJECT] The attestation's data index is zero
   if data.index != U64.zero then reject "attestation data index is non-zero"
@@ -388,8 +388,8 @@ def validateBeaconAttestationGossip (ctx : Context) (seen : SeenWithStore P) (st
   if finalizedCheckpointBlock != store.finalized_checkpoint.root then
     ignore "finalized checkpoint is not an ancestor of block"
   -- Mark this attestation as seen
-  pure { seen with ext := { seen.ext with
-    attestation_validator_epochs := seen.ext.attestation_validator_epochs ++ [attestationEpochKey] } }
+  pure { seen with extension := { seen.extension with
+    attestation_validator_epochs := seen.extension.attestation_validator_epochs ++ [attestationEpochKey] } }
 
 /-! ## Sidecars -/
 
@@ -400,7 +400,7 @@ def validateBlobSidecarGossip (ctx : Context) (seen : SeenWithStore P) (store : 
   let blockHeader := blobSidecar.signed_block_header.message
   -- [IGNORE] The sidecar is the first sidecar for the tuple
   let sidecarTuple := (blockHeader.slot, blockHeader.proposer_index, blobSidecar.index)
-  if seen.ext.blob_sidecar_tuples.contains sidecarTuple then
+  if seen.extension.blob_sidecar_tuples.contains sidecarTuple then
     ignore "already seen blob sidecar from this proposer for this slot and index"
   -- [REJECT] The sidecar's index is consistent with MAX_BLOBS_PER_BLOCK_ELECTRA
   if blobSidecar.index.toNat ≥ cfg.MAX_BLOBS_PER_BLOCK_ELECTRA then reject "blob index out of range"
@@ -450,8 +450,8 @@ def validateBlobSidecarGossip (ctx : Context) (seen : SeenWithStore P) (store : 
   if blockHeader.proposer_index != (← expectedProposer ctx store parentRoot blockHeader.slot) then
     reject "blob sidecar proposer_index does not match expected proposer"
   -- Mark this blob sidecar as seen
-  pure { seen with ext := { seen.ext with
-    blob_sidecar_tuples := seen.ext.blob_sidecar_tuples ++ [sidecarTuple] } }
+  pure { seen with extension := { seen.extension with
+    blob_sidecar_tuples := seen.extension.blob_sidecar_tuples ++ [sidecarTuple] } }
 
 /-- `validate_data_column_sidecar_gossip` (`specs/fulu/p2p-interface.md:415`). -/
 def validateDataColumnSidecarGossip (ctx : Context) (seen : SeenWithStore P) (store : Store P f)
@@ -460,7 +460,7 @@ def validateDataColumnSidecarGossip (ctx : Context) (seen : SeenWithStore P) (st
   let blockHeader := sidecar.signed_block_header.message
   -- [IGNORE] The sidecar is the first sidecar for the tuple
   let sidecarKey := (blockHeader.slot, blockHeader.proposer_index, sidecar.index)
-  if seen.ext.data_column_sidecar_tuples.contains sidecarKey then
+  if seen.extension.data_column_sidecar_tuples.contains sidecarKey then
     ignore "already seen sidecar from this proposer for this slot and index"
   -- [REJECT] The sidecar is valid as verified by verify_data_column_sidecar
   if !(← verifyDataColumnSidecar cfg sidecar) then reject "invalid sidecar"
@@ -508,20 +508,20 @@ def validateDataColumnSidecarGossip (ctx : Context) (seen : SeenWithStore P) (st
   if blockHeader.proposer_index != (← expectedProposer ctx store parentRoot blockHeader.slot) then
     reject "sidecar proposer_index does not match expected proposer"
   -- Mark this data column sidecar as seen
-  pure { seen with ext := { seen.ext with
-    data_column_sidecar_tuples := seen.ext.data_column_sidecar_tuples ++ [sidecarKey] } }
+  pure { seen with extension := { seen.extension with
+    data_column_sidecar_tuples := seen.extension.data_column_sidecar_tuples ++ [sidecarKey] } }
 
 /-! ## `partial_data_column_sidecar` -/
 
 /-- `seen.partial_data_column_headers.get(root)`. -/
 def cachedPartialHeader (seen : SeenWithStore P) (root : Root) : Option (PartialDataColumnHeader P) :=
-  (seen.ext.partial_data_column_headers.find? (·.1 == root)).map (·.2)
+  (seen.extension.partial_data_column_headers.find? (·.1 == root)).map (·.2)
 
 /-- `seen.partial_data_column_headers[root] = header`. -/
 def cachePartialHeader (seen : SeenWithStore P) (root : Root) (header : PartialDataColumnHeader P) :
     SeenWithStore P :=
-  { seen with ext := { seen.ext with partial_data_column_headers :=
-    (seen.ext.partial_data_column_headers.filter (·.1 != root)) ++ [(root, header)] } }
+  { seen with extension := { seen.extension with partial_data_column_headers :=
+    (seen.extension.partial_data_column_headers.filter (·.1 != root)) ++ [(root, header)] } }
 
 /-- The header part of `validate_partial_data_column_sidecar_gossip`
 (`specs/fulu/partial-columns/p2p-interface.md:227`), from `if has_header:` through

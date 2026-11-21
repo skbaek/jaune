@@ -55,13 +55,12 @@
     "Xinst.Run",
     "Ninst.StepRun",
     "MessageOp.Run",
-    "NextOp.StepRun"
-  ],
-  "pending_retired_names": [
+    "NextOp.StepRun",
     "genericCall",
     "genericCreate",
     "incorporateChild"
   ],
+  "pending_retired_names": [],
   "allowed_abbreviations": [
     "API",
     "BLAKE2",
@@ -113,7 +112,7 @@
       "new": "JauneConsensus.Bytes32.beq",
       "kind": "declaration",
       "layer": "consensus",
-      "rule": "1, 6",
+      "rule": "6, 7",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
       "notes": "parts: B256>Bytes32"
     },
@@ -123,7 +122,7 @@
       "kind": "declaration",
       "layer": "consensus",
       "rule": "1, 6",
-      "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
+      "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name); the namespace follows the rename `B256` -> `Bytes32`.",
       "notes": "parts: B256>Bytes32"
     },
     {
@@ -419,7 +418,7 @@
       "new": "JauneConsensus.Crypto.u256Eq",
       "kind": "declaration",
       "layer": "consensus",
-      "rule": "1, 6",
+      "rule": "6, 7",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
       "notes": "parts: b256Eq>u256Eq"
     },
@@ -10373,7 +10372,7 @@
       "new": "JauneConsensus.Facts.toU256_replicate_zero",
       "kind": "declaration",
       "layer": "consensus",
-      "rule": "1, 6",
+      "rule": "6, 7",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
       "notes": "parts: toB256>toU256"
     },
@@ -10382,7 +10381,7 @@
       "new": "JauneConsensus.Facts.toU256_replicate_zero_any",
       "kind": "declaration",
       "layer": "consensus",
-      "rule": "1, 6",
+      "rule": "6, 7",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
       "notes": "parts: toB256>toU256"
     },
@@ -12758,7 +12757,7 @@
       "new": "JauneConsensus.u256GoAt",
       "kind": "declaration",
       "layer": "consensus",
-      "rule": "1, 6",
+      "rule": "6, 7",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
       "notes": "parts: b256GoAt>u256GoAt"
     },
@@ -12767,7 +12766,7 @@
       "new": "JauneConsensus.u256GoAt_eq",
       "kind": "declaration",
       "layer": "consensus",
-      "rule": "1, 6",
+      "rule": "6, 7",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
       "notes": "parts: b256GoAt>u256GoAt"
     },
@@ -12776,7 +12775,7 @@
       "new": "JauneConsensus.bytes_toU256_toBytes",
       "kind": "declaration",
       "layer": "consensus",
-      "rule": "1, 6",
+      "rule": "6, 7",
       "source": "pyspec Bytes32 (ssz/simple-serialize.md); Jaune's B256 is retired (rule 6, one concept one name)",
       "notes": "parts: b256>bytes, toB256>toBytes, toBytes>toU256"
     },

@@ -66,19 +66,19 @@ theorem zeroHashAt_eq (h : Nat) : zeroHashAt h = zeroHash h := by
   · rfl
 
 /-- Little-endian encoding of `v mod 256^n` in `n` bytes (`int.to_bytes(n, "little")`). -/
-def leBytes : Nat → Nat → Bytes
+def littleEndianBytes : Nat → Nat → Bytes
   | 0, _ => []
-  | n + 1, v => (v % 256).toUInt8 :: leBytes n (v / 256)
+  | n + 1, v => (v % 256).toUInt8 :: littleEndianBytes n (v / 256)
 
 /-- Little-endian decoding (`int.from_bytes(bs, "little")`). -/
-def leNat : Bytes → Nat
+def littleEndianNat : Bytes → Nat
   | [] => 0
-  | b :: bs => b.toNat + 256 * leNat bs
+  | b :: bs => b.toNat + 256 * littleEndianNat bs
 
-theorem length_leBytes (n v : Nat) : (leBytes n v).length = n := by
+theorem length_littleEndianBytes (n v : Nat) : (littleEndianBytes n v).length = n := by
   induction n generalizing v with
   | zero => rfl
-  | succ n ih => simp [leBytes, ih]
+  | succ n ih => simp [littleEndianBytes, ih]
 
 /-- A chunk from at most 32 bytes, right-padded with zero bytes. -/
 def chunkOf (bs : Bytes) : Jaune.U256 := Bytes.toU256 (bs ++ List.replicate (32 - bs.length) 0)
@@ -173,11 +173,11 @@ def merkleize (chunks : List Jaune.U256) (limit : Option Nat := none) : Fallible
 
 /-- `mix_in_length(root, length)`: `hash(root + uint256(length).to_bytes(32, "little"))`. -/
 def mixInLength (root : Jaune.U256) (length : Nat) : Jaune.U256 :=
-  hashPair root (Bytes.toU256 (leBytes 32 length))
+  hashPair root (Bytes.toU256 (littleEndianBytes 32 length))
 
 /-- `mix_in_selector(root, selector)`: `hash(root + uint8(selector) right-padded to a chunk)`. -/
 def mixInSelector (root : Jaune.U256) (selector : Nat) : Jaune.U256 :=
-  hashPair root (chunkOf (leBytes 1 selector))
+  hashPair root (chunkOf (littleEndianBytes 1 selector))
 
 /-! Anchors. The root of two zero chunks is SHA-256 of 64 zero bytes, which is also the root
 of an empty `Bitlist[N]` for `N ≤ 256` (`mix_in_length(Bytes32(), 0)`). -/

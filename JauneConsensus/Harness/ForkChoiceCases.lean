@@ -199,7 +199,7 @@ private def runSteps (P : Preset) (f : ConsensusFork) (c : Case) (ctx : Context)
       let blobs : List (Blob P) ← match s.get? "blobs" with
         | none => pure []
         | some (.scalar b _) =>
-          let l : SszList (Blob P) P.MAX_BLOB_COMMITMENTS_PER_BLOCK ← decodeFile c s!"{b}.ssz_snappy"
+          let l : Ssz.List (Blob P) P.MAX_BLOB_COMMITMENTS_PER_BLOCK ← decodeFile c s!"{b}.ssz_snappy"
           pure l.toArray.toList
         | some _ => throw s!"{here}: blobs"
       let proofs : List KZGProof ← match s.get? "proofs" with

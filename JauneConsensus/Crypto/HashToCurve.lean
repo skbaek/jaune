@@ -85,11 +85,11 @@ def hashToFieldFp2 (msg dst : Bytes) (count : Nat) : Except String (List Bls12Fp
 onto the 3-isogenous curve `E'`, then the isogeny map onto `E` (Appendix E.3),
 both Jaune's. No cofactor clearing here; `hashToG2` clears once, after adding
 the two mapped points. -/
-def mapToCurveG2 (u : Bls12Fp2) : Bls12G2 := isoMapG2 (optimizedSwuG2 u)
+def mapToCurveG2 (u : Bls12Fp2) : Bls12G2 := blsMapFp2ToG2.isoMap (blsMapFp2ToG2.mapToCurveSimpleSwu u)
 
 /-- `clear_cofactor` for the suite as section 8.8.2 defines it: scalar multiplication by
 `h_eff`. The reference for `clearCofactorG2`. -/
-def clearCofactorG2Reference (q : Bls12G2) : Bls12G2 := q.mulBy BLSConst.hEffG2
+def clearCofactorG2Reference (q : Bls12G2) : Bls12G2 := q.mulBy BLSConstants.MapFp2ToG2.hEff
 
 /-- `clear_cofactor_bls12381_g2(P)` (RFC 9380 Appendix G.3, after Budroni and Pintore): the
 same point `h_eff * P` from two 64-bit scalar multiplications and the endomorphism `psi`
@@ -97,7 +97,7 @@ same point `h_eff * P` from two 64-bit scalar multiplications and the endomorphi
 `#guard`s against `clearCofactorG2Ref` in HashToCurveVectors.lean. -/
 def clearCofactorG2 (p : Bls12G2) : Bls12G2 :=
   -- c1 = -0xd201000000010000, so c1 * X = -(|c1| * X)
-  let mulC1 (x : Bls12G2) : Bls12G2 := -(x.mulBy blsAteLoopCount)
+  let mulC1 (x : Bls12G2) : Bls12G2 := -(x.mulBy blsMillerLoopScalar)
   let t1 := mulC1 p                       -- 1. t1 = c1 * P
   let t2 := g2Psi p                       -- 2. t2 = psi(P)
   let t3 := p + p                         -- 3. t3 = 2 * P

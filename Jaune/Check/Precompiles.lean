@@ -65,8 +65,8 @@ open Jaune
 
 -- The precompile's own length check is what makes the widths above hold; these
 -- pin that the reader really does produce eight and sixteen words.
-#guard (readLeUInt64Words (List.replicate 213 (0x00 : UInt8)) 4 8).length = 8
-#guard (readLeUInt64Words (List.replicate 213 (0x00 : UInt8)) 68 16).length = 16
+#guard (readLittleEndianUInt64Words (List.replicate 213 (0x00 : UInt8)) 4 8).length = 8
+#guard (readLittleEndianUInt64Words (List.replicate 213 (0x00 : UInt8)) 68 16).length = 16
 
 #guard (Bytes.toExceptBls12G1 (Bls12G1.toBytes blsG1Generator)).toOption = some blsG1Generator
 #guard

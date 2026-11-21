@@ -826,7 +826,7 @@ def onPayloadAttestationMessage (ctx : Context) (store : Store P)
     require (data.slot == (← getCurrentSlot ctx.config store)) s!"{site}: current slot"
     -- Verify the signature
     let indexed : IndexedPayloadAttestation P := {
-      attesting_indices := ← SszList.ofArray #[ptcMessage.validator_index] site
+      attesting_indices := ← Ssz.List.ofArray #[ptcMessage.validator_index] site
       data
       signature := ptcMessage.signature }
     require (← isValidIndexedPayloadAttestation ctx state indexed) s!"{site}: signature"

@@ -91,8 +91,8 @@ theorem engineVerdictGloas_ok_iff {cfg : ChainConfig} {exec : BlockChain}
             (payloadToBlockGloas req).header.timestamp = .ok f ∧
         f.consensusFork? = some .gloas ∧
         checkBlockRlpSize f.ruleSet.block (payloadToBlockGloas req).toRlpItem.toBytes.length = .ok () ∧
-        stateTransitionScheduledE cfg f exec (payloadToBlockGloas req) = .ok (.ok post) ∧
-        ∃ st bout, Checked.applyBody (Checked.initBlockContext f exec (payloadToBlockGloas req).header) exec.state
+        stateTransitionScheduledTyped cfg f exec (payloadToBlockGloas req) = .ok (.ok post) ∧
+        ∃ st bout, applyBody (initBlockContext f exec (payloadToBlockGloas req).header) exec.state
             (payloadToBlockGloas req).transactions (payloadToBlockGloas req).ommers (payloadToBlockGloas req).withdrawals =
             .ok (st, bout) ∧
           bout.requests = Gloas.getExecutionRequestsList req.execution_requests ∧
@@ -112,7 +112,7 @@ requests, as the list `get_execution_requests_list`, and the payload's block acc
 theorem engineVerdictGloas_requests {cfg : ChainConfig} {exec : BlockChain}
     {req : Gloas.NewPayloadRequest P} {post : BlockChain}
     (h : engineVerdictGloas cfg exec req = .ok post) :
-    ∃ st bout, Checked.applyBody (Checked.initBlockContext .amsterdam exec (payloadToBlockGloas req).header) exec.state
+    ∃ st bout, applyBody (initBlockContext .amsterdam exec (payloadToBlockGloas req).header) exec.state
         (payloadToBlockGloas req).transactions (payloadToBlockGloas req).ommers (payloadToBlockGloas req).withdrawals =
         .ok (st, bout) ∧
       bout.requests = Gloas.getExecutionRequestsList req.execution_requests ∧
@@ -200,7 +200,7 @@ theorem verifyEnvelopeGloas_requests {cfg : ChainConfig} {ccfg : Config} {bls : 
     {req : Gloas.NewPayloadRequest P} {post : BlockChain}
     (h : verifyEnvelopeGloas cfg ccfg bls state exec e = .ok (req, post)) :
     req.execution_requests = e.message.execution_requests ∧
-      ∃ st bout, Checked.applyBody (Checked.initBlockContext .amsterdam exec (payloadToBlockGloas req).header) exec.state
+      ∃ st bout, applyBody (initBlockContext .amsterdam exec (payloadToBlockGloas req).header) exec.state
           (payloadToBlockGloas req).transactions (payloadToBlockGloas req).ommers (payloadToBlockGloas req).withdrawals =
           .ok (st, bout) ∧
         bout.requests = Gloas.getExecutionRequestsList e.message.execution_requests := by

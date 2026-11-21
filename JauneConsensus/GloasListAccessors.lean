@@ -266,7 +266,7 @@ def computePtc (state : BeaconState P) (slot : Slot) : Fallible (PayloadTimeline
   let mut indices : Array ValidatorIndex := #[]
   for i in [0:committeesPerSlot.toNat] do
     indices := indices ++ (← getBeaconCommittee state slot (← U64.ofNat? i "CommitteeIndex"))
-  SszVector.ofArray (← computeBalanceWeightedSelection state indices seed P.PTC_SIZE false) site
+  Ssz.Vector.ofArray (← computeBalanceWeightedSelection state indices seed P.PTC_SIZE false) site
 
 /-- `get_ptc(state, slot)` (Gloas, :1392): the cached committee from `state.ptc_window`. -/
 def getPtc (cfg : Config) (state : BeaconState P) (slot : Slot) :

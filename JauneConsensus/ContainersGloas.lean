@@ -55,12 +55,12 @@ abbrev BlockAccessList := ProgressiveByteList
 /-- `PayloadTimelinessCommitteeBits` (`BitVector[PTC_SIZE]`). -/
 abbrev PayloadTimelinessCommitteeBits (P : Preset) := Bitvector P.PTC_SIZE
 /-- `PayloadTimelinessCommitteeIndices` (`List[ValidatorIndex, PTC_SIZE]`). -/
-abbrev PayloadTimelinessCommitteeIndices (P : Preset) := SszList ValidatorIndex P.PTC_SIZE
+abbrev PayloadTimelinessCommitteeIndices (P : Preset) := Ssz.List ValidatorIndex P.PTC_SIZE
 /-- `PayloadTimelinessCommittee` (`Vector[ValidatorIndex, PTC_SIZE]`). -/
-abbrev PayloadTimelinessCommittee (P : Preset) := SszVector ValidatorIndex P.PTC_SIZE
+abbrev PayloadTimelinessCommittee (P : Preset) := Ssz.Vector ValidatorIndex P.PTC_SIZE
 /-- `PayloadTimelinessCommitteeWindow`: `(MIN_SEED_LOOKAHEAD + 2) * SLOTS_PER_EPOCH` committees. -/
 abbrev PayloadTimelinessCommitteeWindow (P : Preset) :=
-  SszVector (PayloadTimelinessCommittee P) ((P.MIN_SEED_LOOKAHEAD + 2) * P.SLOTS_PER_EPOCH)
+  Ssz.Vector (PayloadTimelinessCommittee P) ((P.MIN_SEED_LOOKAHEAD + 2) * P.SLOTS_PER_EPOCH)
 /-- `ExecutionPayloadAvailability` (`BitVector[SLOTS_PER_HISTORICAL_ROOT]`). -/
 abbrev ExecutionPayloadAvailability (P : Preset) := Bitvector P.SLOTS_PER_HISTORICAL_ROOT
 
@@ -166,13 +166,13 @@ ssz_progressive_container ExecutionPayload (P : Preset)
   fee_recipient : ExecutionAddress
   state_root : Bytes32
   receipts_root : Bytes32
-  logs_bloom : (SszVector UInt8 P.BYTES_PER_LOGS_BLOOM)
+  logs_bloom : (Ssz.Vector UInt8 P.BYTES_PER_LOGS_BLOOM)
   prev_randao : Bytes32
   block_number : U64
   gas_limit : U64
   gas_used : U64
   timestamp : U64
-  extra_data : (SszList UInt8 P.MAX_EXTRA_DATA_BYTES)
+  extra_data : (Ssz.List UInt8 P.MAX_EXTRA_DATA_BYTES)
   base_fee_per_gas : U256
   block_hash : Hash32
   transactions : (ProgressiveListRightSpine Transaction)
@@ -277,16 +277,16 @@ ssz_progressive_container BeaconState (P : Preset)
   slot : Slot
   fork : Fork
   latest_block_header : BeaconBlockHeader
-  block_roots : (SszVector Root P.SLOTS_PER_HISTORICAL_ROOT)
-  state_roots : (SszVector Root P.SLOTS_PER_HISTORICAL_ROOT)
-  historical_roots : (SszList Root P.HISTORICAL_ROOTS_LIMIT)
+  block_roots : (Ssz.Vector Root P.SLOTS_PER_HISTORICAL_ROOT)
+  state_roots : (Ssz.Vector Root P.SLOTS_PER_HISTORICAL_ROOT)
+  historical_roots : (Ssz.List Root P.HISTORICAL_ROOTS_LIMIT)
   eth1_data : Eth1Data
-  eth1_data_votes : (SszList Eth1Data (P.EPOCHS_PER_ETH1_VOTING_PERIOD * P.SLOTS_PER_EPOCH))
+  eth1_data_votes : (Ssz.List Eth1Data (P.EPOCHS_PER_ETH1_VOTING_PERIOD * P.SLOTS_PER_EPOCH))
   eth1_deposit_index : U64
   validators : (ProgressiveListRightSpine Validator)
   balances : (ProgressiveListRightSpine Gwei)
-  randao_mixes : (SszVector Bytes32 P.EPOCHS_PER_HISTORICAL_VECTOR)
-  slashings : (SszVector Gwei P.EPOCHS_PER_SLASHINGS_VECTOR)
+  randao_mixes : (Ssz.Vector Bytes32 P.EPOCHS_PER_HISTORICAL_VECTOR)
+  slashings : (Ssz.Vector Gwei P.EPOCHS_PER_SLASHINGS_VECTOR)
   previous_epoch_participation : (ProgressiveListRightSpine ParticipationFlags)
   current_epoch_participation : (ProgressiveListRightSpine ParticipationFlags)
   justification_bits : (Bitvector JUSTIFICATION_BITS_LENGTH)
@@ -299,7 +299,7 @@ ssz_progressive_container BeaconState (P : Preset)
   latest_block_hash : Hash32
   next_withdrawal_index : WithdrawalIndex
   next_withdrawal_validator_index : ValidatorIndex
-  historical_summaries : (SszList HistoricalSummary P.HISTORICAL_ROOTS_LIMIT)
+  historical_summaries : (Ssz.List HistoricalSummary P.HISTORICAL_ROOTS_LIMIT)
   deposit_requests_start_index : U64
   deposit_balance_to_consume : Gwei
   exit_balance_to_consume : Gwei
@@ -309,11 +309,11 @@ ssz_progressive_container BeaconState (P : Preset)
   pending_deposits : (ProgressiveListRightSpine PendingDeposit)
   pending_partial_withdrawals : (ProgressiveListRightSpine PendingPartialWithdrawal)
   pending_consolidations : (ProgressiveListRightSpine PendingConsolidation)
-  proposer_lookahead : (SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH))
+  proposer_lookahead : (Ssz.Vector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH))
   builders : (ProgressiveListRightSpine Builder)
   next_withdrawal_builder_index : BuilderIndex
   execution_payload_availability : (ExecutionPayloadAvailability P)
-  builder_pending_payments : (SszVector BuilderPendingPayment (2 * P.SLOTS_PER_EPOCH))
+  builder_pending_payments : (Ssz.Vector BuilderPendingPayment (2 * P.SLOTS_PER_EPOCH))
   builder_pending_withdrawals : (ProgressiveListRightSpine BuilderPendingWithdrawal)
   latest_execution_payload_bid : ExecutionPayloadBid
   payload_expected_withdrawals : (ProgressiveListRightSpine Withdrawal)
@@ -324,7 +324,7 @@ ssz_progressive_container BeaconState (P : Preset)
 MAX_BLOB_COMMITMENTS_PER_BLOCK]`). -/
 ssz_progressive_container NewPayloadRequest (P : Preset) [1, 1, 1, 1] spine .successorRight where
   execution_payload : (ExecutionPayload P)
-  versioned_hashes : (SszList Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  versioned_hashes : (Ssz.List Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
   parent_beacon_block_root : Root
   execution_requests : ExecutionRequests
 
@@ -377,21 +377,21 @@ ssz_container PartialDataColumnGroupID where
 ssz_container LightClientHeader where
   beacon : BeaconBlockHeader
   execution_block_hash : Hash32
-  execution_branch : (SszVector Bytes32 executionBranchDepth)
+  execution_branch : (Ssz.Vector Bytes32 executionBranchDepth)
 
 /-- `specs/altair/light-client/sync-protocol.md`, Gloas header and branch depth. -/
 ssz_container LightClientBootstrap (P : Preset) where
   header : LightClientHeader
   current_sync_committee : (SyncCommittee P)
-  current_sync_committee_branch : (SszVector Bytes32 syncCommitteeBranchDepth)
+  current_sync_committee_branch : (Ssz.Vector Bytes32 syncCommitteeBranchDepth)
 
 /-- `specs/altair/light-client/sync-protocol.md`, Gloas header and branch depths. -/
 ssz_container LightClientUpdate (P : Preset) where
   attested_header : LightClientHeader
   next_sync_committee : (SyncCommittee P)
-  next_sync_committee_branch : (SszVector Bytes32 syncCommitteeBranchDepth)
+  next_sync_committee_branch : (Ssz.Vector Bytes32 syncCommitteeBranchDepth)
   finalized_header : LightClientHeader
-  finality_branch : (SszVector Bytes32 finalityBranchDepth)
+  finality_branch : (Ssz.Vector Bytes32 finalityBranchDepth)
   sync_aggregate : (SyncAggregate P)
   signature_slot : Slot
 
@@ -399,7 +399,7 @@ ssz_container LightClientUpdate (P : Preset) where
 ssz_container LightClientFinalityUpdate (P : Preset) where
   attested_header : LightClientHeader
   finalized_header : LightClientHeader
-  finality_branch : (SszVector Bytes32 finalityBranchDepth)
+  finality_branch : (Ssz.Vector Bytes32 finalityBranchDepth)
   sync_aggregate : (SyncAggregate P)
   signature_slot : Slot
 

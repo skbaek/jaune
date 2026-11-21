@@ -8,10 +8,10 @@ ROOT = Path(__file__).resolve().parent.parent
 # These modules implement the canonical execution surface. A dropped umbrella
 # import must not silently remove that surface from the default library build.
 EXECUTION_MODULES = {
-    "Jaune.FrameRun.CheckedBasic", "Jaune.FrameRun.CheckedAdequacy",
-    "Jaune.FrameRun.CheckedPrefix", "Jaune.FrameRun.CheckedViews",
-    "Jaune.FrameRun.CheckedSettlementViews", "Jaune.FrameRun.CheckedOrder",
-    "Jaune.FrameRun.CheckedDecompose", "Jaune.CheckedSymbolicPush", "Jaune.CheckedSymbolicArith",
+    "Jaune.FrameRun.Basic", "Jaune.FrameRun.Adequacy",
+    "Jaune.FrameRun.Prefix", "Jaune.FrameRun.Views",
+    "Jaune.FrameRun.SettlementViews", "Jaune.FrameRun.Order",
+    "Jaune.FrameRun.Decompose", "Jaune.SymbolicPush", "Jaune.SymbolicArithmetic",
 }
 
 

@@ -24,7 +24,7 @@ namespace JauneConsensus
 open Jaune
 
 /-- `BLSFieldElement`: the scalar field of BLS12-381. -/
-abbrev Fr : Type := FinField blsModulus
+abbrev BLSFieldElement : Type := FieldElement blsModulus
 
 /-! ### Constants and preset -/
 
@@ -105,14 +105,14 @@ def bitReversalPermutation {α} (xs : Array α) : Except String (Array α) :=
 /-! ### BLS12-381 helpers -/
 
 /-- `hash_to_bls_field(data)`. -/
-def hashToBlsField (data : Bytes) : Fr := FinField.ofNat (os2ip (Bytes.sha256 data).toBytes)
+def hashToBlsField (data : Bytes) : BLSFieldElement := FieldElement.ofNat (os2ip (Bytes.sha256 data).toBytes)
 
 /-- `bytes_to_bls_field(b)`: Jaune's decoder (length 32, value below `BLS_MODULUS`). -/
-def bytesToBlsFieldKernel (b : Bytes) : Except String Fr :=
-  ((bytesToBlsField b).mapError fun _ => "assert: bytes_to_bls_field").map FinField.ofNat
+def bytesToBlsFieldKernel (b : Bytes) : Except String BLSFieldElement :=
+  ((bytesToBlsField b).mapError fun _ => "assert: bytes_to_bls_field").map FieldElement.ofNat
 
 /-- `bls_field_to_bytes(x)`. -/
-def blsFieldToBytes (x : Fr) : Bytes := i2osp x.val 32
+def blsFieldToBytes (x : BLSFieldElement) : Bytes := i2osp x.val 32
 
 /-- `validate_kzg_g1` followed by the decode the callers perform: Jaune's
 `decodeKzgG1` (identity allowed, otherwise KeyValidate). -/
@@ -120,11 +120,11 @@ def bytesToKzgG1 (b : Bytes) : Except String Bls12G1 :=
   (decodeKzgG1 b).mapError fun _ => "assert: validate_kzg_g1"
 
 /-- `blob_to_polynomial(blob)`. -/
-def blobToPolynomial (blob : Bytes) : Except String (Array Fr) :=
+def blobToPolynomial (blob : Bytes) : Except String (Array BLSFieldElement) :=
   ((chunks bytesPerFieldElement blob).take fieldElementsPerBlob).toArray.mapM bytesToBlsFieldKernel
 
 /-- `compute_challenge(blob, commitment)`. -/
-def computeChallenge (blob commitment : Bytes) : Fr :=
+def computeChallenge (blob commitment : Bytes) : BLSFieldElement :=
   let degreePoly := i2osp fieldElementsPerBlob 16
   let data := fiatShamirProtocolDomain ++ degreePoly
   let data := data ++ blob
@@ -132,25 +132,25 @@ def computeChallenge (blob commitment : Bytes) : Fr :=
   hashToBlsField data
 
 /-- `g1_lincomb(points, scalars)`, returning the point. -/
-def g1Lincomb (points : Array Bls12G1) (scalars : Array Fr) : Except String Bls12G1 := do
+def g1Lincomb (points : Array Bls12G1) (scalars : Array BLSFieldElement) : Except String Bls12G1 := do
   kzgAssert (points.size = scalars.size) "g1_lincomb: lengths"
   if points.size = 0 then return g1Identity
   return g1Msm points (scalars.map (·.val))
 
 /-- `compute_powers(x, n)`. -/
-def computePowers (x : Fr) (n : Nat) : Array Fr :=
-  ((List.range n).foldl (fun (acc : Array Fr × Fr) _ => (acc.1.push acc.2, acc.2 * x))
+def computePowers (x : BLSFieldElement) (n : Nat) : Array BLSFieldElement :=
+  ((List.range n).foldl (fun (acc : Array BLSFieldElement × BLSFieldElement) _ => (acc.1.push acc.2, acc.2 * x))
     (#[], 1)).1
 
 /-- `compute_roots_of_unity(order)`. -/
-def computeRootsOfUnity (order : Nat) : Except String (Array Fr) := do
+def computeRootsOfUnity (order : Nat) : Except String (Array BLSFieldElement) := do
   kzgAssert (order ≠ 0 && (blsModulus - 1) % order = 0) "compute_roots_of_unity: order divides r - 1"
-  let rootOfUnity : Fr := FinField.ofNat (Nat.powMod primitiveRootOfUnity ((blsModulus - 1) / order) blsModulus)
+  let rootOfUnity : BLSFieldElement := FieldElement.ofNat (Nat.powMod primitiveRootOfUnity ((blsModulus - 1) / order) blsModulus)
   return computePowers rootOfUnity order
 
 /-- `bit_reversal_permutation(compute_roots_of_unity(FIELD_ELEMENTS_PER_BLOB))`,
 computed once. -/
-def rootsOfUnityBitReversal : Except String (Array Fr) := do
+def rootsOfUnityBitReversal : Except String (Array BLSFieldElement) := do
   bitReversalPermutation (← computeRootsOfUnity fieldElementsPerBlob)
 
 /-- `bit_reversal_permutation(KZG_SETUP_G1_LAGRANGE)`, computed once. -/
@@ -162,13 +162,13 @@ inversion. Zero entries map to 0, as `FinField.inv` does; for nonzero entries th
 inverse in a prime field is unique, so each output equals `x⁻¹` (differential
 `#guard`s in KZGVectors.lean). Used where the spec divides by many values in a loop:
 `a / b` is `a * b⁻¹` by definition of `FinField.div`. -/
-def batchInverse (xs : Array Fr) : Array Fr :=
+def batchInverse (xs : Array BLSFieldElement) : Array BLSFieldElement :=
   -- pre[i] = product of the nonzero entries before i
   let (pre, total) := xs.foldl
-    (fun (acc : Array Fr × Fr) x => (acc.1.push acc.2, if x = 0 then acc.2 else acc.2 * x))
+    (fun (acc : Array BLSFieldElement × BLSFieldElement) x => (acc.1.push acc.2, if x = 0 then acc.2 else acc.2 * x))
     (#[], 1)
   let (_, out) := (xs.zip pre).foldr
-    (fun (x, p) (acc : Fr × Array Fr) =>
+    (fun (x, p) (acc : BLSFieldElement × Array BLSFieldElement) =>
       if x = 0 then (acc.1, acc.2.push 0) else (acc.1 * x, acc.2.push (acc.1 * p)))
     (total⁻¹, #[])
   out.reverse
@@ -176,10 +176,10 @@ def batchInverse (xs : Array Fr) : Array Fr :=
 /-! ### Polynomials -/
 
 /-- `evaluate_polynomial_in_evaluation_form(polynomial, z)`. -/
-def evaluatePolynomialInEvaluationForm (polynomial : Array Fr) (z : Fr) : Except String Fr := do
+def evaluatePolynomialInEvaluationForm (polynomial : Array BLSFieldElement) (z : BLSFieldElement) : Except String BLSFieldElement := do
   let width := polynomial.size
   kzgAssert (width = fieldElementsPerBlob) "evaluate_polynomial_in_evaluation_form: width"
-  let inverseWidth : Fr := (FinField.ofNat width : Fr)⁻¹
+  let inverseWidth : BLSFieldElement := (FieldElement.ofNat width : BLSFieldElement)⁻¹
   let roots ← rootsOfUnityBitReversal
   -- If we are asked to evaluate within the domain, we already know the answer
   match roots.findIdx? (· = z) with
@@ -187,7 +187,7 @@ def evaluatePolynomialInEvaluationForm (polynomial : Array Fr) (z : Fr) : Except
   | none =>
     -- the divisions `a / b` below use one batch inversion of all the `b`
     let bInv := batchInverse (roots.map (z - ·))
-    let mut result : Fr := 0
+    let mut result : BLSFieldElement := 0
     for i in [0:width] do
       let a := (← index polynomial i "polynomial") * (← index roots i "roots")
       result := result + a * (← index bInv i "b⁻¹")
@@ -202,7 +202,7 @@ def blobToKzgCommitment (blob : Bytes) : Except String Bytes := do
   return g1Compress (← g1Lincomb (← kzgSetupG1LagrangeBitReversal) (← blobToPolynomial blob))
 
 /-- `verify_kzg_proof_impl(commitment, z, y, proof)`: `P - y = Q * (X - z)`. -/
-def verifyKzgProofImplKernel (commitment : Bls12G1) (z y : Fr) (proof : Bls12G1) : Except String Bool := do
+def verifyKzgProofImplKernel (commitment : Bls12G1) (z y : BLSFieldElement) (proof : Bls12G1) : Except String Bool := do
   let g2Setup1 ← index (← kzgSetupG2Monomial) 1 "KZG_SETUP_G2_MONOMIAL[1]"
   let xMinusZ := g2Setup1 + blsG2Generator.mulBy (-z).val
   let pMinusY := commitment + blsG1Generator.mulBy (-y).val
@@ -219,7 +219,7 @@ def verifyKzgProof (commitmentBytes zBytes yBytes proofBytes : Bytes) : Except S
 
 /-- `verify_kzg_proof_batch(commitments, zs, ys, proofs)`; commitments and proofs are
 the validated byte strings together with their decoded points. -/
-def verifyKzgProofBatch (commitments : Array (Bytes × Bls12G1)) (zs ys : Array Fr)
+def verifyKzgProofBatch (commitments : Array (Bytes × Bls12G1)) (zs ys : Array BLSFieldElement)
     (proofs : Array (Bytes × Bls12G1)) : Except String Bool := do
   kzgAssert (commitments.size = zs.size && zs.size = ys.size && ys.size = proofs.size)
     "verify_kzg_proof_batch: lengths"
@@ -241,11 +241,11 @@ def verifyKzgProofBatch (commitments : Array (Bytes × Bls12G1)) (zs ys : Array 
   return pairingCheck [(proofLincomb, -g2Setup1), (cMinusYLincomb + proofZLincomb, blsG2Generator)]
 
 /-- `compute_quotient_eval_within_domain(z, polynomial, y)`. -/
-def computeQuotientEvalWithinDomain (z : Fr) (polynomial : Array Fr) (y : Fr) : Except String Fr := do
+def computeQuotientEvalWithinDomain (z : BLSFieldElement) (polynomial : Array BLSFieldElement) (y : BLSFieldElement) : Except String BLSFieldElement := do
   let roots ← rootsOfUnityBitReversal
   -- one batch inversion for all `denominator`s (the skipped one is 0 and unused)
   let denominatorInv := batchInverse (roots.map fun omegaI => z * (z - omegaI))
-  let mut result : Fr := 0
+  let mut result : BLSFieldElement := 0
   for i in [0:roots.size] do
     let omegaI ← index roots i "roots"
     if omegaI = z then continue
@@ -255,7 +255,7 @@ def computeQuotientEvalWithinDomain (z : Fr) (polynomial : Array Fr) (y : Fr) : 
   return result
 
 /-- `compute_kzg_proof_impl(polynomial, z)`. -/
-def computeKzgProofImpl (polynomial : Array Fr) (z : Fr) : Except String (Bls12G1 × Fr) := do
+def computeKzgProofImpl (polynomial : Array BLSFieldElement) (z : BLSFieldElement) : Except String (Bls12G1 × BLSFieldElement) := do
   let roots ← rootsOfUnityBitReversal
   -- For all x_i, compute p(x_i) - p(z)
   let y ← evaluatePolynomialInEvaluationForm polynomial z
@@ -264,7 +264,7 @@ def computeKzgProofImpl (polynomial : Array Fr) (z : Fr) : Except String (Bls12G
   let denominatorPoly := roots.map (· - z)
   let denominatorInv := batchInverse denominatorPoly
   -- Compute the quotient polynomial directly in evaluation form
-  let mut quotientPolynomial : Array Fr := Array.replicate fieldElementsPerBlob 0
+  let mut quotientPolynomial : Array BLSFieldElement := Array.replicate fieldElementsPerBlob 0
   for i in [0:fieldElementsPerBlob] do
     let a ← index polynomialShifted i "shifted"
     let b ← index denominatorPoly i "denominator"
@@ -312,8 +312,8 @@ def verifyBlobKzgProofBatch (blobs commitmentsBytes proofsBytes : List Bytes) : 
   kzgAssert (blobs.length = commitmentsBytes.length && commitmentsBytes.length = proofsBytes.length)
     "verify_blob_kzg_proof_batch: lengths"
   let mut commitments : Array (Bytes × Bls12G1) := #[]
-  let mut evaluationChallenges : Array Fr := #[]
-  let mut ys : Array Fr := #[]
+  let mut evaluationChallenges : Array BLSFieldElement := #[]
+  let mut ys : Array BLSFieldElement := #[]
   let mut proofs : Array (Bytes × Bls12G1) := #[]
   for ((blob, commitmentBytes), proofBytes) in (blobs.zip commitmentsBytes).zip proofsBytes do
     kzgAssert (blob.length = bytesPerBlob) "verify_blob_kzg_proof_batch: blob length"

@@ -5,20 +5,20 @@ import Jaune.Instructions.WordFacts
 
 open private keccakReadRun from Jaune.Machine
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
 
 /-! ### Machine inversions shared by the Memory and Read laws -/
 
-theorem MemoryReadFacts.chargeGas_ok_inv {m out : Machine} {cost : Nat} (h : m.chargeGas cost = .ok out) :
+theorem MemoryReadFacts.chargeGas_ok_inversion {m out : Machine} {cost : Nat} (h : m.chargeGas cost = .ok out) :
     cost ≤ m.gasLeft ∧ out = { m with gasLeft := m.gasLeft - cost } := by
   by_cases enough : cost ≤ m.gasLeft
   · exact ⟨enough, by simpa [Machine.chargeGas, safeSub, enough, eq_comm] using h⟩
   · simp [Machine.chargeGas, safeSub, enough] at h
 
-theorem MemoryReadFacts.chargeGas_error_inv {m out : Machine} {cost : Nat} {e : ExceptionalHalt}
+theorem MemoryReadFacts.chargeGas_error_inversion {m out : Machine} {cost : Nat} {e : ExceptionalHalt}
     (h : m.chargeGas cost = .error (e, out)) :
     e = .outOfGas .none ∧ m.gasLeft < cost ∧ out = m := by
   by_cases enough : cost ≤ m.gasLeft
@@ -27,7 +27,7 @@ theorem MemoryReadFacts.chargeGas_error_inv {m out : Machine} {cost : Nat} {e : 
     rcases h with ⟨rfl, rfl⟩
     exact ⟨rfl, Nat.lt_of_not_le enough, rfl⟩
 
-theorem MemoryReadFacts.push_ok_inv {m out : Machine} {x : U256} (h : m.push x = .ok out) :
+theorem MemoryReadFacts.push_ok_inversion {m out : Machine} {x : U256} (h : m.push x = .ok out) :
     m.stack.length < 1024 ∧ out = { m with stack := x :: m.stack } := by
   unfold Machine.push at h
   split at h
@@ -35,7 +35,7 @@ theorem MemoryReadFacts.push_ok_inv {m out : Machine} {x : U256} (h : m.push x =
     exact ⟨‹_›, rfl⟩
   · contradiction
 
-theorem MemoryReadFacts.push_error_inv {m out : Machine} {x : U256} {e : ExceptionalHalt}
+theorem MemoryReadFacts.push_error_inversion {m out : Machine} {x : U256} {e : ExceptionalHalt}
     (h : m.push x = .error (e, out)) :
     e = .stackOverflow .none ∧ 1024 ≤ m.stack.length ∧ out = m := by
   unfold Machine.push at h
@@ -44,7 +44,7 @@ theorem MemoryReadFacts.push_error_inv {m out : Machine} {x : U256} {e : Excepti
   · cases h
     exact ⟨rfl, Nat.le_of_not_lt ‹_›, rfl⟩
 
-theorem MemoryReadFacts.pop_ok_inv {m out : Machine} {x : U256} (h : m.pop = .ok (x, out)) :
+theorem MemoryReadFacts.pop_ok_inversion {m out : Machine} {x : U256} (h : m.pop = .ok (x, out)) :
     ∃ rest, m.stack = x :: rest ∧ out = { m with stack := rest } := by
   unfold Machine.pop at h
   split at h
@@ -53,7 +53,7 @@ theorem MemoryReadFacts.pop_ok_inv {m out : Machine} {x : U256} (h : m.pop = .ok
     cases h
     exact ⟨rest, hs, rfl⟩
 
-theorem MemoryReadFacts.pop_error_inv {m out : Machine} {e : ExceptionalHalt}
+theorem MemoryReadFacts.pop_error_inversion {m out : Machine} {e : ExceptionalHalt}
     (h : m.pop = .error (e, out)) :
     e = .stackUnderflow .none ∧ m.stack = [] ∧ out = { m with stack := [] } := by
   rcases m with ⟨stk, mem, gl, sg, rd⟩
@@ -80,7 +80,7 @@ theorem MemoryRow.step_ok {row : MemoryRow} {opcodes : OpcodeRules} {ctx : CallC
     {m out : Machine} (h : row.step opcodes ctx m = .ok out) :
     row.available opcodes = true ∧ ∃ args rest pushed,
       m.stack = Words.toList row.arity args ++ rest ∧
-      out.gasLeft + (row.base args + m.extCost (row.effect.ranges args)) = m.gasLeft ∧
+      out.gasLeft + (row.base args + m.memoryExpansionCost (row.effect.ranges args)) = m.gasLeft ∧
       row.effect.apply ctx.calldata ctx.code m.returnData args m.memory = some (out.memory, pushed) ∧
       out.stack = MemoryEffect.stackAfter pushed rest ∧
       out.stateGas = m.stateGas ∧ out.returnData = m.returnData := by
@@ -97,12 +97,12 @@ theorem MemoryRow.step_ok {row : MemoryRow} {opcodes : OpcodeRules} {ctx : CallC
       rw [hp] at h
       dsimp only at h
       cases hc : ({ m with stack := rest } : Machine).chargeGas
-          (row.base args + ({ m with stack := rest } : Machine).extCost (row.effect.ranges args)) with
+          (row.base args + ({ m with stack := rest } : Machine).memoryExpansionCost (row.effect.ranges args)) with
       | error e => rw [hc] at h; cases h
       | ok charged =>
         rw [hc] at h
         dsimp only at h
-        obtain ⟨enough, rfl⟩ := MemoryReadFacts.chargeGas_ok_inv hc
+        obtain ⟨enough, rfl⟩ := MemoryReadFacts.chargeGas_ok_inversion hc
         dsimp only at h enough
         cases happ : row.effect.apply ctx.calldata ctx.code m.returnData args m.memory with
         | none => rw [happ] at h; cases h
@@ -113,10 +113,10 @@ theorem MemoryRow.step_ok {row : MemoryRow} {opcodes : OpcodeRules} {ctx : CallC
           cases pushed with
           | none =>
             cases h
-            exact ⟨by simp only [Machine.extCost] at enough ⊢; omega, happ, rfl, rfl, rfl⟩
+            exact ⟨by simp only [Machine.memoryExpansionCost] at enough ⊢; omega, happ, rfl, rfl, rfl⟩
           | some x =>
-            obtain ⟨_, rfl⟩ := MemoryReadFacts.push_ok_inv h
-            exact ⟨by simp only [Machine.extCost] at enough ⊢; omega, happ, rfl, rfl, rfl⟩
+            obtain ⟨_, rfl⟩ := MemoryReadFacts.push_ok_inversion h
+            exact ⟨by simp only [Machine.memoryExpansionCost] at enough ⊢; omega, happ, rfl, rfl, rfl⟩
 
 /-- **Family effect law (halting).** A Memory row halts in exactly one of five ways, in source
 order: `invalidOpcode` (state kept), `stackUnderflow` (stack emptied), `outOfGas` (stack
@@ -128,20 +128,20 @@ theorem MemoryRow.step_error {row : MemoryRow} {opcodes : OpcodeRules} {ctx : Ca
     (row.available opcodes = true ∧ m.stack.length < row.arity.val ∧
       h = .stackUnderflow .none ∧ out = { m with stack := [] }) ∨
     (∃ args rest, row.available opcodes = true ∧ m.stack = Words.toList row.arity args ++ rest ∧
-      m.gasLeft < row.base args + m.extCost (row.effect.ranges args) ∧ h = .outOfGas .none ∧
+      m.gasLeft < row.base args + m.memoryExpansionCost (row.effect.ranges args) ∧ h = .outOfGas .none ∧
       out = { m with stack := rest }) ∨
     (∃ args rest, row.available opcodes = true ∧ m.stack = Words.toList row.arity args ++ rest ∧
-      row.base args + m.extCost (row.effect.ranges args) ≤ m.gasLeft ∧
+      row.base args + m.memoryExpansionCost (row.effect.ranges args) ≤ m.gasLeft ∧
       row.effect.apply ctx.calldata ctx.code m.returnData args m.memory = none ∧ h = .outOfBoundsRead .none ∧
       out = { m with stack := rest,
-                     gasLeft := m.gasLeft - (row.base args + m.extCost (row.effect.ranges args)) }) ∨
+                     gasLeft := m.gasLeft - (row.base args + m.memoryExpansionCost (row.effect.ranges args)) }) ∨
     (∃ args rest memory x, row.available opcodes = true ∧
       m.stack = Words.toList row.arity args ++ rest ∧
-      row.base args + m.extCost (row.effect.ranges args) ≤ m.gasLeft ∧
+      row.base args + m.memoryExpansionCost (row.effect.ranges args) ≤ m.gasLeft ∧
       row.effect.apply ctx.calldata ctx.code m.returnData args m.memory = some (memory, some x) ∧
       1024 ≤ rest.length ∧ h = .stackOverflow .none ∧
-      out = { m with stack := rest, memory,
-                     gasLeft := m.gasLeft - (row.base args + m.extCost (row.effect.ranges args)) }) := by
+      out = { m with stack := rest, memory := memory,
+                     gasLeft := m.gasLeft - (row.base args + m.memoryExpansionCost (row.effect.ranges args)) }) := by
   cases ha : row.available opcodes with
   | false =>
     simp [MemoryRow.step, ha, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at herr
@@ -161,16 +161,16 @@ theorem MemoryRow.step_error {row : MemoryRow} {opcodes : OpcodeRules} {ctx : Ca
       rw [hp] at herr
       dsimp only at herr
       cases hc : ({ m with stack := rest } : Machine).chargeGas
-          (row.base args + ({ m with stack := rest } : Machine).extCost (row.effect.ranges args)) with
+          (row.base args + ({ m with stack := rest } : Machine).memoryExpansionCost (row.effect.ranges args)) with
       | error err =>
         rw [hc] at herr
         cases herr
-        obtain ⟨rfl, hlt, rfl⟩ := MemoryReadFacts.chargeGas_error_inv hc
+        obtain ⟨rfl, hlt, rfl⟩ := MemoryReadFacts.chargeGas_error_inversion hc
         exact Or.inr (Or.inr (Or.inl ⟨args, rest, rfl, stack, hlt, rfl, rfl⟩))
       | ok charged =>
         rw [hc] at herr
         dsimp only at herr
-        obtain ⟨enough, rfl⟩ := MemoryReadFacts.chargeGas_ok_inv hc
+        obtain ⟨enough, rfl⟩ := MemoryReadFacts.chargeGas_ok_inversion hc
         dsimp only at herr enough
         cases happ : row.effect.apply ctx.calldata ctx.code m.returnData args m.memory with
         | none =>
@@ -185,26 +185,26 @@ theorem MemoryRow.step_error {row : MemoryRow} {opcodes : OpcodeRules} {ctx : Ca
           cases pushed with
           | none => cases herr
           | some x =>
-            obtain ⟨rfl, hlen, rfl⟩ := MemoryReadFacts.push_error_inv herr
+            obtain ⟨rfl, hlen, rfl⟩ := MemoryReadFacts.push_error_inversion herr
             exact Or.inr (Or.inr (Or.inr (Or.inr
               ⟨args, rest, memory, x, rfl, stack, enough, happ, hlen, rfl, rfl⟩)))
 
 
 /-! ### Memory size under the word-aligned invariant -/
 
-theorem MemoryEffect.memExtSize_dvd {c : Nat} (i n : Nat) (h : 32 ∣ c) : 32 ∣ memExtSize c i n := by
-  unfold memExtSize
+theorem MemoryEffect.memorySizeAfterAccess_dvd {c : Nat} (i n : Nat) (h : 32 ∣ c) : 32 ∣ memorySizeAfterAccess c i n := by
+  unfold memorySizeAfterAccess
   split
   · exact h
   · exact Nat.dvd_mul_right 32 _
 
-theorem MemoryEffect.memExtsSize_dvd {c : Nat} (pairs : List (Nat × Nat)) (h : 32 ∣ c) :
-    32 ∣ memExtsSize c pairs := by
+theorem MemoryEffect.memorySizeAfterAccesses_dvd {c : Nat} (pairs : List (Nat × Nat)) (h : 32 ∣ c) :
+    32 ∣ memorySizeAfterAccesses c pairs := by
   induction pairs generalizing c with
   | nil => exact h
-  | cons pair pairs ih => exact ih (MemoryEffect.memExtSize_dvd pair.1 pair.2 h)
+  | cons pair pairs ih => exact ih (MemoryEffect.memorySizeAfterAccess_dvd pair.1 pair.2 h)
 
-private theorem aligned_write_arith {size i n : Nat} (h : 32 ∣ size) (hn : 0 < n) :
+private theorem aligned_write_size_eq_wordMax {size i n : Nat} (h : 32 ∣ size) (hn : 0 < n) :
     (if i + n ≤ size then size else ceil32 (i + n)) =
       32 * max (ceilDiv size 32) (ceilDiv (i + n) 32) := by
   obtain ⟨k, rfl⟩ := h
@@ -214,12 +214,12 @@ private theorem aligned_write_arith {size i n : Nat} (h : 32 ∣ size) (hn : 0 <
 
 /-- On a word-aligned memory, a write grows the size exactly as the extension rule says. -/
 theorem MemoryEffect.write_size {mem : Memory} (h : 32 ∣ mem.size) (i : Nat) (bytes : Bytes) :
-    (mem.write i bytes).size = memExtSize mem.size i bytes.length := by
+    (mem.write i bytes).size = memorySizeAfterAccess mem.size i bytes.length := by
   cases bytes with
-  | nil => simp [Memory.write, memExtSize]
+  | nil => simp [Memory.write, memorySizeAfterAccess]
   | cons b bs =>
-    have arith := aligned_write_arith (i := i) h (Nat.succ_pos bs.length)
-    simp only [memExtSize, List.length_cons, Nat.succ_eq_add_one, Nat.add_one_ne_zero,
+    have arith := aligned_write_size_eq_wordMax (i := i) h (Nat.succ_pos bs.length)
+    simp only [memorySizeAfterAccess, List.length_cons, Nat.succ_eq_add_one, Nat.add_one_ne_zero,
       ↓reduceIte] at arith ⊢
     rw [← arith]
     simp only [Memory.write]
@@ -232,59 +232,59 @@ theorem MemoryEffect.write_size {mem : Memory} (h : 32 ∣ mem.size) (i : Nat) (
       simp only [List.length_cons] at fits
       simp only [fits, ↓reduceIte, List.length_cons]
 
-private theorem sliceD_aux_length {ξ : Type} (xs : Array ξ) (acc : List ξ) (m n : Nat) (d : ξ) :
-    (Array.sliceD.aux xs acc m n d).length = acc.length + n := by
+private theorem sliceD_go_length {ξ : Type} (xs : Array ξ) (acc : List ξ) (m n : Nat) (d : ξ) :
+    (Array.sliceD.go xs acc m n d).length = acc.length + n := by
   induction n generalizing acc with
   | zero => rfl
-  | succ n ih => simp only [Array.sliceD.aux, ih, List.length_cons]; omega
+  | succ n ih => simp only [Array.sliceD.go, ih, List.length_cons]; omega
 
 theorem MemoryEffect.extend_size (mem : Memory) (i n : Nat) :
-    (mem.extend i n).size = memExtSize mem.size i n := rfl
+    (mem.extend i n).size = memorySizeAfterAccess mem.size i n := rfl
 
 theorem MemoryEffect.read_size (mem : Memory) (i n : Nat) :
-    (mem.read i n).2.size = memExtSize mem.size i n := rfl
+    (mem.read i n).2.size = memorySizeAfterAccess mem.size i n := rfl
 
 /-- **Size law.** On a word-aligned memory, the memory an effect leaves has exactly the size its
 ranges' extension gives, and stays word-aligned. -/
 theorem MemoryEffect.apply_size {a : Fin 4} (e : MemoryEffect a) {calldata : Bytes} {code : ByteArray}
     {returnData : Bytes} {args : Words a} {mem mem' : Memory} {pushed : Option U256}
     (h32 : 32 ∣ mem.size) (h : e.apply calldata code returnData args mem = some (mem', pushed)) :
-    mem'.size = memExtsSize mem.size (e.ranges args) ∧ 32 ∣ mem'.size := by
-  have aligned : ∀ {x : Memory}, x.size = memExtsSize mem.size (e.ranges args) →
-      x.size = memExtsSize mem.size (e.ranges args) ∧ 32 ∣ x.size := fun hx =>
-    ⟨hx, hx ▸ MemoryEffect.memExtsSize_dvd _ h32⟩
+    mem'.size = memorySizeAfterAccesses mem.size (e.ranges args) ∧ 32 ∣ mem'.size := by
+  have aligned : ∀ {x : Memory}, x.size = memorySizeAfterAccesses mem.size (e.ranges args) →
+      x.size = memorySizeAfterAccesses mem.size (e.ranges args) ∧ 32 ∣ x.size := fun hx =>
+    ⟨hx, hx ▸ MemoryEffect.memorySizeAfterAccesses_dvd _ h32⟩
   refine aligned ?_
   cases e with
   | copy source =>
     obtain ⟨d, o, n⟩ := args
     cases source <;> simp only [MemoryEffect.apply, Option.some.injEq, Prod.mk.injEq] at h
     · obtain ⟨rfl, -⟩ := h
-      simp [MemoryEffect.ranges, memExtsSize, MemoryEffect.write_size h32, List.sliceD]
+      simp [MemoryEffect.ranges, memorySizeAfterAccesses, MemoryEffect.write_size h32, List.sliceD]
     · obtain ⟨rfl, -⟩ := h
-      simp [MemoryEffect.ranges, memExtsSize, MemoryEffect.write_size h32, ByteArray.length_sliceD]
+      simp [MemoryEffect.ranges, memorySizeAfterAccesses, MemoryEffect.write_size h32, ByteArray.length_sliceD]
     · split at h
       · cases h
       · simp only [Option.some.injEq, Prod.mk.injEq] at h
         obtain ⟨rfl, -⟩ := h
-        simp [MemoryEffect.ranges, memExtsSize, MemoryEffect.write_size h32, List.sliceD]
+        simp [MemoryEffect.ranges, memorySizeAfterAccesses, MemoryEffect.write_size h32, List.sliceD]
   | move =>
     obtain ⟨d, src, n⟩ := args
     simp only [MemoryEffect.apply, Option.some.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, -⟩ := h
-    have hr : 32 ∣ (mem.read src.toNat n.toNat).2.size := MemoryEffect.memExtSize_dvd _ _ h32
+    have hr : 32 ∣ (mem.read src.toNat n.toNat).2.size := MemoryEffect.memorySizeAfterAccess_dvd _ _ h32
     rw [MemoryEffect.write_size hr]
-    simp [MemoryEffect.ranges, memExtsSize, Memory.read, Memory.extend, Array.sliceD,
-      sliceD_aux_length]
+    simp [MemoryEffect.ranges, memorySizeAfterAccesses, Memory.read, Memory.extend, Array.sliceD,
+      sliceD_go_length]
   | storeWord =>
     obtain ⟨i, x⟩ := args
     simp only [MemoryEffect.apply, Option.some.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, -⟩ := h
-    simp [MemoryEffect.ranges, memExtsSize, MemoryEffect.write_size h32, U256.length_toBytes]
+    simp [MemoryEffect.ranges, memorySizeAfterAccesses, MemoryEffect.write_size h32, U256.length_toBytes]
   | storeByte =>
     obtain ⟨i, x⟩ := args
     simp only [MemoryEffect.apply, Option.some.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, -⟩ := h
-    simp [MemoryEffect.ranges, memExtsSize, MemoryEffect.write_size h32]
+    simp [MemoryEffect.ranges, memorySizeAfterAccesses, MemoryEffect.write_size h32]
   | load =>
     simp only [MemoryEffect.apply, Option.some.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, -⟩ := h
@@ -300,7 +300,7 @@ theorem MemoryEffect.apply_size {a : Fin 4} (e : MemoryEffect a) {calldata : Byt
 word-aligned memory of exactly the size the extension of its ranges gives: the size it paid for. -/
 theorem MemoryRow.step_size {row : MemoryRow} {opcodes : OpcodeRules} {ctx : CallContext}
     {m out : Machine} (h32 : 32 ∣ m.memory.size) (h : row.step opcodes ctx m = .ok out) :
-    ∃ args, out.memory.size = memExtsSize m.memory.size (row.effect.ranges args) ∧
+    ∃ args, out.memory.size = memorySizeAfterAccesses m.memory.size (row.effect.ranges args) ∧
       32 ∣ out.memory.size := by
   obtain ⟨_, args, _, _, _, _, happ, _⟩ := MemoryRow.step_ok h
   exact ⟨args, MemoryEffect.apply_size row.effect h32 happ⟩
@@ -438,4 +438,4 @@ theorem PlainOp.memory_run_gasMeasure_lt {op : Jaune.PlainOp}
       simp only [Machine.gasMeasure, Frame.State.withMachine_machine, hsg]
       omega
 
-end Jaune.Checked
+end Jaune

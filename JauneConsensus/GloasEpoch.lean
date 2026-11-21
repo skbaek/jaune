@@ -175,7 +175,7 @@ def processSlashings (_cfg : Config) (state : BeaconState P) : Fallible (BeaconS
 def processEth1DataReset (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
   let nextEpoch ← (← getCurrentEpoch state).add? U64.one "process_eth1_data_reset"
   let r ← nextEpoch.mod? (← u64Checked P.EPOCHS_PER_ETH1_VOTING_PERIOD) "process_eth1_data_reset"
-  if r.toNat == 0 then pure { state with eth1_data_votes := SszList.empty }
+  if r.toNat == 0 then pure { state with eth1_data_votes := Ssz.List.empty }
   else pure state
 
 /-! ## Pending deposits, consolidations, builder payments, effective balances -/
@@ -285,7 +285,7 @@ def processBuilderPendingPayments (_cfg : Config) (state : BeaconState P) : Fall
   let shifted := oldPayments ++ Array.replicate spe BuilderPendingPayment.empty
   pure { state with
     builder_pending_withdrawals := withdrawals
-    builder_pending_payments := ← SszVector.ofArray shifted site }
+    builder_pending_payments := ← Ssz.Vector.ofArray shifted site }
 
 /-- `process_effective_balance_updates` (Electra): the ceiling is `get_max_effective_balance`. -/
 def processEffectiveBalanceUpdates (_cfg : Config) (state : BeaconState P) : Fallible (BeaconState P) := do
@@ -348,7 +348,7 @@ def processParticipationFlagUpdates (_cfg : Config) (state : BeaconState P) :
   pure { state with
     previous_epoch_participation := state.current_epoch_participation
     current_epoch_participation :=
-      ProgressiveListOnSpine.ofArray (Array.replicate state.validators.toArray.size UIntN.zero) }
+      ProgressiveListOnSpine.ofArray (Array.replicate state.validators.toArray.size UnsignedInteger.zero) }
 
 /-- `process_sync_committee_updates` (Altair), with the Gloas next sync committee. -/
 def processSyncCommitteeUpdates (ctx : Context) (state : BeaconState P) : Fallible (BeaconState P) := do
@@ -373,7 +373,7 @@ def processProposerLookahead (_cfg : Config) (state : BeaconState P) : Fallible 
   require (lastEpochProposers.size == la.size - lastEpochStart)
     s!"{site}: last epoch proposers fill the tail"
   pure { state with proposer_lookahead :=
-    ← SszVector.ofArray (la.extract P.SLOTS_PER_EPOCH la.size ++ lastEpochProposers) site }
+    ← Ssz.Vector.ofArray (la.extract P.SLOTS_PER_EPOCH la.size ++ lastEpochProposers) site }
 
 /-- `process_ptc_window(state)` (Gloas, :1737): shift the window one epoch forward, then fill the
 last epoch with `compute_ptc` for each slot of epoch `current + MIN_SEED_LOOKAHEAD + 1`. The new
@@ -390,7 +390,7 @@ def processPtcWindow (_cfg : Config) (state : BeaconState P) : Fallible (BeaconS
   let mut last : Array (PayloadTimelinessCommittee P) := #[]
   for slot in [startSlot.toNat:endSlot.toNat] do
     last := last.push (← computePtc state (← U64.ofNat? slot "Slot"))
-  pure { state with ptc_window := ← SszVector.ofArray (window.extract spe window.size ++ last) site }
+  pure { state with ptc_window := ← Ssz.Vector.ofArray (window.extract spe window.size ++ last) site }
 
 /-! ## `process_epoch` -/
 

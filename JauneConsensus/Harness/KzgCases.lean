@@ -74,7 +74,7 @@ def kzgOutput (handler : String) (i : YamlValue) : Except String KzgValue := do
       .list [.list (cells.toList.map kzgValueOfBytes), .list (proofs.toList.map kzgValueOfBytes)]
   | "compute_verify_cell_kzg_proof_batch_challenge" =>
     let evals ← resultToExcept do (← (← i.field "cosets_evals").asSequence).mapM fun e => do
-      (← e.asSequence).toArray.mapM fun b => do pure (FinField.ofNat (os2ip (← b.asHex)) : Fr)
+      (← e.asSequence).toArray.mapM fun b => do pure (FieldElement.ofNat (os2ip (← b.asHex)) : BLSFieldElement)
     return kzgValueOfExcept (computeVerifyCellKzgProofBatchChallenge (← hexListField i "commitments").toArray
       (← natListField i "commitment_indices").toArray (← natListField i "cell_indices").toArray
       evals.toArray (← hexListField i "proofs").toArray) fun r => kzgValueOfBytes (blsFieldToBytes r)

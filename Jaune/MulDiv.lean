@@ -70,7 +70,7 @@ theorem U256.toNat_mul_mod (x y : U256) :
 /-- The untruncated product, available exactly when it does not overflow. -/
 theorem U256.toNat_mul_eq_of_mul_no_overflow {x y : U256} (h : U256.MulNoOverflow x y) :
     (x * y).toNat = x.toNat * y.toNat := by
-  rw [U256.toNat_mul, Nat.lo_eq_of_lt h]
+  rw [U256.toNat_mul, Nat.lowBits_eq_of_lt h]
 
 /-- The `div` half of the div/mod pair. The `mod` half is the pre-existing
 `B256.toNat_mod`. Neither truncates: both results are bounded by an operand. -/
@@ -211,7 +211,7 @@ theorem Nat.mul_div_le_mul_div_left {b b' : Nat} (h : b ≤ b') (a d : Nat) :
   Nat.div_le_div_right (Nat.mul_le_mul_left a h)
 
 /-- Antitone in the denominator: a larger scale divides to no more. -/
-theorem Nat.mul_div_le_mul_div_of_le_denom {d d' : Nat} (h : d' ≤ d) (hd' : d' ≠ 0)
+theorem Nat.mul_div_le_mul_div_of_le_denominator {d d' : Nat} (h : d' ≤ d) (hd' : d' ≠ 0)
     (a b : Nat) : a * b / d ≤ a * b / d' :=
   Nat.div_le_div_left h (Nat.pos_of_ne_zero hd')
 
@@ -229,7 +229,7 @@ theorem ceilDiv_mul_le_ceilDiv_mul_left {b b' : Nat} (h : b ≤ b') (a : Nat)
   ceilDiv_le_ceilDiv_right (Nat.mul_le_mul_left a h) hd
 
 /-- Antitone in the denominator on the ceiling side too. -/
-theorem ceilDiv_le_ceilDiv_of_le_denom {d d' : Nat} (h : d' ≤ d) (hd' : d' ≠ 0)
+theorem ceilDiv_le_ceilDiv_of_le_denominator {d d' : Nat} (h : d' ≤ d) (hd' : d' ≠ 0)
     (n : Nat) : ceilDiv n d ≤ ceilDiv n d' := by
   have hd : d ≠ 0 := by omega
   rw [ceilDiv_le_iff hd]
@@ -302,14 +302,14 @@ theorem ceilDiv_mul_div_mul_le {p : Nat} (hp : p ≠ 0) (x q : Nat) :
 /-! ## A5 — how a division reacts to a perturbed denominator or numerator -/
 
 /-- Adding to the denominator can only shrink the quotient: the donation lever. -/
-theorem Nat.mul_div_add_denom_le {d : Nat} (hd : d ≠ 0) (a b e : Nat) :
+theorem Nat.mul_div_add_denominator_le {d : Nat} (hd : d ≠ 0) (a b e : Nat) :
     a * b / (d + e) ≤ a * b / d :=
   Nat.div_le_div_left (Nat.le_add_right d e) (Nat.pos_of_ne_zero hd)
 
 /-- How much a denominator perturbation can cost, from above: the exact
 real-valued difference `n * e / (d * (d + e))`, plus the one unit that two
 independent floors can hide. The `+ 1` is necessary. -/
-theorem Nat.div_le_div_add_denom_add {d : Nat} (hd : d ≠ 0) (n e : Nat) :
+theorem Nat.div_le_div_add_denominator_add {d : Nat} (hd : d ≠ 0) (n e : Nat) :
     n / d ≤ n / (d + e) + n * e / (d * (d + e)) + 1 := by
   have hd' : 0 < d := Nat.pos_of_ne_zero hd
   have hde : 0 < d + e := by omega
@@ -322,7 +322,7 @@ theorem Nat.div_le_div_add_denom_add {d : Nat} (hd : d ≠ 0) (n e : Nat) :
   split <;> omega
 
 /-- The same perturbation from below, making the pair two-sided. -/
-theorem Nat.div_add_denom_add_le_div {d : Nat} (hd : d ≠ 0) (n e : Nat) :
+theorem Nat.div_add_denominator_add_le_div {d : Nat} (hd : d ≠ 0) (n e : Nat) :
     n / (d + e) + n * e / (d * (d + e)) ≤ n / d := by
   have hd' : 0 < d := Nat.pos_of_ne_zero hd
   have hde : 0 < d + e := by omega

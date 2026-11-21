@@ -44,6 +44,16 @@ class NamingLintTests(unittest.TestCase):
     def test_whole_words_abbreviations_and_numerals(self):
         self.assertEqual(self.lint('Jaune.Account.gasLimit', 'Jaune.read_UInt32', 'Jaune.value2'), [])
 
+    def test_acronym_run_splits_only_at_an_allowed_acronym(self):
+        # Lean naming (doc/std/naming.md, Acronyms): IO stays upper case, so IO + U256 is one capital run.
+        self.assertEqual(self.lint('Jaune.readIOU256', 'Jaune.readIOUInt64', 'Jaune.readIOValue'), [])
+        # The remainder of the run is still a token of its own and must be registered.
+        self.assertEqual([p['tokens'] for p in self.lint('Jaune.readIORBValue')], [['RB']])
+        # A run with no allowed acronym at its head is not split.
+        self.assertEqual([p['tokens'] for p in self.lint('Jaune.readXIOValue')], [['XIO']])
+        # A whole run that is itself an allowed multi-token acronym is never split.
+        self.assertEqual(self.lint('Jaune.readU256', 'Jaune.readEVM'), [])
+
     def test_retired_execution_and_consensus(self):
         for name in ('Jaune.Devm', 'Jaune.Account.bal', 'JauneConsensus.Ctx', 'JauneConsensus.bal'):
             self.assertTrue(any(p['reason'] == 'retired token' for p in self.lint(name)))
@@ -145,6 +155,47 @@ class NamingLintTests(unittest.TestCase):
         for name in ('Jaune.acct', 'Jaune.readΞ', 'Jaune.read__value', 'Jaune.read$'):
             self.assertTrue(self.lint(name), name)
         self.assertEqual(self.lint("Jaune.read_value'"), [])
+
+    def test_leading_lowercase_abbreviation_plural_and_keyword_escape(self):
+        abbreviations = {'BPO', 'G1', 'UInt32', 'Int', 'U64'}
+        words = {'rules', 'valid', 'to', 'halt', 'op', 'length', 'return'}
+        unknown = lambda s: LINT.unknown_words(s, words, abbreviations)
+        # A leading all-capitals abbreviation is lowered by lowerCamel; inside a name it is not.
+        self.assertEqual(unknown('bpo1Rules_valid'), [])
+        self.assertEqual(unknown('g1Length'), [])
+        self.assertEqual(unknown('rulesBPO1'), [])
+        self.assertEqual(unknown('rulesBpo1'), ['Bpo'])
+        self.assertEqual(unknown('validBpo'), ['Bpo'])
+        # Only all-capitals abbreviations are lowered: `Int` is a word-like abbreviation.
+        self.assertEqual(unknown('intRules'), ['int'])
+        # The lowered form must match the whole abbreviation, digits included.
+        self.assertEqual(unknown('g2Length'), ['g'])
+        # The plural of a registered abbreviation that ends in digits.
+        self.assertEqual(unknown('UInt32s'), [])
+        self.assertEqual(unknown('Rules32s'), ['s'])
+        # A Lean keyword escape is accepted only as the single trailing underscore.
+        self.assertEqual(unknown('return_'), [])
+        self.assertEqual(unknown('rules_'), ['<empty>'])
+        self.assertEqual(unknown('return__'), ['<empty>', '<empty>'])
+        self.assertEqual(unknown('halt_return_'), ['<empty>'])
+
+    def test_default_suffix_only_with_its_lean_source(self):
+        # Ruling 6: Lean core's `D` (`Array.getD`) is accepted only when its pinned source is registered.
+        self.policy['words'] += ['slice', 'take', 'right', 'byte', 'eq', 'go', 'list']
+        self.assertEqual([p['tokens'] for p in self.lint('Jaune.sliceD')], [['D']])
+        raw = b'@[inline] abbrev Array.getD (a : Array \xce\xb1) (i : Nat) (v\xe2\x82\x80 : \xce\xb1) : \xce\xb1 :=\n'
+        (self.root / 'prelude.txt').write_bytes(raw)
+        self.policy['sources']['lean4-prelude'] = dict(path='prelude.txt', sha256=LINT.sha(raw), citation='Lean core fixture')
+        self.assertEqual(self.lint('Jaune.sliceD', 'Jaune.List.takeRightD', 'Jaune.byteD_eq', 'Jaune.sliceD.go'), [])
+        # Only a final `D` after a word: not inside a component, not alone, not after a one-letter token.
+        self.assertEqual([p['tokens'] for p in self.lint('Jaune.sliceDRight')], [['D']])
+        self.assertEqual([p['tokens'] for p in self.lint('Jaune.DSlice')], [['D']])
+        self.assertEqual([p['tokens'] for p in self.lint('Jaune.value_D')], [['D']])
+        # The source must spell the definition; another Prelude text does not activate the suffix.
+        raw = b'def Option.get! (opt : Option \xce\xb1) : \xce\xb1\n'
+        (self.root / 'prelude.txt').write_bytes(raw)
+        self.policy['sources']['lean4-prelude']['sha256'] = LINT.sha(raw)
+        self.assertEqual([p['tokens'] for p in self.lint('Jaune.sliceD')], [['D']])
 
     def test_source_names_pass_only_with_exact_registration(self):
         self.bind('JauneConsensus.eth1_data', 'eth1_data')
@@ -316,6 +367,449 @@ class NamingLintTests(unittest.TestCase):
         words.add('read')
         words.remove('balance')
         self.assertEqual(check(name, 'Jaune.read?', 'theorem')[0]['tokens'], ['balance'])
+
+    # Rule 7: names built from the definitions a kernel statement uses.
+    LEAN_SOURCES = {
+        'lean4-std-naming': '| `refl` | reflexive |\n| `trans` | transitive |\n',
+        'lean4-list-lex': 'protected theorem not_lt_iff_ge\nprotected theorem not_le_iff_gt\n',
+        'lean4-list-lemmas': 'theorem reverse_concat\n',
+        'lean4-elab-structure': 'private def defaultCtorName := `mk\n',
+        'lean4-prelude': 'structure Subtype where\n  val : α\n',
+    }
+
+    def register_lean(self, *keys):
+        for key in keys:
+            raw = self.LEAN_SOURCES[key].encode()
+            (self.root / (key + '.txt')).write_bytes(raw)
+            self.policy['sources'][key] = dict(path=key + '.txt', sha256=LINT.sha(raw), citation='Synthetic Lean source')
+
+    def statement(self, name, kind, pool, root, value=None, extra=None, references=None):
+        payload = {'theorem': ['theorem'], 'definition': ['definition', 'safe', value],
+                   'constructor': ['constructor', ['name', 'Jaune.Value'], 0, 0, 0, False]}[kind]
+        constants = {name: {'kernel': {'payload': payload, 'type': root}}}
+        constants.update(extra or {})
+        bundle = {'index': {'module': 'Jaune.Test', 'references': references or {}},
+                  'constants': constants, 'expr_pool': pool, 'level_pool': [['zero'], ['succ', 0]]}
+        return LINT.theorem_reference_endings(bundle)
+
+    def lean_lint(self, name, evidence):
+        words = LINT.validate_policy(self.policy, self.root)
+        return LINT.lint_names({name: []}, self.mapping, self.policy, words, reference_endings=evidence)[0]
+
+    LE_POOL = [['const', ['name', 'LE.le'], []], ['const', ['name', 'Nat'], []], ['app', 0, 1]]
+
+    def test_statement_relation_names_only_what_the_statement_uses(self):
+        name = 'Jaune.value_le_limit'
+        self.assertEqual(self.lean_lint(name, self.statement(name, 'theorem', self.LE_POOL, 2)), [])
+        other = [['const', ['name', 'LT.lt'], []], ['const', ['name', 'Nat'], []], ['app', 0, 1]]
+        self.assertEqual(self.lean_lint(name, self.statement(name, 'theorem', other, 2))[0]['tokens'], ['le'])
+        own = [['const', ['name', 'Jaune.le'], []]]
+        self.assertEqual(self.lean_lint(name, self.statement(name, 'theorem', own, 0))[0]['tokens'], ['le'])
+        # Data is not named by the theorem algorithm.
+        self.assertTrue(self.lean_lint(name, self.statement(name, 'definition', self.LE_POOL, 2, value=1)))
+        # A type spelled in lower camel case (`Nat` as `nat`) and a punctuated Lean name.
+        pool = [['const', ['name', 'GetElem?.getElem?'], []], ['const', ['name', 'Nat'], []], ['app', 0, 1]]
+        self.assertEqual(self.lean_lint('Jaune.getElem?_nat_value', self.statement(
+            'Jaune.getElem?_nat_value', 'theorem', pool, 2)), [])
+
+    def test_lean_keywords_need_a_registered_source_a_theorem_and_a_whole_component(self):
+        name = 'Jaune.value_refl'
+        evidence = self.statement(name, 'theorem', self.LE_POOL, 2)
+        self.assertEqual(self.lean_lint(name, evidence)[0]['tokens'], ['refl'])
+        self.register_lean('lean4-std-naming')
+        self.assertEqual(self.lean_lint(name, evidence), [])
+        self.assertTrue(self.lean_lint(name, self.statement(name, 'definition', self.LE_POOL, 2, value=1)))
+        self.assertTrue(self.lean_lint('Jaune.valueRefl', self.statement('Jaune.valueRefl', 'theorem', self.LE_POOL, 2)))
+        self.policy['sources']['lean4-std-naming']['sha256'] = '0' * 64
+        with self.assertRaises(ValueError):
+            LINT.validate_policy(self.policy, self.root)
+
+    def test_swapped_relation_and_singleton_append(self):
+        name = 'Jaune.value_ge'
+        self.register_lean('lean4-list-lex', 'lean4-list-lemmas')
+        self.assertEqual(self.lean_lint(name, self.statement(name, 'theorem', self.LE_POOL, 2)), [])
+        lt = [['const', ['name', 'LT.lt'], []]]
+        self.assertTrue(self.lean_lint(name, self.statement(name, 'theorem', lt, 0)))
+        # `l ++ [a]` is `concat`; a plain append is not.
+        pool = [['const', ['name', 'HAppend.hAppend'], []], ['bvar', 0], ['const', ['name', 'List.cons'], []],
+                ['const', ['name', 'List.nil'], []], ['app', 3, 1], ['app', 2, 1], ['app', 5, 1], ['app', 6, 4]]
+        for depth in range(5):
+            pool.append(['app', len(pool) - 1 if depth else 0, 1])
+        pool.append(['app', len(pool) - 1, 7])
+        name = 'Jaune.value_concat'
+        self.assertEqual(self.lean_lint(name, self.statement(name, 'theorem', pool, len(pool) - 1)), [])
+        pool[-1] = ['app', len(pool) - 2, 1]
+        self.assertEqual(self.lean_lint(name, self.statement(name, 'theorem', pool, len(pool) - 1))[0]['tokens'],
+                         ['concat'])
+
+    def test_constructor_projection_and_instance_method_names(self):
+        self.register_lean('lean4-elab-structure', 'lean4-prelude')
+        value = [['const', ['name', 'Jaune.Value'], []], ['const', ['name', 'Nat'], []],
+                 ['forall', 'default', 1, 0], ['bvar', 0], ['proj', ['name', 'Jaune.Value'], 0, 3],
+                 ['lam', 'default', 0, 4]]
+        self.assertEqual(self.lean_lint('Jaune.Value.mk', self.statement('Jaune.Value.mk', 'constructor', value, 2)), [])
+        self.assertEqual(self.lean_lint('Jaune.Value.mk', self.statement('Jaune.Value.mk', 'definition', value, 2, 3)), [])
+        self.assertTrue(self.lean_lint('Jaune.Value.mk', self.statement('Jaune.Value.mk', 'definition', value, 1, 3)))
+        self.assertEqual(self.lean_lint('Jaune.Value.val', self.statement('Jaune.Value.val', 'definition', value, 1, 5)), [])
+        self.assertTrue(self.lean_lint('Jaune.Value.val', self.statement('Jaune.Value.val', 'definition', value, 1, 3)))
+        # A theorem may spell the referenced constructor or projection.
+        ref = [['const', ['name', 'Jaune.Value.val'], []]]
+        self.assertEqual(self.lean_lint('Jaune.read_val', self.statement('Jaune.read_val', 'theorem', ref, 0)), [])
+        # `instance : Neg Value := ⟨Value.neg⟩` names the method after the class.
+        pool = [['const', ['name', 'Jaune.Value'], []], ['const', ['name', 'Neg.mk'], []],
+                ['const', ['name', 'Jaune.Value.neg'], []], ['app', 1, 0], ['app', 3, 2],
+                ['const', ['name', 'Neg'], []], ['app', 5, 0]]
+        instance = {'Jaune.instNegValue': {'attributes': {'instance': 'default'},
+                                           'kernel': {'payload': ['definition', 'safe', 4], 'type': 6}}}
+        evidence = self.statement('Jaune.Value.neg', 'definition', pool, 0, value=0, extra=instance)
+        self.assertEqual(self.lean_lint('Jaune.Value.neg', evidence), [])
+        del instance['Jaune.instNegValue']['attributes']['instance']
+        evidence = self.statement('Jaune.Value.neg', 'definition', pool, 0, value=0, extra=instance)
+        self.assertTrue(self.lean_lint('Jaune.Value.neg', evidence))
+
+    def test_mirrored_namespace_predicate_body_and_punctuated_jaune_name(self):
+        pool = [['const', ['name', 'Std.TreeMap'], []]]
+        name = 'Jaune.Std.TreeMap.value'
+        self.assertEqual(self.lean_lint(name, self.statement(name, 'definition', pool, 0, value=0)), [])
+        self.assertTrue(self.lean_lint(name, self.statement(name, 'definition', [['const', ['name', 'Nat'], []]], 0, 0)))
+        # A proposition defined by `≤` may be named with it; its body supplies the name.
+        pool = [['sort', 0], ['const', ['name', 'LE.le'], []], ['const', ['name', 'Nat'], []]]
+        self.assertEqual(self.lean_lint('Jaune.ValueLe', self.statement('Jaune.ValueLe', 'definition', pool, 0, 1)), [])
+        self.assertTrue(self.lean_lint('Jaune.ValueLe', self.statement('Jaune.ValueLe', 'definition', pool, 0, 2)))
+        # The punctuation of a referenced Jaune name is kept; its words are still linted.
+        pool = [['const', ['name', 'Jaune.read?'], []]]
+        self.assertEqual(self.lean_lint('Jaune.value_read?_limit', self.statement('Jaune.value_read?_limit', 'theorem', pool, 0)), [])
+        pool = [['const', ['name', 'Jaune.bal?'], []]]
+        self.assertEqual(self.lean_lint('Jaune.value_bal?_limit', self.statement('Jaune.value_bal?_limit', 'theorem', pool, 0))[0]['tokens'],
+                         ['bal'])
+
+    FIXTURE = 'YZZ WWW VVV G_{callstipend} GAS_PER_BLOB the hex-prefix encoding'
+
+    def option(self, name, spelling, style='lowerCamel', rule='1', **options):
+        self.bind(name, spelling, style, text=self.FIXTURE)
+        self.policy['bindings'][name].update(rule=rule, **options)
+
+    def test_hyphenated_and_segmented_source_spellings(self):
+        self.option('Jaune.hexPrefix', 'hex-prefix')
+        self.assertEqual(self.lint('Jaune.hexPrefix'), [])
+        self.option('Jaune.callStipend', 'callstipend')
+        with self.assertRaisesRegex(ValueError, 'case mismatch'):
+            self.lint('Jaune.callStipend')
+        self.option('Jaune.callStipend', 'callstipend', segments=['call', 'stipend'])
+        self.policy['words'].append('call')
+        self.assertEqual([f['tokens'] for f in self.lint('Jaune.callStipend')], [['stipend']])
+        self.policy['words'].append('stipend')
+        self.assertEqual(self.lint('Jaune.callStipend'), [])
+        for segments in (['call', 'stipen'], ['callstipend'], ['call', '', 'stipend'], 'call stipend'):
+            self.policy['bindings']['Jaune.callStipend']['segments'] = segments
+            with self.assertRaisesRegex(ValueError, 'segments must split'):
+                self.lint('Jaune.callStipend')
+
+    def test_namespace_replaces_only_the_named_source_prefix(self):
+        self.option('Jaune.Gas.perBlob', 'GAS_PER_BLOB', namespace_prefix='GAS')
+        self.assertEqual(self.lint('Jaune.Gas.perBlob'), [])
+        for name, prefix in (('Jaune.Fee.perBlob', 'GAS'), ('Jaune.Gas.perBlob', 'PER'), ('Jaune.perBlob', 'GAS')):
+            self.policy['bindings'] = {}
+            self.option(name, 'GAS_PER_BLOB', namespace_prefix=prefix)
+            with self.assertRaisesRegex(ValueError, 'namespace does not replace'):
+                self.lint(name)
+
+    def test_component_binding_credits_its_component_alone(self):
+        self.mapping['entries'] = [dict(old='Jaune.Zzz', new='Jaune.readYzz?', kind='declaration',
+                                        layer='execution', rule='1, 7', source='synthetic protocol name')]
+        self.assertEqual(self.lint('Jaune.readYzz?')[0]['reason'], 'map requires matching source binding')
+        self.option('Jaune.readYzz?', 'YZZ', 'upperCamel', component='Yzz')
+        self.assertEqual(self.lint('Jaune.readYzz?'), [])
+        self.policy['words'].remove('read')
+        self.assertEqual([(f['reason'], f['tokens']) for f in self.lint('Jaune.readYzz?')],
+                         [('unregistered word or source', ['read'])])
+        self.policy['words'].append('read')
+        self.policy['bindings']['Jaune.readYzz?']['rule'] = '3'
+        self.assertEqual(self.lint('Jaune.readYzz?')[0]['reason'], 'map requires matching source binding')
+        for name, component in (('Jaune.readYzzy', 'Yzz'), ('Jaune.readYzz', 'Www'), ('Jaune.readWww', 'Yzz')):
+            self.policy['bindings'] = {}
+            self.option(name, 'YZZ', 'upperCamel', component=component)
+            with self.assertRaisesRegex(ValueError, 'case mismatch'):
+                self.lint(name)
+
+    def register_compound(self, old, new, bases, rule='1, 3, 7', layer='execution',
+                          source='Derived by token: `Zzz` -> `Yzz` (synthetic) [B]; `Qqq` -> `Www` (other) [M]'):
+        roots = [dict(old='Jaune.Zzz', new='Jaune.Yzz', kind='declaration', layer='execution', rule='1, 7',
+                      source='Derived by token: `Zzz` -> `Yzz` (synthetic) [B]'),
+                 dict(old='Jaune.Qqq', new='Jaune.Www', kind='declaration', layer='execution', rule='3, 7',
+                      source='Derived by token: `Qqq` -> `Www` (other) [M]')]
+        self.mapping['entries'] = roots + [dict(old=old, new=new, kind='declaration', layer=layer, rule=rule,
+                                                 source=source)]
+        self.policy['bindings'] = {}
+        self.option('Jaune.Yzz', 'YZZ', 'upperCamel')
+        self.option('Jaune.Www', 'WWW', 'upperCamel', rule='3')
+        self.option('Jaune.Vvv', 'VVV', 'upperCamel')
+        self.policy['derived'] = {new: dict(old=old, bases=bases)}
+        return self.lint(new)
+
+    def test_compound_derived_row_needs_a_bound_cited_base_for_each_sourced_rule(self):
+        both = ['Jaune.Yzz', 'Jaune.Www']
+        self.assertEqual(self.register_compound('Jaune.Zzz.readQqq', 'Jaune.Yzz.readWww', both), [])
+        self.assertEqual(self.register_compound('Jaune.readQqq_Zzz', 'Jaune.readWww_Yzz', both), [])
+        # A changed suffix is admitted, but only the bound spellings are credited.
+        found = self.register_compound('Jaune.Zzz.qxzQqq', 'Jaune.Yzz.qxzqWww', both)
+        self.assertEqual([(f['reason'], f['tokens']) for f in found], [('unregistered word or source', ['qxzq'])])
+        self.assertEqual(self.register_compound('Jaune.Zzz.read', 'Jaune.Yzz.read', ['Jaune.Yzz'], rule='1, 5, 7',
+                                                layer='adapter'), [])
+        for bases, rule, message in (
+                (['Jaune.Yzz'], '1, 3, 7', 'lacks a base for each sourced rule'),
+                (both, '1, 7', 'does not list the rule'),
+                (['Jaune.Yzz', 'Jaune.Vvv'], '1, 3, 7', 'one known old name'),
+                (['Jaune.Yzz', 'Jaune.Missing'], '1, 3, 7', 'one known old name'),
+                ([], '1, 3, 7', 'lacks matching map row'),
+                ([['Jaune.Yzz']], '1, 3, 7', 'invalid derived base')):
+            with self.assertRaisesRegex(ValueError, message):
+                self.register_compound('Jaune.Zzz.readQqq', 'Jaune.Yzz.readWww', bases, rule=rule)
+        with self.assertRaisesRegex(ValueError, 'does not name the rename of Jaune.Www'):
+            self.register_compound('Jaune.Zzz.readQqq', 'Jaune.Yzz.readWww', both,
+                                   source='Derived by token: `Zzz` -> `Yzz` (synthetic) [B]; `Kqq` -> `Www` (other) [M]')
+        with self.assertRaisesRegex(ValueError, 'another layer'):
+            self.register_compound('Jaune.Zzz.readQqq', 'Jaune.Yzz.readWww', both, layer='consensus')
+        # The sourced spelling must stand where the old token stood: no mid-token or missing change.
+        for old, new in (('Jaune.readZzzy_Qqq', 'Jaune.readYzzy_Www'), ('Jaune.readZzz_Qqq', 'Jaune.readKqq_Www'),
+                         ('Jaune.read_Qqq', 'Jaune.readYzz_Www')):
+            with self.assertRaisesRegex(ValueError, 'extends beyond sourced component Jaune.Yzz'):
+                self.register_compound(old, new, both)
+        self.register_compound('Jaune.Zzz.readQqq', 'Jaune.Yzz.readWww', both)
+        self.policy['derived']['Jaune.Yzz.readWww']['old'] = 'Jaune.Zzz.readKqq'
+        with self.assertRaisesRegex(ValueError, 'lacks matching map row'):
+            self.lint('Jaune.Yzz.readWww')
+
+    def test_compound_base_may_be_a_bound_namespace_with_its_stated_old_name(self):
+        source = 'Derived by token: `Jaune.Uuu` -> `Vvv` (synthetic plural) [M]'
+        stated = [dict(name='Jaune.Vvv', old='Jaune.Uuu')]
+        self.assertEqual(self.register_compound('Jaune.Uuu.read', 'Jaune.Vvv.read', stated, rule='1, 7',
+                                                source=source), [])
+        self.assertEqual(self.register_compound('Jaune.readUuu', 'Jaune.readVvv', stated, rule='1, 7',
+                                                source='`Uuu` -> `Vvv`'), [])
+        with self.assertRaisesRegex(ValueError, 'does not name the rename'):
+            self.register_compound('Jaune.Uuu.read', 'Jaune.Vvv.read', [dict(name='Jaune.Vvv', old='Jaune.Kqq')],
+                                   rule='1, 7', source=source)
+        with self.assertRaisesRegex(ValueError, 'one known old name'):
+            self.register_compound('Jaune.Uuu.read', 'Jaune.Vvv.read', [dict(name='Jaune.Yzz', old='Jaune.Uuu')],
+                                   rule='1, 7', source=source)
+        self.register_compound('Jaune.Uuu.read', 'Jaune.Vvv.read', stated, rule='1, 7', source=source)
+        pair = self.bundle()
+        result = LINT.check(self.root, self.mapping, self.policy, self.root, [pair], ['Jaune'])
+        self.assertIn('Jaune.Vvv.read', [p['name'] for p in result['problems']
+                                       if p['reason'] == 'unused source binding'])
+
+    def test_rule_seven_binding_needs_a_lean_ecosystem_source(self):
+        # Rule 7: the name Lean core gives the same definition (`Nat.decEq`, `BitVec.neg`).
+        raw = ('def decEq {a : Sort u} [inst : DecidableEq a] (a b : a) : Decidable (Eq a b) :=\n'
+               'protected def neg (x : BitVec n) : BitVec n := .ofNat n (2^n - x.toNat)\n').encode()
+        (self.root / 'lean.txt').write_bytes(raw)
+        self.policy['sources']['lean'] = dict(path='lean.txt', sha256=LINT.sha(raw),
+                                              citation='leanprover/lean4 v4.35.0 at ' + 'e' * 40 + ', src/Init/Prelude.lean')
+        self.policy['words'] += ['list', 'one']
+        names = ('Jaune.Value.decEq', 'Jaune.Value.decEq.decEqList', 'Jaune.Value.negOne')
+        self.assertEqual([p['segment'] for p in self.lint(*names)],
+                         ['Jaune.Value.decEq', 'Jaune.Value.decEq', 'Jaune.Value.decEq.decEqList', 'Jaune.Value.negOne'])
+        lean = dict(rule='7', source='lean', style='lowerCamel')
+        self.policy['bindings'] = {'Jaune.Value.decEq': dict(lean, spelling='decEq'),
+                                   'Jaune.Value.decEq.decEqList': dict(lean, spelling='decEq', component='decEq'),
+                                   'Jaune.Value.negOne': dict(lean, spelling='neg', component='neg')}
+        self.assertEqual(self.lint(*names), [])
+        # The spelling stays exact, and only a Lean core, Std, Batteries or Mathlib file carries rule 7.
+        self.policy['bindings']['Jaune.Value.negOne']['spelling'] = 'negOne'
+        with self.assertRaisesRegex(ValueError, 'spelling absent'):
+            self.lint(*names)
+        self.policy['bindings']['Jaune.Value.negOne']['spelling'] = 'neg'
+        for citation in ('ethereum/execution-specs at ' + 'e' * 40, 'Synthetic leanprover/lean4 fixture'):
+            self.policy['sources']['lean']['citation'] = citation
+            with self.assertRaisesRegex(ValueError, 'rule 7 binding needs a Lean'):
+                self.lint(*names)
+        self.policy['sources']['lean']['citation'] = 'leanprover-community/mathlib4 at ' + 'e' * 40
+        self.assertEqual(self.lint(*names), [])
+        self.policy['bindings']['Jaune.Value.decEq']['rule'] = '6'
+        with self.assertRaisesRegex(ValueError, 'invalid source binding'):
+            self.lint(*names)
+
+    def product_bundle(self, source, name, kind, pool, root, value=None):
+        path = self.root / source
+        path.parent.mkdir(parents=True, exist_ok=True)
+        last = name.split('.')[-1]
+        text = f'def {last} := 1\n'
+        path.write_text(text)
+        module = source[:-5].replace('/', '.')
+        payload = {'theorem': ['theorem'], 'definition': ['definition', 'safe', value]}[kind]
+        index = dict(version=5, module=module, references={},
+                     decls={name: [0, 0, 0, len(text) - 1, 0, 4, 0, 4 + len(last)]})
+        bundle = self.root / (module + '.json')
+        bundle.write_text(json.dumps(dict(source=text, index=index, expr_pool=pool, level_pool=[['zero']],
+                                          constants={name: {'kernel': {'payload': payload, 'type': root}}})))
+        return source, str(bundle)
+
+    def test_theorem_spells_a_product_name_that_passes_where_it_is_declared(self):
+        self.policy['words'] += ['settled', 'mono', 'run', 'to']
+        # `def SettledGasLe (n : Nat) : Exit -> Prop` in one file: the `≤` of its body names it.
+        predicate = [['sort', 0], ['const', ['name', 'LE.le'], []]]
+        defining = self.product_bundle('Jaune/A.lean', 'Jaune.SettledGasLe', 'definition', predicate, 0, 1)
+        # A theorem in another file about it, one whose statement uses it, and a definition that uses it.
+        uses = [['const', ['name', 'Jaune.SettledGasLe'], []], ['const', ['name', 'Nat'], []], ['app', 0, 1]]
+        mono = self.product_bundle('Jaune/B.lean', 'Jaune.SettledGasLe.mono', 'theorem', uses, 2)
+        run = self.product_bundle('Jaune/C.lean', 'Jaune.run_settledGasLe', 'theorem', uses, 2)
+        data = self.product_bundle('Jaune/D.lean', 'Jaune.toSettledGasLe', 'definition', uses, 2, 0)
+
+        def segments(*files):
+            result = LINT.check(self.root, self.mapping, self.policy, self.root, list(files), [])
+            return sorted((p['segment'], tuple(p['tokens'])) for p in result['problems'])
+
+        self.assertEqual(segments(defining, mono, run, data), [('Jaune.toSettledGasLe', ('Le',))])
+        # Without the declaring file the name has no evidence.
+        self.assertEqual(segments(mono, run), [('Jaune.SettledGasLe', ('Le',)), ('Jaune.run_settledGasLe', ('Le',))])
+        # A referenced name that fails where it is declared credits nothing.
+        self.policy['words'].remove('settled')
+        self.assertEqual([s for s, _ in segments(defining, mono, run)],
+                         ['Jaune.SettledGasLe', 'Jaune.SettledGasLe', 'Jaune.run_settledGasLe'])
+
+    # Freeze additions (jsn-u9 F): Lean conventions for the vocabulary residue.
+    def register_text(self, key, text):
+        raw = text.encode()
+        (self.root / (key + '.txt')).write_bytes(raw)
+        self.policy['sources'][key] = dict(path=key + '.txt', sha256=LINT.sha(raw), citation='Synthetic Lean source')
+
+    def test_leading_core_type_in_lower_camel_case_needs_its_lean_source(self):
+        names = ('Jaune.natValue', 'Jaune.Value.bool', 'Jaune.boolField')
+        self.assertEqual(sorted(t for p in self.lint(*names) for t in p['tokens']), ['bool', 'bool', 'nat'])
+        self.register_text('lean4-prelude', 'inductive Bool : Type where\ninductive Nat where\n')
+        # The type alone is not enough: the naming convention must be registered too.
+        self.assertTrue(self.lint('Jaune.natValue'))
+        self.register_text('lean4-std-naming', '* When encountering a name, put it in lower camel case.\n')
+        self.assertEqual(self.lint(*names), [])
+        # Only the leading token of the declaration's own component, and only a registered type.
+        self.assertEqual(self.lint('Jaune.read_nat')[0]['tokens'], ['nat'])
+        self.assertEqual(self.lint('Jaune.valueNatural')[0]['tokens'], ['Natural'])
+        self.assertEqual(self.lint('Jaune.intValue')[0]['tokens'], ['int'])
+        self.register_text('lean4-int-basic', 'inductive Int : Type where\n')
+        self.assertEqual(self.lint('Jaune.intValue'), [])
+
+    def instance_evidence(self, name, pool, root, instance=True):
+        attributes = {'instance': ['instance', 1000, [1], 'global', 0]} if instance else {}
+        extra = {name: {'attributes': attributes, 'kernel': {'payload': ['definition', 'safe', 0], 'type': root}}}
+        return self.statement(name, 'definition', pool, root, value=0, extra=extra)
+
+    def test_instance_spelled_as_lean_would_name_it(self):
+        # `instance {c : Bool} : BEq (Value c)` is `instBEqValue` (Lean.Elab.mkInstanceName).
+        pool = [['const', ['name', 'BEq'], []], ['const', ['name', 'Jaune.Value'], []], ['bvar', 0],
+                ['app', 1, 2], ['app', 0, 3], ['const', ['name', 'Bool'], []], ['forall', 'implicit', 5, 4]]
+        name = 'Jaune.instBEqValue'
+        evidence = self.instance_evidence(name, pool, 6)
+        self.assertEqual(evidence[name].instance_name, 'instBEqValue')
+        self.assertTrue(self.lean_lint(name, evidence))
+        self.register_text('lean4-decl-name-gen',
+                           'runTermElabM fun _ => NameGen.mkBaseNameWithSuffix\' "inst" binders type\n')
+        self.assertEqual(self.lean_lint(name, evidence), [])
+        # Another spelling, a non-instance and a name Lean would suffix with the project are refused.
+        self.assertTrue(self.lean_lint('Jaune.instValueBEq', self.instance_evidence('Jaune.instValueBEq', pool, 6)))
+        self.assertTrue(self.lean_lint(name, self.instance_evidence(name, pool, 6, instance=False)))
+        foreign = [['const', ['name', 'BEq'], []], ['const', ['name', 'Nat'], []], ['app', 0, 1]]
+        evidence = self.instance_evidence('Jaune.instBEqNat', foreign, 2)
+        self.assertEqual(evidence['Jaune.instBEqNat'].instance_name, 'instBEqNat_jaune')
+        self.assertTrue(self.lean_lint('Jaune.instBEqNat', evidence))
+        # A non-dependent instance-implicit binder that renders to something new adds `Of`.
+        hyp = [['const', ['name', 'Jaune.Value'], []], ['const', ['name', 'Repr'], []], ['app', 1, 0],
+               ['const', ['name', 'Hashable'], []], ['app', 3, 0], ['forall', 'instImplicit', 4, 2]]
+        evidence = self.instance_evidence('Jaune.instReprValueOfHashable', hyp, 5)
+        self.assertEqual(evidence['Jaune.instReprValueOfHashable'].instance_name, 'instReprValueOfHashable')
+
+    def test_beq_and_elim_are_lean_keywords_with_their_prelude_source(self):
+        names = ('Jaune.value_beq', 'Jaune.read_elim')
+        evidence = {n: self.statement(n, 'theorem', self.LE_POOL, 2)[n] for n in names}
+        words = LINT.validate_policy(self.policy, self.root)
+        found = LINT.lint_names(dict.fromkeys(names, []), self.mapping, self.policy, words, reference_endings=evidence)[0]
+        self.assertEqual(sorted(t for p in found for t in p['tokens']), ['beq', 'elim'])
+        self.register_text('lean4-prelude', '@[macro_inline] def False.elim {C : Sort u} (h : False) : C :=\n'
+                                            'def Nat.beq : (@& Nat) → (@& Nat) → Bool\n')
+        words = LINT.validate_policy(self.policy, self.root)
+        self.assertEqual(LINT.lint_names(dict.fromkeys(names, []), self.mapping, self.policy, words,
+                                         reference_endings=evidence)[0], [])
+        # Keywords name theorems; a definition `beq` is still a word to register or bind.
+        self.assertTrue(self.lean_lint('Jaune.Value.beq', self.statement('Jaune.Value.beq', 'definition',
+                                                                         self.LE_POOL, 2, value=1)))
+
+    def test_compiler_generated_aux_namespace_of_the_declaring_module(self):
+        name = 'Jaune._aux_Jaune_Test___elabRules_Jaune_tacticRead_1.read'
+        words = LINT.validate_policy(self.policy, self.root)
+        self.assertTrue(LINT.lint_names({name: []}, self.mapping, self.policy, words, module='Jaune.Test')[0])
+        self.register_text('lean4-elab-auxdef', '    let id := `_aux ++ (← getMainModule) ++ `_ ++ id\n')
+        words = LINT.validate_policy(self.policy, self.root)
+        self.assertEqual(LINT.lint_names({name: []}, self.mapping, self.policy, words, module='Jaune.Test')[0], [])
+        # Only the declaring module's own generated prefix, and only when the module is known.
+        self.assertTrue(LINT.lint_names({name: []}, self.mapping, self.policy, words, module='Jaune.Other')[0])
+        self.assertTrue(LINT.lint_names({name: []}, self.mapping, self.policy, words)[0])
+        self.assertTrue(LINT.lint_names({'Jaune._aux_Jaune_Test_read.read': []}, self.mapping, self.policy, words,
+                                        module='Jaune.Test')[0])
+
+    def test_final_component_keeps_the_referenced_lean_constants_punctuation(self):
+        pool = [['const', ['name', 'GetElem?.getElem?'], []], ['const', ['name', 'Nat'], []], ['app', 0, 1]]
+        name = 'Jaune.read_getElem?'
+        self.assertEqual(self.lean_lint(name, self.statement(name, 'theorem', pool, 2)), [])
+        # Not when the statement does not use it, nor for a definition.
+        self.assertTrue(self.lean_lint(name, self.statement(name, 'theorem', self.LE_POOL, 2)))
+        self.assertTrue(self.lean_lint(name, self.statement(name, 'definition', pool, 2, value=1)))
+        # `getElem!` is a different constant.
+        self.assertTrue(self.lean_lint('Jaune.read_getElem!', self.statement('Jaune.read_getElem!', 'theorem', pool, 2)))
+
+    def test_binding_may_back_another_rule_the_row_lists(self):
+        # Master ruling R15: `B256.neg` -> `U256.neg`, rule `3, 7`: rule 3 renames
+        # the namespace token (bound at `Jaune.U256`), rule 7 is the kept leaf
+        # (Lean's `BitVec.neg`), evidenced by the name's own direct binding.
+        raw = ('def decEq {a : Sort u} [inst : DecidableEq a] (a b : a) : Decidable (Eq a b) :=\n'
+               'protected def neg (x : BitVec n) : BitVec n := .ofNat n (2^n - x.toNat)\n'
+               'Qww Yzz GT\n').encode()
+        (self.root / 'lean.txt').write_bytes(raw)
+        (self.root / 'spec.txt').write_bytes(raw)
+        self.policy['sources']['lean'] = dict(path='lean.txt', sha256=LINT.sha(raw),
+                                              citation='leanprover/lean4 v4.35.0 at ' + 'e' * 40 + ', src/Init/Prelude.lean')
+        self.policy['sources']['spec'] = dict(path='spec.txt', sha256=LINT.sha(raw), citation='Synthetic spec fixture')
+        self.policy['words'] += ['list', 'one', 'check']
+        def row(old, new, rule):
+            return dict(old=old, new=new, kind='declaration', layer='execution', rule=rule, source='synthetic')
+        self.mapping = dict(self.mapping, entries=list(self.mapping['entries']) + [
+            row('Jaune.Zzz', 'Jaune.Yzz', '3'), row('Jaune.Zzz.neg', 'Jaune.Yzz.neg', '3, 7'),
+            row('Jaune.Zzz.negOne', 'Jaune.Yzz.negOne', '3, 7'), row('Jaune.Zzz.decEq', 'Jaune.Yzz.decEq', '3, 7'),
+            row('Jaune.Zzz.decEq.decEqList', 'Jaune.Yzz.decEq.decEqList', '3, 7'),
+            row('Jaune.Ppp', 'Jaune.Qww', '1'), row('Jaune.Ppp.decEq', 'Jaune.Qww.decEq', '1, 7'),
+            row('Jaune.Zzz.gtCheck', 'Jaune.Yzz.gtCheck', '3, 7')])
+        lean = dict(rule='7', source='lean', style='lowerCamel')
+        base = {'Jaune.Yzz': dict(rule='3', source='spec', spelling='Yzz', style='verbatim'),
+                'Jaune.Qww': dict(rule='1', source='spec', spelling='Qww', style='verbatim'),
+                'Jaune.Yzz.neg': dict(lean, spelling='neg'),
+                'Jaune.Yzz.negOne': dict(lean, spelling='neg', component='neg'),
+                'Jaune.Yzz.decEq': dict(lean, spelling='decEq'),
+                'Jaune.Yzz.decEq.decEqList': dict(lean, spelling='decEq', component='decEq'),
+                'Jaune.Qww.decEq': dict(lean, spelling='decEq')}
+        names = ('Jaune.Yzz', 'Jaune.Qww', 'Jaune.Yzz.neg', 'Jaune.Yzz.negOne', 'Jaune.Yzz.decEq',
+                 'Jaune.Yzz.decEq.decEqList', 'Jaune.Qww.decEq')
+        self.policy['bindings'] = dict(base)
+        self.assertEqual(self.lint(*names), [])
+        reasons = lambda *ns: [(p['name'], p['reason']) for p in self.lint(*ns)]
+        # Control: a binding under a rule the row does not list.
+        self.policy['bindings'] = dict(base, **{'Jaune.Yzz.gtCheck': dict(rule='1', source='spec', spelling='GT',
+                                                                         style='lowerCamel', component='gt')})
+        self.assertIn(('Jaune.Yzz.gtCheck', 'map requires matching source binding'), reasons('Jaune.Yzz', 'Jaune.Yzz.gtCheck'))
+        # Control: the renamed namespace token's rule has no backing.
+        self.policy['bindings'] = {k: v for k, v in base.items() if k != 'Jaune.Yzz'}
+        self.assertIn(('Jaune.Yzz.neg', 'map requires matching source binding'), reasons('Jaune.Yzz.neg'))
+        self.policy['bindings'] = dict(base, **{'Jaune.Yzz': dict(base['Jaune.Yzz'], rule='1')})
+        self.assertIn(('Jaune.Yzz.neg', 'map requires matching source binding'), reasons('Jaune.Yzz.neg'))
+        # Control: the backing base must be the rename of the row's own old namespace.
+        self.policy['bindings'] = dict(base)
+        self.mapping['entries'].append(row('Jaune.Www.neg', 'Jaune.Yzz.negWww', '3, 7'))
+        self.policy['bindings']['Jaune.Yzz.negWww'] = dict(lean, spelling='neg', component='neg')
+        self.policy['words'] += ['www']
+        self.assertIn(('Jaune.Yzz.negWww', 'map requires matching source binding'), reasons('Jaune.Yzz', 'Jaune.Yzz.negWww'))
+        # Control: a binding that covers no token of the name is refused by policy
+        # validation before this rule runs (`source_form`).
+        self.policy['bindings'] = dict(base, **{'Jaune.Yzz.neg': dict(lean, spelling='decEq')})
+        with self.assertRaisesRegex(ValueError, 'spelling/case mismatch'):
+            self.lint(*names)
 
     def test_malformed_policy_refused(self):
         for policy in ([], {}, dict(self.policy, words=['bal', 'bal']),

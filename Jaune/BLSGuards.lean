@@ -53,11 +53,11 @@ namespace Jaune
 -- `CodecVectors` compares `pairingCheck` with its reference on three more instances), and the pieces of the fast final
 -- exponentiation on Miller values and on one element off the cyclotomic subgroup: the
 -- Frobenius is the `p`-th power, and `blsFinalExpFast` is the power `(p^12 - 1) / r`.
-#guard blsPairing blsG2Generator blsG1Generator = blsPairingRef blsG2Generator blsG1Generator
+#guard blsPairing blsG2Generator blsG1Generator = blsPairingReference blsG2Generator blsG1Generator
 #guard
   let f1 := (blsPairing blsG2Generator blsG1Generator (finalExp := false)).getD 0
   let f3 : Bls12Fp12 := ⟨[3, 0, 7, 0, 0, 1, 0, 0, 0, 0, 2, 9]⟩
-  f12Frob f1 = f1 ^ blsPrime ∧ f12Frob f3 = f3 ^ blsPrime ∧
+  bls12Fp12Frobenius f1 = f1 ^ blsPrime ∧ bls12Fp12Frobenius f3 = f3 ^ blsPrime ∧
     blsFinalExpFast f3 = f3 ^ blsFinalExponent
 
 end Jaune

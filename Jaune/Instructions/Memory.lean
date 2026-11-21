@@ -12,7 +12,7 @@ substate or the trail. -/
 
 open private keccakReadRun from Jaune.Machine
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -88,10 +88,10 @@ def MemoryRow.step (row : MemoryRow) (opcodes : OpcodeRules) (ctx : CallContext)
     Except (ExceptionalHalt × Machine) Machine := do
   unless row.available opcodes do throw (.invalidOpcode .none, m)
   let (args, m) ← m.popWords row.arity
-  let m ← m.chargeGas (row.base args + m.extCost (row.effect.ranges args))
+  let m ← m.chargeGas (row.base args + m.memoryExpansionCost (row.effect.ranges args))
   match row.effect.apply ctx.calldata ctx.code m.returnData args m.memory with
   | none => throw (.outOfBoundsRead .none, m)
-  | some (memory, none) => pure { m with memory }
-  | some (memory, some x) => Machine.push x { m with memory }
+  | some (memory, none) => pure { m with memory := memory }
+  | some (memory, some x) => Machine.push x { m with memory := memory }
 
-end Jaune.Checked
+end Jaune

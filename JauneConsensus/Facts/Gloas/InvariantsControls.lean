@@ -40,7 +40,7 @@ def withdrawalOfFive : JauneConsensus.Gloas.BuilderPendingWithdrawal :=
   { fee_recipient := Witnesses.address ⟨7⟩, amount := U64.literal 5, builder_index := U64.zero }
 
 /-- The new builder's deposit: a fresh pubkey with the builder prefix (BLS off). -/
-def depositKey : JauneConsensus.Gloas.BuilderDepositRequest := Witnesses.depositRequest 9 Witnesses.prefixB0 0xc0
+def depositKey : JauneConsensus.Gloas.BuilderDepositRequest := Witnesses.depositRequest 9 Witnesses.builderPrefixWord 0xc0
 
 /-- Register `depK`, then run the builder-withdrawals phase and apply it: the balances of the
 registry after the registration and after the withdrawals. -/

@@ -223,10 +223,10 @@ theorem slashValidator_builders {cfg : Config} {m m' : JauneConsensus.Gloas.Beac
 
 /-! ## Builder payment mutators (B7) -/
 
-theorem sszVector_set_ok {α : Type} {n : Nat} {xs ys : SszVector α n} {i : Nat} {v : α}
+theorem sszVector_set_ok {α : Type} {n : Nat} {xs ys : Ssz.Vector α n} {i : Nat} {v : α}
     {site : String} (h : xs.set i v site = .ok ys) :
     ys.toArray[i]? = some v ∧ ∀ j, j ≠ i → ys.toArray[j]? = xs.toArray[j]? := by
-  unfold SszVector.set at h
+  unfold Ssz.Vector.set at h
   split at h
   · rename_i hi
     cases h
@@ -252,7 +252,7 @@ theorem settleBuilderPayment_frame {m m' : JauneConsensus.Gloas.BeaconState P} {
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨p, hp, h⟩ := bind_eq_ok_iff.mp h
   have hp' : m.builder_pending_payments.toArray[idx.toNat]? = some p := by
-    unfold SszVector.get getAt at hp
+    unfold Ssz.Vector.get getAt at hp
     split at hp
     · rename_i x hx; cases hp; exact hx
     · cases hp
@@ -340,7 +340,7 @@ theorem processBuilderPendingPayments_frame {cfg : Config}
   obtain ⟨_, _, h⟩ := bind_eq_ok_iff.mp h
   obtain ⟨v, hv, h⟩ := bind_eq_ok_iff.mp h
   cases h
-  unfold SszVector.ofArray at hv
+  unfold Ssz.Vector.ofArray at hv
   split at hv
   · cases hv
     exact ⟨rfl, q, hq, foldl_push_filter_toList _ _ _ _, rfl⟩
@@ -551,7 +551,7 @@ theorem processBuilderExitRequest_at {cfg : Config} {st st' : JauneConsensus.Glo
 
 /-! ## The builder-deposit and builder-exit loops (B3 writers, B1 register-then-top-up) -/
 
-theorem foldlM_snoc_ok {α β : Type} {f : β → α → Fallible β} {l : List α} {s0 st st' : β} {x : α}
+theorem foldlM_concat_ok {α β : Type} {f : β → α → Fallible β} {l : List α} {s0 st st' : β} {x : α}
     (hl : l.foldlM f s0 = .ok st) (hx : f st x = .ok st') : (l ++ [x]).foldlM f s0 = .ok st' := by
   rw [List.foldlM_append, hl]
   show List.foldlM f st [x] = .ok st'
@@ -566,7 +566,7 @@ def TopUpResetIn (ctx : Context) (s0 : JauneConsensus.Gloas.BeaconState P)
     pre.foldlM (JauneConsensus.Gloas.processBuilderDepositRequest ctx) s0 = .ok st ∧
     classifyBuilderDeposit ctx.config ctx.blsActive st r = .ok (.topUp i r.amount true)
 
-theorem TopUpResetIn.snoc {ctx : Context} {s0 : JauneConsensus.Gloas.BeaconState P}
+theorem TopUpResetIn.concat {ctx : Context} {s0 : JauneConsensus.Gloas.BeaconState P}
     {L : List JauneConsensus.Gloas.BuilderDepositRequest} {i : Nat} (h : TopUpResetIn ctx s0 L i)
     (x : JauneConsensus.Gloas.BuilderDepositRequest) : TopUpResetIn ctx s0 (L ++ [x]) i := by
   obtain ⟨pre, r, post, st, rfl, h1, h2⟩ := h
@@ -602,7 +602,7 @@ theorem depositSlotInvariant_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Contex
     intro c' hp hw
     rcases hcase with ⟨h1, h2⟩ | hR | ⟨h1, h2⟩
     · exact Or.inl ⟨hp.trans h1, hw.trans h2⟩
-    · exact Or.inr (Or.inl (hR.snoc r))
+    · exact Or.inr (Or.inl (hR.concat r))
     · exact Or.inr (Or.inr ⟨hp ▸ h1, hw.trans h2⟩)
   rcases hat with heq | ⟨c0, c', reset, hc0, hc', hcl, hpk, _, hres, _⟩ |
       ⟨addr, e, _, he, hat', hall, hreuse⟩
@@ -617,7 +617,7 @@ theorem depositSlotInvariant_step (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Contex
     rcases hcase with ⟨h1, _⟩ | hR | ⟨_, h2⟩
     · refine Or.inr (Or.inr ⟨fun heqpk => ?_, rfl⟩)
       exact hall c (Array.mem_of_getElem? hc) (h1.trans heqpk.symm)
-    · exact Or.inr (Or.inl (hR.snoc r))
+    · exact Or.inr (Or.inl (hR.concat r))
     · rw [h2] at hwle
       exact absurd hwle (not_far_le_epoch hspe he)
 
@@ -638,7 +638,7 @@ theorem depositSlotInvariant_loop (hspe : 2 ≤ P.SLOTS_PER_EPOCH) {ctx : Contex
     intro pre st hpre hinv h
     rw [List.foldlM_cons] at h
     obtain ⟨st', h1, h2⟩ := bind_eq_ok_iff.mp h
-    have := ih (pre ++ [r]) st' (foldlM_snoc_ok hpre h1) (depositSlotInvariant_step hspe hpre hinv h1) h2
+    have := ih (pre ++ [r]) st' (foldlM_concat_ok hpre h1) (depositSlotInvariant_step hspe hpre hinv h1) h2
     simpa using this
 
 /-- **B3, the deposit loop.** Across a list of builder deposits, builder slot `i` keeps its pubkey
@@ -661,7 +661,7 @@ def ExitInitiateIn (cfg : Config) (s1 : JauneConsensus.Gloas.BeaconState P)
     pre.foldlM (JauneConsensus.Gloas.processBuilderExitRequest cfg) s1 = .ok st ∧
     classifyBuilderExit cfg st e = .ok (.initiate i)
 
-theorem ExitInitiateIn.snoc {cfg : Config} {s1 : JauneConsensus.Gloas.BeaconState P}
+theorem ExitInitiateIn.concat {cfg : Config} {s1 : JauneConsensus.Gloas.BeaconState P}
     {L : List JauneConsensus.Gloas.BuilderExitRequest} {i : Nat} (h : ExitInitiateIn cfg s1 L i)
     (x : JauneConsensus.Gloas.BuilderExitRequest) : ExitInitiateIn cfg s1 (L ++ [x]) i := by
   obtain ⟨pre, r, post, st, rfl, h1, h2⟩ := h
@@ -701,14 +701,14 @@ theorem exitSlotInvariant_loop {cfg : Config} {s1 s2 : JauneConsensus.Gloas.Beac
         refine ⟨c', hc', hpk, ?_⟩
         rcases hcase with h | ⟨h1, h2⟩
         · exact Or.inl h
-        · exact Or.inr ⟨h1, h2.snoc r⟩
+        · exact Or.inr ⟨h1, h2.concat r⟩
       · rw [hc'] at hc0; cases hc0
         refine ⟨_, hc'', hpk, Or.inr ⟨?_, ?_⟩⟩
         · rcases hcase with h | ⟨h1, _⟩
           · rw [← h]; exact hfar
           · exact h1
         · exact ⟨pre, r, [], st, rfl, hpre, hcl⟩
-    simpa using ih (pre ++ [r]) st' (foldlM_snoc_ok hpre h1) hstep h2
+    simpa using ih (pre ++ [r]) st' (foldlM_concat_ok hpre h1) hstep h2
 
 /-- **B3, the exit loop.** Across a list of builder exits, builder slot `i` keeps its pubkey, and
 its `withdrawable_epoch` is unchanged or it was `FAR_FUTURE_EPOCH` and one of the exits was

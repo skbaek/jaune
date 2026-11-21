@@ -124,7 +124,7 @@ def blockExceptionTags : List String :=
 
 #guard SettledHalt.render .revert = "Revert"
 #guard SettledHalt.render (.halt (.outOfGas .none)) = "OutOfGasError"
-#guard SettledHalt.render (.halt (.invalidJumpDest .none)) = "InvalidJumpDestError"
+#guard SettledHalt.render (.halt (.invalidJumpDestination .none)) = "InvalidJumpDestError"
 #guard SettledHalt.render (.halt (.addressCollision .none)) = "AddressCollision"
 
 -- The eight decode tags the typed reasons render under are exactly the eight
@@ -254,17 +254,17 @@ example :
 
 -- Stack-access immediates are visited as ordinary bytes by the pinned walk.
 -- JUMPDEST remains a destination; a following PUSH still skips its data.
-#guard pinnedJumpDestsFrom ⟨#[0xE6, 0x5B]⟩ 0 = [1]
-#guard pinnedJumpDestsFrom ⟨#[0xE8, 0x5B]⟩ 0 = [1]
-#guard pinnedJumpDestsFrom ⟨#[0xE6, 0x80, 0x5B]⟩ 0 = [2]
-#guard pinnedJumpDestsFrom ⟨#[0xE8, 0x00, 0x5B]⟩ 0 = [2]
+#guard pinnedJumpDestinationsFrom ⟨#[0xE6, 0x5B]⟩ 0 = [1]
+#guard pinnedJumpDestinationsFrom ⟨#[0xE8, 0x5B]⟩ 0 = [1]
+#guard pinnedJumpDestinationsFrom ⟨#[0xE6, 0x80, 0x5B]⟩ 0 = [2]
+#guard pinnedJumpDestinationsFrom ⟨#[0xE8, 0x00, 0x5B]⟩ 0 = [2]
 -- 0x7F is PUSH32, which eats the
 -- JUMPDEST behind it: the set is empty on both walks and for `jumpable`.
-#guard pinnedJumpDestsFrom ⟨#[0xE7, 0x7F, 0x5B]⟩ 0 = []
+#guard pinnedJumpDestinationsFrom ⟨#[0xE7, 0x7F, 0x5B]⟩ 0 = []
 #guard (List.range 3).filter (jumpable ⟨#[0xE7, 0x7F, 0x5B]⟩) = []
-#guard pinnedJumpDestsFrom ⟨#[0xE7, 0x5B, 0x5B]⟩ 0 = [1, 2]
-#guard pinnedJumpDestsFrom ⟨#[0x60, 0x5B, 0x5B]⟩ 0 = [2]
-#guard pinnedJumpDestsFrom ⟨#[0xE6]⟩ 0 = []
+#guard pinnedJumpDestinationsFrom ⟨#[0xE7, 0x5B, 0x5B]⟩ 0 = [1, 2]
+#guard pinnedJumpDestinationsFrom ⟨#[0x60, 0x5B, 0x5B]⟩ 0 = [2]
+#guard pinnedJumpDestinationsFrom ⟨#[0xE6]⟩ 0 = []
 #guard jumpable ⟨#[0xE6, 0x5B]⟩ 1 = true
 #guard jumpable ⟨#[0xE8, 0x5B]⟩ 1 = true
 #guard jumpable ⟨#[0xE6, 0x80, 0x5B]⟩ 2 = true
@@ -285,21 +285,21 @@ shapes fails here.
 `gasWarmAccess` is a global on both sides on purpose: no fork moves it, so the
 warm rows say "still 100" rather than restating a rule that did not change. -/
 
-private def guardAdr : Address := 0x1000
-private def guardCold : AdrSet := .emptyWithCapacity
-private def guardWarm : AdrSet := guardCold.insert guardAdr
+private def guardAddress : Address := 0x1000
+private def guardCold : AddressSet := .emptyWithCapacity
+private def guardWarm : AddressSet := guardCold.insert guardAddress
 
 private def pragueGas : GasSchedule := pragueRules.gas
 private def amsterdamGas : GasSchedule := amsterdamRules.gas
 
 -- `accessCost`, the shape `BALANCE`, `EXTCODE*` and the whole CALL family read.
-#guard pragueGas.accessCost guardAdr guardCold = 2600
-#guard amsterdamGas.accessCost guardAdr guardCold = 3000
-#guard pragueGas.accessCost guardAdr guardWarm = 100
-#guard amsterdamGas.accessCost guardAdr guardWarm = 100
+#guard pragueGas.accessCost guardAddress guardCold = 2600
+#guard amsterdamGas.accessCost guardAddress guardCold = 3000
+#guard pragueGas.accessCost guardAddress guardWarm = 100
+#guard amsterdamGas.accessCost guardAddress guardWarm = 100
 -- and the sibling is the old function at Prague, definitionally.
-#guard pragueGas.accessCost guardAdr guardCold = accessCost guardAdr guardCold
-#guard pragueGas.accessCost guardAdr guardWarm = accessCost guardAdr guardWarm
+#guard pragueGas.accessCost guardAddress guardCold = accessCost guardAddress guardCold
+#guard pragueGas.accessCost guardAddress guardWarm = accessCost guardAddress guardWarm
 
 -- `EXTCODESIZE` / `EXTCODECOPY`: the access half plus EIP-8038's code-reading
 -- surcharge, which is `0` at Prague and 100 at Amsterdam.

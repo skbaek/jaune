@@ -396,15 +396,15 @@ def Transaction.blobVersionedHashes (tx : Transaction) : List U256 := tx.type.bl
 -- nibbles-to-bytes maps
 abbrev TrieBuilder := Std.TreeMap (List UInt8) (List UInt8) (@List.compare _ ⟨UInt8.compareLows⟩)
 
-def hexPrefixAux : Bytes → (Option UInt8 × Bytes)
+def packNibbles : Bytes → (Option UInt8 × Bytes)
   | [] => ⟨none, []⟩
   | n :: ns =>
-    match hexPrefixAux ns with
+    match packNibbles ns with
     | ⟨none, bs⟩ => ⟨some n, bs⟩
     | ⟨some m, bs⟩ => ⟨none, ((n <<< 4) ||| m.lows) :: bs⟩
 
 def hexPrefix (ns : Bytes) (t : Bool) : Bytes :=
-  match hexPrefixAux ns with
+  match packNibbles ns with
   | ⟨none, bs⟩ => (cond t (0x20) 0) :: bs
   | ⟨some n, bs⟩ => ((cond t 0x30 0x10) ||| n.lows) :: bs
 
@@ -424,26 +424,26 @@ def commonPrefix (n : UInt8) (ns : Bytes) : List Bytes → Option Bytes
 
 def TrieBuilder.empty : TrieBuilder := Std.TreeMap.empty
 
-def sansPrefix : Bytes → Bytes → Option Bytes
+def dropPrefix? : Bytes → Bytes → Option Bytes
   | [], ns => some ns
   | _, [] => none
   | n :: ns, n' :: ns' =>
-    if n = n' then sansPrefix ns ns' else none
+    if n = n' then dropPrefix? ns ns' else none
 
-def insertSansPrefix (pfx : Bytes) (m : TrieBuilder) (ns : Bytes) (bs : Bytes) : Option TrieBuilder := do
-  (m.insert · bs) <$> sansPrefix pfx ns
+def insertWithoutPrefix (pfx : Bytes) (m : TrieBuilder) (ns : Bytes) (bs : Bytes) : Option TrieBuilder := do
+  (m.insert · bs) <$> dropPrefix? pfx ns
 
 def TrieBuilder.factor (m : TrieBuilder) : Option (Bytes × TrieBuilder) := do
   let ((n :: ns) :: nss) ← some (m.toList.map Prod.fst) | none
   let pfx ← commonPrefix n ns nss
-  let m' ← Std.TreeMap.foldlM (insertSansPrefix pfx) TrieBuilder.empty m
+  let m' ← Std.TreeMap.foldlM (insertWithoutPrefix pfx) TrieBuilder.empty m
   some ⟨pfx, m'⟩
 
 structure TrieBranches : Type where
   (child0 : TrieBuilder) (child1 : TrieBuilder) (child2 : TrieBuilder) (child3 : TrieBuilder)
   (child4 : TrieBuilder) (child5 : TrieBuilder) (child6 : TrieBuilder) (child7 : TrieBuilder)
-  (child8 : TrieBuilder) (child9 : TrieBuilder) (childA : TrieBuilder) (childB : TrieBuilder)
-  (childC : TrieBuilder) (childD : TrieBuilder) (childE : TrieBuilder) (childF : TrieBuilder)
+  (child8 : TrieBuilder) (child9 : TrieBuilder) (child10 : TrieBuilder) (child11 : TrieBuilder)
+  (child12 : TrieBuilder) (child13 : TrieBuilder) (child14 : TrieBuilder) (child15 : TrieBuilder)
 
 def TrieBranches.empty : TrieBranches :=
   ⟨ .empty, .empty, .empty, .empty,
@@ -452,7 +452,7 @@ def TrieBranches.empty : TrieBranches :=
     .empty, .empty, .empty, .empty ⟩
 
 def TrieBranches.update (js : TrieBranches) (f : TrieBuilder → TrieBuilder) (k : UInt8) : TrieBranches :=
-  match k.toBools with
+  match k.toBits with
   | ⟨_, _, _, _, 0, 0, 0, 0⟩ => { js with child0 := f js.child0}
   | ⟨_, _, _, _, 0, 0, 0, 1⟩ => { js with child1 := f js.child1}
   | ⟨_, _, _, _, 0, 0, 1, 0⟩ => { js with child2 := f js.child2}
@@ -463,12 +463,12 @@ def TrieBranches.update (js : TrieBranches) (f : TrieBuilder → TrieBuilder) (k
   | ⟨_, _, _, _, 0, 1, 1, 1⟩ => { js with child7 := f js.child7}
   | ⟨_, _, _, _, 1, 0, 0, 0⟩ => { js with child8 := f js.child8}
   | ⟨_, _, _, _, 1, 0, 0, 1⟩ => { js with child9 := f js.child9}
-  | ⟨_, _, _, _, 1, 0, 1, 0⟩ => { js with childA := f js.childA}
-  | ⟨_, _, _, _, 1, 0, 1, 1⟩ => { js with childB := f js.childB}
-  | ⟨_, _, _, _, 1, 1, 0, 0⟩ => { js with childC := f js.childC}
-  | ⟨_, _, _, _, 1, 1, 0, 1⟩ => { js with childD := f js.childD}
-  | ⟨_, _, _, _, 1, 1, 1, 0⟩ => { js with childE := f js.childE}
-  | ⟨_, _, _, _, 1, 1, 1, 1⟩ => { js with childF := f js.childF}
+  | ⟨_, _, _, _, 1, 0, 1, 0⟩ => { js with child10 := f js.child10}
+  | ⟨_, _, _, _, 1, 0, 1, 1⟩ => { js with child11 := f js.child11}
+  | ⟨_, _, _, _, 1, 1, 0, 0⟩ => { js with child12 := f js.child12}
+  | ⟨_, _, _, _, 1, 1, 0, 1⟩ => { js with child13 := f js.child13}
+  | ⟨_, _, _, _, 1, 1, 1, 0⟩ => { js with child14 := f js.child14}
+  | ⟨_, _, _, _, 1, 1, 1, 1⟩ => { js with child15 := f js.child15}
 
 def TrieBranches.insert (js : TrieBranches) : Bytes → Bytes → TrieBranches
   | [], _ => js
@@ -480,17 +480,17 @@ def Std.TreeMap.isSingleton {K V : Type} (cmp : K → K → Ordering)
 
 mutual
 
-  def nodeComp : Nat → TrieBuilder → Rlp.Item
+  def trieNodeReference : Nat → TrieBuilder → Rlp.Item
     | 0, _ => .bytes []
     | k + 1, j =>
       if j.isEmpty
       then .bytes []
-      else let r := structComp k j
+      else let r := encodeTrieNode k j
            if r.toBytes.length < 32
            then r
            else .bytes <| r.toBytes.keccak.toBytes
 
-  def structComp : Nat → TrieBuilder → Rlp.Item
+  def encodeTrieNode : Nat → TrieBuilder → Rlp.Item
     | 0, _ => .bytes []
     | k + 1, j =>
       if j.isEmpty
@@ -500,20 +500,20 @@ mutual
                 | _ => .bytes []            else match j.factor with
                 | none =>
                   let js := Std.TreeMap.foldl TrieBranches.insert TrieBranches.empty j
-                  .list [ nodeComp k js.child0, nodeComp k js.child1, nodeComp k js.child2,
-                          nodeComp k js.child3, nodeComp k js.child4, nodeComp k js.child5,
-                          nodeComp k js.child6, nodeComp k js.child7, nodeComp k js.child8,
-                          nodeComp k js.child9, nodeComp k js.childA, nodeComp k js.childB,
-                          nodeComp k js.childC, nodeComp k js.childD, nodeComp k js.childE,
-                          nodeComp k js.childF, .bytes (j.getD [] []) ]
-                | some (pfx, j') => .list [.bytes (hexPrefix pfx 0), nodeComp k j']
+                  .list [ trieNodeReference k js.child0, trieNodeReference k js.child1, trieNodeReference k js.child2,
+                          trieNodeReference k js.child3, trieNodeReference k js.child4, trieNodeReference k js.child5,
+                          trieNodeReference k js.child6, trieNodeReference k js.child7, trieNodeReference k js.child8,
+                          trieNodeReference k js.child9, trieNodeReference k js.child10, trieNodeReference k js.child11,
+                          trieNodeReference k js.child12, trieNodeReference k js.child13, trieNodeReference k js.child14,
+                          trieNodeReference k js.child15, .bytes (j.getD [] []) ]
+                | some (pfx, j') => .list [.bytes (hexPrefix pfx 0), trieNodeReference k j']
 
 end
 
 def TrieBuilder.maxKeyLength (j : TrieBuilder) : Nat :=
   (j.toList.map (List.length ∘ Prod.fst)).maxD 0
 
-def collapse (j : TrieBuilder) : Rlp.Item := structComp (2 * (j.maxKeyLength + 1)) j
+def collapse (j : TrieBuilder) : Rlp.Item := encodeTrieNode (2 * (j.maxKeyLength + 1)) j
 
 def trie (j : TrieBuilder) : U256 :=
   Bytes.keccak <| (collapse j).toBytes
@@ -528,11 +528,11 @@ def Storage.toTrieBuilder (s : Storage) : TrieBuilder :=
         ((Rlp.Item.toBytes <| .bytes <| Bytes.sig <| v.toBytes))
   Std.TreeMap.foldl f TrieBuilder.empty s
 
-def U256.zerocount (x : U256) : Nat → Nat
+def U256.leadingZeroByteCount (x : U256) : Nat → Nat
   | 0 => 0
-  | k + 1 => if x = 0 then k + 1 else U256.zerocount (x >>> 8) k
+  | k + 1 => if x = 0 then k + 1 else U256.leadingZeroByteCount (x >>> 8) k
 
-def U256.bytecount (x : U256) : Nat := 32 - (U256.zerocount x 32)
+def U256.significantByteCount (x : U256) : Nat := 32 - (U256.leadingZeroByteCount x 32)
 
 /-- Leading zero bits of one 64-bit limb; 64 for zero. -/
 def UInt64.leadingZeros (x : UInt64) : Nat :=
@@ -582,7 +582,7 @@ def Gas.exp : Nat := 10
 def Gas.expByte : Nat := 50
 def Gas.coldSloadCost : Nat := 2100
 def Gas.sstoreSetGas : Nat := 20000
-def Gas.storageClearRefund : Nat := 4800
+def Gas.sstoreClearsSchedule : Nat := 4800
 def Gas.blockhash : Nat := 20
 def Gas.codeDeposit : Nat := 200
 def Gas.create : Nat := 32000
@@ -597,7 +597,7 @@ execution-specs `GAS_STORAGE_UPDATE` (older layout) and `GasCosts.COLD_STORAGE_W
 (at the conformance pin `e27f097e`). -/
 def Gas.sstoreResetGas : Nat := 5000
 def Gas.ecrecover : Nat := 3000
-def Gas.p256Verify : Nat := 6900
+def Gas.p256verify : Nat := 6900
 -- `maxCodeSize` and `maxInitCodeSize` are fork rules, not global constants:
 -- see `ForkRules.code` in `Jaune/Fork.lean`.
 def Gas.newAccount : Nat := 25000
@@ -703,8 +703,8 @@ safe rather than a second source of truth. -/
     pragueRules.gas.callValue = Gas.callValue := rfl
 @[simp] theorem pragueRules_gas_createAccess :
     pragueRules.gas.createAccess = Gas.create := rfl
-@[simp] theorem pragueRules_gas_storageClearRefund :
-    pragueRules.gas.storageClearRefund = Gas.storageClearRefund := rfl
+@[simp] theorem pragueRules_gas_sstoreClearsSchedule :
+    pragueRules.gas.sstoreClearsSchedule = Gas.sstoreClearsSchedule := rfl
 @[simp] theorem pragueRules_gas_txBase :
     pragueRules.gas.txBase = Gas.transaction := rfl
 @[simp] theorem pragueRules_gas_txAccessListAddress :
@@ -772,7 +772,7 @@ theorem GasSchedule.Valid.warmAccess_le {g : GasSchedule} (h : g.Valid) :
 theorem GasSchedule.Valid.createAccess_pos {g : GasSchedule} (h : g.Valid) :
     0 < g.createAccess := h.2.1
 
-theorem GasSchedule.Valid.stipend_le_callValue {g : GasSchedule} (h : g.Valid) :
+theorem GasSchedule.Valid.stipend_at_most_callValue {g : GasSchedule} (h : g.Valid) :
     Gas.callStipend ≤ g.callValue := h.2.2
 
 -- The whole supported chain shares Prague's schedule, so the bridge above
@@ -838,7 +838,7 @@ instance : Hashable (Address × U256) :=
     let k := x.2
     mixHash (hash x.1) (mixHash k.1.1 (mixHash k.1.2 (mixHash k.2.1 k.2.2)))⟩
 
-abbrev AdrSet : Type := @Std.HashSet Address _ _
+abbrev AddressSet : Type := @Std.HashSet Address _ _
 abbrev KeySet : Type := @Std.HashSet (Address × U256) _ _
 
 abbrev TransientStorage : Type := Std.TreeMap Address Storage compare
@@ -1161,7 +1161,7 @@ inductive ExceptionalHalt : Type
   | outOfGas (detail : ErrorDetail)
   | modexpInputLimit (detail : ErrorDetail)
   | invalidOpcode (detail : ErrorDetail)
-  | invalidJumpDest (detail : ErrorDetail)
+  | invalidJumpDestination (detail : ErrorDetail)
   | stackDepthLimit (detail : ErrorDetail)
   | writeInStaticContext (detail : ErrorDetail)
   | outOfBoundsRead (detail : ErrorDetail)
@@ -1178,7 +1178,7 @@ def ExceptionalHalt.tag : ExceptionalHalt → String
   | .outOfGas _ => "OutOfGasError"
   | .modexpInputLimit _ => modexpInputLimitTag
   | .invalidOpcode _ => "InvalidOpcode"
-  | .invalidJumpDest _ => "InvalidJumpDestError"
+  | .invalidJumpDestination _ => "InvalidJumpDestError"
   | .stackDepthLimit _ => "StackDepthLimitError"
   | .writeInStaticContext _ => "WriteInStaticContext"
   | .outOfBoundsRead _ => "OutOfBoundsRead"
@@ -1190,7 +1190,7 @@ def ExceptionalHalt.tag : ExceptionalHalt → String
 /-- The diagnostic payload of an exceptional halt. -/
 def ExceptionalHalt.detail : ExceptionalHalt → ErrorDetail
   | .stackUnderflow d | .stackOverflow d | .outOfGas d
-  | .modexpInputLimit d | .invalidOpcode d | .invalidJumpDest d
+  | .modexpInputLimit d | .invalidOpcode d | .invalidJumpDestination d
   | .stackDepthLimit d | .writeInStaticContext d | .outOfBoundsRead d
   | .invalidParameter d | .invalidContractPrefix d | .addressCollision d
   | .kzgProof d => d
@@ -1202,7 +1202,7 @@ def ExceptionalHalt.render (e : ExceptionalHalt) : String :=
 /-- Every exceptional-halt reason, for the completeness guards. -/
 def ExceptionalHalt.all : List ExceptionalHalt :=
   [ .stackUnderflow .none, .stackOverflow .none, .outOfGas .none,
-    .modexpInputLimit .none, .invalidOpcode .none, .invalidJumpDest .none,
+    .modexpInputLimit .none, .invalidOpcode .none, .invalidJumpDestination .none,
     .stackDepthLimit .none, .writeInStaticContext .none,
     .outOfBoundsRead .none, .invalidParameter .none,
     .invalidContractPrefix .none, .addressCollision .none, .kzgProof .none ]
@@ -1633,12 +1633,12 @@ typed-envelope bytes, so the two sides carry genuinely different obligations:
 the decoded side must be a well-formed legacy transaction, while typed bytes
 stay opaque until the existing decode point inside `applyBody`. Eagerly
 decoding them here would change which error wins (fixed decision 5). -/
-def TxEntry.WireWellFormed : Bytes ⊕ Transaction → Prop
+def TransactionEntry.WireWellFormed : Bytes ⊕ Transaction → Prop
   | .inl _ => True
   | .inr tx => Transaction.WireWellFormed tx ∧ tx.type.isLegacy = true
 
-instance (e : Bytes ⊕ Transaction) : Decidable (TxEntry.WireWellFormed e) := by
-  cases e <;> (unfold TxEntry.WireWellFormed; infer_instance)
+instance (e : Bytes ⊕ Transaction) : Decidable (TransactionEntry.WireWellFormed e) := by
+  cases e <;> (unfold TransactionEntry.WireWellFormed; infer_instance)
 
 /-- Structural canonicality of a decoded block: the header, every ommer
 header, every withdrawal, and every transaction slot are wire-well-formed.
@@ -1648,7 +1648,7 @@ def Block.RlpCanonical (b : Block) : Prop :=
   b.header.WireWellFormed ∧
   (∀ o ∈ b.ommers, Header.WireWellFormed o) ∧
   (∀ w ∈ b.withdrawals, Withdrawal.WireWellFormed w) ∧
-  (∀ e ∈ b.transactions, TxEntry.WireWellFormed e)
+  (∀ e ∈ b.transactions, TransactionEntry.WireWellFormed e)
 
 instance (b : Block) : Decidable (Block.RlpCanonical b) := by
   unfold Block.RlpCanonical; infer_instance
@@ -1826,7 +1826,7 @@ def NextOp.toString : NextOp → String
 instance : ToString NextOp := ⟨NextOp.toString⟩
 instance : Repr NextOp := ⟨λ i _ => i.toString⟩
 
-lemma NextOp.push_ext {xs ys : Bytes}
+lemma NextOp.push_congr {xs ys : Bytes}
     (le : xs.length ≤ 32) (le' : ys.length ≤ 32) (eq : xs = ys) :
     NextOp.push xs le = NextOp.push ys le' := by
   revert le le'; rw [eq]; simp
@@ -1869,13 +1869,13 @@ lemma JumpOp.toOpClass_toUInt8 (j : JumpOp) : j.toUInt8.toOpClass = .jump := by
 lemma UInt8.lt_of_highs_lt_highs (x y : UInt8) (lt : x.highs < y.highs) : x < y := by
   rw [UInt8.lt_iff_toNat_lt]
   have lt' : x.toNat < (x.toNat ↿ 4) + 16 := by
-    conv => lhs; rw [← Nat.hi_or_lo x.toNat 4]; rfl
+    conv => lhs; rw [← Nat.clearLowBits_or_lowBits x.toNat 4]; rfl
     rw [← @Nat.add_eq_or 4]
-    · rw [Nat.add_lt_add_iff_left]; apply Nat.lo_lt
-    · apply Nat.two_pow_dvd_shl
-    · apply Nat.lo_lt
+    · rw [Nat.add_lt_add_iff_left]; apply Nat.lowBits_lt
+    · apply Nat.two_pow_dvd_shiftLeft
+    · apply Nat.lowBits_lt
   have le : (x.toNat ↿ 4) + 16 ≤ (y.toNat ↿ 4) := by
-    simp only [Nat.hi]
+    simp only [Nat.clearLowBits]
     rw [Nat.shiftLeft_eq, Nat.shiftLeft_eq]
     have rw : 16 = 2 ^ 4 := by rfl
     conv => lhs; arg 2; rw [rw]; rfl
@@ -1883,10 +1883,10 @@ lemma UInt8.lt_of_highs_lt_highs (x y : UInt8) (lt : x.highs < y.highs) : x < y 
     rw [← Nat.succ_mul (x.toNat >>> 4) (2 ^ 4)]
     rw [Nat.mul_le_mul_right_iff (by omega)]
     apply Nat.succ_le_of_lt lt
-  have le' : (y.toNat ↿ 4) ≤ y.toNat := Nat.hi_le _ _
+  have le' : (y.toNat ↿ 4) ≤ y.toNat := Nat.clearLowBits_le _ _
   apply Nat.lt_of_lt_of_le lt' <| Nat.le_trans le le'
 
-lemma le_of_toOpClass_eq_p (b : UInt8) (h : b.toOpClass = .push) :
+lemma le_of_toOpClass_eq_push (b : UInt8) (h : b.toOpClass = .push) :
     b.toNat ≤ 127 := by
   apply Nat.le_of_lt_succ
   apply (@UInt8.lt_iff_toNat_lt b 0x80).mp
@@ -1921,7 +1921,7 @@ def ByteArray.getOp (code : ByteArray) (pc : Nat) : Option Op :=
     | .jump => b.toJumpOp <&> .jump
     | .halt => b.toHaltOp <&> .halt
     | .push =>
-      let le := le_of_toOpClass_eq_p b h
+      let le := le_of_toOpClass_eq_push b h
       let bs : Bytes := code.sliceD (pc + 1) (b.toNat - 95) 0
       let le' : bs.length ≤ 32 := by
         simp [bs, ByteArray.length_sliceD, le]
@@ -1938,9 +1938,9 @@ Termination is by the lexicographic measure `(num + 1 - i, numAcc)`: while
 zero denominator — excluded from the semantic domain by `BlobSchedule.Valid` —
 zeroes the accumulator immediately under `Nat` division) or `num < den * i`
 strictly shrinks a positive accumulator. -/
-def fakeExponentialAux (num den i numAcc : Nat) : Nat :=
+def fakeExponentialLoop (num den i numAcc : Nat) : Nat :=
   if _h : numAcc = 0 then 0
-  else numAcc + fakeExponentialAux num den (i + 1) (numAcc * num / (den * i))
+  else numAcc + fakeExponentialLoop num den (i + 1) (numAcc * num / (den * i))
 termination_by (num + 1 - i, numAcc)
 decreasing_by
   rcases Nat.lt_or_ge i (num + 1) with hi | hi
@@ -1959,17 +1959,17 @@ decreasing_by
         omega
       exact mul_lt_mul_of_pos_left hlt (Nat.pos_of_ne_zero _h)
 
-@[simp] theorem fakeExponentialAux_zero (num den i : Nat) :
-    fakeExponentialAux num den i 0 = 0 := by
-  unfold fakeExponentialAux
+@[simp] theorem fakeExponentialLoop_zero (num den i : Nat) :
+    fakeExponentialLoop num den i 0 = 0 := by
+  unfold fakeExponentialLoop
   simp
 
 /-- The EELS recurrence equation — for *every* `Nat` numerator, including the
 U64 maximum; nothing here evaluates the series. -/
-theorem fakeExponentialAux_succ {numAcc : Nat} (h : numAcc ≠ 0) (num den i : Nat) :
-    fakeExponentialAux num den i numAcc
-      = numAcc + fakeExponentialAux num den (i + 1) (numAcc * num / (den * i)) := by
-  conv_lhs => unfold fakeExponentialAux
+theorem fakeExponentialLoop_succ {numAcc : Nat} (h : numAcc ≠ 0) (num den i : Nat) :
+    fakeExponentialLoop num den i numAcc
+      = numAcc + fakeExponentialLoop num den (i + 1) (numAcc * num / (den * i)) := by
+  conv_lhs => unfold fakeExponentialLoop
   simp [h]
 
 /-- The EELS accumulator recurrence as a predicate on candidate functions:
@@ -1980,28 +1980,28 @@ def FakeExponentialSpec (num den : Nat) (f : Nat → Nat → Nat) : Prop :=
     f i numAcc = numAcc + f (i + 1) (numAcc * num / (den * i))
 
 /-- `fakeExpAux` satisfies the recurrence. -/
-theorem fakeExponentialAux_spec (num den : Nat) :
-    FakeExponentialSpec num den (fakeExponentialAux num den) :=
-  ⟨fakeExponentialAux_zero num den,
-   fun i numAcc h => fakeExponentialAux_succ (numAcc := numAcc) h num den i⟩
+theorem fakeExponentialLoop_spec (num den : Nat) :
+    FakeExponentialSpec num den (fakeExponentialLoop num den) :=
+  ⟨fakeExponentialLoop_zero num den,
+   fun i numAcc h => fakeExponentialLoop_succ (numAcc := numAcc) h num den i⟩
 
 /-- Uniqueness: the recurrence has exactly one solution, so `fakeExpAux` is
 *the* EELS accumulator function. -/
-theorem fakeExponentialAux_spec_unique {num den : Nat} {f : Nat → Nat → Nat}
-    (hf : FakeExponentialSpec num den f) : f = fakeExponentialAux num den := by
+theorem fakeExponentialLoop_spec_unique {num den : Nat} {f : Nat → Nat → Nat}
+    (hf : FakeExponentialSpec num den f) : f = fakeExponentialLoop num den := by
   funext i numAcc
-  induction i, numAcc using fakeExponentialAux.induct num den with
-  | case1 i => rw [hf.1, fakeExponentialAux_zero]
-  | case2 i numAcc h ih => rw [hf.2 i numAcc h, ih, ← fakeExponentialAux_succ h]
+  induction i, numAcc using fakeExponentialLoop.induct num den with
+  | case1 i => rw [hf.1, fakeExponentialLoop_zero]
+  | case2 i numAcc h ih => rw [hf.2 i numAcc h, ih, ← fakeExponentialLoop_succ h]
 
 /-- The pre-integrity fuelled worker as a *total* `Option`-valued reference:
 `none` exactly where the old implementation exhausted its guessed fuel bound.
 This is the only sanctioned old/new bridge; nothing executes it. -/
-def fakeExponentialAuxRef? (num den i : Nat) : Nat → Nat → Option Nat
+def fakeExponentialReferenceLoop? (num den i : Nat) : Nat → Nat → Option Nat
   | _, 0 => none
   | 0, _ => some 0
   | numAcc, fuel + 1 =>
-    (fakeExponentialAuxRef? num den (i + 1) (numAcc * num / (den * i)) fuel).map
+    (fakeExponentialReferenceLoop? num den (i + 1) (numAcc * num / (den * i)) fuel).map
       (numAcc + ·)
 
 /-- The accumulator sequence from `(i, numAcc)` reaches zero strictly before
@@ -2013,8 +2013,8 @@ def reachesZeroBeforeFuel (num den : Nat) : Nat → Nat → Nat → Bool
     reachesZeroBeforeFuel num den (i + 1) (numAcc * num / (den * i)) fuel
 
 /-- The reference worker answers exactly on `reachesZeroBeforeFuel`. -/
-theorem fakeExponentialAuxRef?_isSome (num den : Nat) :
-    ∀ fuel i numAcc, (fakeExponentialAuxRef? num den i numAcc fuel).isSome
+theorem fakeExponentialReferenceLoop?_isSome (num den : Nat) :
+    ∀ fuel i numAcc, (fakeExponentialReferenceLoop? num den i numAcc fuel).isSome
       = reachesZeroBeforeFuel num den i numAcc fuel := by
   intro fuel
   induction fuel with
@@ -2023,14 +2023,14 @@ theorem fakeExponentialAuxRef?_isSome (num den : Nat) :
     intro i numAcc
     cases numAcc with
     | zero => rfl
-    | succ n => simp [fakeExponentialAuxRef?, reachesZeroBeforeFuel, ih]
+    | succ n => simp [fakeExponentialReferenceLoop?, reachesZeroBeforeFuel, ih]
 
 /-- Wherever the old fuelled computation completed, it computed exactly the
 total well-founded value. -/
-theorem fakeExponentialAuxRef?_eq_some {num den : Nat} :
+theorem fakeExponentialReferenceLoop?_eq_some {num den : Nat} :
     ∀ {fuel i numAcc}, reachesZeroBeforeFuel num den i numAcc fuel = true →
-      fakeExponentialAuxRef? num den i numAcc fuel
-        = some (fakeExponentialAux num den i numAcc) := by
+      fakeExponentialReferenceLoop? num den i numAcc fuel
+        = some (fakeExponentialLoop num den i numAcc) := by
   intro fuel
   induction fuel with
   | zero =>
@@ -2039,10 +2039,10 @@ theorem fakeExponentialAuxRef?_eq_some {num den : Nat} :
   | succ fuel ih =>
     intro i numAcc h
     cases numAcc with
-    | zero => simp [fakeExponentialAuxRef?]
+    | zero => simp [fakeExponentialReferenceLoop?]
     | succ n =>
-      rw [fakeExponentialAux_succ (Nat.succ_ne_zero n)]
-      simp only [fakeExponentialAuxRef?]
+      rw [fakeExponentialLoop_succ (Nat.succ_ne_zero n)]
+      simp only [fakeExponentialReferenceLoop?]
       rw [ih (by simpa [reachesZeroBeforeFuel] using h)]
       rfl
 
@@ -2050,7 +2050,7 @@ theorem fakeExponentialAuxRef?_eq_some {num den : Nat} :
 every input; the semantic domain additionally demands a positive denominator
 through `BlobSchedule.Valid`. -/
 def fakeExponential (fac num den : Nat) : Nat :=
-  fakeExponentialAux num den 1 (fac * den) / den
+  fakeExponentialLoop num den 1 (fac * den) / den
 
 def getBaseFeePerBlobGas (blob : BlobSchedule) (excessBlobGas : Nat) : Nat :=
   fakeExponential 1 excessBlobGas blob.baseFeeUpdateFraction
@@ -2059,7 +2059,7 @@ def getBaseFeePerBlobGas (blob : BlobSchedule) (excessBlobGas : Nat) : Nat :=
 recurrence function rather than through evaluation (`MIN_BLOB_GASPRICE = 1`). -/
 theorem calculateBlobGasPrice_eq (blob : BlobSchedule) (excess : Nat) :
     getBaseFeePerBlobGas blob excess
-      = fakeExponentialAux excess blob.baseFeeUpdateFraction 1
+      = fakeExponentialLoop excess blob.baseFeeUpdateFraction 1
           (1 * blob.baseFeeUpdateFraction) / blob.baseFeeUpdateFraction := rfl
 
 /-- Under a validated schedule the denominator is positive and the price is
@@ -2072,11 +2072,11 @@ theorem calculateBlobGasPrice_spec (blob : BlobSchedule) (hv : blob.Valid)
       getBaseFeePerBlobGas blob excess
         = f 1 (1 * blob.baseFeeUpdateFraction) / blob.baseFeeUpdateFraction := by
   refine ⟨hv.1, fun f hf => ?_⟩
-  rw [calculateBlobGasPrice_eq, fakeExponentialAux_spec_unique hf]
+  rw [calculateBlobGasPrice_eq, fakeExponentialLoop_spec_unique hf]
 
 /-- The U64-maximum numerator, pinned explicitly: the acceptance case the plan
 forbids executing is covered by the non-evaluating theorem above. -/
-theorem calculateBlobGasPrice_spec_u64max (blob : BlobSchedule)
+theorem calculateBlobGasPrice_spec_maxU64 (blob : BlobSchedule)
     (hv : blob.Valid) :
     0 < blob.baseFeeUpdateFraction ∧
     ∀ f, FakeExponentialSpec (2 ^ 64 - 1) blob.baseFeeUpdateFraction f →
@@ -2098,7 +2098,7 @@ theorem calculateBlobGasPrice_spec_corpusMax (blob : BlobSchedule)
 def Prod.mapFst {α₁ : Type u₁} {α₂ : Type u₂} {β : Type v} (f : α₁ → α₂) : α₁ × β → α₂ × β :=
   Prod.map f id
 
-def accessCost (x : Address) (a : AdrSet) : Nat :=
+def accessCost (x : Address) (a : AddressSet) : Nat :=
   if x ∈ a then Gas.warmStorageReadCost else Gas.coldAccountAccessCost
 
 /-- The warm/cold account-access cost under a *fork's own* schedule.
@@ -2110,20 +2110,20 @@ downstream, and widening its arity would move every one of those statements for
 a reason that has nothing to do with what they say. Instead the schedule-carrying
 form is the one the interpreter calls, `accessCost` stays exactly what it was,
 and the `rfl` lemma below says they are the same function at Prague. -/
-def GasSchedule.accessCost (gas : GasSchedule) (x : Address) (a : AdrSet) : Nat :=
+def GasSchedule.accessCost (gas : GasSchedule) (x : Address) (a : AddressSet) : Nat :=
   if x ∈ a then Gas.warmStorageReadCost else gas.coldAccountAccess
 
-@[simp] theorem pragueGasSchedule_accessCost (x : Address) (a : AdrSet) :
+@[simp] theorem pragueGasSchedule_accessCost (x : Address) (a : AddressSet) :
     pragueGasSchedule.accessCost x a = accessCost x a := rfl
 
-@[simp] theorem pragueRules_gas_accessCost (x : Address) (a : AdrSet) :
+@[simp] theorem pragueRules_gas_accessCost (x : Address) (a : AddressSet) :
     pragueRules.gas.accessCost x a = accessCost x a := rfl
 
 /-- The warm cost is the floor at every schedule, because only the cold half
 moves. The Sufficiency family needs this, and needs it to hold of an arbitrary
 schedule rather than of Prague's. -/
-theorem GasSchedule.gasWarmAccess_le_accessCost (gas : GasSchedule)
-    (x : Address) (a : AdrSet) (h : Gas.warmStorageReadCost ≤ gas.coldAccountAccess) :
+theorem GasSchedule.warmStorageReadCost_at_most_accessCost (gas : GasSchedule)
+    (x : Address) (a : AddressSet) (h : Gas.warmStorageReadCost ≤ gas.coldAccountAccess) :
     Gas.warmStorageReadCost ≤ gas.accessCost x a := by
   unfold GasSchedule.accessCost
   split
@@ -2134,15 +2134,15 @@ theorem GasSchedule.gasWarmAccess_le_accessCost (gas : GasSchedule)
 `access_cost_pos` had at Prague, now stated of the schedule the interpreter
 actually reads. -/
 theorem GasSchedule.Valid.accessCost_pos {g : GasSchedule} (h : g.Valid)
-    (x : Address) (a : AdrSet) : 0 < g.accessCost x a := by
+    (x : Address) (a : AddressSet) : 0 < g.accessCost x a := by
   unfold GasSchedule.accessCost
   have hw := h.warmAccess_le
   unfold Gas.warmStorageReadCost at *
   split <;> omega
 
-theorem GasSchedule.Valid.warmAccess_le_accessCost {g : GasSchedule}
-    (h : g.Valid) (x : Address) (a : AdrSet) : Gas.warmStorageReadCost ≤ g.accessCost x a :=
-  g.gasWarmAccess_le_accessCost x a h.warmAccess_le
+theorem GasSchedule.Valid.warmStorageReadCost_at_most_accessCost {g : GasSchedule}
+    (h : g.Valid) (x : Address) (a : AddressSet) : Gas.warmStorageReadCost ≤ g.accessCost x a :=
+  g.warmStorageReadCost_at_most_accessCost x a h.warmAccess_le
 
 -- The recorders touch `meta` and nothing else; every measure, machine field
 -- and world projection sees through them, and under `bal = none` they vanish.
@@ -2365,14 +2365,14 @@ def State.setCode (ω : State) (a : Address) (cd : ByteArray) : State :=
 def Storage.set (s : Storage) (k v : U256) : Storage :=
   if v = 0 then s.erase k else s.insert k v
 
-def State.setStorVal (wor : State) (adr : Address) (key val : U256) : State :=
+def State.setStorageValue (wor : State) (adr : Address) (key val : U256) : State :=
   wor.writeAccount .keepIfPresent adr (fun ac => {ac with storage := ac.storage.set key val})
 
 def TransientStorage.setStorageValue (tra : TransientStorage) (adr : Address) (key val : U256) : TransientStorage :=
   let stor : Storage := tra.getD adr .empty
   tra.set adr <| stor.set key val
 
-def memExtSize
+def memorySizeAfterAccess
   (current_size access_index access_size : Nat) : Nat :=
   if access_size = 0
   then current_size
@@ -2382,11 +2382,11 @@ def memExtSize
         (ceilDiv current_size 32)
         (ceilDiv (access_index + access_size) 32) )
 
-def memExtsSize : Nat → List (Nat × Nat) → Nat
+def memorySizeAfterAccesses : Nat → List (Nat × Nat) → Nat
   | initSize, [] => initSize
   | initSize, ⟨accessIndex, accessSize⟩ :: pairs =>
-    let expSize := memExtSize initSize accessIndex accessSize
-    memExtsSize expSize pairs
+    let expSize := memorySizeAfterAccess initSize accessIndex accessSize
+    memorySizeAfterAccesses expSize pairs
 
 def ceil32 (n : Nat) : Nat :=
   match n % 32 with
@@ -2416,7 +2416,7 @@ private def keccakReadRun (read : Nat → UInt8) (pos n : Nat)
     let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
     let ws' := KECCAK.xorLane ws wc.val (by have := wc.isLt; omega) t
     keccakReadRun read (pos + 8) (n - 8) (wc + 1) <|
-      if _hw : wc = 16 then KECCAK.f1600 ws' else ws'
+      if _hw : wc = 16 then KECCAK.permutation ws' else ws'
   else
     KECCAK.Bytes.run wc ((List.range n).map (fun j => read (pos + j))) ws
   termination_by n
@@ -2424,17 +2424,17 @@ private def keccakReadRun (read : Nat → UInt8) (pos n : Nat)
 
 /-- Adapted from Blanc `CommonProofs.lean` `Array.sliceD_aux_eq` (source
 attribution; never import Blanc into Jaune). -/
-private theorem Array.sliceD_aux_eq' {ξ : Type} (xs : Array ξ) (d : ξ) :
+private theorem Array.sliceD_go_eq' {ξ : Type} (xs : Array ξ) (d : ξ) :
     ∀ (n : Nat) (Acc : List ξ) (m : Nat),
-      Array.sliceD.aux xs Acc m n d
+      Array.sliceD.go xs Acc m n d
         = (List.range n).map (fun j => xs.getD (m + j) d) ++ Acc := by
   intro n
   induction n with
   | zero => intro Acc m; rfl
   | succ n ih =>
     intro Acc m
-    rw [show Array.sliceD.aux xs Acc m (n + 1) d
-          = Array.sliceD.aux xs (xs.getD (m + n) d :: Acc) m n d from rfl,
+    rw [show Array.sliceD.go xs Acc m (n + 1) d
+          = Array.sliceD.go xs (xs.getD (m + n) d :: Acc) m n d from rfl,
       ih, List.range_succ]
     simp only [Array.getD_eq_getD_getElem?, List.map_append, List.map_cons, List.map_nil,
       List.append_assoc, List.cons_append, List.nil_append]
@@ -2443,8 +2443,8 @@ private theorem Array.sliceD_aux_eq' {ξ : Type} (xs : Array ξ) (d : ξ) :
 attribution; never import Blanc into Jaune). -/
 private theorem Array.sliceD_eq_map' {ξ : Type} (xs : Array ξ) (m n : Nat) (d : ξ) :
     Array.sliceD xs m n d = (List.range n).map (fun j => xs.getD (m + j) d) := by
-  rw [show Array.sliceD xs m n d = Array.sliceD.aux xs [] m n d from rfl,
-    Array.sliceD_aux_eq']
+  rw [show Array.sliceD xs m n d = Array.sliceD.go xs [] m n d from rfl,
+    Array.sliceD_go_eq']
   simp only [Array.getD_eq_getD_getElem?, List.append_nil]
 
 /-- One-element range-map split: the range-mapped reader sequence at length
@@ -2494,9 +2494,9 @@ private theorem keccakReadRun_eq_reference (read : Nat → UInt8) (pos n : Nat)
     set xw : Vector UInt64 25 :=
       KECCAK.xorLane ws wc.val (by have := wc.isLt; omega) lane with hxw
     set st : Vector UInt64 25 :=
-      (if _hw : wc = 16 then KECCAK.f1600 xw else xw) with hst
+      (if _hw : wc = 16 then KECCAK.permutation xw else xw) with hst
     set stI : Vector UInt64 25 :=
-      (if wc = 16 then KECCAK.f1600 xw else xw) with hstI
+      (if wc = 16 then KECCAK.permutation xw else xw) with hstI
     have hL : keccakReadRun read pos (k + 8) wc ws =
         keccakReadRun read (pos + 8) (k + 8 - 8) (wc + 1) st := by
       conv_lhs => unfold keccakReadRun
@@ -2576,12 +2576,12 @@ def sstoreNewRefundCounter (gas : GasSchedule) (new_value : U256)
   if current_value ≠ new_value then
     let rc' :=
       if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
-        rc + gas.storageClearRefund
+        rc + gas.sstoreClearsSchedule
       else
         rc
     let rc'' :=
       if original_value ≠ 0 ∧ current_value = 0 then
-        rc' - gas.storageClearRefund
+        rc' - gas.sstoreClearsSchedule
       else
         rc'
     if original_value = new_value then
@@ -2600,11 +2600,11 @@ The original-value parameter is retained for the shared refund interface. -/
 def sstoreLegacyRefundCounter (gas : GasSchedule) (new_value : U256)
     (original_value : U256) (current_value : U256) (rc : Int) : Int :=
   if current_value ≠ 0 ∧ new_value = 0 then
-    rc + gas.storageClearRefund
+    rc + gas.sstoreClearsSchedule
   else rc
 
 /-- A no-change write refunds nothing under the legacy schedule. -/
-theorem sstoreLegacyRefundCounter_noop (gas : GasSchedule) (new_value : U256)
+theorem sstoreLegacyRefundCounter_unchanged (gas : GasSchedule) (new_value : U256)
     (original_value : U256) (rc : Int) :
     sstoreLegacyRefundCounter gas new_value original_value new_value rc = rc := by
   unfold sstoreLegacyRefundCounter
@@ -2615,7 +2615,7 @@ theorem sstoreLegacyRefundCounter_clear (gas : GasSchedule)
     (original_value current_value : U256) (rc : Int)
     (horig : original_value ≠ 0) (hcurr : current_value ≠ 0) :
     sstoreLegacyRefundCounter gas 0 original_value current_value rc =
-      rc + gas.storageClearRefund := by
+      rc + gas.sstoreClearsSchedule := by
   simp [sstoreLegacyRefundCounter, hcurr]
 
 /-- Restoring a freshly set slot refunds the set premium: what the first
@@ -2684,12 +2684,12 @@ def sstoreFlatRefundCounter (gas : GasSchedule) (sload : Nat)
   if current_value ≠ new_value then
     let rc' :=
       if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
-        rc + gas.storageClearRefund
+        rc + gas.sstoreClearsSchedule
       else
         rc
     let rc'' :=
       if original_value ≠ 0 ∧ current_value = 0 then
-        rc' - gas.storageClearRefund
+        rc' - gas.sstoreClearsSchedule
       else
         rc'
     if original_value = new_value then
@@ -2727,12 +2727,12 @@ def sstoreAmsterdamRefundCounter (gas : GasSchedule) (state : StateGasRules)
   if current_value ≠ new_value then
     let rc' :=
       if original_value ≠ 0 ∧ current_value ≠ 0 ∧ new_value = 0 then
-        rc + gas.storageClearRefund
+        rc + gas.sstoreClearsSchedule
       else
         rc
     let rc'' :=
       if original_value ≠ 0 ∧ current_value = 0 then
-        rc' - gas.storageClearRefund
+        rc' - gas.sstoreClearsSchedule
       else
         rc'
     if original_value = new_value then
@@ -2962,7 +2962,7 @@ lemma noPushBefore_peel {code : ByteArray} {k s : Nat} {b : UInt8} {ys zs : Byte
   constructor
   · refine noPushBefore_add (fun hk => ?_) hb
     rw [ByteArray.getElem_of_getElem?_eq_some'
-      (List.get?_eq_of_slice (List.slice_prefix h)) hk]
+      (List.getElem?_eq_of_slice (List.slice_prefix h)) hk]
     rcases hinst with hp | ⟨hnp, hnil⟩
     · exact Or.inl hp
     · exact Or.inr ⟨hnp, by simp [hs, hnil]⟩
@@ -3017,20 +3017,20 @@ def opStarts (cd : ByteArray) : List Bool :=
 
 /-- `instStarts` reads `cd.data.toList`, a projection, because `ByteArray.toList`'s
 index loop is quadratic under kernel reduction; the two lists are equal. -/
-private lemma instStarts_eq (cd : ByteArray) : opStarts cd = scanStarts cd.toList 0 := by
+private lemma opStarts_eq_scanStarts (cd : ByteArray) : opStarts cd = scanStarts cd.toList 0 := by
   rw [opStarts, ByteArray.toList_eq_toList_data']
 
 def opStartAt (cd : ByteArray) (k : Nat) : Bool :=
   (opStarts cd).getD k false
 
-private inductive Ops : List UInt8 → Prop
-  | nil : Ops []
+private inductive CompleteInstructions : List UInt8 → Prop
+  | nil : CompleteInstructions []
   | step (b : UInt8) (ys rest : List UInt8)
-      (hy : ys.length = pushWidth b) (hr : Ops rest) :
-      Ops ((b :: ys) ++ rest)
+      (hy : ys.length = pushWidth b) (hr : CompleteInstructions rest) :
+      CompleteInstructions ((b :: ys) ++ rest)
 
 private def ScanCover (xs : List UInt8) (k : Nat) : Prop :=
-  ∃ pre b ys rest, xs = pre ++ (b :: ys) ++ rest ∧ Ops pre ∧
+  ∃ pre b ys rest, xs = pre ++ (b :: ys) ++ rest ∧ CompleteInstructions pre ∧
     pre.length + 1 + ys.length = k ∧ ys.length < pushWidth b
 
 private lemma scanStarts_false_cover :
@@ -3056,11 +3056,11 @@ private lemma scanStarts_false_cover :
           rcases hc with ⟨pre, c, ys, rest, heq, hpre, hlen, hys⟩
           refine ⟨(b :: []) ++ pre, c, ys, rest, ?_, ?_, ?_, hys⟩
           · simp [heq, List.append_assoc]
-          · exact Ops.step b [] pre (by simp [hq]) hpre
+          · exact CompleteInstructions.step b [] pre (by simp [hq]) hpre
           · simp only [List.length_cons, List.length_nil, List.length_append]
             omega
         · by_cases hsmall : j < pushWidth b
-          · refine ⟨[], b, bs.take j, bs.drop j, ?_, Ops.nil, ?_, ?_⟩
+          · refine ⟨[], b, bs.take j, bs.drop j, ?_, CompleteInstructions.nil, ?_, ?_⟩
             · simp [List.take_append_drop]
             · simp [List.length_take_of_le (Nat.le_of_lt hj), Nat.add_comm]
             · rw [List.length_take_of_le (Nat.le_of_lt hj)]
@@ -3093,13 +3093,13 @@ private lemma scanStarts_false_cover :
                   rw [heq]
                 _ = (b :: bs.take (pushWidth b)) ++ pre ++ (c :: ys) ++ rest := by
                   simp [List.append_assoc]
-            · exact Ops.step b (bs.take (pushWidth b)) pre htake hpre
+            · exact CompleteInstructions.step b (bs.take (pushWidth b)) pre htake hpre
             · simp only [List.length_cons, List.length_append]
               omega
 
 private def ScanPrefix (xs : List UInt8) (rem k : Nat) : Prop :=
   ∃ ys pre rest, xs = ys ++ pre ++ rest ∧ ys.length = rem ∧
-    rem ≤ k ∧ k < xs.length ∧ pre.length = k - rem ∧ Ops pre
+    rem ≤ k ∧ k < xs.length ∧ pre.length = k - rem ∧ CompleteInstructions pre
 
 private lemma scanPrefix_cons_skip :
     ScanPrefix (b :: bs) (r + 1) (j + 1) ↔ ScanPrefix bs r j := by
@@ -3120,8 +3120,8 @@ private lemma scanPrefix_cons_skip :
       omega
     · omega
 
-private lemma instrs_cons_inv {b : UInt8} {xs : List UInt8} (h : Ops (b :: xs)) :
-    ∃ ys rest, xs = ys ++ rest ∧ ys.length = pushWidth b ∧ Ops rest := by
+private lemma completeInstructions_cons_inversion {b : UInt8} {xs : List UInt8} (h : CompleteInstructions (b :: xs)) :
+    ∃ ys rest, xs = ys ++ rest ∧ ys.length = pushWidth b ∧ CompleteInstructions rest := by
   cases h with
   | step b ys rest hy hr => exact ⟨ys, rest, rfl, hy, hr⟩
 
@@ -3136,10 +3136,10 @@ private lemma pushWidth_spec (b : UInt8) :
     · omega
     · simp [h]
 
-private lemma noPushBefore_instrs {cd : ByteArray} {k : Nat}
+private lemma noPushBefore_completeInstructions {cd : ByteArray} {k : Nat}
     {pre rest : List UInt8}
     (hslice : List.Slice cd.toList k (pre ++ rest))
-    (hb : noPushBefore cd k 32 = true) (hpre : Ops pre) :
+    (hb : noPushBefore cd k 32 = true) (hpre : CompleteInstructions pre) :
     noPushBefore cd (k + pre.length) 32 = true ∧
       List.Slice cd.toList (k + pre.length) rest := by
   induction hpre generalizing k rest with
@@ -3185,7 +3185,7 @@ private lemma scanStarts_true_iff :
       cases rem with
       | zero =>
         cases k with
-        | zero => simp [scanStarts, ScanPrefix, Ops.nil]
+        | zero => simp [scanStarts, ScanPrefix, CompleteInstructions.nil]
         | succ j =>
           simp only [scanStarts, List.getD_cons_succ]
           have hbs : bs.length = n - 1 := by omega
@@ -3200,7 +3200,7 @@ private lemma scanStarts_true_iff :
             · simp [hpre]
               rw [hys]
               omega
-            · exact Ops.step b ys pre hys hinst
+            · exact CompleteInstructions.step b ys pre hys hinst
           · rintro ⟨ys, pre, rest, heq, hys, hqj, hbound, hpre, hinst⟩
             have hys0 : ys = [] := by simpa using hys
             subst ys
@@ -3212,7 +3212,7 @@ private lemma scanStarts_true_iff :
             | cons c pre' =>
               have heq' : b :: bs = c :: pre' ++ rest := by simpa using heq
               cases heq'
-              rcases instrs_cons_inv hinst with ⟨ys', tail, htail, hq, hr'⟩
+              rcases completeInstructions_cons_inversion hinst with ⟨ys', tail, htail, hq, hr'⟩
               have htail_len : tail.length = j - pushWidth b := by
                 simp only [List.length_cons] at hpre
                 simp [htail, hq] at hpre
@@ -3241,7 +3241,7 @@ private lemma noPushBefore_of_scan_start {cd : ByteArray} {k : Nat}
   have hk' : k < cd.toList.length := by
     simpa [ByteArray.size_eq_length_toList'] using hk
   have hs : (scanStarts cd.toList 0).getD k false = true := by
-    simpa [opStartAt, instStarts_eq] using hstart
+    simpa [opStartAt, opStarts_eq_scanStarts] using hstart
   have hp := (scanStarts_true_iff cd.toList.length cd.toList rfl 0 k hk').mp hs
   rcases hp with ⟨ys, pre, rest, heq, hys, hzero, hbound, hpre, hinst⟩
   have hys0 : ys = [] := by simpa using hys
@@ -3250,7 +3250,7 @@ private lemma noPushBefore_of_scan_start {cd : ByteArray} {k : Nat}
     have heq' : cd.toList = pre ++ rest := by simpa using heq
     rw [heq']
     simpa using List.slice_refl (pre ++ rest)
-  have hno := noPushBefore_instrs hslice (by rfl) hinst
+  have hno := noPushBefore_completeInstructions hslice (by rfl) hinst
   have hpre_len : pre.length = k := by simpa using hpre
   simpa [hpre_len] using hno.1
 
@@ -3266,13 +3266,13 @@ private lemma noPushBefore_iff_scan_start {cd : ByteArray} {k : Nat}
       have hk' : k < cd.toList.length := by
         simpa [ByteArray.size_eq_length_toList'] using hk
       have hs : (scanStarts cd.toList 0).getD k false = false := by
-        simpa [opStartAt, instStarts_eq] using hstart'
+        simpa [opStartAt, opStarts_eq_scanStarts] using hstart'
       have hc := scanStarts_false_cover cd.toList.length cd.toList rfl k hk' hs
       rcases hc with ⟨pre, b, ys, rest, heq, hpre, hlen, hys⟩
       have hslice : List.Slice cd.toList 0 (pre ++ ((b :: ys) ++ rest)) := by
         rw [heq]
         simpa [List.append_assoc] using List.slice_refl _
-      have hpre_no := noPushBefore_instrs (cd := cd) (k := 0) (pre := pre)
+      have hpre_no := noPushBefore_completeInstructions (cd := cd) (k := 0) (pre := pre)
         (rest := (b :: ys) ++ rest) hslice (by rfl) hpre
       have hpre_no' : noPushBefore cd pre.length 32 = true := by
         simpa using hpre_no.1
@@ -3281,7 +3281,7 @@ private lemma noPushBefore_iff_scan_start {cd : ByteArray} {k : Nat}
         simpa [List.append_assoc] using
           (List.append_slice_suffix (xs := pre) (ys := (b :: ys) ++ rest))
       have hget : cd.toList[pre.length]? = some b :=
-        List.get?_eq_of_slice hslice_p
+        List.getElem?_eq_of_slice hslice_p
       have hp_lt_list : pre.length < cd.toList.length :=
         (List.getElem?_eq_some_iff.mp hget).1
       have hp_lt : pre.length < cd.size := by
@@ -3331,56 +3331,56 @@ theorem jumpable_eq_jumpdestOk (cd : ByteArray) (k : Nat) :
 
 /-- The pre-Amsterdam walk: the same pass with no immediate-carrying opcode
 other than the pushes, which is the walk `noPushBefore` characterises. -/
-def legacyJumpDestsFrom (cd : ByteArray) (pc : Nat) : List Nat :=
+def legacyJumpDestinationsFrom (cd : ByteArray) (pc : Nat) : List Nat :=
   if h : pc < cd.size then
     let b := cd[pc]
-    if b = 0x5B then pc :: legacyJumpDestsFrom cd (pc + 1)
-    else if 0x60 ≤ b ∧ b ≤ 0x7F then legacyJumpDestsFrom cd (pc + (b.toNat - 0x5F) + 1)
-    else legacyJumpDestsFrom cd (pc + 1)
+    if b = 0x5B then pc :: legacyJumpDestinationsFrom cd (pc + 1)
+    else if 0x60 ≤ b ∧ b ≤ 0x7F then legacyJumpDestinationsFrom cd (pc + (b.toNat - 0x5F) + 1)
+    else legacyJumpDestinationsFrom cd (pc + 1)
   else []
 termination_by cd.size - pc
 decreasing_by all_goals omega
 
 /-- The legacy walk steps off a byte that is neither `JUMPDEST` nor a
 `PUSH1`–`PUSH32` without adding a destination. -/
-theorem legacyJumpDestsFrom_skip (cd : ByteArray) (pc : Nat)
+theorem legacyJumpDestinationsFrom_skip (cd : ByteArray) (pc : Nat)
     (hj : cd.byteD pc ≠ 0x5B) (hp : ¬ (0x60 ≤ cd.byteD pc ∧ cd.byteD pc ≤ 0x7F)) :
-    legacyJumpDestsFrom cd pc = legacyJumpDestsFrom cd (pc + 1) := by
-  rw [legacyJumpDestsFrom]
+    legacyJumpDestinationsFrom cd pc = legacyJumpDestinationsFrom cd (pc + 1) := by
+  rw [legacyJumpDestinationsFrom]
   split
   · rename_i h
     have hb : cd[pc] = cd.byteD pc := by simp [ByteArray.byteD, h]
     simp only [hb]
     rw [ite_eq_right hj, ite_eq_right hp]
   · rename_i h
-    rw [legacyJumpDestsFrom]
+    rw [legacyJumpDestinationsFrom]
     rw [dite_eq_right (by omega)]
 
 /-- The pinned Amsterdam `get_valid_jump_destinations` is the legacy walk:
 only PUSH1–PUSH32 skip data. EELS #3618 removed the stack-access cases. -/
-abbrev pinnedJumpDestsFrom := legacyJumpDestsFrom
+abbrev pinnedJumpDestinationsFrom := legacyJumpDestinationsFrom
 
 /-- The pinned and legacy forward walks are now definitionally identical. -/
-theorem pinnedJumpDestsFrom_eq_legacy (cd : ByteArray) (pc : Nat) :
-    pinnedJumpDestsFrom cd pc = legacyJumpDestsFrom cd pc := rfl
+theorem pinnedJumpDestinationsFrom_eq_legacy (cd : ByteArray) (pc : Nat) :
+    pinnedJumpDestinationsFrom cd pc = legacyJumpDestinationsFrom cd pc := rfl
 
-def State.bal (w : State) (a : Address) : U256 := (w.get a).balance
+def State.balance (w : State) (a : Address) : U256 := (w.get a).balance
 
-def State.setBal (st : State) (adr : Address) (val : U256) : State :=
+def State.setBalance (st : State) (adr : Address) (val : U256) : State :=
   st.writeAccount .erase adr (fun ac => ac.withBalance val)
 
-def State.addBal (st : State) (adr : Address) (val : U256) : State :=
-  st.setBal adr <| (st.bal adr + val)
+def State.addBalance (st : State) (adr : Address) (val : U256) : State :=
+  st.setBalance adr <| (st.balance adr + val)
 
-def State.subBal (st : State) (adr : Address) (val : U256) : Option State :=
-  if st.bal adr < val
+def State.subtractBalance (st : State) (adr : Address) (val : U256) : Option State :=
+  if st.balance adr < val
   then .none
-  else st.setBal adr (st.bal adr - val)
+  else st.setBalance adr (st.balance adr - val)
 
 @[simp] theorem pragueRules_settle_eraseEmptyOnModify :
     pragueRules.settlement.eraseEmptyOnModify = true := rfl
 
-def calculateMsgCallGas
+def MessageCall.gasCostAndChildGas
   (value gas gas_left memory_cost extra_gas : Nat)
   (cs : Nat := Gas.callStipend) : Nat × Nat :=
   let call_stipend : Nat := if value = 0 then 0 else cs
@@ -3412,10 +3412,10 @@ def create2NewAddress
     (0xFF : UInt8) :: (sender.toBytes ++ salt.toBytes ++ initCode.keccak.toBytes)
   (Bytes.keccak LA).toAddress
 
-def State.incrNonce (w : State) (a : Address) : State :=
+def State.incrementNonce (w : State) (a : Address) : State :=
   w.writeAccount .erase a (fun ac => {ac with nonce := ac.nonce + 1})
 
-def State.setStor (w : State) (a : Address) (s : Storage) : State :=
+def State.setStorage (w : State) (a : Address) (s : Storage) : State :=
   w.writeAccount .keepIfPresent a (fun ac => {ac with storage := s})
 
 --------------- CANONICAL STATE AND STORAGE (P0.4) ---------------
@@ -3730,45 +3730,45 @@ theorem State.get_setPresent_ne (w : State) {a b : Address} (h : a ≠ b) (ac : 
     (w.setPresent a ac).get b = w.get b := by
   rw [State.get_eq_getD, State.get_eq_getD, State.getElem?_setPresent, ite_eq_right h]
 
-theorem State.setStorVal_get_self (w : State) (a : Address) (k v : U256) :
-    (w.setStorVal a k v).get a = {w.get a with storage := (w.get a).storage.set k v} := by
-  rw [State.setStorVal, State.writeAccount_keepIfPresent_eq]
+theorem State.setStorageValue_get_self (w : State) (a : Address) (k v : U256) :
+    (w.setStorageValue a k v).get a = {w.get a with storage := (w.get a).storage.set k v} := by
+  rw [State.setStorageValue, State.writeAccount_keepIfPresent_eq]
   split
   · exact State.get_setPresent_self _ _ _
   · exact State.get_set_self _ _ _
 
-theorem State.setStorVal_get_ne (w : State) {a b : Address} (h : a ≠ b) (k v : U256) :
-    (w.setStorVal a k v).get b = w.get b := by
-  rw [State.setStorVal, State.writeAccount_keepIfPresent_eq]
+theorem State.setStorageValue_get_ne (w : State) {a b : Address} (h : a ≠ b) (k v : U256) :
+    (w.setStorageValue a k v).get b = w.get b := by
+  rw [State.setStorageValue, State.writeAccount_keepIfPresent_eq]
   split
   · exact State.get_setPresent_ne _ h _
   · exact State.get_set_ne _ h _
 
 /-- A storage write does not change membership or payload at another address. -/
-theorem State.getElem?_setStorVal_ne (w : State) {a b : Address} (h : a ≠ b) (k v : U256) :
-    (w.setStorVal a k v)[b]? = w[b]? := by
-  rw [State.setStorVal, State.writeAccount_keepIfPresent_eq]
+theorem State.getElem?_setStorageValue_ne (w : State) {a b : Address} (h : a ≠ b) (k v : U256) :
+    (w.setStorageValue a k v)[b]? = w[b]? := by
+  rw [State.setStorageValue, State.writeAccount_keepIfPresent_eq]
   split
   · rw [State.getElem?_setPresent, ite_eq_right h]
   · rw [State.getElem?_set, ite_eq_right h]
 
-theorem State.getElem?_setStor_ne (w : State) {a b : Address} (h : a ≠ b) (stor : Storage) :
-    (w.setStor a stor)[b]? = w[b]? := by
-  rw [State.setStor, State.writeAccount_keepIfPresent_eq]
+theorem State.getElem?_setStorage_ne (w : State) {a b : Address} (h : a ≠ b) (stor : Storage) :
+    (w.setStorage a stor)[b]? = w[b]? := by
+  rw [State.setStorage, State.writeAccount_keepIfPresent_eq]
   split
   · rw [State.getElem?_setPresent, ite_eq_right h]
   · rw [State.getElem?_set, ite_eq_right h]
 
 /-- Clearing storage never deletes an account that is already present. -/
-theorem State.getElem?_setStorVal_self_of_exists (w : State) (a : Address) (k v : U256)
+theorem State.getElem?_setStorageValue_self_of_exists (w : State) (a : Address) (k v : U256)
     (h : AccountExists w a) :
-    (w.setStorVal a k v)[a]? = some {w.get a with storage := (w.get a).storage.set k v} := by
-  rw [State.setStorVal, State.writeAccount_keepIfPresent_eq, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
+    (w.setStorageValue a k v)[a]? = some {w.get a with storage := (w.get a).storage.set k v} := by
+  rw [State.setStorageValue, State.writeAccount_keepIfPresent_eq, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
 
-theorem State.getElem?_setStor_self_of_exists (w : State) (a : Address) (stor : Storage)
+theorem State.getElem?_setStorage_self_of_exists (w : State) (a : Address) (stor : Storage)
     (h : AccountExists w a) :
-    (w.setStor a stor)[a]? = some {w.get a with storage := stor} := by
-  rw [State.setStor, State.writeAccount_keepIfPresent_eq, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
+    (w.setStorage a stor)[a]? = some {w.get a with storage := stor} := by
+  rw [State.setStorage, State.writeAccount_keepIfPresent_eq, ite_eq_left h, State.getElem?_setPresent, ite_eq_left rfl]
 
 theorem State.setAccount_get_self (w : State) (a : Address) (ac : Account) :
     (w.setAccount a ac).get a = ac.clearIfEmpty := by
@@ -3804,37 +3804,37 @@ theorem State.Canonical.setCode {w : State} (h : State.Canonical w) (a : Address
     (cd : ByteArray) : State.Canonical (w.setCode a cd) :=
   h.setAccount a (h.storage a)
 
-theorem State.Canonical.setBal {w : State} (h : State.Canonical w) (a : Address)
-    (v : U256) : State.Canonical (w.setBal a v) :=
+theorem State.Canonical.setBalance {w : State} (h : State.Canonical w) (a : Address)
+    (v : U256) : State.Canonical (w.setBalance a v) :=
   h.setAccount a (h.storage a)
 
-theorem State.Canonical.addBal {w : State} (h : State.Canonical w) (a : Address)
-    (v : U256) : State.Canonical (w.addBal a v) :=
-  h.setBal a _
+theorem State.Canonical.addBalance {w : State} (h : State.Canonical w) (a : Address)
+    (v : U256) : State.Canonical (w.addBalance a v) :=
+  h.setBalance a _
 
-theorem State.Canonical.subBal {w w' : State} (h : State.Canonical w) {a : Address}
-    {v : U256} (hw : w.subBal a v = some w') : State.Canonical w' := by
-  rw [State.subBal] at hw
+theorem State.Canonical.subtractBalance {w w' : State} (h : State.Canonical w) {a : Address}
+    {v : U256} (hw : w.subtractBalance a v = some w') : State.Canonical w' := by
+  rw [State.subtractBalance] at hw
   split at hw
   · cases hw
-  · cases hw; exact h.setBal a _
+  · cases hw; exact h.setBalance a _
 
-theorem State.Canonical.incrNonce {w : State} (h : State.Canonical w) (a : Address) :
-    State.Canonical (w.incrNonce a) :=
+theorem State.Canonical.incrementNonce {w : State} (h : State.Canonical w) (a : Address) :
+    State.Canonical (w.incrementNonce a) :=
   h.setAccount a (h.storage a)
 
 /-- `State.setStor` carries its real premise: the storage map handed in must
 already be canonical. -/
-theorem State.Canonical.setStor {w : State} (h : State.Canonical w) (a : Address)
-    {s : Storage} (hs : Storage.Canonical s) : State.Canonical (w.setStor a s) := by
-  rw [State.setStor, State.writeAccount_keepIfPresent_eq]
+theorem State.Canonical.setStorage {w : State} (h : State.Canonical w) (a : Address)
+    {s : Storage} (hs : Storage.Canonical s) : State.Canonical (w.setStorage a s) := by
+  rw [State.setStorage, State.writeAccount_keepIfPresent_eq]
   split
   · exact h.setPresent a hs
   · exact h.set a hs
 
-theorem State.Canonical.setStorVal {w : State} (h : State.Canonical w) (a : Address)
-    (k v : U256) : State.Canonical (w.setStorVal a k v) := by
-  rw [State.setStorVal, State.writeAccount_keepIfPresent_eq]
+theorem State.Canonical.setStorageValue {w : State} (h : State.Canonical w) (a : Address)
+    (k v : U256) : State.Canonical (w.setStorageValue a k v) := by
+  rw [State.setStorageValue, State.writeAccount_keepIfPresent_eq]
   split
   · exact h.setPresent a ((h.storage a).set k v)
   · exact h.set a ((h.storage a).set k v)

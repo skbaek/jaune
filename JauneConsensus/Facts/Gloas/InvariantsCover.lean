@@ -43,7 +43,7 @@ theorem exposure_congr {s s' : GloasState P} (hL : s'.latest_execution_payload_b
 theorem pendingBalance_congr {s s' : GloasState P} (hf : InvariantFrame s s') (i : Nat) : pendingBalance s' i = pendingBalance s i :=
   pendingBalance_of_equalities hf.2.2.1 hf.2.1 i
 
-theorem exposure_le_live {s : GloasState P} {i : Nat} (h : BidLive s) : exposure s i = 0 := by
+theorem exposure_eq_zero_of_bidLive {s : GloasState P} {i : Nat} (h : BidLive s) : exposure s i = 0 := by
   unfold exposure; rw [if_neg (fun e => e.2.2 h)]
 
 theorem exposure_of_not_live {s : GloasState P} {i : Nat} (h : ¬ BidLive s) :
@@ -138,7 +138,7 @@ theorem rotation_cover (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCRE
         show ({ b with slot := next } : GloasState P).builder_pending_payments.toArray[_]? = _
         rw [hbp, shifted_low hsz hLm]; exact hE
     by_cases hl : BidLive a
-    · rw [exposure_le_live hl, exposure_le_live (hiff.mpr hl)]; omega
+    · rw [exposure_eq_zero_of_bidLive hl, exposure_eq_zero_of_bidLive (hiff.mpr hl)]; omega
     · rw [exposure_of_not_live hl, exposure_of_not_live (fun h => hl (hiff.mp h)), hLb', ← hL]; omega
   · by_cases e2 : L.slot.toNat / P.SLOTS_PER_EPOCH + 1 = a.slot.toNat / P.SLOTS_PER_EPOCH
     · -- L in the previous epoch: it leaves the window
@@ -150,7 +150,7 @@ theorem rotation_cover (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCRE
         rintro ⟨_, _, h, _⟩; rw [hkb] at h; cases h
       rw [exposure_of_not_live hnl, hLb']
       by_cases hlive : BidLive a
-      · rw [exposure_le_live hlive]
+      · rw [exposure_eq_zero_of_bidLive hlive]
         obtain ⟨k, E, hk, hE, hEw⟩ := hlive
         rw [hka] at hk; cases hk
         obtain ⟨E', hE', hw0, _⟩ := g7 _ hka
@@ -237,7 +237,7 @@ theorem processSlots_pendingCovered (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_
             rw [f1.2.1, f1.2.2.2.1]
           have hp : pendingBalance { st2 with slot := next } i = pendingBalance st i := pendingBalance_congr f1 i
           by_cases hl : BidLive st
-          · rw [exposure_le_live hl, exposure_le_live (hiff.mpr hl), hp]
+          · rw [exposure_eq_zero_of_bidLive hl, exposure_eq_zero_of_bidLive (hiff.mpr hl), hp]
           · rw [exposure_of_not_live hl, exposure_of_not_live (fun h => hl (hiff.mp h)), hp]
             show _ + withdrawalAmount i (bidWithdrawal st2.latest_execution_payload_bid) ≤ _
             rw [f1.2.2.2.1]

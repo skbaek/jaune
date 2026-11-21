@@ -6,7 +6,7 @@ A push is a Word row of arity zero whose result is its immediate: it is stepped 
 `WordRow.step` and obeys `WordRow.step_ok` and `WordRow.step_error`, so it needs no step or law of
 its own. -/
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -23,4 +23,4 @@ def NextOp.pushRow? : Jaune.NextOp → Option WordRow
   | .push xs _ => some (NextOp.pushRow xs)
   | _ => none
 
-end Jaune.Checked
+end Jaune

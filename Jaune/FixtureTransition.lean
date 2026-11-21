@@ -14,29 +14,29 @@ open Jaune
 /-- Fixture syntax, distinct from protocol fork/schedule syntax. -/
 inductive FixtureNetwork : Type
   | scheduled (spec : NetworkSpec)
-  | arrowGlacierParisTTD
+  | arrowGlacierToParisAtTerminalTotalDifficulty
   deriving DecidableEq, Repr
 
 namespace FixtureNetwork
 
 def ofString? (label : String) : Option FixtureNetwork :=
-  if label = "ArrowGlacierToParisAtDiffC0000" then some .arrowGlacierParisTTD
+  if label = "ArrowGlacierToParisAtDiffC0000" then some .arrowGlacierToParisAtTerminalTotalDifficulty
   else .scheduled <$> NetworkSpec.ofString? label
 
 def toString : FixtureNetwork → String
   | .scheduled spec => spec.toString
-  | .arrowGlacierParisTTD => "ArrowGlacierToParisAtDiffC0000"
+  | .arrowGlacierToParisAtTerminalTotalDifficulty => "ArrowGlacierToParisAtDiffC0000"
 
 instance : ToString FixtureNetwork := ⟨toString⟩
 
 def forks : FixtureNetwork → List Fork
   | .scheduled spec => spec.forks
-  | .arrowGlacierParisTTD => [.arrowGlacier, .paris]
+  | .arrowGlacierToParisAtTerminalTotalDifficulty => [.arrowGlacier, .paris]
 
 def genesisFork : FixtureNetwork → Fork
   | .scheduled (.static f) => f
   | .scheduled (.transition t) => t.before
-  | .arrowGlacierParisTTD => .arrowGlacier
+  | .arrowGlacierToParisAtTerminalTotalDifficulty => .arrowGlacier
 
 end FixtureNetwork
 
@@ -120,26 +120,26 @@ theorem score_continue_iff (expected : Expected)
 
 end FixtureClosure
 
-namespace FixtureTTD
+namespace FixtureTerminalTotalDifficulty
 
 /-- The threshold of the one supported fixture label, not mainnet fork data. -/
 def threshold : Nat := 786432
 
 inductive Phase : Type
   | preTerminal
-  | terminalPow
-  | pos
+  | terminalProofOfWork
+  | proofOfStake
   deriving DecidableEq, Repr
 
 /-- One complete branch record. TD and phase cannot drift from a second map. -/
 structure Entry : Type where
   chain : CheckedBlockChain
-  td : Nat
+  totalDifficulty : Nat
   phase : Phase
 
 private def phaseFork : Phase → Fork
   | .preTerminal => .arrowGlacier
-  | .terminalPow | .pos => .paris
+  | .terminalProofOfWork | .proofOfStake => .paris
 
 /-- Only original low-TD PoW genesis is an admitted anchor for this label. -/
 def GenesisAdmitted (g : CheckedBlockChain) : Prop :=
@@ -152,9 +152,9 @@ private def genesisEntry (g : CheckedBlockChain) : Entry :=
 private def nextEntry (parent : Entry) (child : CheckedBlockChain) : Entry :=
   match parent.phase with
   | .preTerminal =>
-    let td := parent.td + child.tip.header.difficulty
-    ⟨child, td, if threshold ≤ td then .terminalPow else .preTerminal⟩
-  | .terminalPow | .pos => ⟨child, parent.td, .pos⟩
+    let td := parent.totalDifficulty + child.tip.header.difficulty
+    ⟨child, td, if threshold ≤ td then .terminalProofOfWork else .preTerminal⟩
+  | .terminalProofOfWork | .proofOfStake => ⟨child, parent.totalDifficulty, .proofOfStake⟩
 
 /-- Proof-only provenance. Every step names the actual accepted static checked
 import, including its parent, canonical envelope and selected fork. -/
@@ -168,26 +168,26 @@ inductive Origin (genesis : CheckedBlockChain) : Entry → Prop
 
 private theorem nextEntry_phase_bounds (parent : Entry) (child : CheckedBlockChain)
     (h : match parent.phase with
-      | .preTerminal => parent.td < threshold
-      | .terminalPow | .pos => threshold ≤ parent.td) :
+      | .preTerminal => parent.totalDifficulty < threshold
+      | .terminalProofOfWork | .proofOfStake => threshold ≤ parent.totalDifficulty) :
     match (nextEntry parent child).phase with
-    | .preTerminal => (nextEntry parent child).td < threshold
-    | .terminalPow | .pos => threshold ≤ (nextEntry parent child).td := by
+    | .preTerminal => (nextEntry parent child).totalDifficulty < threshold
+    | .terminalProofOfWork | .proofOfStake => threshold ≤ (nextEntry parent child).totalDifficulty := by
   cases hp : parent.phase with
   | preTerminal =>
     simp only [nextEntry, hp]
-    by_cases ht : threshold ≤ parent.td + child.tip.header.difficulty
+    by_cases ht : threshold ≤ parent.totalDifficulty + child.tip.header.difficulty
     · simp only [ite_eq_left ht]; exact ht
     · simp only [ite_eq_right ht]; omega
-  | terminalPow => simpa only [nextEntry, hp] using h
-  | pos => simpa only [nextEntry, hp] using h
+  | terminalProofOfWork => simpa only [nextEntry, hp] using h
+  | proofOfStake => simpa only [nextEntry, hp] using h
 
 /-- Phase bounds follow the admitted origin; high TD alone is no origin. -/
 theorem origin_phase_bounds {g : CheckedBlockChain} {entry : Entry}
     (h : Origin g entry) :
     match entry.phase with
-    | .preTerminal => entry.td < threshold
-    | .terminalPow | .pos => threshold ≤ entry.td := by
+    | .preTerminal => entry.totalDifficulty < threshold
+    | .terminalProofOfWork | .proofOfStake => threshold ≤ entry.totalDifficulty := by
   induction h with
   | genesis h => exact h.2.2
   | @step parent cb child previous imported ih =>
@@ -200,31 +200,31 @@ private theorem nextEntry_chain (parent : Entry) (child : CheckedBlockChain) :
 
 private theorem nextEntry_pre (parent : Entry) (child : CheckedBlockChain)
     (h : parent.phase = .preTerminal) :
-    (nextEntry parent child).td = parent.td + child.tip.header.difficulty ∧
-    ((nextEntry parent child).phase = .terminalPow ↔
-      threshold ≤ parent.td + child.tip.header.difficulty) := by
+    (nextEntry parent child).totalDifficulty = parent.totalDifficulty + child.tip.header.difficulty ∧
+    ((nextEntry parent child).phase = .terminalProofOfWork ↔
+      threshold ≤ parent.totalDifficulty + child.tip.header.difficulty) := by
   simp [nextEntry, h]
 
 private theorem nextEntry_post (parent : Entry) (child : CheckedBlockChain)
     (h : parent.phase ≠ .preTerminal) :
-    (nextEntry parent child).td = parent.td ∧
-      (nextEntry parent child).phase = .pos := by
+    (nextEntry parent child).totalDifficulty = parent.totalDifficulty ∧
+      (nextEntry parent child).phase = .proofOfStake := by
   cases hp : parent.phase <;> simp_all [nextEntry]
 
 private theorem nextEntry_terminal (parent : Entry) (child : CheckedBlockChain)
-    (h : (nextEntry parent child).phase = .terminalPow) :
+    (h : (nextEntry parent child).phase = .terminalProofOfWork) :
     parent.phase = .preTerminal ∧
-      threshold ≤ parent.td + child.tip.header.difficulty := by
+      threshold ≤ parent.totalDifficulty + child.tip.header.difficulty := by
   cases hp : parent.phase <;> simp_all [nextEntry]
 
 /-- The pre-terminal child has exactly the threshold-selected phase. -/
 theorem step_preTerminal (parent : Entry) (child : CheckedBlockChain)
     (h : parent.phase = .preTerminal) :
-    (nextEntry parent child).td = parent.td + child.tip.header.difficulty ∧
-    ((nextEntry parent child).phase = .terminalPow ↔
-      threshold ≤ parent.td + child.tip.header.difficulty) ∧
+    (nextEntry parent child).totalDifficulty = parent.totalDifficulty + child.tip.header.difficulty ∧
+    ((nextEntry parent child).phase = .terminalProofOfWork ↔
+      threshold ≤ parent.totalDifficulty + child.tip.header.difficulty) ∧
     ((nextEntry parent child).phase = .preTerminal ↔
-      parent.td + child.tip.header.difficulty < threshold) ∧
+      parent.totalDifficulty + child.tip.header.difficulty < threshold) ∧
     phaseFork parent.phase = .arrowGlacier := by
   obtain ⟨htd, hterminal⟩ := nextEntry_pre parent child h
   refine ⟨htd, hterminal, ?_, ?_⟩
@@ -234,8 +234,8 @@ theorem step_preTerminal (parent : Entry) (child : CheckedBlockChain)
 /-- Terminal PoW and PoS parents select Paris, retain TD and remain PoS. -/
 theorem step_postTerminal (parent : Entry) (child : CheckedBlockChain)
     (h : parent.phase ≠ .preTerminal) :
-    (nextEntry parent child).td = parent.td ∧
-    (nextEntry parent child).phase = .pos ∧ phaseFork parent.phase = .paris := by
+    (nextEntry parent child).totalDifficulty = parent.totalDifficulty ∧
+    (nextEntry parent child).phase = .proofOfStake ∧ phaseFork parent.phase = .paris := by
   obtain ⟨htd, hphase⟩ := nextEntry_post parent child h
   refine ⟨htd, hphase, ?_⟩
   cases hp : parent.phase <;> simp_all [phaseFork]
@@ -243,12 +243,12 @@ theorem step_postTerminal (parent : Entry) (child : CheckedBlockChain)
 /-- A terminal entry records an actual accepted Arrow Glacier crossing from
 an origin-proven parent below the threshold. -/
 theorem origin_terminal_crossing {g : CheckedBlockChain} {entry : Entry}
-    (h : Origin g entry) (phase : entry.phase = .terminalPow) :
+    (h : Origin g entry) (phase : entry.phase = .terminalProofOfWork) :
     ∃ (parent : Entry) (cb : CanonicalBlock) (child : BlockChain)
       (accepted : addBlockToChainChecked (phaseFork parent.phase) parent.chain cb =
         .ok (.inl child)),
-      Origin g parent ∧ parent.phase = .preTerminal ∧ parent.td < threshold ∧
-      threshold ≤ parent.td + cb.block.header.difficulty ∧
+      Origin g parent ∧ parent.phase = .preTerminal ∧ parent.totalDifficulty < threshold ∧
+      threshold ≤ parent.totalDifficulty + cb.block.header.difficulty ∧
       entry = nextEntry parent (CheckedBlockChain.ofImport accepted) := by
   cases h with
   | genesis hg => cases phase
@@ -262,7 +262,7 @@ theorem origin_terminal_crossing {g : CheckedBlockChain} {entry : Entry}
 Paris imports. This is proof-only lineage, not a second runtime ledger. -/
 inductive ParisLineage (g : CheckedBlockChain) : Entry → Prop
   | terminal {entry : Entry} (origin : Origin g entry)
-      (phase : entry.phase = .terminalPow) : ParisLineage g entry
+      (phase : entry.phase = .terminalProofOfWork) : ParisLineage g entry
   | step {parent : Entry} {cb : CanonicalBlock} {child : BlockChain}
       (previous : ParisLineage g parent) (post : parent.phase ≠ .preTerminal)
       (imported : addBlockToChainChecked (phaseFork parent.phase) parent.chain cb =
@@ -278,7 +278,7 @@ theorem origin_paris_lineage {g : CheckedBlockChain} {entry : Entry}
     intro post
     by_cases hp : parent.phase = .preTerminal
     · have terminal : (nextEntry parent (CheckedBlockChain.ofImport imported)).phase =
-          .terminalPow := by
+          .terminalProofOfWork := by
         simp only [nextEntry, hp] at post ⊢
         split <;> simp_all
       exact .terminal (.step previous imported) terminal
@@ -290,7 +290,7 @@ private theorem import_chainId {parent : Entry} {cb : CanonicalBlock} {child : B
       .ok (.inl child)) :
     (CheckedBlockChain.ofImport h).val.chainId = parent.chain.val.chainId := by
   exact stateTransitionAt_preserves_chainId
-    (stateTransitionAt_eq_ok_iff.mpr (addBlockToChainCanonicalE_eq_ok_inl h).2)
+    (stateTransitionAt_eq_ok_iff.mpr (addBlockToChainCanonicalTyped_eq_ok_inl h).2)
 
 theorem origin_chainId {g : CheckedBlockChain} {entry : Entry}
     (h : Origin g entry) : entry.chain.val.chainId = g.val.chainId := by
@@ -344,8 +344,8 @@ theorem find_key (store : Store) (h : store.find? key = some entry) :
 
 theorem find_phase_bounds (store : Store) (h : store.find? key = some entry) :
     match entry.phase with
-    | .preTerminal => entry.td < threshold
-    | .terminalPow | .pos => threshold ≤ entry.td := by
+    | .preTerminal => entry.totalDifficulty < threshold
+    | .terminalProofOfWork | .proofOfStake => threshold ≤ entry.totalDifficulty := by
   obtain ⟨g, _, ho⟩ := store.find_origin h
   exact origin_phase_bounds ho
 
@@ -431,7 +431,7 @@ inductive Faithful (store : Store) (raw : Bytes) : CheckedBlockChain → Store �
       (structural : StructuralHeader raw header)
       (found : store.find? header.parentHash = some parent)
       (selected : (phaseFork parent.phase).rules = .ok rules)
-      (decoded : rlpToBlockEAt rules raw = .ok (block, hash))
+      (decoded : rlpToBlockTypedAt rules raw = .ok (block, hash))
       (sameHeader : block.header = header)
       (normalized : rlpToBlock block.toRlpItem.toBytes = .ok (canon, canonHash))
       (sameNormalized : canon.header = block.header)
@@ -463,7 +463,7 @@ private def importBody (store : Store) (raw : Bytes) (header : Header)
   match selected : (phaseFork parent.phase).rules with
   | .error reason => .error (.support reason)
   | .ok rules =>
-    match decoded : rlpToBlockEAt rules raw with
+    match decoded : rlpToBlockTypedAt rules raw with
     | .error reason => .ok (.inr (.decode reason))
     | .ok (block, _) =>
       if sameHeader : block.header = header then
@@ -544,7 +544,7 @@ theorem accepted_selected_decode_import {store : Store} {raw : Bytes}
         (CanonicalBlock.ofDecode normalized) = .ok (.inl chain)),
       StructuralHeader raw header ∧ store.find? header.parentHash = some parent ∧
       (phaseFork parent.phase).rules = .ok rules ∧
-      rlpToBlockEAt rules raw = .ok (block, hash) ∧
+      rlpToBlockTypedAt rules raw = .ok (block, hash) ∧
       block.header = header ∧ canon.header = header ∧
       result.child = CheckedBlockChain.ofImport accepted ∧
       result.child.tip = canon := by
@@ -592,12 +592,12 @@ theorem accepted_recurrence {store : Store} {raw : Bytes}
       (∀ hash, hash ≠ result.child.tipHash →
         result.next.find? hash = store.find? hash) ∧
       (parent.phase = .preTerminal →
-        (nextEntry parent result.child).td = parent.td + result.child.tip.header.difficulty ∧
-        ((nextEntry parent result.child).phase = .terminalPow ↔
-          threshold ≤ parent.td + result.child.tip.header.difficulty)) ∧
+        (nextEntry parent result.child).totalDifficulty = parent.totalDifficulty + result.child.tip.header.difficulty ∧
+        ((nextEntry parent result.child).phase = .terminalProofOfWork ↔
+          threshold ≤ parent.totalDifficulty + result.child.tip.header.difficulty)) ∧
       (parent.phase ≠ .preTerminal →
-        (nextEntry parent result.child).td = parent.td ∧
-        (nextEntry parent result.child).phase = .pos) := by
+        (nextEntry parent result.child).totalDifficulty = parent.totalDifficulty ∧
+        (nextEntry parent result.child).phase = .proofOfStake) := by
   obtain ⟨child, next, faithful⟩ := result
   cases faithful with
   | @imported header parent rules block canon hash canonHash chain structural found
@@ -667,5 +667,5 @@ theorem adopt_error (store : Store) (raw : Bytes) (failure : ImportFailure) :
 theorem adopt_rejected (store : Store) (raw : Bytes) (reason : BlockRejection) :
     adopt store (raw := raw) (.ok (.inr reason)) = store := rfl
 
-end FixtureTTD
+end FixtureTerminalTotalDifficulty
 end Jaune

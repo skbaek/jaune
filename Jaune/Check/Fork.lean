@@ -196,7 +196,7 @@ namespace Jaune
                     target := pragueBlobSchedule.max } } : ForkRules).defect?.isNone
 
 -- Guard helpers: the boundary checks below match typed reasons directly.
-private def ctxFails {α : Type} (p : ChainContextError → Bool) :
+private def chainContextFails {α : Type} (p : ChainContextError → Bool) :
     Except ChainContextError α → Bool
   | .error e => p e
   | .ok _ => false
@@ -206,9 +206,9 @@ private def lookupFails {α : Type} (p : RulesLookupError → Bool) :
   | .error e => p e
   | .ok _ => false
 
-private def isContextL : RulesLookupError → Bool
+private def isContextLookupError : RulesLookupError → Bool
   | .context _ => true | _ => false
-private def isEraL : RulesLookupError → Bool
+private def isEraLookupError : RulesLookupError → Bool
   | .support (.unsupportedEra _ _) => true
   | .support (.unsupportedBlockEra _ _) => true
   | _ => false
@@ -283,7 +283,7 @@ private def isEraL : RulesLookupError → Bool
 #guard pragueRules.gas.coldAccountAccess = 2600
 #guard pragueRules.gas.callValue = 9000
 #guard pragueRules.gas.createAccess = 32000
-#guard pragueRules.gas.storageClearRefund = 4800
+#guard pragueRules.gas.sstoreClearsSchedule = 4800
 #guard pragueRules.gas.txBase = 21000
 #guard pragueRules.gas.txAccessListAddress = 2400
 #guard pragueRules.gas.txAccessListStorageKey = 1900
@@ -329,8 +329,8 @@ private def isEraL : RulesLookupError → Bool
 #guard osakaRules.block.maxRlpSize = some 8388608
 #guard osakaRules.modexp.maxLength = some 1024
 #guard osakaRules.modexp.flatComplexity = some 16
-#guard osakaRules.modexp.complexityCoeff = 2
-#guard osakaRules.modexp.iterationCoeff = 2 * pragueRules.modexp.iterationCoeff
+#guard osakaRules.modexp.complexityCoefficient = 2
+#guard osakaRules.modexp.iterationCoefficient = 2 * pragueRules.modexp.iterationCoefficient
 #guard osakaRules.modexp.gasDivisor = 1
 #guard osakaRules.modexp.minGas = 500
 #guard osakaRules.opcodes.clz = true
@@ -417,7 +417,7 @@ private def isEraL : RulesLookupError → Bool
 #guard cancunRules.proofOfWork = none
 
 -- Istanbul's shared-formula numbers, the full literal's live fields.
-#guard istanbulRules.gas.storageClearRefund = 15000
+#guard istanbulRules.gas.sstoreClearsSchedule = 15000
 #guard istanbulRules.transactionRules.dataNonZero = 16
 -- EIP-2200 is the EIP-2929 SSTORE formula with cold surcharge 0 and no-op
 -- price `SLOAD = 800`: set 20000, update 5000 - 0, restore refunds
@@ -465,15 +465,15 @@ private def isEraL : RulesLookupError → Bool
 #guard pragueRules.transactionRules.calldataFloor = true
 
 -- Creation: 0xEF rejection at London, init-code limit at Shanghai.
-#guard berlinRules.creation.rejectEf = false
-#guard parisRules.creation.rejectEf = true
+#guard berlinRules.creation.rejectReservedFirstByte = false
+#guard parisRules.creation.rejectReservedFirstByte = true
 #guard londonRules.creation.initCodeLimit = false
 #guard shanghaiRules.creation.initCodeLimit = true
 
 -- Opcode availability along the chain.
 #guard byzantiumRules.opcodes.shifts = false
 #guard petersburgRules.opcodes.create2 = true
-#guard petersburgRules.opcodes.extCodeHash = true
+#guard petersburgRules.opcodes.extcodehash = true
 #guard istanbulRules.opcodes.chainId = true
 #guard istanbulRules.opcodes.selfBalance = true
 #guard berlinRules.opcodes.baseFee = false
@@ -508,14 +508,14 @@ private def isEraL : RulesLookupError → Bool
 #guard istanbulRules.blob = pragueBlobSchedule
 
 -- alt_bn128 repricing at Istanbul (EIP-1108).
-#guard byzantiumRules.bn254.add = 500
-#guard byzantiumRules.bn254.mul = 40000
-#guard byzantiumRules.bn254.pairingBase = 100000
-#guard byzantiumRules.bn254.pairingPerPair = 80000
-#guard istanbulRules.bn254.add = 150
-#guard istanbulRules.bn254.mul = 6000
-#guard istanbulRules.bn254.pairingBase = 45000
-#guard istanbulRules.bn254.pairingPerPair = 34000
+#guard byzantiumRules.altBn128.add = 500
+#guard byzantiumRules.altBn128.mul = 40000
+#guard byzantiumRules.altBn128.pairingBase = 100000
+#guard byzantiumRules.altBn128.pairingPerPair = 80000
+#guard istanbulRules.altBn128.add = 150
+#guard istanbulRules.altBn128.mul = 6000
+#guard istanbulRules.altBn128.pairingBase = 45000
+#guard istanbulRules.altBn128.pairingPerPair = 34000
 
 -- MODEXP: EIP-198 numbers until Muir Glacier, Prague's from Berlin.
 #guard byzantiumRules.modexp.gasDivisor = 20
@@ -537,8 +537,8 @@ private def isEraL : RulesLookupError → Bool
 #guard pragueRules.requests.length = 2
 
 -- The refund boundary: 15000 through Berlin, 4800 from London.
-#guard berlinRules.gas.storageClearRefund = 15000
-#guard londonRules.gas.storageClearRefund = 4800
+#guard berlinRules.gas.sstoreClearsSchedule = 15000
+#guard londonRules.gas.sstoreClearsSchedule = 4800
 
 -- F1 (goal D): each earlier fork's record spelled with the anonymous
 -- constructor over all thirteen fields, so a field added to `ForkRules` later
@@ -550,25 +550,25 @@ example : pragueRules =
      pragueBlockLimits, pragueModexpRules, pragueOpcodeRules, pragueGasSchedule,
      none, pragueHeaderRules, pragueRequests, none, praguePrecompiles,
      pragueAccess, pragueSstore, pragueSettlement, pragueTransactionRules, pragueCreation,
-     none, pragueSystemCalls, pragueBn254, .eip2565⟩ := rfl
+     none, pragueSystemCalls, pragueAltBn128Gas, .eip2565⟩ := rfl
 example : osakaRules =
     ⟨.osaka, osakaBlobSchedule, pragueCodeLimits, osakaTransactionLimits,
      osakaBlockLimits, osakaModexpRules, osakaOpcodeRules, pragueGasSchedule,
      none, pragueHeaderRules, pragueRequests, none, osakaPrecompiles,
      pragueAccess, pragueSstore, pragueSettlement, pragueTransactionRules, pragueCreation,
-     none, pragueSystemCalls, pragueBn254, .eip2565⟩ := rfl
+     none, pragueSystemCalls, pragueAltBn128Gas, .eip2565⟩ := rfl
 example : bpo1Rules =
     ⟨.bpo1, bpo1BlobSchedule, pragueCodeLimits, osakaTransactionLimits,
      osakaBlockLimits, osakaModexpRules, osakaOpcodeRules, pragueGasSchedule,
      none, pragueHeaderRules, pragueRequests, none, osakaPrecompiles,
      pragueAccess, pragueSstore, pragueSettlement, pragueTransactionRules, pragueCreation,
-     none, pragueSystemCalls, pragueBn254, .eip2565⟩ := rfl
+     none, pragueSystemCalls, pragueAltBn128Gas, .eip2565⟩ := rfl
 example : bpo2Rules =
     ⟨.bpo2, bpo2BlobSchedule, pragueCodeLimits, osakaTransactionLimits,
      osakaBlockLimits, osakaModexpRules, osakaOpcodeRules, pragueGasSchedule,
      none, pragueHeaderRules, pragueRequests, none, osakaPrecompiles,
      pragueAccess, pragueSstore, pragueSettlement, pragueTransactionRules, pragueCreation,
-     none, pragueSystemCalls, pragueBn254, .eip2565⟩ := rfl
+     none, pragueSystemCalls, pragueAltBn128Gas, .eip2565⟩ := rfl
 -- F1 for the twelve historical forks: the whole record, so a field added to
 -- `ForkRules` later cannot be inherited by any of them without being named.
 example : byzantiumRules =
@@ -577,7 +577,7 @@ example : byzantiumRules =
      byzantiumGasSchedule, none, preLondonHeaderRules, [], none,
      byzantiumPrecompiles, AccessSchedule.flat byzantiumAccessGas,
      byzantiumSstore, byzantiumSettlement, byzantiumTransactionRules, byzantiumCreation,
-     some ⟨3 * 10 ^ 18, 3000000⟩, byzantiumSystemCalls, byzantiumBn254Gas,
+     some ⟨3 * 10 ^ 18, 3000000⟩, byzantiumSystemCalls, byzantiumAltBn128Gas,
      ModexpComplexity.eip198⟩ := rfl
 example : petersburgRules =
     ⟨.petersburg, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
@@ -585,7 +585,7 @@ example : petersburgRules =
      byzantiumGasSchedule, none, preLondonHeaderRules, [], none,
      byzantiumPrecompiles, AccessSchedule.flat byzantiumAccessGas,
      byzantiumSstore, byzantiumSettlement, byzantiumTransactionRules, byzantiumCreation,
-     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSystemCalls, byzantiumBn254Gas,
+     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSystemCalls, byzantiumAltBn128Gas,
      ModexpComplexity.eip198⟩ := rfl
 example : constantinopleRules =
     ⟨.constantinople, pragueBlobSchedule, pragueCodeLimits,
@@ -594,7 +594,7 @@ example : constantinopleRules =
      [], none, byzantiumPrecompiles,
      AccessSchedule.flat byzantiumAccessGas, constantinopleSstore,
      byzantiumSettlement, byzantiumTransactionRules, byzantiumCreation,
-     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSystemCalls, byzantiumBn254Gas,
+     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSystemCalls, byzantiumAltBn128Gas,
      ModexpComplexity.eip198⟩ := rfl
 example : istanbulRules =
     ⟨.istanbul, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
@@ -602,7 +602,7 @@ example : istanbulRules =
      byzantiumGasSchedule, none, preLondonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.flat istanbulAccessGas,
      istanbulSstore, byzantiumSettlement, istanbulTransactionRules, byzantiumCreation,
-     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSystemCalls, istanbulBn254Gas,
+     some ⟨2 * 10 ^ 18, 5000000⟩, byzantiumSystemCalls, istanbulAltBn128Gas,
      ModexpComplexity.eip198⟩ := rfl
 example : muirGlacierRules =
     ⟨.muirGlacier, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
@@ -610,7 +610,7 @@ example : muirGlacierRules =
      byzantiumGasSchedule, none, preLondonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.flat istanbulAccessGas,
      istanbulSstore, byzantiumSettlement, istanbulTransactionRules, byzantiumCreation,
-     some ⟨2 * 10 ^ 18, 9000000⟩, byzantiumSystemCalls, istanbulBn254Gas,
+     some ⟨2 * 10 ^ 18, 9000000⟩, byzantiumSystemCalls, istanbulAltBn128Gas,
      ModexpComplexity.eip198⟩ := rfl
 example : berlinRules =
     ⟨.berlin, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
@@ -618,7 +618,7 @@ example : berlinRules =
      byzantiumGasSchedule, none, preLondonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
      istanbulSstore, byzantiumSettlement, berlinTransactionRules, byzantiumCreation,
-     some ⟨2 * 10 ^ 18, 9000000⟩, byzantiumSystemCalls, istanbulBn254Gas,
+     some ⟨2 * 10 ^ 18, 9000000⟩, byzantiumSystemCalls, istanbulAltBn128Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : londonRules =
     ⟨.london, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
@@ -626,7 +626,7 @@ example : londonRules =
      pragueGasSchedule, none, londonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
      istanbulSstore, londonSettlement, londonTransactionRules, londonCreation,
-     some ⟨2 * 10 ^ 18, 9700000⟩, byzantiumSystemCalls, istanbulBn254Gas,
+     some ⟨2 * 10 ^ 18, 9700000⟩, byzantiumSystemCalls, istanbulAltBn128Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : arrowGlacierRules =
     ⟨.arrowGlacier, pragueBlobSchedule, pragueCodeLimits,
@@ -634,7 +634,7 @@ example : arrowGlacierRules =
      londonOpcodeRules, pragueGasSchedule, none, londonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
      istanbulSstore, londonSettlement, londonTransactionRules, londonCreation,
-     some ⟨2 * 10 ^ 18, 10700000⟩, byzantiumSystemCalls, istanbulBn254Gas,
+     some ⟨2 * 10 ^ 18, 10700000⟩, byzantiumSystemCalls, istanbulAltBn128Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : grayGlacierRules =
     ⟨.grayGlacier, pragueBlobSchedule, pragueCodeLimits,
@@ -642,7 +642,7 @@ example : grayGlacierRules =
      londonOpcodeRules, pragueGasSchedule, none, londonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
      istanbulSstore, londonSettlement, londonTransactionRules, londonCreation,
-     some ⟨2 * 10 ^ 18, 11400000⟩, byzantiumSystemCalls, istanbulBn254Gas,
+     some ⟨2 * 10 ^ 18, 11400000⟩, byzantiumSystemCalls, istanbulAltBn128Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : parisRules =
     ⟨.paris, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
@@ -650,7 +650,7 @@ example : parisRules =
      pragueGasSchedule, none, londonHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
      istanbulSstore, parisSettlement, londonTransactionRules, londonCreation,
-     none, byzantiumSystemCalls, istanbulBn254Gas,
+     none, byzantiumSystemCalls, istanbulAltBn128Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : shanghaiRules =
     ⟨.shanghai, pragueBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
@@ -658,7 +658,7 @@ example : shanghaiRules =
      pragueGasSchedule, none, shanghaiHeaderRules, [], none,
      istanbulPrecompiles, AccessSchedule.eip2929,
      istanbulSstore, parisSettlement, shanghaiTransactionRules, shanghaiCreation,
-     none, byzantiumSystemCalls, istanbulBn254Gas,
+     none, byzantiumSystemCalls, istanbulAltBn128Gas,
      ModexpComplexity.eip2565⟩ := rfl
 example : cancunRules =
     ⟨.cancun, cancunBlobSchedule, pragueCodeLimits, pragueTransactionLimits,
@@ -666,7 +666,7 @@ example : cancunRules =
      pragueGasSchedule, none, cancunHeaderRules, [], none,
      cancunPrecompiles, AccessSchedule.eip2929,
      istanbulSstore, cancunSettlement, cancunTransactionRules, shanghaiCreation,
-     none, cancunSystemCalls, istanbulBn254Gas,
+     none, cancunSystemCalls, istanbulAltBn128Gas,
      ModexpComplexity.eip2565⟩ := rfl
 
 -- The same fact stated field by field for the three new categories, so that a
@@ -728,7 +728,7 @@ example : cancunRules =
 #guard amsterdamRules.gas.coldAccountAccess = 3000
 #guard amsterdamRules.gas.callValue = 11300
 #guard amsterdamRules.gas.createAccess = 12000
-#guard amsterdamRules.gas.storageClearRefund = 11616
+#guard amsterdamRules.gas.sstoreClearsSchedule = 11616
 #guard amsterdamRules.gas.txBase = 12000
 #guard amsterdamRules.gas.txAccessListAddress = 2900
 #guard amsterdamRules.gas.txAccessListStorageKey = 2000
@@ -742,7 +742,7 @@ example : cancunRules =
 #guard amsterdamGasSchedule.callValue = 9000 + 2300
 #guard amsterdamGasSchedule.createAccess
   = 9000 + amsterdamGasSchedule.coldAccountAccess
-#guard amsterdamGasSchedule.storageClearRefund = (10000 + 2100) * 4800 / 5000
+#guard amsterdamGasSchedule.sstoreClearsSchedule = (10000 + 2100) * 4800 / 5000
 #guard amsterdamGasSchedule.txAccessListAddress
   = amsterdamGasSchedule.coldAccountAccess - 100
 #guard amsterdamGasSchedule.txAccessListStorageKey = 2100 - 100
@@ -774,7 +774,7 @@ example : cancunRules =
   = amsterdamStateGasRules.accountWrite + 2300
 #guard amsterdamGasSchedule.createAccess
   = amsterdamStateGasRules.accountWrite + amsterdamGasSchedule.coldAccountAccess
-#guard amsterdamGasSchedule.storageClearRefund
+#guard amsterdamGasSchedule.sstoreClearsSchedule
   = (amsterdamStateGasRules.storageWrite + 2100) * 4800 / 5000
 
 -- A plain Amsterdam value transfer still costs 21,000 intrinsic gas, as three
@@ -831,7 +831,7 @@ example : amsterdamRules =
      amsterdamGasSchedule, some amsterdamStateGasRules, amsterdamHeaderRules,
      amsterdamRequests, some amsterdamBlockAccessListRules, osakaPrecompiles,
      pragueAccess, pragueSstore, pragueSettlement, pragueTransactionRules, pragueCreation,
-     none, pragueSystemCalls, pragueBn254, .eip2565⟩ := rfl
+     none, pragueSystemCalls, pragueAltBn128Gas, .eip2565⟩ := rfl
 
 -- The block-level values themselves (EIP-7954, 7843, 8024, 7928, 8282), each
 -- of which goal B's vehicle guarded as *absent* (`header.blockAccessListHash =
@@ -965,13 +965,13 @@ private def guardFloorSchedule : ChainConfig :=
   ChainConfig.mk 1 [⟨.prague, .byTimestamp 1000⟩, ⟨.osaka, .byTimestamp 2000⟩]
 
 #guard guardFloorSchedule.validate.toOption.isSome
-#guard lookupFails isEraL (guardFloorSchedule.forkAt 0 999)
+#guard lookupFails isEraLookupError (guardFloorSchedule.forkAt 0 999)
 #guard guardFloorSchedule.forkAt 0 999
   = .error (.support (.unsupportedEra 999 1000))
 #guard guardFloorSchedule.forkAt 0 1000 = .ok .prague
 #guard guardFloorSchedule.forkAt 0 1999 = .ok .prague
 #guard guardFloorSchedule.forkAt 0 2000 = .ok .osaka
-#guard ¬ lookupFails isContextL (guardFloorSchedule.forkAt 0 999)
+#guard ¬ lookupFails isContextLookupError (guardFloorSchedule.forkAt 0 999)
 
 -- The whole supported chain is now executable, so every point of the schedule
 -- resolves to rules, and each segment resolves to its own.
@@ -1010,7 +1010,7 @@ private def guardFloorSchedule : ChainConfig :=
 #guard ¬ (ChainConfig.mk 1 []).Valid
 #guard mainnetChainConfig.chainId = 1
 #guard ¬ mainnetChainConfig.TimestampOnly
-#guard lookupFails isEraL (mainnetChainConfig.forkAt 0 0)
+#guard lookupFails isEraLookupError (mainnetChainConfig.forkAt 0 0)
 #guard mainnetChainConfig.forkAt (mainnetByzantiumBlock - 1) 0
   = .error (.support (.unsupportedBlockEra (mainnetByzantiumBlock - 1)
       mainnetByzantiumBlock))
@@ -1190,7 +1190,7 @@ private def guardBerlinToLondon : ForkTransition := ⟨.berlin, .london, .byBloc
 #guard (guardBerlinToLondon.chainConfig 1).rulesAt 4 0 = .ok berlinRules
 #guard (guardBerlinToLondon.chainConfig 1).rulesAt 5 0 = .ok londonRules
 -- A fork block at genesis is the unusable schedule it is in the timestamp form.
-#guard lookupFails isContextL
+#guard lookupFails isContextLookupError
   (((⟨.berlin, .london, .byBlock 0⟩ : ForkTransition).chainConfig 1).forkAt 0 0)
 
 -- A transition is a schedule: the `before` fork runs from genesis and the
@@ -1222,15 +1222,15 @@ private def guardBpo2ToAmsterdam : ForkTransition := ⟨.bpo2, .amsterdam, .byTi
 #guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 15000 = .ok amsterdamRules
 #guard (guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 15001 = .ok amsterdamRules
 -- Neither side of the boundary is a context failure: the schedule is usable.
-#guard ¬ lookupFails isContextL ((guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 15000)
+#guard ¬ lookupFails isContextLookupError ((guardBpo2ToAmsterdam.chainConfig 1).rulesAt 0 15000)
 
 -- A parseable label may still name an unusable schedule; it is refused where
 -- every other unusable schedule is, rather than at the parser.
 #guard ForkTransition.ofString? "OsakaToPragueAtTime15k"
   = some ⟨.osaka, .prague, .byTimestamp 15000⟩
-#guard lookupFails isContextL
+#guard lookupFails isContextLookupError
   (((⟨.osaka, .prague, .byTimestamp 15000⟩ : ForkTransition).chainConfig 1).rulesAt 0 0)
-#guard lookupFails isContextL
+#guard lookupFails isContextLookupError
   (((⟨.prague, .osaka, .byTimestamp 0⟩ : ForkTransition).chainConfig 1).rulesAt 0 0)
 
 -- A `network` label is either a static fork or a transition, and the two

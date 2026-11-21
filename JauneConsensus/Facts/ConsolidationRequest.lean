@@ -249,7 +249,7 @@ theorem processConsolidationRequest_of_classify {cfg : Config} {state : BeaconSt
   rw [processConsolidationRequest_eq, h]; rfl
 
 /-- `==` on SSZ vectors of a lawful element type is equality. -/
-theorem sszVector_beq_iff {α : Type} [BEq α] [LawfulBEq α] {n : Nat} {a b : SszVector α n} :
+theorem sszVector_beq_iff {α : Type} [BEq α] [LawfulBEq α] {n : Nat} {a b : Ssz.Vector α n} :
     (a == b) = true ↔ a = b := by
   show (a.toArray == b.toArray) = true ↔ a = b
   rw [beq_iff_eq]
@@ -646,7 +646,7 @@ theorem applyConsolidation_pending_spec {cfg : Config} {state s' : BeaconState P
     ⟨st1, hr1⟩, ⟨delay, hdelay, hw⟩, ?_⟩
   · rw [hs']
     exact forkField_write_read hg
-  · unfold SszList.push at hq'
+  · unfold Ssz.List.push at hq'
     split at hq'
     · cases hq'; rfl
     · cases hq'
@@ -654,7 +654,7 @@ theorem applyConsolidation_pending_spec {cfg : Config} {state s' : BeaconState P
     rw [hs']
     show vals.toArray[j]? = _
     rw [hv1] at hvals
-    unfold SszList.set at hvals
+    unfold Ssz.List.set at hvals
     split at hvals
     · cases hvals
       simp only [Array.getElem?_set]

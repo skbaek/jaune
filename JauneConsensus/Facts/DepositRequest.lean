@@ -81,7 +81,7 @@ theorem processDepositRequest_ok_iff (h : f.atLeast .electra = true) (state : Be
     (∃ s', processDepositRequest state dr = .ok s') ↔
       (ForkField.get h state.pending_deposits).toArray.size + 1 ≤ P.PENDING_DEPOSITS_LIMIT := by
   rw [processDepositRequest_eq h]
-  unfold SszList.push
+  unfold Ssz.List.push
   by_cases hs : (ForkField.get h state.pending_deposits).toArray.size + 1 ≤ P.PENDING_DEPOSITS_LIMIT
   · simp only [hs, dite_true, iff_true]
     exact ⟨_, rfl⟩
@@ -97,7 +97,7 @@ theorem processDepositRequest_pending (h : f.atLeast .electra = true) {state s' 
     (ForkField.get h s'.pending_deposits).toArray =
       (ForkField.get h state.pending_deposits).toArray.push (depositRequestPending dr state.slot) := by
   rw [processDepositRequest_eq h] at hp
-  unfold SszList.push at hp
+  unfold Ssz.List.push at hp
   split at hp
   · cases hp
     simp only [ForkField.get_mk]
@@ -110,7 +110,7 @@ theorem processDepositRequest_startIndex (h : f.atLeast .electra = true)
     ForkField.get h s'.deposit_requests_start_index =
       depositRequestStartIndex f (ForkField.get h state.deposit_requests_start_index) dr := by
   rw [processDepositRequest_eq h] at hp
-  unfold SszList.push at hp
+  unfold Ssz.List.push at hp
   split at hp
   · cases hp
     simp only [ForkField.get_mk]
@@ -124,7 +124,7 @@ theorem processDepositRequest_frame (h : f.atLeast .electra = true)
       deposit_requests_start_index := s'.deposit_requests_start_index
       pending_deposits := s'.pending_deposits } := by
   rw [processDepositRequest_eq h] at hp
-  unfold SszList.push at hp
+  unfold Ssz.List.push at hp
   split at hp
   · cases hp
     rfl

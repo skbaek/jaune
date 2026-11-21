@@ -513,6 +513,15 @@ key, its original `spelling`, and `style` (`"verbatim"`, `"lowerCamel"` or
 source bytes and transliterate to the last component of the bound name.
 Bindings cover that component only; a namespace needs its own binding or
 whole words. Map rows whose primary rule is 1–3 require a matching binding.
+A direct binding under another rule the row lists also matches (master ruling
+R15): the row's first rule may name the renamed namespace token (rule 3,
+`B256` -> `U256`) while the binding evidences the kept leaf (rule 7, Lean's
+`BitVec.neg`). The binding's spelling must cover a token of the new name, as
+policy validation already requires, and every other listed rule 1–3 must
+still be backed for the namespace token: a proper prefix of the name bound
+under that rule and renamed by a map row that lists it, from the prefix of
+the row's old name. A binding under a rule the row does not list never
+matches.
 Unbound components must consist of policy words, map-approved abbreviations
 or numeric indices. Unsupported characters fail rather than disappear.
 

@@ -19,8 +19,8 @@ open JauneConsensus JauneConsensus.Facts JauneConsensus.Gloas
 /-- The minimal preset. -/
 abbrev MinimalPreset : Preset := Preset.minimal
 
-private def replicateVector {α : Type} (n : Nat) (x : α) : SszVector α n := ⟨Array.replicate n x, by simp⟩
-private def emptyList {α : Type} {n : Nat} : SszList α n := ⟨#[], by simp⟩
+private def replicateVector {α : Type} (n : Nat) (x : α) : Ssz.Vector α n := ⟨Array.replicate n x, by simp⟩
+private def emptyList {α : Type} {n : Nat} : Ssz.List α n := ⟨#[], by simp⟩
 private def zeroBitvector (n : Nat) : Bitvector n := ⟨Array.replicate n false, by simp⟩
 
 private def zeroRoot : Root := 0

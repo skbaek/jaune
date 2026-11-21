@@ -39,4 +39,4 @@
 # the trust surface's gate, so this fact belongs on it. Listing it also means a
 # SECOND `@[csimp]` anywhere under the scanned source fails the gate and has to
 # be argued for here.
-Jaune/Implementation/CheckedCachedDriver.lean @[csimp] private theorem execFueled_eq_cached :
+Jaune/Implementation/CachedDriver.lean @[csimp] private theorem execFueled_eq_cached :

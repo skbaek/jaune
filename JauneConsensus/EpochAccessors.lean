@@ -221,7 +221,7 @@ def getNextSyncCommittee (state : BeaconState P f) : Fallible (SyncCommittee P) 
   let pubkeys ← indices.mapM fun i => do
     pure (← state.validators.get i.toNat site).pubkey
   let agg ← ethAggregatePubkeysFallible (pubkeys.toList.map (·.toArray.toList))
-  let aggregate : BLSPubkey ← SszVector.ofArray agg.toArray site
-  pure { pubkeys := ← SszVector.ofArray pubkeys site, aggregate_pubkey := aggregate }
+  let aggregate : BLSPubkey ← Ssz.Vector.ofArray agg.toArray site
+  pure { pubkeys := ← Ssz.Vector.ofArray pubkeys site, aggregate_pubkey := aggregate }
 
 end JauneConsensus

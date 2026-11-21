@@ -31,9 +31,9 @@ namespace JauneConsensus.Facts.Gloas.Witnesses
 
 open JauneConsensus JauneConsensus.Facts JauneConsensus.Facts.Gloas
 
-local instance {α : Type} [Inhabited α] {n : Nat} : Inhabited (SszVector α n) :=
+local instance {α : Type} [Inhabited α] {n : Nat} : Inhabited (Ssz.Vector α n) :=
   ⟨⟨Array.replicate n default, Array.size_replicate⟩⟩
-local instance {α : Type} {n : Nat} : Inhabited (SszList α n) := ⟨⟨#[], Nat.zero_le _⟩⟩
+local instance {α : Type} {n : Nat} : Inhabited (Ssz.List α n) := ⟨⟨#[], Nat.zero_le _⟩⟩
 local instance {n : Nat} : Inhabited (Bitvector n) := ⟨⟨Array.replicate n false, Array.size_replicate⟩⟩
 local instance {s : Spine} {α : Type} : Inhabited (ProgressiveListOnSpine s α) := ⟨⟨#[]⟩⟩
 local instance : Inhabited Fork := ⟨by constructor <;> exact default⟩
@@ -171,7 +171,7 @@ def withdrawalCredentials (hi lo : U64) : Bytes32 := match hi, lo with
   | ⟨h⟩, ⟨l⟩ => ((h, 0), (0, l))
 
 /-- Top words whose first byte is `0xB0` (the builder prefix) and `0x01`. -/
-def prefixB0 : U64 := ⟨0xB000000000000000⟩
+def builderPrefixWord : U64 := ⟨0xB000000000000000⟩
 def prefix01 : U64 := ⟨0x0100000000000000⟩
 
 /-- A signature with first byte `b0`, then zeros. -/
@@ -196,14 +196,14 @@ theorem witness_ignoredPrefix (ccfg : Config) (bls : Bool) :
 
 /-- `.topUp` with `reset = true`: builder 1 is exited and swept. -/
 theorem witness_topUp_reset (ccfg : Config) (bls : Bool) :
-    classifyBuilderDeposit ccfg bls stateDeposit (depositRequest 2 prefixB0 0xc0) = .ok (.topUp 1 ⟨1000000000⟩ true) := by
+    classifyBuilderDeposit ccfg bls stateDeposit (depositRequest 2 builderPrefixWord 0xc0) = .ok (.topUp 1 ⟨1000000000⟩ true) := by
   unfold classifyBuilderDeposit
   simp only [stateDeposit, state, depositRequest, firstMatch_list]
   rfl
 
 /-- `.topUp` with `reset = false`: builder 0 is active. -/
 theorem witness_topUp_noReset (ccfg : Config) (bls : Bool) :
-    classifyBuilderDeposit ccfg bls stateDeposit (depositRequest 1 prefixB0 0xc0) = .ok (.topUp 0 ⟨1000000000⟩ false) := by
+    classifyBuilderDeposit ccfg bls stateDeposit (depositRequest 1 builderPrefixWord 0xc0) = .ok (.topUp 0 ⟨1000000000⟩ false) := by
   unfold classifyBuilderDeposit
   simp only [stateDeposit, state, depositRequest, firstMatch_list]
   rfl
@@ -211,14 +211,14 @@ theorem witness_topUp_noReset (ccfg : Config) (bls : Bool) :
 /-- `.ignoredBadSignature` at `bls = true`: the signature's first byte `0x20` carries invalid
 metadata bits, so `signatureToPoint` fails before any curve or pairing work. -/
 theorem witness_ignoredBadSignature :
-    classifyBuilderDeposit Config.minimal true stateDeposit (depositRequest 9 prefixB0 0x20) = .ok .ignoredBadSignature := by
+    classifyBuilderDeposit Config.minimal true stateDeposit (depositRequest 9 builderPrefixWord 0x20) = .ok .ignoredBadSignature := by
   unfold classifyBuilderDeposit
   simp only [stateDeposit, state, depositRequest, firstMatch_list]
   rfl
 
 /-- `.register` at `bls = false`: a new pubkey registers at the end of the registry (index 2). -/
 theorem witness_register_blsOff :
-    classifyBuilderDeposit Config.minimal false stateDeposit (depositRequest 9 prefixB0 0xc0) =
+    classifyBuilderDeposit Config.minimal false stateDeposit (depositRequest 9 builderPrefixWord 0xc0) =
       .ok (.register 2 ⟨1000000000⟩) := by
   unfold classifyBuilderDeposit
   simp only [stateDeposit, state, depositRequest, firstMatch_list]
@@ -227,7 +227,7 @@ theorem witness_register_blsOff :
 /-- A builder deposit for an arbitrary `key` and `signature`, otherwise `dep _ preB0 _`: `0xB0`
 credentials, amount `10^9`. -/
 def depositKey (key : BLSPubkey) (s : BLSSignature) : JauneConsensus.Gloas.BuilderDepositRequest :=
-  { pubkey := key, withdrawal_credentials := withdrawalCredentials prefixB0 ⟨3⟩, amount := ⟨1000000000⟩, signature := s }
+  { pubkey := key, withdrawal_credentials := withdrawalCredentials builderPrefixWord ⟨3⟩, amount := ⟨1000000000⟩, signature := s }
 
 /-- `s` with its first byte set to `0x00` (a one-byte change of the signature). -/
 def zeroHead (s : BLSSignature) : BLSSignature :=

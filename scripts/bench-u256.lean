@@ -61,12 +61,12 @@ def benchBlake2 (label : String) (iterations : Nat) (nonce : Nat)
   let rec go : Nat → List UInt64 → List UInt64
     | 0, m => m
     | k + 1, m =>
-      let out := (bCompress numRounds h m 0 0 false).getD []
+      let out := (Blake2.compress numRounds h m 0 0 false).getD []
       go k (m.set 0 ((Bytes.toUInt64 (out.take 8)) ^^^ (k.toUInt64)))
   let m0 : List UInt64 := (List.range 16).map (fun i => (nonce + i).toUInt64)
   let start ← IO.monoNanosNow
   let sink ← forceB8L
-    ((bCompress numRounds h (go iterations m0) 0 0 false).getD [])
+    ((Blake2.compress numRounds h (go iterations m0) 0 0 false).getD [])
   let finish ← IO.monoNanosNow
   IO.println s!"{label}\t{(finish - start) / iterations} ns/op\titerations={iterations}\tsink={sink.take 4}"
 

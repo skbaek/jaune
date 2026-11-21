@@ -97,7 +97,7 @@ private def readFixtureBlock (caseNetwork : String) (j : Lean.Json) :
   let selected := readFixtureExpectation caseNetwork j
   if let some error := selected.selectionError then
     .throw s!"error : expectation field format error ({error.tag}): {error.detail}"
-  let rlp ← j.find "rlp" >>= Lean.Json.toIoBytes
+  let rlp ← j.find "rlp" >>= Lean.Json.toIOBytes
   pure ⟨selected, rlp⟩
 
 /-- The block-level access list a Glamsterdam fixture publishes beside an
@@ -107,36 +107,36 @@ deduplication: the refinement in `refineBlockAccessListRejection` needs the
 list exactly as delivered. The JSON prints its keys in an order that is not
 the RLP field order, so the structure is rebuilt field by field. -/
 def Lean.Json.toIoBlockAccessList (j : Lean.Json) : IO BlockAccessList := do
-  let accounts ← j.toIoList
+  let accounts ← j.toIOList
   accounts.mapM fun acc => do
     let indexOf (c : Lean.Json) : IO Nat :=
-      (c.find "blockAccessIndex" >>= Lean.Json.toIoQuantityUInt64 "blockAccessIndex")
+      (c.find "blockAccessIndex" >>= Lean.Json.toIOQuantityUInt64 "blockAccessIndex")
         <&> UInt64.toNat
-    let address ← acc.find "address" >>= Lean.Json.toIoAddress
-    let storageChanges ← (acc.find "storageChanges" >>= Lean.Json.toIoList) >>=
+    let address ← acc.find "address" >>= Lean.Json.toIOAddress
+    let storageChanges ← (acc.find "storageChanges" >>= Lean.Json.toIOList) >>=
       List.mapM fun sc => do
-        let slot ← sc.find "slot" >>= Lean.Json.toIoQuantityU256 "slot"
-        let changes ← (sc.find "slotChanges" >>= Lean.Json.toIoList) >>= List.mapM fun c => do
+        let slot ← sc.find "slot" >>= Lean.Json.toIOQuantityU256 "slot"
+        let changes ← (sc.find "slotChanges" >>= Lean.Json.toIOList) >>= List.mapM fun c => do
           let i ← indexOf c
-          let v ← c.find "postValue" >>= Lean.Json.toIoQuantityU256 "postValue"
+          let v ← c.find "postValue" >>= Lean.Json.toIOQuantityU256 "postValue"
           pure (i, v)
         pure (slot, changes)
-    let storageReads ← (acc.find "storageReads" >>= Lean.Json.toIoList) >>=
-      List.mapM (Lean.Json.toIoQuantityU256 "storageReads")
-    let balanceChanges ← (acc.find "balanceChanges" >>= Lean.Json.toIoList) >>=
+    let storageReads ← (acc.find "storageReads" >>= Lean.Json.toIOList) >>=
+      List.mapM (Lean.Json.toIOQuantityU256 "storageReads")
+    let balanceChanges ← (acc.find "balanceChanges" >>= Lean.Json.toIOList) >>=
       List.mapM fun c => do
         let i ← indexOf c
-        let v ← c.find "postBalance" >>= Lean.Json.toIoQuantityU256 "postBalance"
+        let v ← c.find "postBalance" >>= Lean.Json.toIOQuantityU256 "postBalance"
         pure (i, v)
-    let nonceChanges ← (acc.find "nonceChanges" >>= Lean.Json.toIoList) >>=
+    let nonceChanges ← (acc.find "nonceChanges" >>= Lean.Json.toIOList) >>=
       List.mapM fun c => do
         let i ← indexOf c
-        let n ← c.find "postNonce" >>= Lean.Json.toIoQuantityUInt64 "postNonce"
+        let n ← c.find "postNonce" >>= Lean.Json.toIOQuantityUInt64 "postNonce"
         pure (i, n)
-    let codeChanges ← (acc.find "codeChanges" >>= Lean.Json.toIoList) >>=
+    let codeChanges ← (acc.find "codeChanges" >>= Lean.Json.toIOList) >>=
       List.mapM fun c => do
         let i ← indexOf c
-        let code ← c.find "newCode" >>= Lean.Json.toIoBytes
+        let code ← c.find "newCode" >>= Lean.Json.toIOBytes
         pure (i, code.toByteArray)
     pure { address := address, storageChanges := storageChanges, storageReads := storageReads, balanceChanges := balanceChanges, nonceChanges := nonceChanges, codeChanges := codeChanges }
 
@@ -167,7 +167,7 @@ def refineBlockAccessListRejection (blockJson : Lean.Json) (blockRlp : Bytes) :
     | none => pure (.block (.blockAccessListHash computed detail))
     | some listJson =>
       let published ← listJson.toIoBlockAccessList
-      let header ← match rlpToBlockE blockRlp with
+      let header ← match rlpToBlockTyped blockRlp with
         | .ok ⟨block, _⟩ => pure block.header
         | .error reason =>
           .throw s!"error : block RLP undecodable while refining a block access \
@@ -175,7 +175,7 @@ def refineBlockAccessListRejection (blockJson : Lean.Json) (blockRlp : Bytes) :
       let publishedHash := published.hash
       if header.blockAccessListHash ≠ some publishedHash then
         pure (.block (.blockAccessListHash computed detail))
-      else if published.canonicalise.hash = computed then
+      else if published.toCanonical.hash = computed then
         pure (.block (.blockAccessListFormat (.text
           s!"published block access list ({published.length} entries) has the computed \
              content {computed} in a non-canonical arrangement, hash {publishedHash}")))
@@ -194,32 +194,32 @@ def Lean.Json.findIo? {α : Type} (json : Lean.Json) (key : String)
   | some v => some <$> read v
 
 def Lean.Json.toHeader (json : Lean.Json) : IO Header := do
-  let parentHash ← json.find "parentHash" >>= Lean.Json.toIoU256
-  let ommersHash ← json.find "uncleHash" >>= Lean.Json.toIoU256
-  let coinbase ← json.find "coinbase" >>= Lean.Json.toIoAddress
-  let stateRoot ← json.find "stateRoot" >>= Lean.Json.toIoU256
-  let txsRoot ← json.find "transactionsTrie" >>= Lean.Json.toIoU256
-  let receiptRoot ← json.find "receiptTrie" >>= Lean.Json.toIoU256
-  let bloom ← json.find "bloom" >>= Lean.Json.toIoBytes
-  let difficulty ← (json.find "difficulty" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
-  let number ← (json.find "number" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
-  let gasLimit ← (json.find "gasLimit" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
-  let gasUsed ← (json.find "gasUsed" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
-  let timestamp ← (json.find "timestamp" >>= Lean.Json.toIoBytes) <&> Bytes.toNat
-  let extraData ← json.find "extraData" >>= Lean.Json.toIoBytes
-  let prevRandao ← json.find "mixHash" >>= Lean.Json.toIoU256
-  let nonce ← json.find "nonce" >>= Lean.Json.toIoUInt64
+  let parentHash ← json.find "parentHash" >>= Lean.Json.toIOU256
+  let ommersHash ← json.find "uncleHash" >>= Lean.Json.toIOU256
+  let coinbase ← json.find "coinbase" >>= Lean.Json.toIOAddress
+  let stateRoot ← json.find "stateRoot" >>= Lean.Json.toIOU256
+  let txsRoot ← json.find "transactionsTrie" >>= Lean.Json.toIOU256
+  let receiptRoot ← json.find "receiptTrie" >>= Lean.Json.toIOU256
+  let bloom ← json.find "bloom" >>= Lean.Json.toIOBytes
+  let difficulty ← (json.find "difficulty" >>= Lean.Json.toIOBytes) <&> Bytes.toNat
+  let number ← (json.find "number" >>= Lean.Json.toIOBytes) <&> Bytes.toNat
+  let gasLimit ← (json.find "gasLimit" >>= Lean.Json.toIOBytes) <&> Bytes.toNat
+  let gasUsed ← (json.find "gasUsed" >>= Lean.Json.toIOBytes) <&> Bytes.toNat
+  let timestamp ← (json.find "timestamp" >>= Lean.Json.toIOBytes) <&> Bytes.toNat
+  let extraData ← json.find "extraData" >>= Lean.Json.toIOBytes
+  let prevRandao ← json.find "mixHash" >>= Lean.Json.toIOU256
+  let nonce ← json.find "nonce" >>= Lean.Json.toIOUInt64
   -- The fork-dependent fields: absent in a fixture whose fork does not define
   -- them, present otherwise, and read exactly when present.
   let baseFeePerGas ←
-    json.findIo? "baseFeePerGas" fun v => Bytes.toNat <$> v.toIoBytes
-  let withdrawalsRoot ← json.findIo? "withdrawalsRoot" Lean.Json.toIoU256
+    json.findIo? "baseFeePerGas" fun v => Bytes.toNat <$> v.toIOBytes
+  let withdrawalsRoot ← json.findIo? "withdrawalsRoot" Lean.Json.toIOU256
   let blobGasUsed ←
-    json.findIo? "blobGasUsed" fun v => Bytes.toNat <$> v.toIoBytes
+    json.findIo? "blobGasUsed" fun v => Bytes.toNat <$> v.toIOBytes
   let excessBlobGas ←
-    json.findIo? "excessBlobGas" fun v => Bytes.toNat <$> v.toIoBytes
+    json.findIo? "excessBlobGas" fun v => Bytes.toNat <$> v.toIOBytes
   let parentBeaconBlockRoot ←
-    json.findIo? "parentBeaconBlockRoot" Lean.Json.toIoU256
+    json.findIo? "parentBeaconBlockRoot" Lean.Json.toIOU256
   let requestsHash := (json.find? "requestsHash" >>= Lean.Json.toU256?)
   -- The two Amsterdam header fields, read exactly as `requestsHash` is: absent
   -- in a fixture whose fork does not define them, present otherwise. Reading
@@ -335,15 +335,15 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("block.maxRlpSize", jOptNat r.block.maxRlpSize),
     ("modexp.maxLength", jOptNat r.modexp.maxLength),
     ("modexp.flatComplexity", jOptNat r.modexp.flatComplexity),
-    ("modexp.complexityCoeff", jNat r.modexp.complexityCoeff),
-    ("modexp.iterationCoeff", jNat r.modexp.iterationCoeff),
+    ("modexp.complexityCoeff", jNat r.modexp.complexityCoefficient),
+    ("modexp.iterationCoeff", jNat r.modexp.iterationCoefficient),
     ("modexp.gasDivisor", jNat r.modexp.gasDivisor),
     ("modexp.minGas", jNat r.modexp.minGas),
     ("op.clz", Lean.Json.bool r.opcodes.clz),
     ("op.slotnum", Lean.Json.bool r.opcodes.slotnum),
     ("op.stackAccess", Lean.Json.bool r.opcodes.stackAccess),
     ("op.shifts", Lean.Json.bool r.opcodes.shifts),
-    ("op.extCodeHash", Lean.Json.bool r.opcodes.extCodeHash),
+    ("op.extCodeHash", Lean.Json.bool r.opcodes.extcodehash),
     ("op.create2", Lean.Json.bool r.opcodes.create2),
     ("op.chainId", Lean.Json.bool r.opcodes.chainId),
     ("op.selfBalance", Lean.Json.bool r.opcodes.selfBalance),
@@ -358,7 +358,7 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("gas.coldAccountAccess", jNat r.gas.coldAccountAccess),
     ("gas.callValue", jNat r.gas.callValue),
     ("gas.createAccess", jNat r.gas.createAccess),
-    ("gas.storageClearRefund", jNat r.gas.storageClearRefund),
+    ("gas.storageClearRefund", jNat r.gas.sstoreClearsSchedule),
     ("gas.txBase", jNat r.gas.txBase),
     ("gas.txAccessListAddress", jNat r.gas.txAccessListAddress),
     ("gas.txAccessListStorageKey", jNat r.gas.txAccessListStorageKey),
@@ -412,9 +412,9 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("access.balance",
       jOptNat (match r.access with | .flat g => some g.balance | _ => none)),
     ("access.extCode",
-      jOptNat (match r.access with | .flat g => some g.extCode | _ => none)),
+      jOptNat (match r.access with | .flat g => some g.extcodesizeAndExtcodecopy | _ => none)),
     ("access.extCodeHash",
-      jOptNat (match r.access with | .flat g => some g.extCodeHash | _ => none)),
+      jOptNat (match r.access with | .flat g => some g.extcodehash | _ => none)),
     ("access.sload",
       jOptNat (match r.access with | .flat g => some g.sload | _ => none)),
     ("access.call",
@@ -432,7 +432,7 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("txr.calldataFloor", Lean.Json.bool r.transactionRules.calldataFloor),
     ("txr.warmCoinbase", Lean.Json.bool r.transactionRules.warmCoinbase),
     ("creation.initCodeLimit", Lean.Json.bool r.creation.initCodeLimit),
-    ("creation.rejectEf", Lean.Json.bool r.creation.rejectEf),
+    ("creation.rejectEf", Lean.Json.bool r.creation.rejectReservedFirstByte),
     -- Proof of work under the same `present` + `null` convention: no numbers
     -- once the seal leaves the execution layer.
     ("pow.present", Lean.Json.bool r.proofOfWork.isSome),
@@ -440,10 +440,10 @@ def ForkRules.toGateJson (r : ForkRules) : Lean.Json :=
     ("pow.bombDelay", jOptNat (r.proofOfWork.map ProofOfWorkRules.bombDelay)),
     ("sys.beaconRoots", Lean.Json.bool r.systemCalls.beaconRoots),
     ("sys.historyStorage", Lean.Json.bool r.systemCalls.historyStorage),
-    ("bn254.add", jNat r.bn254.add),
-    ("bn254.mul", jNat r.bn254.mul),
-    ("bn254.pairingBase", jNat r.bn254.pairingBase),
-    ("bn254.pairingPerPair", jNat r.bn254.pairingPerPair),
+    ("bn254.add", jNat r.altBn128.add),
+    ("bn254.mul", jNat r.altBn128.mul),
+    ("bn254.pairingBase", jNat r.altBn128.pairingBase),
+    ("bn254.pairingPerPair", jNat r.altBn128.pairingPerPair),
     ("modexpComplexity",
       Lean.Json.str (match r.modexpComplexity with
         | .eip198 => "eip198" | .eip2565 => "eip2565")),
@@ -549,7 +549,7 @@ def runJumpdestControl (seedStr blobsStr sizeStr : String) : IO Bool := do
     IO.println s!"blob {i}: {cd.size} bytes generated, {stackAccessBytes} stack-access byte(s) so far"
     (← IO.getStdout).flush
     let tWalk ← IO.monoMsNow
-    let pinned := pinnedJumpDestsFrom cd 0
+    let pinned := pinnedJumpDestinationsFrom cd 0
     IO.println s!"blob {i}: pinned walk: {pinned.length} destination(s)"
     (← IO.getStdout).flush
     let t0 ← IO.monoMsNow
@@ -591,7 +591,7 @@ def getPostStateRootWithSource (json : Lean.Json) : IO (U256 × FixturePostSourc
   ( do let stateJson ← json.find "postState"
        let state ← stateJson.toWorld
        .ok (state.root, .postState) ) <|>
-  (do let root ← json.find "postStateHash" >>= Lean.Json.toIoU256
+  (do let root ← json.find "postStateHash" >>= Lean.Json.toIOU256
       pure (root, .postStateHash))
 
 def getPostStateRoot (json : Lean.Json) : IO U256 :=
@@ -662,14 +662,14 @@ def decodeFixtureBlockBody (spec : NetworkSpec) (chainId : UInt64)
         | .static f =>
           match f.rules with
           | .error err => .error (.support err)
-          | .ok rules => .ok ((rlpToBlockEAt rules blockRlp).map (·.1))
+          | .ok rules => .ok ((rlpToBlockTypedAt rules blockRlp).map (·.1))
         | .transition t =>
           match (t.chainConfig chainId).forkAt header.number header.timestamp with
           | .error err => .error (ImportFailure.ofLookup err)
           | .ok f =>
             match f.rules with
             | .error err => .error (.support err)
-            | .ok rules => .ok ((rlpToBlockEAt rules blockRlp).map (·.1))
+            | .ok rules => .ok ((rlpToBlockTypedAt rules blockRlp).map (·.1))
     | _ => .ok (.error (DecodeError.structure "block"
       "expected [header, transactions, ommers, withdrawals] lists"))
 
@@ -863,9 +863,9 @@ private def evaluateScheduledStore (spec : NetworkSpec) (chainId : UInt64)
     (fun child => (child, store.addResult (.inl child)))
 
 /-- The TTD observer retains its proof-produced atomic next ledger. -/
-private def evaluateTTDStore (store : FixtureTTD.Store) (raw : Bytes) :
-    FixtureObserved (CheckedBlockChain × FixtureTTD.Store) :=
-  (FixtureTTD.evaluateObserved store raw).map (fun result => (result.child, result.next))
+private def evaluateTTDStore (store : FixtureTerminalTotalDifficulty.Store) (raw : Bytes) :
+    FixtureObserved (CheckedBlockChain × FixtureTerminalTotalDifficulty.Store) :=
+  (FixtureTerminalTotalDifficulty.evaluateObserved store raw).map (fun result => (result.child, result.next))
 
 /-- Scheduled imports retain their existing decoder and London dispatch. -/
 def processBlockJsons (caseNetwork : String) (spec : NetworkSpec) (chainId : UInt64) (store : ChainStore)
@@ -874,8 +874,8 @@ def processBlockJsons (caseNetwork : String) (spec : NetworkSpec) (chainId : UIn
     (evaluateScheduledStore spec chainId store raw).outcome) store blocks
 
 /-- TTD acceptance already carries its indivisible branch-ledger update. -/
-private def processTTDBlockJsons (caseNetwork : String) (store : FixtureTTD.Store)
-    (blocks : List (Nat × Lean.Json)) : IO FixtureTTD.Store :=
+private def processTTDBlockJsons (caseNetwork : String) (store : FixtureTerminalTotalDifficulty.Store)
+    (blocks : List (Nat × Lean.Json)) : IO FixtureTerminalTotalDifficulty.Store :=
   processBlockJsonsWith caseNetwork (fun store raw => (evaluateTTDStore store raw).outcome) store blocks
 
 /-- Check a fixture's own declared blob schedule against the rules this run
@@ -903,9 +903,9 @@ def checkFixtureBlobSchedule (spec : FixtureNetwork) (json : Lean.Json) : IO Uni
       continue
     let declared ← (schedule.find? f.toString).toIO
       s!"error : fixture declares a blob schedule but no entry for {f}"
-    let target ← declared.find "target" >>= Lean.Json.toIoHexNat
-    let ceiling ← declared.find "max" >>= Lean.Json.toIoHexNat
-    let fraction ← declared.find "baseFeeUpdateFraction" >>= Lean.Json.toIoHexNat
+    let target ← declared.find "target" >>= Lean.Json.toIOHexNat
+    let ceiling ← declared.find "max" >>= Lean.Json.toIOHexNat
+    let fraction ← declared.find "baseFeeUpdateFraction" >>= Lean.Json.toIOHexNat
     .guard (rules.blob.target = target * Gas.perBlob)
       s!"error : {f} blob target = {rules.blob.target}, fixture declares \
          {target} blobs = {target * Gas.perBlob}"
@@ -938,14 +938,14 @@ private def prepareFixtureCase (spec : FixtureNetwork) (json : Lean.Json) :
   let gbh_json ← json.find "genesisBlockHeader"
   let gbh ← gbh_json.toHeader
   let gb : Block := {header := gbh, transactions := [], ommers := [], withdrawals := []}
-  let gbh_hash ← gbh_json.find "hash" >>= Lean.Json.toIoU256
+  let gbh_hash ← gbh_json.find "hash" >>= Lean.Json.toIOU256
   let gbh_hash' := (Rlp.Item.toBytes (Header.toRlpItem gbh)).keccak
 
   .guard
     (gbh_hash = gbh_hash')
     s!"error : genesis block header hash, expected = {gbh_hash}, computed = {gbh_hash'}"
 
-  let genesisRLP ← json.find "genesisRLP" >>= Lean.Json.toIoBytes
+  let genesisRLP ← json.find "genesisRLP" >>= Lean.Json.toIOBytes
   -- The genesis block's wire shape follows the fork active where it sits:
   -- withdrawals ride along from Shanghai, so a pre-Shanghai genesis block
   -- encodes three elements, not four. `Block.toBLT` always writes the
@@ -965,7 +965,7 @@ private def prepareFixtureCase (spec : FixtureNetwork) (json : Lean.Json) :
   let (chainId : Nat) ←
     match gbh_json.find? "chainId" with
     | .none => .ok 1
-    | .some chainIdJson => chainIdJson.toIoUInt64 <&> UInt64.toNat
+    | .some chainIdJson => chainIdJson.toIOUInt64 <&> UInt64.toNat
 
   let preState ← json.find "pre" >>= Lean.Json.toWorldAt genesisFork
 
@@ -982,7 +982,7 @@ private def prepareFixtureCase (spec : FixtureNetwork) (json : Lean.Json) :
   -- candidate block passes through. The fixed message is unchanged: a
   -- genesis that does not decode under its fork's rules was never a
   -- scorable verdict.
-  let genesisBlock ← match rlpToBlockEAt genesisFork genesisRLP with
+  let genesisBlock ← match rlpToBlockTypedAt genesisFork genesisRLP with
     | .ok ⟨block, _⟩ => pure block
     | .error _ => .throw "error : genesis RLP is not canonical block RLP"
   let genesisEnvelope ←
@@ -1011,7 +1011,7 @@ private def prepareFixtureCase (spec : FixtureNetwork) (json : Lean.Json) :
       .throw s!"error : genesis block number = \
         {genesisEnvelope.block.header.number}, expected 0"
 
-  let blockJsons ← json.find "blocks" >>= Lean.Json.toIoList
+  let blockJsons ← json.find "blocks" >>= Lean.Json.toIOList
   pure (genesisChecked, chainId.toUInt64, blockJsons)
 
 private structure FixtureFinalObservation where
@@ -1028,7 +1028,7 @@ at the assertion site, including a partial failure, without recomputing roots. -
 private def verifyFixtureFinal (json : Lean.Json)
     (findLast : U256 → Except ImportFailure CheckedBlockChain)
     (observe : FixtureFinalObservation → IO Unit := fun _ => pure ()) : IO Unit := do
-  let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIoU256
+  let lastBlockHash ← json.find "lastblockhash" >>= Lean.Json.toIOU256
   let chain ← match findLast lastBlockHash with
     | .error failure => do
       observe { lastSnapshotFound := false, lastExpected := lastBlockHash }
@@ -1056,7 +1056,7 @@ def runBlockchainStTest (spec : FixtureNetwork) : (Nat × String × Lean.Json) �
   | ⟨idx, name, json⟩ => do
     .println s!"TEST NAME : {name}"
     .println s!"TEST INDEX : {idx}"
-    let caseNetwork ← json.find "network" >>= Lean.Json.toIoString
+    let caseNetwork ← json.find "network" >>= Lean.Json.toIOString
     let (genesisChecked, chainId, blockJsons) ← prepareFixtureCase spec json
     let findLast : U256 → Except ImportFailure CheckedBlockChain ←
       match spec with
@@ -1064,8 +1064,8 @@ def runBlockchainStTest (spec : FixtureNetwork) : (Nat × String × Lean.Json) �
         let store ← processBlockJsons caseNetwork scheduled chainId (.init genesisChecked)
           blockJsons.putIndex
         pure (fun hash => store.findLast hash)
-      | .arrowGlacierParisTTD => do
-        let initial ← ((FixtureTTD.init genesisChecked).mapError ImportFailure.render).toIO
+      | .arrowGlacierToParisAtTerminalTotalDifficulty => do
+        let initial ← ((FixtureTerminalTotalDifficulty.init genesisChecked).mapError ImportFailure.render).toIO
         let store ← processTTDBlockJsons caseNetwork initial blockJsons.putIndex
         pure (fun hash => store.findLast hash)
     verifyFixtureFinal json findLast
@@ -1234,7 +1234,7 @@ private def closureCandidateStep {σ : Type}
   let captured ← IO.mkRef (none : Option (FixtureObserved (CheckedBlockChain × σ)))
   let capturedRaw ← IO.mkRef (none : Option Bytes)
   try
-    let raw ← blockJson.find "rlp" >>= Lean.Json.toIoBytes
+    let raw ← blockJson.find "rlp" >>= Lean.Json.toIOBytes
     capturedRaw.set (some raw)
     let observed := evaluate store raw
     captured.set (some observed)
@@ -1307,7 +1307,7 @@ private def runClosureCase (spec : FixtureNetwork) (case : Nat × String × Lean
   let (idx, name, json) := case
   .println s!"TEST NAME : {name}"
   .println s!"TEST INDEX : {idx}"
-  let caseNetwork ← json.find "network" >>= Lean.Json.toIoString
+  let caseNetwork ← json.find "network" >>= Lean.Json.toIOString
   let genesisDone ← IO.mkRef false
   let rows ← IO.mkRef ([] : List Lean.Json)
   let final ← IO.mkRef (none : Option FixtureFinalObservation)
@@ -1326,8 +1326,8 @@ private def runClosureCase (spec : FixtureNetwork) (case : Nat × String × Lean
           initial blockJsons.putIndex
         rows.set result.rows
         pure ((fun hash => result.store.findLast hash), result.complete, result.strictAccepted)
-      | .arrowGlacierParisTTD => do
-        let initial ← ((FixtureTTD.init genesisChecked).mapError ImportFailure.render).toIO
+      | .arrowGlacierToParisAtTerminalTotalDifficulty => do
+        let initial ← ((FixtureTerminalTotalDifficulty.init genesisChecked).mapError ImportFailure.render).toIO
         genesisDone.set true
         let result ← processClosureBlocks caseNetwork evaluateTTDStore initial blockJsons.putIndex
         rows.set result.rows
@@ -1363,7 +1363,7 @@ well, so both come from one definition of "supported". -/
 def supportedSpec? (label : String) : Option FixtureNetwork := do
   let spec ← FixtureNetwork.ofString? label
   match spec with
-  | .arrowGlacierParisTTD | .scheduled (.static _) => return spec
+  | .arrowGlacierToParisAtTerminalTotalDifficulty | .scheduled (.static _) => return spec
   | .scheduled (.transition t) =>
     match (ChainConfig.mk 0 t.activations).validate with
     | .ok _ => return spec
@@ -1437,7 +1437,7 @@ def fixtureCaseSpec? (o : FixtureOptions) :
       return none
     if name ∈ o.excludes then
       return none
-    let label ← json.find "network" >>= Lean.Json.toIoString
+    let label ← json.find "network" >>= Lean.Json.toIOString
     let some spec := supportedSpec? label | return none
     if let some requested := o.network then
       if spec ≠ requested.spec then return none
@@ -1445,7 +1445,7 @@ def fixtureCaseSpec? (o : FixtureOptions) :
 
 /-- One fixture case's declared `network` label, for reporting. -/
 def fixtureCaseNetwork : (Nat × String × Lean.Json) → IO String
-  | ⟨_, _, json⟩ => json.find "network" >>= Lean.Json.toIoString
+  | ⟨_, _, json⟩ => json.find "network" >>= Lean.Json.toIOString
 
 /-- The fixture format a case declares, when it declares one.
 
@@ -1487,7 +1487,7 @@ private def selectFixtureCases (o : FixtureOptions) (path : String) :
     IO (List (FixtureNetwork × (Nat × String × Lean.Json))) := do
   .println "\n================================================================\n"
   .println s!"TEST FILE : {path}\n"
-  let rb ← readJsonFile path >>= Lean.Json.toIoRBNode
+  let rb ← readJsonFile path >>= Lean.Json.toIOTreeMap
   let js := rb.toArray.toList.putIndex
   -- Rule 0, and the first thing a new user hits. EEST ships the same test
   -- under one name in five sibling trees and only `blockchain_tests` is this
@@ -1649,11 +1649,11 @@ def processVector (fork : Fork) (adr : Address) : (Nat × Lean.Json) → IO Bool
   | ⟨idx, json⟩ => do
     let name ← (json.find? "Name" >>= Lean.Json.toString?).toIO s!"missing Name at index {idx}"
     let inputStr ← (json.find? "Input" >>= Lean.Json.toString?).toIO s!"missing Input for {name}"
-    let input ← (Hex.toBytes <| remove0x inputStr).toIO s!"invalid Input hex for {name}"
+    let input ← (Hex.toBytes <| removeHexPrefix inputStr).toIO s!"invalid Input hex for {name}"
     let isPositive := (json.find? "Expected").isSome
     let expected? ← if isPositive then
         let expStr ← (json.find? "Expected" >>= Lean.Json.toString?).toIO s!"missing Expected for {name}"
-        some <$> (Hex.toBytes <| remove0x expStr).toIO s!"invalid Expected hex for {name}"
+        some <$> (Hex.toBytes <| removeHexPrefix expStr).toIO s!"invalid Expected hex for {name}"
       else pure none
     let gas ← if isPositive then
         let g ← (json.find? "Gas").toIO s!"missing Gas for {name}"
@@ -1695,7 +1695,7 @@ def runVectorFile (f : Fork) (addr : Address) (path : String) : IO Bool := do
     IO.println
       s!"RED — vectors: no precompile is active at {addr.toHex} under {f}"
     return false
-  let rb ← readJsonFile path >>= Lean.Json.toIoList
+  let rb ← readJsonFile path >>= Lean.Json.toIOList
   let js := rb.putIndex
   let results ← js.mapM (processVector f addr)
   let mut passes := 0
@@ -1720,8 +1720,8 @@ def runVectorFile (f : Fork) (addr : Address) (path : String) : IO Bool := do
 
 def Lean.Json.toIoU256Vectors (j : Lean.Json) : IO (List Lean.Json) :=
   match j with
-  | .obj o => (o.get? "vectors").toIO "u256 vector file has no vectors array" >>= Lean.Json.toIoList
-  | .arr _ => Lean.Json.toIoList j -- accepted for simple external differential files
+  | .obj o => (o.get? "vectors").toIO "u256 vector file has no vectors array" >>= Lean.Json.toIOList
+  | .arr _ => Lean.Json.toIOList j -- accepted for simple external differential files
   | _ => IO.throw "u256 vector file must be an object or array"
 
 def b256VectorResult (op : String) (xs : List U256) : Option U256 :=
@@ -1736,7 +1736,7 @@ def b256VectorResult (op : String) (xs : List U256) : Option U256 :=
   | "addmod", [x, y, z] => some (U256.addmod x y z)
   | "mulmod", [x, y, z] => some (U256.mulmod x y z)
   | "exp", [x, y] => some (x ^ y)
-  | "signextend", [x, y] => some (U256.signext x y)
+  | "signextend", [x, y] => some (U256.signextend x y)
   | "lt", [x, y] => some (U256.ltCheck x y)
   | "gt", [x, y] => some (U256.gtCheck x y)
   | "slt", [x, y] => some (U256.sltCheck x y)
@@ -1750,35 +1750,35 @@ def b256VectorResult (op : String) (xs : List U256) : Option U256 :=
   | "byte", [x, y] => some (List.getD y.toBytes x.toNat 0).toU256
   | "shl", [x, y] => some (y <<< x.toNat)
   | "shr", [x, y] => some (y >>> x.toNat)
-  | "sar", [x, y] => some (U256.arithShiftRight y x.toNat)
+  | "sar", [x, y] => some (U256.arithmeticShiftRight y x.toNat)
   | "codec", [x] => some x.toBytes.toU256
-  | "bytecount", [x] => some x.bytecount.toU256
-  | "exp_gas", [x] => some (Gas.exp + Gas.expByte * x.bytecount).toU256
+  | "bytecount", [x] => some x.significantByteCount.toU256
+  | "exp_gas", [x] => some (Gas.exp + Gas.expByte * x.significantByteCount).toU256
   | _, _ => none
 
 def processU256Vector : (Nat × Lean.Json) → IO Bool
   | ⟨idx, json⟩ => do
     let op ← (json.find? "op" >>= Lean.Json.toString?).toIO s!"u256 vector {idx}: missing op"
-    let argsJ ← (json.find? "args").toIO s!"u256 vector {idx}: missing args" >>= Lean.Json.toIoList
+    let argsJ ← (json.find? "args").toIO s!"u256 vector {idx}: missing args" >>= Lean.Json.toIOList
     let expectedJ ← (json.find? "expected").toIO s!"u256 vector {idx}: missing expected"
     let expected ← match expectedJ with
-      | .str _ => Lean.Json.toIoU256 expectedJ
+      | .str _ => Lean.Json.toIOU256 expectedJ
       | _ => do
         let n ← (String.toNat? (toString expectedJ)).toIO s!"u256 vector {idx}: invalid numeric expected"
         pure n.toU256
     let actual? ← match op with
       | "keccak" => match argsJ with
-        | [arg] => pure (some ((← Lean.Json.toIoBytes arg).keccak))
+        | [arg] => pure (some ((← Lean.Json.toIOBytes arg).keccak))
         | _ => pure none
       | "keccak_ba" => match argsJ with
         | [arg] => do
-          let bs ← Lean.Json.toIoBytes arg
+          let bs ← Lean.Json.toIOBytes arg
           pure (some (ByteArray.keccak 0 bs.length ⟨bs.toArray⟩))
         | _ => pure none
       | "ofB8L" => match argsJ with
-        | [arg] => pure (some (Bytes.toU256 (← Lean.Json.toIoBytes arg)))
+        | [arg] => pure (some (Bytes.toU256 (← Lean.Json.toIOBytes arg)))
         | _ => pure none
-      | _ => pure (b256VectorResult op (← argsJ.mapM Lean.Json.toIoU256))
+      | _ => pure (b256VectorResult op (← argsJ.mapM Lean.Json.toIOU256))
     match actual? with
     | some actual =>
       if actual = expected then IO.println s!"PASS\t{idx}\t{op}"; return true
@@ -1931,7 +1931,7 @@ def main : List String → IO Unit
   | "--vectors" :: addrStr :: pathStr :: opts => do
     .guard (!opts.contains "--identity-closure")
       "error : --identity-closure is only available in fixture mode"
-    let addrStr2 := remove0x addrStr
+    let addrStr2 := removeHexPrefix addrStr
     let paddedAddrStr :=
       String.ofList (List.replicate (40 - addrStr2.length) '0') ++ addrStr2
     let addr ← (Hex.toAddress? paddedAddrStr).toIO "invalid address"

@@ -119,11 +119,11 @@ def applyWithdrawalOutcome (cfg : Config) (state : BeaconState P f) (_wr : Withd
 /-- `bind` on an `ok` result, as a rewrite: substitutes the value into the
 continuation. (The core `pure_bind` simp lemma does not fire here because the
 scrutinee is the `Except.ok` constructor, not `pure`.) -/
-private theorem bind_ok_cons {α β ε : Type} (a : α) (k : α → Except ε β) :
+private theorem bind_ok_constructor {α β ε : Type} (a : α) (k : α → Except ε β) :
     Bind.bind (Except.ok a) k = k a := rfl
 
 /-- `bind` on an `error` result, as a rewrite. -/
-private theorem bind_error_cons {α β ε : Type} (e : ε) (k : α → Except ε β) :
+private theorem bind_error_constructor {α β ε : Type} (e : ε) (k : α → Except ε β) :
     Bind.bind (Except.error e) k = Except.error e := rfl
 
 /-- Inversion for one `bind` layer: from a successful bind, the scrutinee
@@ -132,7 +132,7 @@ private theorem bind_ok_invariant {α β ε : Type} {m : Except ε α} {f : α �
     {y : β} (h : Bind.bind m f = .ok y) : ∃ a, m = .ok a ∧ f a = .ok y := by
   cases m with
   | ok a => exact ⟨a, rfl, h⟩
-  | error e => rw [bind_error_cons] at h; cases h
+  | error e => rw [bind_error_constructor] at h; cases h
 
 /-- Equational characterization: the function is classify-then-apply. -/
 theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
@@ -144,7 +144,7 @@ theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
   cases h1 : state.pendingPartialWithdrawals with
   | error e => rfl
   | ok q1 =>
-    simp only [bind_ok_cons]
+    simp only [bind_ok_constructor]
     cases hb1 : (q1.length == P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
       !(wr.amount == FULL_EXIT_REQUEST_AMOUNT)) with
     | true => rfl
@@ -152,7 +152,7 @@ theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
       cases h2 : validatorIndexOf state wr.validator_pubkey with
       | error e => rfl
       | ok v2 =>
-        simp only [bind_ok_cons]
+        simp only [bind_ok_constructor]
         cases v2 with
         | none => rfl
         | some index =>
@@ -161,7 +161,7 @@ theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
             "process_withdrawal_request" with
           | error e => rfl
           | ok validator =>
-            simp only [bind_ok_cons]
+            simp only [bind_ok_constructor]
             cases hb3 : (!(hasExecutionWithdrawalCredential validator &&
               validator.withdrawal_credentials.toBytes.drop 12 ==
                 wr.source_address.toBytes)) with
@@ -170,7 +170,7 @@ theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
               cases h4 : getCurrentEpoch state with
               | error e => rfl
               | ok current =>
-                simp only [bind_ok_cons]
+                simp only [bind_ok_constructor]
                 cases hb4 : (!isActiveValidator validator current) with
                 | true => rfl
                 | false =>
@@ -180,12 +180,12 @@ theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
                     cases h5a : u64Checked cfg.SHARD_COMMITTEE_PERIOD with
                     | error e => rfl
                     | ok period =>
-                      simp only [bind_ok_cons]
+                      simp only [bind_ok_constructor]
                       cases h5b : U64.add? validator.activation_epoch period
                         "process_withdrawal_request" with
                       | error e => rfl
                       | ok actSum =>
-                        simp only [bind_ok_cons]
+                        simp only [bind_ok_constructor]
                         by_cases hc6 : (current < actSum)
                         · rw [ite_eq_left hc6, ite_eq_left hc6]
                           rfl
@@ -193,7 +193,7 @@ theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
                           cases h6 : getPendingBalanceToWithdraw state index with
                           | error e => rfl
                           | ok pendingBalance =>
-                            simp only [bind_ok_cons]
+                            simp only [bind_ok_constructor]
                             cases hb7 : (wr.amount == FULL_EXIT_REQUEST_AMOUNT) with
                             | true =>
                               cases hb8 : (pendingBalance == U64.zero) with
@@ -203,17 +203,17 @@ theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
                               cases h7 : u64Checked P.MIN_ACTIVATION_BALANCE with
                               | error e => rfl
                               | ok minAct =>
-                                simp only [bind_ok_cons]
+                                simp only [bind_ok_constructor]
                                 cases h8 : state.balances.get (U64.toNat index)
                                   "process_withdrawal_request" with
                                 | error e => rfl
                                 | ok balance =>
-                                  simp only [bind_ok_cons]
+                                  simp only [bind_ok_constructor]
                                   cases h9 : U64.add? minAct pendingBalance
                                     "process_withdrawal_request" with
                                   | error e => rfl
                                   | ok sum =>
-                                    simp only [bind_ok_cons]
+                                    simp only [bind_ok_constructor]
                                     cases hc : hasCompoundingWithdrawalCredential
                                       validator with
                                     | false => rfl
@@ -229,7 +229,7 @@ theorem processWithdrawalRequest_eq (cfg : Config) (state : BeaconState P f)
                                             "process_withdrawal_request" with
                                           | error e => rfl
                                           | ok sub1 =>
-                                            simp only [bind_ok_cons]
+                                            simp only [bind_ok_constructor]
                                             cases h11 : U64.sub? sub1 pendingBalance
                                               "process_withdrawal_request" with
                                             | error e => rfl
@@ -617,13 +617,13 @@ theorem classify_fullExit_iff {cfg : Config} {state : BeaconState P f}
     unfold classifyWithdrawalRequest
     dsimp only
     rw [hamt, hq, hlook]
-    simp only [bind_ok_cons]
+    simp only [bind_ok_constructor]
     rw [hget]
     rw [hcur]
     rw [h5a]
-    simp only [bind_ok_cons]
+    simp only [bind_ok_constructor]
     rw [h5b]
-    simp only [hpend, bind_ok_cons]
+    simp only [hpend, bind_ok_constructor]
     rw [ite_eq_right (show ¬((q.length ==
       P.PENDING_PARTIAL_WITHDRAWALS_LIMIT &&
       !(FULL_EXIT_REQUEST_AMOUNT == FULL_EXIT_REQUEST_AMOUNT)) = true) from by

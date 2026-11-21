@@ -162,17 +162,17 @@ theorem identity_ok_output_and_cost {input : PrecompileInput} {cost : Nat} {outp
     exact ⟨rfl, rfl, ‹_›⟩
   · cases h
 
-private theorem bnp_serialized_length (p : Bn254G1) : (Bn254G1.toBytes p).length = 64 := by
-  simp only [Bn254G1.toBytes, List.length_append, Bytes.pack, List.length_takeRightD]
+private theorem altBn128G1_toBytes_length (p : AltBn128G1) : (AltBn128G1.toBytes p).length = 64 := by
+  simp only [AltBn128G1.toBytes, List.length_append, Bytes.pack, List.length_takeRightD]
 
-private theorem blsp_serialized_length (p : Bls12G1) : (Bls12G1.toBytes p).length = 128 := by
+private theorem bls12G1_toBytes_length (p : Bls12G1) : (Bls12G1.toBytes p).length = 128 := by
   simp only [Bls12G1.toBytes, List.length_append, Bytes.pack, List.length_takeRightD]
 
-private theorem blsf2_serialized_length (x : Bls12Fp2) : x.toBytes.length = 128 := by
+private theorem bls12Fp2_toBytes_length (x : Bls12Fp2) : x.toBytes.length = 128 := by
   simp only [Bls12Fp2.toBytes, List.length_append, Bytes.pack, List.length_takeRightD]
 
-private theorem blsp2_serialized_length (p : Bls12G2) : (Bls12G2.toBytes p).length = 256 := by
-  simp only [Bls12G2.toBytes, List.length_append, blsf2_serialized_length]
+private theorem bls12G2_toBytes_length (p : Bls12G2) : (Bls12G2.toBytes p).length = 256 := by
+  simp only [Bls12G2.toBytes, List.length_append, bls12Fp2_toBytes_length]
 
 private theorem ecAdd_ok_output_length {input : PrecompileInput} {cost : Nat}
     {output : Bytes} (h : ecAdd input = .ok cost output) :
@@ -183,7 +183,7 @@ private theorem ecAdd_ok_output_length {input : PrecompileInput} {cost : Nat}
   all_goals repeat split at h
   all_goals repeat split at h
   all_goals try cases h
-  all_goals exact bnp_serialized_length _
+  all_goals exact altBn128G1_toBytes_length _
 
 private theorem ecMul_ok_output_length {input : PrecompileInput} {cost : Nat}
     {output : Bytes} (h : ecMul input = .ok cost output) :
@@ -193,7 +193,7 @@ private theorem ecMul_ok_output_length {input : PrecompileInput} {cost : Nat}
   repeat split at h
   all_goals repeat split at h
   all_goals try cases h
-  all_goals exact bnp_serialized_length _
+  all_goals exact altBn128G1_toBytes_length _
 
 private theorem bls12G1Add_ok_output_length {input : PrecompileInput} {cost : Nat}
     {output : Bytes} (h : bls12G1Add input = .ok cost output) :
@@ -203,7 +203,7 @@ private theorem bls12G1Add_ok_output_length {input : PrecompileInput} {cost : Na
   repeat split at h
   all_goals repeat split at h
   all_goals try cases h
-  all_goals exact blsp_serialized_length _
+  all_goals exact bls12G1_toBytes_length _
 
 private theorem bls12G1Msm_ok_output_length {input : PrecompileInput} {cost : Nat}
     {output : Bytes} (h : bls12G1Msm input = .ok cost output) :
@@ -213,7 +213,7 @@ private theorem bls12G1Msm_ok_output_length {input : PrecompileInput} {cost : Na
   repeat split at h
   all_goals repeat split at h
   all_goals try cases h
-  all_goals exact blsp_serialized_length _
+  all_goals exact bls12G1_toBytes_length _
 
 private theorem bls12G2Add_ok_output_length {input : PrecompileInput} {cost : Nat}
     {output : Bytes} (h : bls12G2Add input = .ok cost output) :
@@ -223,7 +223,7 @@ private theorem bls12G2Add_ok_output_length {input : PrecompileInput} {cost : Na
   repeat split at h
   all_goals repeat split at h
   all_goals try cases h
-  all_goals exact blsp2_serialized_length _
+  all_goals exact bls12G2_toBytes_length _
 
 private theorem bls12G2Msm_ok_output_length {input : PrecompileInput} {cost : Nat}
     {output : Bytes} (h : bls12G2Msm input = .ok cost output) :
@@ -233,7 +233,7 @@ private theorem bls12G2Msm_ok_output_length {input : PrecompileInput} {cost : Na
   repeat split at h
   all_goals repeat split at h
   all_goals try cases h
-  all_goals exact blsp2_serialized_length _
+  all_goals exact bls12G2_toBytes_length _
 
 private theorem bls12MapFpToG1_ok_output_length {input : PrecompileInput} {cost : Nat}
     {output : Bytes} (h : bls12MapFpToG1 input = .ok cost output) :
@@ -243,7 +243,7 @@ private theorem bls12MapFpToG1_ok_output_length {input : PrecompileInput} {cost 
   repeat split at h
   all_goals repeat split at h
   all_goals try cases h
-  all_goals exact blsp_serialized_length _
+  all_goals exact bls12G1_toBytes_length _
 
 private theorem bls12MapFp2ToG2_ok_output_length {input : PrecompileInput} {cost : Nat}
     {output : Bytes} (h : bls12MapFp2ToG2 input = .ok cost output) :
@@ -253,7 +253,7 @@ private theorem bls12MapFp2ToG2_ok_output_length {input : PrecompileInput} {cost
   repeat split at h
   all_goals repeat split at h
   all_goals try cases h
-  all_goals exact blsp2_serialized_length _
+  all_goals exact bls12G2_toBytes_length _
 
 private theorem sha256_ok_output_length {input : PrecompileInput} {cost : Nat}
     {output : Bytes} (h : sha256 input = .ok cost output) :
@@ -275,10 +275,10 @@ private theorem ripemd160_ok_output_length {input : PrecompileInput} {cost : Nat
     exact U256.length_toBytes _
   · cases h
 
-private theorem p256Verify_ok_output_length_le {input : PrecompileInput} {cost : Nat}
-    {output : Bytes} (h : p256Verify input = .ok cost output) :
+private theorem p256verify_ok_output_length_le {input : PrecompileInput} {cost : Nat}
+    {output : Bytes} (h : p256verify input = .ok cost output) :
     output.length ≤ 32 := by
-  unfold p256Verify chargeGas at h
+  unfold p256verify chargeGas at h
   dsimp only at h
   repeat split at h
   all_goals repeat split at h
@@ -337,10 +337,10 @@ private theorem executeBls12PairingInner_ok_output_length {data : Bytes}
     all_goals cases h
     all_goals simp only [U256.length_toBytes]
 
-private theorem ecPairing_ok_output_length {input : PrecompileInput}
+private theorem ecPairingCheck_ok_output_length {input : PrecompileInput}
     {cost : Nat} {output : Bytes}
-    (h : ecPairing input = .ok cost output) : output.length = 32 := by
-  unfold ecPairing chargeGas at h
+    (h : ecPairingCheck input = .ok cost output) : output.length = 32 := by
+  unfold ecPairingCheck chargeGas at h
   dsimp only at h
   repeat split at h
   all_goals try cases h
@@ -366,10 +366,10 @@ private theorem eight_byte_chunks_length (xs : List UInt64) :
       List.takeD_length, ih, List.length_cons]
     omega
 
-private theorem bCompress_ok_output_length {rounds : Nat} {h m : List UInt64}
+private theorem _root_.Jaune.Blake2.compress_ok_output_length {rounds : Nat} {h m : List UInt64}
     {t0 t1 : UInt64} {f : Bool} {output : Bytes}
-    (hok : bCompress rounds h m t0 t1 f = some output) : output.length = 64 := by
-  unfold bCompress at hok
+    (hok : Blake2.compress rounds h m t0 t1 f = some output) : output.length = 64 := by
+  unfold Blake2.compress at hok
   split at hok
   · split at hok
     · simp only [Option.some.injEq] at hok
@@ -387,7 +387,7 @@ private theorem blake2f_ok_output_length {input : PrecompileInput}
   all_goals repeat split at h
   all_goals repeat split at h
   all_goals try cases h
-  all_goals exact bCompress_ok_output_length ‹_›
+  all_goals exact Blake2.compress_ok_output_length ‹_›
 
 /-- Every successful initialized native precompile has a fixed-width reply
 unless it is identity or MODEXP; those two use their paid input and gas. -/
@@ -407,7 +407,7 @@ theorem run_ok_output_length_lt_two_pow_160
     | exact modexp_ok_output_length_lt_two_pow_160 h hgas
     | have := ecAdd_ok_output_length h; omega
     | have := ecMul_ok_output_length h; omega
-    | have := ecPairing_ok_output_length h; omega
+    | have := ecPairingCheck_ok_output_length h; omega
     | have := blake2f_ok_output_length h; omega
     | have := pointEvaluation_ok_output_length h; omega
     | have := bls12G1Add_ok_output_length h; omega
@@ -417,7 +417,7 @@ theorem run_ok_output_length_lt_two_pow_160
     | have := bls12PairingCheck_ok_output_length h; omega
     | have := bls12MapFpToG1_ok_output_length h; omega
     | have := bls12MapFp2ToG2_ok_output_length h; omega
-    | have := p256Verify_ok_output_length_le h; omega
+    | have := p256verify_ok_output_length_le h; omega
     | cases h
 
 

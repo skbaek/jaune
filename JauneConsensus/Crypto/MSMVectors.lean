@@ -15,7 +15,7 @@ def points (n : Nat) : Array Bls12G1 :=
 def scalars (n : Nat) : Array Nat :=
   (List.range n).toArray.map fun i => (i * 0x9e3779b97f4a7c15f39cc0605cedc834 + i ^ 7) % (2 ^ 256)
 
-def naive (ps : Array Bls12G1) (ss : Array Nat) : Bls12G1 := g1MsmSum (ps.toList.zip ss.toList)
+def naive (ps : Array Bls12G1) (ss : Array Nat) : Bls12G1 := bls12G1MsmSum (ps.toList.zip ss.toList)
 
 #guard g1Msm #[] #[] = naive #[] #[]
 #guard g1Msm #[blsG1Generator] #[0] = ⟨0, 0⟩

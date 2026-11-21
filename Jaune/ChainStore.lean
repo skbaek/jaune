@@ -151,7 +151,7 @@ wire-representable header carries, and the state root is the root of the empty
 world these synthetic snapshots pair with. That is P0.2 item 7 -- the fixtures
 satisfy the checked predicate for real, rather than the production store
 gaining a bypass for them. -/
-private def synthHeader (parentHash : U256) (number : Nat) (tag : Bytes) : Header :=
+private def syntheticHeader (parentHash : U256) (number : Nat) (tag : Bytes) : Header :=
   { parentHash := parentHash
     ommersHash := 0
     coinbase := 0
@@ -176,10 +176,10 @@ private def synthHeader (parentHash : U256) (number : Nat) (tag : Bytes) : Heade
     blockAccessListHash := none
     slotNumber := none }
 
-private def synthBlock (parentHash : U256) (number : Nat) (tag : Bytes) : Block :=
-  { header := synthHeader parentHash number tag, transactions := [], ommers := [], withdrawals := [] }
+private def syntheticBlock (parentHash : U256) (number : Nat) (tag : Bytes) : Block :=
+  { header := syntheticHeader parentHash number tag, transactions := [], ommers := [], withdrawals := [] }
 
-private def synthHash (b : Block) : U256 :=
+private def syntheticBlockHash (b : Block) : U256 :=
   (Header.toRlpItem b.header).toBytes.keccak
 
 private def chainOf (blocks : List Block) : BlockChain :=
@@ -197,49 +197,49 @@ every other one in a decidable `#guard`. -/
 private def tagsOf (chain : BlockChain) : List Bytes :=
   chain.blocks.map (fun b => b.header.extraData)
 
-private def gB : Block := synthBlock 0 0 [0x60]
-private def gH : U256 := synthHash gB
-private def a1B : Block := synthBlock gH 1 [0xA1]
-private def a1H : U256 := synthHash a1B
-private def b1B : Block := synthBlock gH 1 [0xB1]
-private def b1H : U256 := synthHash b1B
-private def a2B : Block := synthBlock a1H 2 [0xA2]
-private def a2H : U256 := synthHash a2B
-private def b2B : Block := synthBlock b1H 2 [0xB2]
-private def b2H : U256 := synthHash b2B
-private def b3B : Block := synthBlock b2H 3 [0xB3]
-private def b3H : U256 := synthHash b3B
+private def genesisBlock : Block := syntheticBlock 0 0 [0x60]
+private def genesisHash : U256 := syntheticBlockHash genesisBlock
+private def shortBranchBlock1 : Block := syntheticBlock genesisHash 1 [0xA1]
+private def shortBranchHash1 : U256 := syntheticBlockHash shortBranchBlock1
+private def longBranchBlock1 : Block := syntheticBlock genesisHash 1 [0xB1]
+private def longBranchHash1 : U256 := syntheticBlockHash longBranchBlock1
+private def shortBranchBlock2 : Block := syntheticBlock shortBranchHash1 2 [0xA2]
+private def shortBranchHash2 : U256 := syntheticBlockHash shortBranchBlock2
+private def longBranchBlock2 : Block := syntheticBlock longBranchHash1 2 [0xB2]
+private def longBranchHash2 : U256 := syntheticBlockHash longBranchBlock2
+private def longBranchBlock3 : Block := syntheticBlock longBranchHash2 3 [0xB3]
+private def longBranchHash3 : U256 := syntheticBlockHash longBranchBlock3
 
 -- The synthetic hashes are pairwise distinct, so the two branches and the
 -- rejected candidate cannot collide in the store.
-#guard ([gH, a1H, b1H, a2H, b2H, b3H].eraseDups).length = 6
+#guard ([genesisHash, shortBranchHash1, longBranchHash1, shortBranchHash2, longBranchHash2, longBranchHash3].eraseDups).length = 6
 
 -- Every synthetic snapshot is built through the real checker. There is no
 -- test-only constructor and no production bypass: if one of these chains
 -- failed retained-history validity or tip/root agreement, `checkedOf` would
 -- return `none` and the guards below would fail rather than skip.
-private def gC : Option CheckedBlockChain := checkedOf [gB]
-private def a1C : Option CheckedBlockChain := checkedOf [gB, a1B]
-private def b1C : Option CheckedBlockChain := checkedOf [gB, b1B]
-private def a2C : Option CheckedBlockChain := checkedOf [gB, a1B, a2B]
-private def b2C : Option CheckedBlockChain := checkedOf [gB, b1B, b2B]
-private def b3C : Option CheckedBlockChain := checkedOf [gB, b1B, b2B, b3B]
+private def genesisChain : Option CheckedBlockChain := checkedOf [genesisBlock]
+private def shortBranchChain1 : Option CheckedBlockChain := checkedOf [genesisBlock, shortBranchBlock1]
+private def longBranchChain1 : Option CheckedBlockChain := checkedOf [genesisBlock, longBranchBlock1]
+private def shortBranchChain2 : Option CheckedBlockChain := checkedOf [genesisBlock, shortBranchBlock1, shortBranchBlock2]
+private def longBranchChain2 : Option CheckedBlockChain := checkedOf [genesisBlock, longBranchBlock1, longBranchBlock2]
+private def longBranchChain3 : Option CheckedBlockChain := checkedOf [genesisBlock, longBranchBlock1, longBranchBlock2, longBranchBlock3]
 
-#guard [gC, a1C, b1C, a2C, b2C, b3C].all Option.isSome
+#guard [genesisChain, shortBranchChain1, longBranchChain1, shortBranchChain2, longBranchChain2, longBranchChain3].all Option.isSome
 -- The checker refuses a synthetic chain whose numbering or links are broken,
 -- so the guards above are evidence rather than coincidence.
-#guard (checkedOf [gB, a2B]).isNone
-#guard (checkedOf [a1B]).isNone
+#guard (checkedOf [genesisBlock, shortBranchBlock2]).isNone
+#guard (checkedOf [shortBranchBlock1]).isNone
 
 /-- Every key is derived from the snapshot being stored. -/
-private def store0? : Option ChainStore := gC.map ChainStore.init
+private def store0? : Option ChainStore := genesisChain.map ChainStore.init
 
 private def store2? : Option ChainStore := do
-  let g ← gC
-  let a1 ← a1C
-  let b1 ← b1C
-  let a2 ← a2C
-  let b2 ← b2C
+  let g ← genesisChain
+  let a1 ← shortBranchChain1
+  let b1 ← longBranchChain1
+  let a2 ← shortBranchChain2
+  let b2 ← longBranchChain2
   pure (((((ChainStore.init g).insert a1).insert b1).insert a2).insert b2)
 
 /-- The snapshot under `hash`, read as its tag trail. -/
@@ -261,27 +261,27 @@ private def rejectsAs (r : Except BlockValidationError CheckedBlockChain)
 -- Initialization: exactly the genesis snapshot, under the key the snapshot
 -- itself determines. No hash is supplied.
 #guard store0?.map ChainStore.size == some 1
-#guard findTags? store0? gH == some [[0x60]]
+#guard findTags? store0? genesisHash == some [[0x60]]
 
 -- Both of genesis's children find genesis -- not "the current tip" -- as their
 -- parent, and each fork block finds its own branch's snapshot.
-#guard store2?.map (fun s => (s.findParent gH).toOption.map (fun cc => tagsOf cc.val))
+#guard store2?.map (fun s => (s.findParent genesisHash).toOption.map (fun cc => tagsOf cc.val))
   == some (some [[0x60]])
-#guard store2?.map (fun s => (s.findParent a1H).toOption.map (fun cc => tagsOf cc.val))
+#guard store2?.map (fun s => (s.findParent shortBranchHash1).toOption.map (fun cc => tagsOf cc.val))
   == some (some [[0x60], [0xA1]])
-#guard store2?.map (fun s => (s.findParent b1H).toOption.map (fun cc => tagsOf cc.val))
+#guard store2?.map (fun s => (s.findParent longBranchHash1).toOption.map (fun cc => tagsOf cc.val))
   == some (some [[0x60], [0xB1]])
 
 -- Looking up A2 and B2 yields different snapshots: the branches stay separate.
-#guard findTags? store2? a2H == some [[0x60], [0xA1], [0xA2]]
-#guard findTags? store2? b2H == some [[0x60], [0xB1], [0xB2]]
-#guard findTags? store2? a2H != findTags? store2? b2H
+#guard findTags? store2? shortBranchHash2 == some [[0x60], [0xA1], [0xA2]]
+#guard findTags? store2? longBranchHash2 == some [[0x60], [0xB1], [0xB2]]
+#guard findTags? store2? shortBranchHash2 != findTags? store2? longBranchHash2
 
 -- The key invariant, now structural: every stored snapshot sits under the
 -- keccak of its own tip header, because that is the only key `insert` can use.
-#guard store2?.map (fun s => [gH, a1H, b1H, a2H, b2H].all fun h =>
+#guard store2?.map (fun s => [genesisHash, shortBranchHash1, longBranchHash1, shortBranchHash2, longBranchHash2].all fun h =>
   ((s.find? h).map CheckedBlockChain.tipHash) == some h) == some true
-#guard store2?.map (fun s => [gH, a1H, b1H, a2H, b2H].all fun h =>
+#guard store2?.map (fun s => [genesisHash, shortBranchHash1, longBranchHash1, shortBranchHash2, longBranchHash2].all fun h =>
   ((s.find? h).bind (fun cc => cc.val.tipHash?)) == some h) == some true
 
 -- Rejecting candidate B3 leaves the store -- and in particular B2's branch --
@@ -293,57 +293,57 @@ private def store3? : Option ChainStore :=
       (.intrinsicGasTooLow (.text "synthetic rejection of B3")))))
 
 #guard store3?.map ChainStore.size == store2?.map ChainStore.size
-#guard store3?.map (fun s => (s.find? b3H).isNone) == some true
-#guard findTags? store3? b2H == findTags? store2? b2H
-#guard findTags? store3? b2H == some [[0x60], [0xB1], [0xB2]]
-#guard findTags? store3? a2H == findTags? store2? a2H
+#guard store3?.map (fun s => (s.find? longBranchHash3).isNone) == some true
+#guard findTags? store3? longBranchHash2 == findTags? store2? longBranchHash2
+#guard findTags? store3? longBranchHash2 == some [[0x60], [0xB1], [0xB2]]
+#guard findTags? store3? shortBranchHash2 == findTags? store2? shortBranchHash2
 
 -- Had B3 been valid, the same fold would have added exactly its snapshot --
 -- under the key its own checked tip determines.
 private def store3'? : Option ChainStore := do
   let s ← store2?
-  let b3 ← b3C
+  let b3 ← longBranchChain3
   pure (s.addResult (.inl b3))
 
 #guard store3'?.map ChainStore.size
   == store2?.map (fun s => ChainStore.size s + 1)
-#guard findTags? store3'? b3H == some [[0x60], [0xB1], [0xB2], [0xB3]]
-#guard findTags? store3'? b2H == findTags? store2? b2H
+#guard findTags? store3'? longBranchHash3 == some [[0x60], [0xB1], [0xB2], [0xB3]]
+#guard findTags? store3'? longBranchHash2 == findTags? store2? longBranchHash2
 
 -- Unknown parents fail explicitly with the exact Step 6/9 identities: the
 -- all-zero hash is its own reason, and any other missing hash is
 -- `UNKNOWN_PARENT`. Both are failures, never silent fallbacks to some tip.
 #guard store2?.map (fun s => rejectsAs (s.findParent 0) .blockUnknownParentZero)
   == some true
-#guard store2?.map (fun s => rejectsAs (s.findParent b3H) .blockUnknownParent)
+#guard store2?.map (fun s => rejectsAs (s.findParent longBranchHash3) .blockUnknownParent)
   == some true
 #guard store2?.map (fun s => (s.findParent 0).toOption.isNone) == some true
-#guard store2?.map (fun s => (s.findParent b3H).toOption.isNone) == some true
+#guard store2?.map (fun s => (s.findParent longBranchHash3).toOption.isNone) == some true
 
 -- Final lookup by the fixture's `lastblockhash`: an imported hash yields its
 -- exact snapshot; a missing one is a runner-level failure that classifies to
 -- no canonical identity, so it can never satisfy an expected exception.
-#guard store2?.map (fun s => (s.findLast b2H).toOption.map (fun cc => tagsOf cc.val))
+#guard store2?.map (fun s => (s.findLast longBranchHash2).toOption.map (fun cc => tagsOf cc.val))
   == some (some [[0x60], [0xB1], [0xB2]])
-#guard store2?.map (fun s => (s.findLast a2H).toOption.map (fun cc => tagsOf cc.val))
+#guard store2?.map (fun s => (s.findLast shortBranchHash2).toOption.map (fun cc => tagsOf cc.val))
   == some (some [[0x60], [0xA1], [0xA2]])
-#guard store2?.map (fun s => (s.findLast b3H).toOption.isNone) == some true
+#guard store2?.map (fun s => (s.findLast longBranchHash3).toOption.isNone) == some true
 -- A `findLast` miss is an `ImportFailure`, which has no classification arm at
 -- all; the guard pins the constructor and its byte-identical render.
 #guard store2?.map (fun s =>
-  match s.findLast b3H with
+  match s.findLast longBranchHash3 with
   | .error (.harness _) => true
   | _ => false) == some true
 #guard store2?.map (fun s =>
-  match s.findLast b3H with
+  match s.findLast longBranchHash3 with
   | .error f => f.render ==
-      s!"ERROR : lastblockhash = {b3H} names no imported snapshot"
+      s!"ERROR : lastblockhash = {longBranchHash3} names no imported snapshot"
   | .ok _ => false) == some true
 
 -- Re-inserting an existing snapshot replaces rather than duplicates.
-#guard (do let s ← store2?; let a2 ← a2C; pure (s.insert a2).size)
+#guard (do let s ← store2?; let a2 ← shortBranchChain2; pure (s.insert a2).size)
   == store2?.map ChainStore.size
-#guard (do let s ← store2?; let a2 ← a2C; pure (findTags (s.insert a2) a2H))
-  == some (findTags? store2? a2H)
+#guard (do let s ← store2?; let a2 ← shortBranchChain2; pure (findTags (s.insert a2) shortBranchHash2))
+  == some (findTags? store2? shortBranchHash2)
 
 end Jaune

@@ -1,5 +1,5 @@
 import Jaune.Instructions.Store
-import Jaune.MessageCall.CheckedPlain
+import Jaune.MessageCall.Plain
 
 /-! Effect laws and semantic bridges for `SstoreRow` and `TstoreRow`.
 
@@ -10,7 +10,7 @@ bounds, gas-measure monotonicity, and exact world/substate/trail projections), a
 configuration and `Fork`, without introducing any unrestricted state-transforming function. Their
 agreement with the per-opcode arms is in `Jaune.Bridge.G2b.CheckedStoreAgreement`. -/
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -272,7 +272,7 @@ theorem Frame.State.applyStoreTouch_trail_of_none (rules : ForkRules) (recipient
     | none => rfl
     | some w => cases w <;> rfl)
 
-private theorem applyStoreTouch_account_nonstorage (rules : ForkRules) (recipient : Address)
+private theorem applyStoreTouch_balance_nonce_code (rules : ForkRules) (recipient : Address)
     {touch : StoreTouch} (hnot : ∀ k v, touch.write ≠ some (.transient k v))
     (s : Frame.State) (a : Address) :
     let a' := (s.applyStoreTouch rules recipient touch).account a
@@ -292,31 +292,31 @@ private theorem applyStoreTouch_account_nonstorage (rules : ForkRules) (recipien
       by_cases ha : recipient = a
       · subst ha
         dsimp only [Frame.State.setStorageValue, Frame.State.withWorld_world]
-        rw [State.setStorVal_get_self]
+        rw [State.setStorageValue_get_self]
         exact ⟨rfl, rfl, rfl⟩
       · dsimp only [Frame.State.setStorageValue, Frame.State.withWorld_world]
-        rw [State.setStorVal_get_ne _ ha]
+        rw [State.setStorageValue_get_ne _ ha]
         exact ⟨rfl, rfl, rfl⟩
 
 theorem Frame.State.applyStoreTouch_balance (rules : ForkRules) (recipient : Address)
     {touch : StoreTouch} (hnot : ∀ k v, touch.write ≠ some (.transient k v))
     (s : Frame.State) (a : Address) :
     (s.applyStoreTouch rules recipient touch).balance a = s.balance a :=
-  (applyStoreTouch_account_nonstorage rules recipient hnot s a).1
+  (applyStoreTouch_balance_nonce_code rules recipient hnot s a).1
 
 theorem Frame.State.applyStoreTouch_nonce (rules : ForkRules) (recipient : Address)
     {touch : StoreTouch} (hnot : ∀ k v, touch.write ≠ some (.transient k v))
     (s : Frame.State) (a : Address) :
     ((s.applyStoreTouch rules recipient touch).account a).nonce = (s.account a).nonce :=
-  (applyStoreTouch_account_nonstorage rules recipient hnot s a).2.1
+  (applyStoreTouch_balance_nonce_code rules recipient hnot s a).2.1
 
 theorem Frame.State.applyStoreTouch_code (rules : ForkRules) (recipient : Address)
     {touch : StoreTouch} (hnot : ∀ k v, touch.write ≠ some (.transient k v))
     (s : Frame.State) (a : Address) :
     (s.applyStoreTouch rules recipient touch).code a = s.code a :=
-  (applyStoreTouch_account_nonstorage rules recipient hnot s a).2.2
+  (applyStoreTouch_balance_nonce_code rules recipient hnot s a).2.2
 
-theorem Frame.State.applyStoreTouch_storageValue_ne_addr (rules : ForkRules) (recipient : Address)
+theorem Frame.State.applyStoreTouch_storageValue_ne_address (rules : ForkRules) (recipient : Address)
     {touch : StoreTouch} (hnot : ∀ k v, touch.write ≠ some (.transient k v))
     (s : Frame.State) {a : Address} (hne : recipient ≠ a) (k : U256) :
     (s.applyStoreTouch rules recipient touch).storageValue a k = s.storageValue a k := by
@@ -329,7 +329,7 @@ theorem Frame.State.applyStoreTouch_storageValue_ne_addr (rules : ForkRules) (re
     | storage sk sv =>
       rw [applyStoreTouch_world_storage rules recipient touch s hw]
       dsimp only [Frame.State.setStorageValue, Frame.State.withWorld_world]
-      rw [State.setStorVal_get_ne _ hne]
+      rw [State.setStorageValue_get_ne _ hne]
 
 theorem Frame.State.applyStoreTouch_storageValue_ne_key (rules : ForkRules) (recipient : Address)
     {touch : StoreTouch} (s : Frame.State) {k : U256}
@@ -350,7 +350,7 @@ theorem Frame.State.applyStoreTouch_storageValue_ne_key (rules : ForkRules) (rec
         intro heq
         subst heq
         exact hk sv hw
-      rw [State.setStorVal_get_self, Storage.get_set_ne _ hne]
+      rw [State.setStorageValue_get_self, Storage.get_set_ne _ hne]
 
 /-! ### `SstoreRow` effect laws -/
 
@@ -636,7 +636,7 @@ theorem SstoreRow.ofRules_run_fork_eq (f : Fork) (r : Frame.Running)
 `(stateGas, sstore, access, gas.storageClearRefund, blockAccessListRules.isSome)`. -/
 def PlainOp.sstoreRuleReads (rules : ForkRules) :
     Option StateGasRules × SstoreRules × AccessSchedule × Nat × Bool :=
-  (rules.stateGas, rules.sstore, rules.access, rules.gas.storageClearRefund,
+  (rules.stateGas, rules.sstore, rules.access, rules.gas.sstoreClearsSchedule,
     rules.blockAccessListRules.isSome)
 
 private theorem applyStoreTouch_eq_of {r1 r2 : ForkRules}
@@ -650,7 +650,7 @@ private theorem sstoreRow_ofRules_eq_of {r1 r2 : ForkRules}
     (hsg : r1.stateGas = r2.stateGas)
     (hss : r1.sstore = r2.sstore)
     (hacc : r1.access = r2.access)
-    (hclr : r1.gas.storageClearRefund = r2.gas.storageClearRefund) :
+    (hclr : r1.gas.sstoreClearsSchedule = r2.gas.sstoreClearsSchedule) :
     SstoreRow.ofRules r1 = SstoreRow.ofRules r2 := by
   unfold SstoreRow.ofRules
   cases hs1 : r1.stateGas with
@@ -845,7 +845,7 @@ theorem PlainOp.sstore_run_code (r : Frame.Running) (a : Address) :
     rcases err with ⟨e, m', touch⟩
     exact Frame.State.applyStoreTouch_code _ _ (SstoreRow.step_error hs).2.2.2.2.2.2.1 _ a
 
-theorem PlainOp.sstore_run_storageValue_ne_addr (r : Frame.Running) {a : Address}
+theorem PlainOp.sstore_run_storageValue_ne_address (r : Frame.Running) {a : Address}
     (hne : r.context.recipient ≠ a) (k : U256) :
     (match PlainOp.run r .sstore with | .ok s' | .error (_, s') => s'.storageValue a k) =
       r.state.storageValue a k := by
@@ -860,10 +860,10 @@ theorem PlainOp.sstore_run_storageValue_ne_addr (r : Frame.Running) {a : Address
       rw [hw]
       intro _ _ hc
       cases hc
-    exact Frame.State.applyStoreTouch_storageValue_ne_addr _ _ hnot _ hne k
+    exact Frame.State.applyStoreTouch_storageValue_ne_address _ _ hnot _ hne k
   | error err =>
     rcases err with ⟨e, m', touch⟩
-    exact Frame.State.applyStoreTouch_storageValue_ne_addr _ _
+    exact Frame.State.applyStoreTouch_storageValue_ne_address _ _
       (SstoreRow.step_error hs).2.2.2.2.2.2.1 _ hne k
 
 /-! ### `TstoreRow` effect laws and bridge -/
@@ -1105,4 +1105,4 @@ theorem PlainOp.tstore_run_gasMeasure_lt (r : Frame.Running) {s' : Frame.State}
     simp only [Machine.gasMeasure, TstoreRow.ofRules, Gas.warmStorageReadCost] at hle ⊢
     omega
 
-end Jaune.Checked
+end Jaune

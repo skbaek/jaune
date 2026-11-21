@@ -24,32 +24,32 @@ lemma toNat_toUInt16 {n : ℕ} : UInt16.toNat n.toUInt16 = n ↾ 16 := UInt16.to
 lemma toNat_toUInt32 {n : ℕ} : UInt32.toNat n.toUInt32 = n ↾ 32 := UInt32.toNat_ofNat
 lemma toNat_toUInt64 {n : ℕ} : UInt64.toNat (n.toUInt64) = n ↾ 64 := UInt64.toNat_ofNat
 
-lemma Nat.lo_lo_of_le {k m n : Nat} (le : m ≤ n) :
+lemma Nat.lowBits_lowBits_of_le {k m n : Nat} (le : m ≤ n) :
     (k ↾ m) ↾ n = k ↾ m := mod_mod_of_dvd' <| Nat.pow_dvd_pow _ le
 
-lemma Nat.lo_lo_of_ge {k m n : Nat} (ge : m ≥ n) :
+lemma Nat.lowBits_lowBits_of_ge {k m n : Nat} (ge : m ≥ n) :
     (k ↾ m) ↾ n = k ↾ n := mod_mod_of_dvd _ <| Nat.pow_dvd_pow _ ge
 
-lemma Nat.hi_or_lo (a b : Nat) : a ↿ b ||| a ↾ b = a := by
-  simp only [Nat.hi, Nat.lo]
+lemma Nat.clearLowBits_or_lowBits (a b : Nat) : a ↿ b ||| a ↾ b = a := by
+  simp only [Nat.clearLowBits, Nat.lowBits]
   rw [Nat.shiftLeft_eq, Nat.shiftRight_eq_div_pow]
   rw [← @Nat.add_eq_or b, Nat.div_add_mod']
   · apply Nat.dvd_mul_left
   · apply Nat.mod_lt _ (Nat.pow_pos _); omega
 
-lemma Nat.or_eq_lo_add {k m n : Nat} :
+lemma Nat.or_eq_lowBits_add {k m n : Nat} :
     (k >>> n ↾ m) <<< n ||| k ↾ n = k ↾ (m + n) := by
-  rw [← @Nat.lo_add_shr k m n]
-  rw [← @Nat.lo_lo_of_ge k (m + n) n (by omega)]
-  apply Nat.hi_or_lo
+  rw [← @Nat.lowBits_add_shiftRight k m n]
+  rw [← @Nat.lowBits_lowBits_of_ge k (m + n) n (by omega)]
+  apply Nat.clearLowBits_or_lowBits
 
 lemma toNat_toU128 (n : Nat) : n.toU128.toNat = n ↾ 128 := by
   simp only [Nat.toU128, U128.toNat]; rw [toNat_toUInt64, toNat_toUInt64]
-  apply Nat.or_eq_lo_add
+  apply Nat.or_eq_lowBits_add
 
 lemma Nat.toNat_toAddress (n : Nat) : n.toAddress.toNat = n ↾ 160 := by
   simp only [Nat.toAddress, Address.toNat]; rw [toNat_toUInt32, toNat_toU128]
-  apply Nat.or_eq_lo_add
+  apply Nat.or_eq_lowBits_add
 
 lemma toUInt32_toNat {x : UInt32} : x.toNat.toUInt32 = x := UInt32.ofNat_toNat
 
@@ -85,13 +85,13 @@ lemma U128.zero_or {x : U128} : (0 ||| x) = x := by
 lemma Nat.div_eq_zero_of_lt {k x : Nat} (h : x < k) : x / k = 0 := by
   rw [Nat.div_eq_zero_iff_lt (by omega)]; apply h
 
-lemma UInt8.toNat_add_lo (a b : UInt8) : (a + b).toNat = (a.toNat + b.toNat) ↾ 8 :=
+lemma UInt8.toNat_add_lowBits (a b : UInt8) : (a + b).toNat = (a.toNat + b.toNat) ↾ 8 :=
   UInt8.toNat_add a b
 
-lemma UInt64.toNat_add_lo (a b : UInt64) : (a + b).toNat = (a.toNat + b.toNat) ↾ 64 :=
+lemma UInt64.toNat_add_lowBits (a b : UInt64) : (a + b).toNat = (a.toNat + b.toNat) ↾ 64 :=
   UInt64.toNat_add a b
 
-lemma Nat.lo_eq_of_lt {a b : ℕ} (h : a < (2 ^ b)) : a ↾ b = a :=
+lemma Nat.lowBits_eq_of_lt {a b : ℕ} (h : a < (2 ^ b)) : a ↾ b = a :=
   Nat.mod_eq_of_lt h
 
 lemma Nat.add_mod_eq_add_sub {k m n : Nat} (m_lt : m < k)
@@ -105,14 +105,14 @@ lemma Nat.add_mod_eq_add_sub {k m n : Nat} (m_lt : m < k)
 
 lemma UInt64.toNat_overflow {x y : UInt64} :
     x + y < x ↔ 2 ^ 64 ≤ x.toNat + y.toNat := by
-  rw [UInt64.lt_iff_toNat_lt, UInt64.toNat_add_lo]
+  rw [UInt64.lt_iff_toNat_lt, UInt64.toNat_add_lowBits]
   by_cases h : x.toNat + y.toNat < 2 ^ 64
-  · rw [Nat.lo_eq_of_lt h]
+  · rw [Nat.lowBits_eq_of_lt h]
     apply iff_of_false <;> omega
   · rw [not_lt] at h; apply iff_of_true _ h
     have x_lt := @UInt64.toNat_lt x
     have y_lt := @UInt64.toNat_lt y
-    rw [Nat.lo, Nat.add_mod_eq_add_sub x_lt y_lt h]
+    rw [Nat.lowBits, Nat.add_mod_eq_add_sub x_lt y_lt h]
     omega
 
 lemma ite_distrib {α β} {f : α → β} {p : Prop} [Decidable p] {a b : α} :
@@ -129,17 +129,17 @@ lemma ite_eq_ite_of_iff {α} {p q : Prop} [Decidable p] [Decidable q]
 lemma toUInt64_toNat (x : UInt64) : x.toNat.toUInt64 = x :=
   UInt64.ofNat_toNat
 
-lemma UInt64.ofNat_eq_iff_lo_eq_toNat (a : Nat) (b : UInt64) :
+lemma UInt64.ofNat_eq_iff_lowBits_eq_toNat (a : Nat) (b : UInt64) :
     a.toUInt64 = b ↔ a ↾ 64 = b.toNat :=
   UInt64.ofNat_eq_iff_mod_eq_toNat a b
 
-lemma Nat.lo_lo {m n : Nat} : (m ↾ n) ↾ n = m ↾ n :=
+lemma Nat.lowBits_lowBits {m n : Nat} : (m ↾ n) ↾ n = m ↾ n :=
   Nat.mod_mod _ _
 
-lemma lo_toUInt64 (n : Nat) : (n ↾ 64).toUInt64 = n.toUInt64 := by
-  rw [← UInt64.toNat_inj, toNat_toUInt64, toNat_toUInt64, Nat.lo_lo]
+lemma lowBits_toUInt64 (n : Nat) : (n ↾ 64).toUInt64 = n.toUInt64 := by
+  rw [← UInt64.toNat_inj, toNat_toUInt64, toNat_toUInt64, Nat.lowBits_lowBits]
 
-lemma Nat.or_lo {k m n : Nat} : (m ||| n) ↾ k = (m ↾ k) ||| (n ↾ k) :=
+lemma Nat.or_lowBits {k m n : Nat} : (m ||| n) ↾ k = (m ↾ k) ||| (n ↾ k) :=
   Nat.or_mod_two_pow
 
 /-
@@ -148,14 +148,14 @@ definitions are in `Basic.lean`. The lemmas live here rather than beside them
 because their proofs need the `Nat.lo`/`Nat.hi` algebra declared above.
 -/
 
-lemma pair_aux (n m : Nat) :
+lemma reassemble_halves (n m : Nat) :
     ((n >>> m ↾ m) ↾ (m + m)) <<< m ↾ (m + m) ||| (n ↾ m) ↾ (m + m) =
       n ↾ (m + m) := by
-  rw [Nat.lo_lo_of_le (by omega)]
-  rw [Nat.lo_lo_of_le (by omega)]
-  apply Eq.trans _ <| high_or_low_eq_self (n ↾ (m + m)) m Nat.lo_lt
-  apply congr_arg₂  _ _ (Nat.lo_lo_of_ge (by omega)).symm
-  rw [@Nat.lo_add_shr n m m, ← Nat.lo_eq _ m, Nat.lo_lo]; rfl
+  rw [Nat.lowBits_lowBits_of_le (by omega)]
+  rw [Nat.lowBits_lowBits_of_le (by omega)]
+  apply Eq.trans _ <| high_or_low_eq_self (n ↾ (m + m)) m Nat.lowBits_lt
+  apply congr_arg₂  _ _ (Nat.lowBits_lowBits_of_ge (by omega)).symm
+  rw [@Nat.lowBits_add_shiftRight n m m, ← Nat.lowBits_eq _ m, Nat.lowBits_lowBits]; rfl
 
 lemma Nat.toUInt16_toUInt8 (n : Nat) : n.toUInt8.toUInt16 = (n ↾ 8).toUInt16 := by
   have h0 : n.toUInt8.toUInt16 = n.toUInt16 % (2 ^ 8) :=
@@ -164,19 +164,19 @@ lemma Nat.toUInt16_toUInt8 (n : Nat) : n.toUInt8.toUInt16 = (n ↾ 8).toUInt16 :
   have h1: (n.toUInt16 % 2 ^ 8).toNat = n ↾ 8 := by
     have rw : UInt16.toNat (2 ^ 8) = 2 ^ 8 := rfl
     rw [UInt16.toNat_mod, rw]; clear rw
-    rw [toNat_toUInt16, ← Nat.lo_eq]
-    apply Nat.lo_lo_of_ge (by omega)
+    rw [toNat_toUInt16, ← Nat.lowBits_eq]
+    apply Nat.lowBits_lowBits_of_ge (by omega)
   have h2 : (n ↾ 8).toUInt16 = n.toUInt16 % (2 ^ 8) := by
     apply (UInt16.ofNat_eq_iff_mod_eq_toNat _ _).mpr
-    apply Eq.trans (Nat.lo_lo_of_le (by omega)) h1.symm
+    apply Eq.trans (Nat.lowBits_lowBits_of_le (by omega)) h1.symm
   apply Eq.trans h0 h2.symm
 
 lemma List.toUInt16_pair (n : Nat) :
     Bytes.toUInt16 [(n >>> 8).toUInt8, n.toUInt8] = n.toUInt16 := by
   have h : (n >>> 8 ↾ 8).toUInt16 <<< 8 ||| (n ↾ 8).toUInt16 = n.toUInt16 := by
     rw [← UInt16.toNat_inj, toNat_toUInt16, UInt16.toNat_or, toNat_toUInt16]
-    rw [UInt16.toNat_shiftLeft, toNat_toUInt16]; apply pair_aux n 8
-  simp [Bytes.toUInt16, Bytes.getElem_packV, Bytes.pack, takeRightD, List.takeD,
+    rw [UInt16.toNat_shiftLeft, toNat_toUInt16]; apply reassemble_halves n 8
+  simp [Bytes.toUInt16, Bytes.getElem_packVector, Bytes.pack, takeRightD, List.takeD,
     List.reverse, List.reverseAux, List.tail, List.headD]
   rw [Nat.toUInt16_toUInt8, Nat.toUInt16_toUInt8, h]
 
@@ -187,33 +187,33 @@ lemma Nat.toUInt32_toUInt16 (n : Nat) : n.toUInt16.toUInt32 = (n ↾ 16).toUInt3
   have h1: (n.toUInt32 % 2 ^ 16).toNat = n ↾ 16 := by
     have rw : UInt32.toNat (2 ^ 16) = 2 ^ 16 := rfl
     rw [UInt32.toNat_mod, rw]; clear rw
-    rw [toNat_toUInt32, ← Nat.lo_eq]
-    apply Nat.lo_lo_of_ge (by omega)
+    rw [toNat_toUInt32, ← Nat.lowBits_eq]
+    apply Nat.lowBits_lowBits_of_ge (by omega)
   have h2 : (n ↾ 16).toUInt32 = n.toUInt32 % (2 ^ 16) := by
     apply (UInt32.ofNat_eq_iff_mod_eq_toNat _ _).mpr
-    apply Eq.trans (Nat.lo_lo_of_le (by omega)) h1.symm
+    apply Eq.trans (Nat.lowBits_lowBits_of_le (by omega)) h1.symm
   apply Eq.trans h0 h2.symm
 
-lemma toUInt32_eq_concat (n : Nat) :
-    n.toUInt32 = UInt16.concat (n >>> 16).toUInt16 n.toUInt16 := by
+lemma toUInt32_eq_append (n : Nat) :
+    n.toUInt32 = UInt16.append (n >>> 16).toUInt16 n.toUInt16 := by
   rw [← UInt32.toNat_inj, toNat_toUInt32]
-  simp only [UInt16.concat, Nat.toUInt32_toUInt16]
-  rw [UInt32.toNat_or, UInt32.toNat_shiftLeft_lo, toNat_toUInt32, toNat_toUInt32]
-  rw [Nat.lo_lo_of_le (by omega), Nat.lo_lo_of_le (by omega)]
+  simp only [UInt16.append, Nat.toUInt32_toUInt16]
+  rw [UInt32.toNat_or, UInt32.toNat_shiftLeft_lowBits, toNat_toUInt32, toNat_toUInt32]
+  rw [Nat.lowBits_lowBits_of_le (by omega), Nat.lowBits_lowBits_of_le (by omega)]
   have rw : (UInt32.toNat 16 % 32) = 16 := rfl
   rw [rw]; clear rw
   have rw : (n >>> 16 ↾ 16) <<< 16 ↾ 32 = (n ↾ 32) ↿ 16 := by
-    rw [← Nat.lo_add_shr, ← Nat.hi_eq]
-    apply Nat.lo_eq_of_lt
-    apply lt_of_le_of_lt (Nat.hi_le _ _) Nat.lo_lt
-  rw [rw, ← @Nat.lo_lo_of_ge n 32 16 (by omega)]
-  apply (Nat.hi_or_lo _ _).symm
+    rw [← Nat.lowBits_add_shiftRight, ← Nat.clearLowBits_eq]
+    apply Nat.lowBits_eq_of_lt
+    apply lt_of_le_of_lt (Nat.clearLowBits_le _ _) Nat.lowBits_lt
+  rw [rw, ← @Nat.lowBits_lowBits_of_ge n 32 16 (by omega)]
+  apply (Nat.clearLowBits_or_lowBits _ _).symm
 
 lemma List.toUInt32_pair (n : Nat) (n_lt : n < 2 ^ 16) :
     Bytes.toUInt32 [(n >>> 8).toUInt8, n.toUInt8] = n.toUInt32 := by
   simp only [ Bytes.toUInt32, Bytes.pack, takeRightD, List.takeD,
     List.reverse, List.reverseAux, List.tail, List.headD, List.take, List.drop ]
-  apply Eq.trans _ (toUInt32_eq_concat _).symm
+  apply Eq.trans _ (toUInt32_eq_append _).symm
   apply congr_arg₂ _ _ (congr_arg _ _)
   · apply congr_arg (λ x : UInt32 => x <<< 16) <| congr_arg _ _
     rw [Nat.shiftRight_eq_div_pow, Nat.div_eq_zero_of_lt (by omega)]; rfl
@@ -226,33 +226,33 @@ lemma Nat.toUInt64_toUInt32 (n : Nat) : n.toUInt32.toUInt64 = (n ↾ 32).toUInt6
   have h1: (n.toUInt64 % 2 ^ 32).toNat = n ↾ 32 := by
     have rw : UInt64.toNat (2 ^ 32) = 2 ^ 32 := rfl
     rw [UInt64.toNat_mod, rw]; clear rw
-    rw [toNat_toUInt64, ← Nat.lo_eq]
-    apply Nat.lo_lo_of_ge (by omega)
+    rw [toNat_toUInt64, ← Nat.lowBits_eq]
+    apply Nat.lowBits_lowBits_of_ge (by omega)
   have h2 : (n ↾ 32).toUInt64 = n.toUInt64 % (2 ^ 32) := by
     apply (UInt64.ofNat_eq_iff_mod_eq_toNat _ _).mpr
-    apply Eq.trans (Nat.lo_lo_of_le (by omega)) h1.symm
+    apply Eq.trans (Nat.lowBits_lowBits_of_le (by omega)) h1.symm
   apply Eq.trans h0 h2.symm
 
-lemma toUInt64_eq_concat (n : Nat) :
-    n.toUInt64 = UInt32.concat (n >>> 32).toUInt32 n.toUInt32 := by
+lemma toUInt64_eq_append (n : Nat) :
+    n.toUInt64 = UInt32.append (n >>> 32).toUInt32 n.toUInt32 := by
   rw [← UInt64.toNat_inj, toNat_toUInt64]
-  simp only [UInt32.concat, Nat.toUInt64_toUInt32]
-  rw [UInt64.toNat_or, UInt64.toNat_shiftLeft_lo, toNat_toUInt64, toNat_toUInt64]
-  rw [Nat.lo_lo_of_le (by omega), Nat.lo_lo_of_le (by omega)]
+  simp only [UInt32.append, Nat.toUInt64_toUInt32]
+  rw [UInt64.toNat_or, UInt64.toNat_shiftLeft_lowBits, toNat_toUInt64, toNat_toUInt64]
+  rw [Nat.lowBits_lowBits_of_le (by omega), Nat.lowBits_lowBits_of_le (by omega)]
   have rw : (UInt64.toNat 32 % 64) = 32 := rfl
   rw [rw]; clear rw
   have rw : (n >>> 32 ↾ 32) <<< 32 ↾ 64 = (n ↾ 64) ↿ 32 := by
-    rw [← Nat.lo_add_shr, ← Nat.hi_eq]
-    apply Nat.lo_eq_of_lt
-    apply lt_of_le_of_lt (Nat.hi_le _ _) Nat.lo_lt
-  rw [rw, ← @Nat.lo_lo_of_ge n 64 32 (by omega)]
-  apply (Nat.hi_or_lo _ _).symm
+    rw [← Nat.lowBits_add_shiftRight, ← Nat.clearLowBits_eq]
+    apply Nat.lowBits_eq_of_lt
+    apply lt_of_le_of_lt (Nat.clearLowBits_le _ _) Nat.lowBits_lt
+  rw [rw, ← @Nat.lowBits_lowBits_of_ge n 64 32 (by omega)]
+  apply (Nat.clearLowBits_or_lowBits _ _).symm
 
 lemma List.toUInt64_pair (n : Nat) (n_lt : n < 2 ^ 16) :
     Bytes.toUInt64 [(n >>> 8).toUInt8, n.toUInt8] = n.toUInt64 := by
   simp only [ Bytes.toUInt64, Bytes.pack, takeRightD, List.takeD,
     List.reverse, List.reverseAux, List.tail, List.headD, List.take, List.drop ]
-  apply Eq.trans _ (toUInt64_eq_concat _).symm
+  apply Eq.trans _ (toUInt64_eq_append _).symm
   apply congr_arg₂ _ _ (congr_arg _ _)
   · apply congr_arg (λ x : UInt64 => x <<< 32) <| congr_arg _ _
     rw [Nat.shiftRight_eq_div_pow, Nat.div_eq_zero_of_lt (by omega)]; rfl
@@ -262,20 +262,20 @@ lemma List.toU256_pair (n : Nat) (n_lt : n < 2 ^ 16):
     Bytes.toU256 [(n >>> 8).toUInt8, n.toUInt8] = n.toU256 := by
   have hlow : ∀ a b : UInt8, UInt8.toUInt64 a <<< 8 ||| UInt8.toUInt64 b = Bytes.toUInt64 [a, b] := by
     intro a b
-    simp only [ Bytes.toUInt64, Bytes.toUInt32, Bytes.toUInt16, Bytes.getElem_packV,
+    simp only [ Bytes.toUInt64, Bytes.toUInt32, Bytes.toUInt16, Bytes.getElem_packVector,
       Bytes.pack, List.takeRightD, List.takeD,
       List.reverse, List.reverseAux, List.tail, List.headD, List.take, List.drop,
       List.getD_cons_zero, List.getD_cons_succ ]
     simp
     apply congrArg (fun x : UInt64 => x ||| b.toUInt64)
     rw [← UInt64.toNat_inj]
-    rw [UInt64.toNat_mod, UInt64.toNat_mod, UInt64.toNat_shiftLeft_lo]
+    rw [UInt64.toNat_mod, UInt64.toNat_mod, UInt64.toNat_shiftLeft_lowBits]
     have hw : UInt64.toNat (UInt8.toUInt64 a) = UInt8.toNat a := by cases a; rfl
     have h8 : UInt64.toNat 8 % 64 = 8 := rfl
     have h32 : UInt64.toNat 4294967296 = 4294967296 := rfl
     have h16 : UInt64.toNat 65536 = 65536 := rfl
     rw [hw, h8, h32, h16]
-    simp only [Nat.shiftLeft_eq, Nat.lo]
+    simp only [Nat.shiftLeft_eq, Nat.lowBits]
     have h := UInt8.toNat_lt a
     omega
   show Bytes.toU256 [(n >>> 8).toUInt8, n.toUInt8] = n.toU256
@@ -290,18 +290,18 @@ lemma toU128_toNat (x : U128) : x.toNat.toU128 = x := by
   apply congr_arg₂
   · rw [Nat.shiftRight_or_distrib, Nat.shiftLeft_shiftRight]
     rw [Nat.shiftRight_eq_zero _ _ (UInt64.toNat_lt _), Nat.or_zero, toUInt64_toNat]
-  · rw [← lo_toUInt64, Nat.or_lo, Nat.shl_lo_eq_zero_of_le (by omega)]
-    rw [Nat.zero_or, lo_toUInt64, toUInt64_toNat]
+  · rw [← lowBits_toUInt64, Nat.or_lowBits, Nat.shiftLeft_lowBits_eq_zero_of_le (by omega)]
+    rw [Nat.zero_or, lowBits_toUInt64, toUInt64_toNat]
 
 lemma U128.toNat_inj (xs ys : U128) : xs.toNat = ys.toNat ↔ xs = ys := by
   constructor <;> intro h
   · rw [← toU128_toNat xs, ← toU128_toNat ys, h]
   · simp [h]
 
-lemma lo_toU128 (n : Nat) : (n ↾ 128).toU128 = n.toU128 := by
-  rw [← U128.toNat_inj, toNat_toU128, toNat_toU128, Nat.lo_lo]
+lemma lowBits_toU128 (n : Nat) : (n ↾ 128).toU128 = n.toU128 := by
+  rw [← U128.toNat_inj, toNat_toU128, toNat_toU128, Nat.lowBits_lowBits]
 
-lemma toU128_eq_iff_lo_eq_toNat (a : Nat) (b : U128) :
+lemma toU128_eq_iff_lowBits_eq_toNat (a : Nat) (b : U128) :
     a.toU128 = b ↔ a ↾ 128 = b.toNat := by
   constructor <;> intro h
   · rw [← h, toNat_toU128]
@@ -335,8 +335,8 @@ lemma toU256_toNat (x : U256) : x.toNat.toU256 = x := by
   apply congr_arg₂
   · rw [Nat.shiftRight_or_distrib, Nat.shiftLeft_shiftRight]
     rw [Nat.shiftRight_eq_zero _ _ U128.toNat_lt, Nat.or_zero, toU128_toNat]
-  · rw [← lo_toU128, Nat.or_lo, Nat.shl_lo_eq_zero_of_le (by omega)]
-    rw [Nat.zero_or, lo_toU128, toU128_toNat]
+  · rw [← lowBits_toU128, Nat.or_lowBits, Nat.shiftLeft_lowBits_eq_zero_of_le (by omega)]
+    rw [Nat.zero_or, lowBits_toU128, toU128_toNat]
 
 theorem U256.toNat_inj (xs ys : U256) (eq : xs.toNat = ys.toNat) : xs = ys := by
   rw [← toU256_toNat xs, ← toU256_toNat ys, eq]
@@ -348,10 +348,10 @@ interface downstream developments consume instead of unfolding definitions.
 
 theorem U256.toNat_toU256 (n : Nat) : (Nat.toU256 n).toNat = n ↾ 256 := by
   simp only [Nat.toU256, U256.toNat]; rw [toNat_toU128, toNat_toU128]
-  apply Nat.or_eq_lo_add
+  apply Nat.or_eq_lowBits_add
 
 theorem U256.toNat_toU256_of_lt {n : Nat} (h : n < 2 ^ 256) :
-    (Nat.toU256 n).toNat = n := by rw [U256.toNat_toU256, Nat.lo_eq_of_lt h]
+    (Nat.toU256 n).toNat = n := by rw [U256.toNat_toU256, Nat.lowBits_eq_of_lt h]
 
 theorem U256.toNat_mul (x y : U256) :
     (x * y).toNat = (x.toNat * y.toNat) ↾ 256 := U256.toNat_toU256 _
@@ -438,19 +438,19 @@ lemma Nat.lt_of_lt_high {sz high low high' low' : Nat}
     · apply Nat.mul_le_mul_right _ h_le
     · apply Nat.lt_add_right _ h_low
 
-lemma Nat.shl_or_lt_shl_or_of_left {k m n m' n' : Nat}
+lemma Nat.shiftLeft_or_lt_shiftLeft_or_of_left {k m n m' n' : Nat}
     (m_lt_m' : m < m') (n_lt : n < 2 ^ k) (n'_lt : n' < 2 ^ k) :
     m <<< k ||| n < m' <<< k ||| n' := by
-  rw [← Nat.add_eq_or two_pow_dvd_shl n_lt]
-  rw [← Nat.add_eq_or two_pow_dvd_shl n'_lt]
+  rw [← Nat.add_eq_or two_pow_dvd_shiftLeft n_lt]
+  rw [← Nat.add_eq_or two_pow_dvd_shiftLeft n'_lt]
   simp only [Nat.shiftLeft_eq]
   apply lt_of_lt_high m_lt_m' n_lt
 
-lemma Nat.shl_or_lt_shl_or_of_right {k m n n' : Nat}
+lemma Nat.shiftLeft_or_lt_shiftLeft_or_of_right {k m n n' : Nat}
     (n_lt : n < n') (n'_lt : n' < 2 ^ k) :
     m <<< k ||| n < m <<< k ||| n' := by
-  rw [← Nat.add_eq_or two_pow_dvd_shl (lt_trans n_lt n'_lt)]
-  rw [← Nat.add_eq_or two_pow_dvd_shl n'_lt]
+  rw [← Nat.add_eq_or two_pow_dvd_shiftLeft (lt_trans n_lt n'_lt)]
+  rw [← Nat.add_eq_or two_pow_dvd_shiftLeft n'_lt]
   simp only [Nat.shiftLeft_eq]
   rw [Nat.add_lt_add_iff_left]; apply n_lt
 
@@ -459,8 +459,8 @@ lemma U128.toNat_lt_toNat {a b : U128} (h : a < b) :
   rcases a with ⟨_, _⟩; rcases b with ⟨_, _⟩
   rcases h with h | h <;> simp at h
   · rw [UInt64.lt_iff_toNat_lt] at h
-    apply Nat.shl_or_lt_shl_or_of_left h (UInt64.toNat_lt _) (UInt64.toNat_lt _)
-  · rw [h.1]; apply Nat.shl_or_lt_shl_or_of_right _ (UInt64.toNat_lt _)
+    apply Nat.shiftLeft_or_lt_shiftLeft_or_of_left h (UInt64.toNat_lt _) (UInt64.toNat_lt _)
+  · rw [h.1]; apply Nat.shiftLeft_or_lt_shiftLeft_or_of_right _ (UInt64.toNat_lt _)
     rw [← UInt64.lt_iff_toNat_lt]; apply h.2
 
 lemma U128.toNat_le_toNat {a b : U128} (h : a ≤ b) : a.toNat ≤ b.toNat := by
@@ -483,8 +483,8 @@ lemma U256.toNat_lt_toNat {a b : U256} (h : a < b) :
   rcases a with ⟨_, _⟩; rcases b with ⟨_, _⟩
   rcases h with h | h <;> simp at h
   · rw [U128.lt_iff_toNat_lt_toNat] at h
-    apply Nat.shl_or_lt_shl_or_of_left h U128.toNat_lt U128.toNat_lt
-  · rw [h.1]; apply Nat.shl_or_lt_shl_or_of_right _ U128.toNat_lt
+    apply Nat.shiftLeft_or_lt_shiftLeft_or_of_left h U128.toNat_lt U128.toNat_lt
+  · rw [h.1]; apply Nat.shiftLeft_or_lt_shiftLeft_or_of_right _ U128.toNat_lt
     rw [← U128.lt_iff_toNat_lt_toNat]; apply h.2
 
 lemma U128.le_of_lt {a b : U128} (h : a < b) : a ≤ b := by
@@ -557,15 +557,15 @@ lemma U128.le_of_toNat_le_toNat {a b : U128} : a.toNat ≤ b.toNat → a ≤ b :
 lemma U256.le_of_toNat_le_toNat {a b : U256} : a.toNat ≤ b.toNat → a ≤ b :=
   U256.le_iff_toNat_le_toNat.mpr
 
-lemma Nat.lo_add_lo (m n k : ℕ) : (m ↾ k + n) ↾ k = (m + n) ↾ k :=
+lemma Nat.lowBits_add_lowBits (m n k : ℕ) : (m ↾ k + n) ↾ k = (m + n) ↾ k :=
   Nat.mod_add_mod _ _ _
 
 lemma U128.toNat_add (x y : U128) :
     (x + y).toNat = (x.toNat + y.toNat) ↾ 128 := by
   rw [U128.add_eq]; simp only [U128.toNat]
-  rw [Nat.shl_or_add_shl_or_lo_add (UInt64.toNat_lt _) (UInt64.toNat_lt _)]
-  apply congr_arg₂ _ (congr_arg₂ _ _ rfl) (UInt64.toNat_add_lo _ _)
-  rw [UInt64.toNat_add_lo, UInt64.toNat_add_lo, Nat.lo_add_lo]
+  rw [Nat.shiftLeft_or_add_shiftLeft_or_lowBits_add (UInt64.toNat_lt _) (UInt64.toNat_lt _)]
+  apply congr_arg₂ _ (congr_arg₂ _ _ rfl) (UInt64.toNat_add_lowBits _ _)
+  rw [UInt64.toNat_add_lowBits, UInt64.toNat_add_lowBits, Nat.lowBits_add_lowBits]
   apply congr_arg₂ _ (congr_arg₂ _ rfl _) rfl
   rw [← ite_not, @ite_distrib _ _ UInt64.toNat]
   apply ite_eq_ite_of_iff _ rfl rfl
@@ -575,20 +575,20 @@ lemma U128.toNat_overflow {x y : U128} :
     x + y < x ↔ 2 ^ 128 ≤ x.toNat + y.toNat := by
   rw [U128.lt_iff_toNat_lt_toNat, U128.toNat_add]
   by_cases h : x.toNat + y.toNat < 2 ^ 128
-  · rw [Nat.lo_eq_of_lt h]
+  · rw [Nat.lowBits_eq_of_lt h]
     apply iff_of_false <;> omega
   · rw [_root_.not_lt] at h; apply iff_of_true _ h
     have x_lt := @U128.toNat_lt x
     have y_lt := @U128.toNat_lt y
-    rw [Nat.lo, Nat.add_mod_eq_add_sub x_lt y_lt h]
+    rw [Nat.lowBits, Nat.add_mod_eq_add_sub x_lt y_lt h]
     omega
 
 lemma U256.toNat_add (x y : U256) :
     (x + y).toNat = (x.toNat + y.toNat) ↾ 256 := by
   rw [U256.add_eq]; simp only [U256.toNat]
-  rw [Nat.shl_or_add_shl_or_lo_add U128.toNat_lt U128.toNat_lt]
+  rw [Nat.shiftLeft_or_add_shiftLeft_or_lowBits_add U128.toNat_lt U128.toNat_lt]
   apply congr_arg₂ _ (congr_arg₂ _ _ rfl) (U128.toNat_add _ _)
-  rw [U128.toNat_add, U128.toNat_add, Nat.lo_add_lo]
+  rw [U128.toNat_add, U128.toNat_add, Nat.lowBits_add_lowBits]
   apply congr_arg₂ _ (congr_arg₂ _ rfl _) rfl
   rw [← ite_not, @ite_distrib _ _ U128.toNat]
   apply ite_eq_ite_of_iff _ rfl rfl
@@ -599,7 +599,7 @@ def U256.AddNoOverflow (xs ys : U256) : Prop := xs.toNat + ys.toNat < 2 ^ 256
 
 lemma U256.toNat_add_eq_of_add_no_overflow (x y : U256) (h : U256.AddNoOverflow x y) :
     (x + y).toNat = (x.toNat + y.toNat) := by
-  rw [U256.toNat_add, Nat.lo_eq_of_lt h]
+  rw [U256.toNat_add, Nat.lowBits_eq_of_lt h]
 
 theorem U256.add_comm {xs ys : U256} : xs + ys = ys + xs := by
   apply U256.toNat_inj
@@ -619,7 +619,7 @@ lemma toAddress_toU256 (a : Address) : a.toU256.toAddress = a := by
 theorem Address.toU256_inj {x y : Address} (eq : x.toU256 = y.toU256) : x = y := by
   rw [← toAddress_toU256 x, ← toAddress_toU256 y, eq]
 
-lemma UInt64.toNat_sub_lo {a b : UInt64} :
+lemma UInt64.toNat_sub_lowBits {a b : UInt64} :
     (a - b).toNat = (2 ^ 64 + a.toNat - b.toNat) ↾ 64 := by
   apply Eq.trans (UInt64.toNat_sub _ _)
   apply congr_arg₂ _ _ rfl
@@ -641,19 +641,19 @@ lemma Nat.sub_mod_eq_sub_mod_right {a d c b : Nat}
     rw [Nat.add_sub_assoc (Nat.le_mul_of_pos_right _ (by omega))]
     apply Nat.add_mod_eq_add_mod_right _ eq
 
-lemma Nat.two_pow_add_lo (x y : Nat) : (2 ^ x + y) ↾ x = y ↾ x :=
+lemma Nat.two_pow_add_lowBits (x y : Nat) : (2 ^ x + y) ↾ x = y ↾ x :=
   Nat.add_mod_left _ _
 
 lemma U128.toNat_sub {a b : U128} :
     (a - b).toNat = (2 ^ 128 + a.toNat - b.toNat) ↾ 128 := by
   rw [U128.sub_eq]; simp only [U128.toNat]
-  rw [Nat.add_shl_or_sub_shl_or_lo_add (UInt64.toNat_lt _) (UInt64.toNat_lt _) (UInt64.toNat_lt _)]
-  apply congr_arg₂ _ (congr_arg₂ _ _ rfl) UInt64.toNat_sub_lo
-  simp only [UInt64.toNat_sub_lo]
+  rw [Nat.add_shiftLeft_or_sub_shiftLeft_or_lowBits_add (UInt64.toNat_lt _) (UInt64.toNat_lt _) (UInt64.toNat_lt _)]
+  apply congr_arg₂ _ (congr_arg₂ _ _ rfl) UInt64.toNat_sub_lowBits
+  simp only [UInt64.toNat_sub_lowBits]
   rw [@ite_distrib _ _ UInt64.toNat, UInt64.toNat_one, UInt64.toNat_zero]
   rw [← ite_eq_ite_of_iff UInt64.lt_iff_toNat_lt rfl rfl]
   apply Nat.sub_mod_eq_sub_mod_right
-  · rw [Nat.add_mod_left]; apply Nat.lo_lo
+  · rw [Nat.add_mod_left]; apply Nat.lowBits_lowBits
   · split <;> omega
   · have _ := @UInt64.toNat_lt b.1; split <;> omega
 
@@ -667,19 +667,19 @@ lemma U256.zero_ne_one : (0 : U256) ≠ 1 := by intro h; cases h
 lemma U256.toNat_sub (a b : U256) :
     (a - b).toNat = (2 ^ 256 + a.toNat - b.toNat) ↾ 256 := by
   rw [U256.sub_eq]; simp only [U256.toNat]
-  rw [Nat.add_shl_or_sub_shl_or_lo_add U128.toNat_lt U128.toNat_lt U128.toNat_lt]
+  rw [Nat.add_shiftLeft_or_sub_shiftLeft_or_lowBits_add U128.toNat_lt U128.toNat_lt U128.toNat_lt]
   apply congr_arg₂ _ (congr_arg₂ _ _ rfl) U128.toNat_sub
   simp only [U128.toNat_sub]
   rw [@ite_distrib _ _ U128.toNat, U128.toNat_one, U128.toNat_zero]
   rw [← ite_eq_ite_of_iff U128.lt_iff_toNat_lt_toNat rfl rfl]
   apply Nat.sub_mod_eq_sub_mod_right
-  · rw [Nat.add_mod_left]; apply Nat.lo_lo
+  · rw [Nat.add_mod_left]; apply Nat.lowBits_lowBits
   · split <;> omega
   · have _ := @U128.toNat_lt b.1; split <;> omega
 
 theorem U256.toNat_sub_eq_of_le (xs ys : U256) (h : ys ≤ xs) :
     (xs - ys).toNat = xs.toNat - ys.toNat := by
-  rw [toNat_sub, Nat.lo, Nat.add_sub_mod_eq_sub]
+  rw [toNat_sub, Nat.lowBits, Nat.add_sub_mod_eq_sub]
   · apply U256.toNat_lt
   · apply U256.toNat_le_toNat h
 
@@ -808,7 +808,7 @@ lemma U256.sub_zero (x : U256) : x - 0 = x := by
 lemma U256.add_zero (x : U256) : x + 0 = x := by
   apply U256.toNat_inj
   rw [U256.toNat_add, U256.toNat_zero, Nat.add_zero]
-  exact Nat.lo_eq_of_lt (U256.toNat_lt x)
+  exact Nat.lowBits_eq_of_lt (U256.toNat_lt x)
 
 lemma U256.zero_le (x : U256) : (0 : U256) ≤ x := by
   rw [U256.le_iff_toNat_le_toNat, U256.toNat_zero]
@@ -937,13 +937,13 @@ theorem U256.sub_add_cancel {x y : U256} : x - y + y = x := by
   generalize x.toNat = x, y.toNat = y
   intros y_lt x_lt
   by_cases h : x < y
-  · rw [@Nat.lo_eq_of_lt (2 ^ 256 + x - y) _ (by omega)]
+  · rw [@Nat.lowBits_eq_of_lt (2 ^ 256 + x - y) _ (by omega)]
     rw [Nat.sub_add_cancel (by omega)]
-    rw [Nat.two_pow_add_lo, Nat.lo_eq_of_lt x_lt]
+    rw [Nat.two_pow_add_lowBits, Nat.lowBits_eq_of_lt x_lt]
   · rw [Nat.not_lt] at h
-    rw [Nat.add_sub_assoc h, Nat.two_pow_add_lo]
-    rw [Nat.lo_eq_of_lt (by {rw [Nat.lo]; omega})]
-    rw [Nat.lo_eq_of_lt (by omega)]
+    rw [Nat.add_sub_assoc h, Nat.two_pow_add_lowBits]
+    rw [Nat.lowBits_eq_of_lt (by {rw [Nat.lowBits]; omega})]
+    rw [Nat.lowBits_eq_of_lt (by omega)]
     apply Nat.sub_add_cancel h
 
 lemma toAddress_toNat (a : Address) : a.toNat.toAddress = a := by
@@ -954,8 +954,8 @@ lemma toAddress_toNat (a : Address) : a.toNat.toAddress = a := by
     apply toUInt32_toNat
   · rw [toU128_or]
     have eq : (a.1.toNat <<< 128).toU128 = 0 := by
-      rw [toU128_eq_iff_lo_eq_toNat]
-      rw [Nat.shl_lo_eq_zero_of_le (by omega)]
+      rw [toU128_eq_iff_lowBits_eq_toNat]
+      rw [Nat.shiftLeft_lowBits_eq_zero_of_le (by omega)]
       rfl
     rw [eq, U128.zero_or]
     apply toU128_toNat

@@ -15,15 +15,15 @@ open Jaune JauneConsensus
 -- KZG_SETUP_G2_MONOMIAL[1] equals Jaune's independently pinned point (BLSConst), and
 -- the first monomial entries are the generators.
 #guard ((setupPoints kzgSetupG2MonomialHex 96).take 2).mapM signatureToPoint
-  = .ok [blsG2Generator, kzgSetupG2Monomial1P]
+  = .ok [blsG2Generator, kzgSetupG2Monomial1Point]
 #guard ((setupPoints kzgSetupG1MonomialHex 48).take 1).mapM pubkeyToPoint = .ok [blsG1Generator]
 -- Bit reversal on 8 entries.
 #guard bitReversalPermutation #[0, 1, 2, 3, 4, 5, 6, 7] = .ok #[0, 4, 2, 6, 1, 5, 3, 7]
 
 -- Batch inversion equals elementwise inversion, zeros included.
-def frs : Array Fr := #[3, 0, 7, FinField.ofNat (blsModulus - 1), 1, 0, 123456789]
-#guard batchInverse frs = frs.map (·⁻¹)
-#guard batchInverse #[] = (#[] : Array Fr)
-#guard batchInverse #[0, 0] = (#[0, 0] : Array Fr)
+def batchInverseInputs : Array BLSFieldElement := #[3, 0, 7, FieldElement.ofNat (blsModulus - 1), 1, 0, 123456789]
+#guard batchInverse batchInverseInputs = batchInverseInputs.map (·⁻¹)
+#guard batchInverse #[] = (#[] : Array BLSFieldElement)
+#guard batchInverse #[0, 0] = (#[0, 0] : Array BLSFieldElement)
 
 end JauneConsensus.KZGVectors

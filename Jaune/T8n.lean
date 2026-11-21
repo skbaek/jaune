@@ -25,7 +25,7 @@
 -- state.
 
 import Jaune.Transaction
-import Jaune.Run.CheckedTransaction
+import Jaune.Run.Block
 import Jaune.FixtureException
 import Jaune.Adapter.IO
 
@@ -38,33 +38,33 @@ open Jaune
 -- second copy of `toWorld` would be a second definition of what a pre-state
 -- is. `Main.lean` imports this module, so its own uses are unchanged.
 
-def Lean.Json.toIoList : Lean.Json → IO (List Json)
+def Lean.Json.toIOList : Lean.Json → IO (List Json)
   | .arr a => return a.toList
   | _ => IO.throw "not an array"
 
-def Lean.Json.toIoRBNode :
+def Lean.Json.toIOTreeMap :
   Lean.Json → IO (Std.TreeMap.Raw String Json compare)
   | .obj r => return r
   | _ => IO.throw "not an object"
 
-def Lean.Json.toIoString : Lean.Json → IO String
+def Lean.Json.toIOString : Lean.Json → IO String
   | .str s => return s
   | _ => IO.throw "not a string"
 
-def Lean.Json.toIoBytes (j : Json) : IO Bytes := do
-  let x ← toIoString j >>= .remove0x
+def Lean.Json.toIOBytes (j : Json) : IO Bytes := do
+  let x ← toIOString j >>= .removeHexPrefix
   (Hex.toBytes x).toIO ""
 
-def Lean.Json.toIoAddress (j : Json) : IO Address := do
-  let x ← toIoString j >>= .remove0x
+def Lean.Json.toIOAddress (j : Json) : IO Address := do
+  let x ← toIOString j >>= .removeHexPrefix
   (Hex.toAddress? x).toIO ""
 
-def Lean.Json.toIoUInt64 (j : Json) : IO UInt64 := do
-  let x ← toIoString j >>= .remove0x
+def Lean.Json.toIOUInt64 (j : Json) : IO UInt64 := do
+  let x ← toIOString j >>= .removeHexPrefix
   (Hex.toUInt64? x).toIO
 
-def Lean.Json.toIoU256 (j : Json) : IO U256 := do
-  let x ← toIoString j >>= .remove0x
+def Lean.Json.toIOU256 (j : Json) : IO U256 := do
+  let x ← toIOString j >>= .removeHexPrefix
   (Hex.toU256? x).toIO ""
 
 -- Fixture JSON quantities: any width up to the field's own, and no
@@ -76,47 +76,47 @@ def Lean.Json.toIoU256 (j : Json) : IO U256 := do
 -- `Bytes.toQuantityB256?` accept exactly the same short values and reject the
 -- over-long input; see the soundness theorems in `Jaune/Types.lean`.
 
-def Lean.Json.toIoQuantityUInt64 (field : String) (j : Json) : IO UInt64 := do
-  let x ← toIoString j >>= .remove0x
+def Lean.Json.toIOQuantityUInt64 (field : String) (j : Json) : IO UInt64 := do
+  let x ← toIOString j >>= .removeHexPrefix
   let xs ← (Hex.toBytes x).toIO s!"error : {field} is not a hex byte string"
   (Bytes.toQuantityUInt64? xs).toIO
     s!"error : {field} is {xs.length} bytes wide, exceeding the 8-byte maximum"
 
-def Lean.Json.toIoQuantityU256 (field : String) (j : Json) : IO U256 := do
-  let x ← toIoString j >>= .remove0x
+def Lean.Json.toIOQuantityU256 (field : String) (j : Json) : IO U256 := do
+  let x ← toIOString j >>= .removeHexPrefix
   let xs ← (Hex.toBytes x).toIO s!"error : {field} is not a hex byte string"
   (Bytes.toQuantityU256? xs).toIO
     s!"error : {field} is {xs.length} bytes wide, exceeding the 32-byte maximum"
 
 /-- The same decoder for a quantity that arrives as a JSON *key* rather than a
 value. The `0x` prefix stays mandatory, exactly as before. -/
-def Hex.toIoQuantityU256 (field : String) (h : String) : IO U256 := do
-  let x ← IO.remove0x h
+def Hex.toIOQuantityU256 (field : String) (h : String) : IO U256 := do
+  let x ← IO.removeHexPrefix h
   let xs ← (Hex.toBytes x).toIO s!"error : {field} is not a hex byte string"
   (Bytes.toQuantityU256? xs).toIO
     s!"error : {field} is {xs.length} bytes wide, exceeding the 32-byte maximum"
 
 /-- Read a hex *quantity*, which unlike a byte string may have an odd number of
 digits. Used for the small schedule numbers a fixture states about itself. -/
-def Lean.Json.toIoHexNat (j : Json) : IO Nat := do
-  let x ← toIoString j >>= .remove0x
+def Lean.Json.toIOHexNat (j : Json) : IO Nat := do
+  let x ← toIOString j >>= .removeHexPrefix
   if x.isEmpty then .throw "error : empty hex quantity"
-  let nibbles ← (x.toList.mapM Hexit.toNibble).toIO s!"error : invalid hex quantity {x}"
+  let nibbles ← (x.toList.mapM HexDigit.toNibble).toIO s!"error : invalid hex quantity {x}"
   return nibbles.foldl (fun acc nibble => (acc * 16) + nibble.toNat) 0
 
 def Lean.Json.toAccount : Lean.Json → IO Account
   | .obj r => do
     let aux (xy : String × Lean.Json) : IO (U256 × U256) := do
-      let key ← Hex.toIoQuantityU256 "storage key" xy.fst
-      let value ← Lean.Json.toIoQuantityU256 "storage value" xy.snd
+      let key ← Hex.toIOQuantityU256 "storage key" xy.fst
+      let value ← Lean.Json.toIOQuantityU256 "storage value" xy.snd
       return ⟨key, value⟩
     let bal_json ← (r.get? "balance").toIO ""
     let nonce_json ← (r.get? "nonce").toIO ""
     let code_json ← (r.get? "code").toIO ""
-    let stor_json ← (r.get? "storage").toIO "" >>= Lean.Json.toIoRBNode
-    let bal ← Lean.Json.toIoQuantityU256 "balance" bal_json
-    let nonce ← Lean.Json.toIoQuantityUInt64 "nonce" nonce_json
-    let code ← Lean.Json.toIoBytes code_json
+    let stor_json ← (r.get? "storage").toIO "" >>= Lean.Json.toIOTreeMap
+    let bal ← Lean.Json.toIOQuantityU256 "balance" bal_json
+    let nonce ← Lean.Json.toIOQuantityUInt64 "nonce" nonce_json
+    let code ← Lean.Json.toIOBytes code_json
     let storPairs ← List.mapM aux stor_json.toArray.toList
     -- Ethereum's state trie has no entries for zero-valued storage slots.  The
     -- JSON fixtures may spell such a slot explicitly in `pre`, so normalize
@@ -132,10 +132,10 @@ def Lean.Json.toAccount : Lean.Json → IO Account
 -- only by toWorldAt below.
 def Lean.Json.toWorld (j : Lean.Json) : IO State := do
   let aux (xy : String × Lean.Json) : IO (Address × Account) := do
-    let adr ← (Hex.toAddress? <| remove0x xy.fst).toIO ""
+    let adr ← (Hex.toAddress? <| removeHexPrefix xy.fst).toIO ""
     let acct ← xy.snd.toAccount
     return ⟨adr, acct⟩
-  let ob ← j.toIoRBNode
+  let ob ← j.toIOTreeMap
   let entries ← List.mapM aux ob.toArray.toList
   return State.ofPresentList entries
 
@@ -206,14 +206,14 @@ def advertisedForkNames : List String :=
 -- rendered once, so key order is fixed by construction and two runs on the
 -- same input cannot differ.
 
-inductive JOut : Type
-  | str (s : String)
-  | obj (fields : List (String × JOut))
-  | arr (items : List JOut)
+inductive JsonOutput : Type
+  | string (s : String)
+  | object (fields : List (String × JsonOutput))
+  | array (items : List JsonOutput)
 
 /-- One JSON string character, escaped the way Python's `json` module escapes
 it with the default `ensure_ascii=True`. -/
-def escapeChar (c : Char) : String :=
+def escapeCharacter (c : Char) : String :=
   if c = '"' then "\\\""
   else if c = '\\' then "\\\\"
   else if c = '\n' then "\\n"
@@ -234,7 +234,7 @@ def escapeChar (c : Char) : String :=
     else String.ofList [c]
 
 def escapeString (s : String) : String :=
-  s.toList.foldl (fun acc c => acc ++ escapeChar c) ""
+  s.toList.foldl (fun acc c => acc ++ escapeCharacter c) ""
 
 def quoted (s : String) : String := "\"" ++ escapeString s ++ "\""
 
@@ -244,31 +244,31 @@ mutual
 
 /-- Render at an indentation depth measured in spaces, exactly as
 `json.dump(..., indent=4)` does. -/
-def JOut.render (depth : Nat) : JOut → String
-  | .str s => quoted s
-  | .obj [] => "{}"
-  | .obj (f :: fs) =>
-    "{\n" ++ JOut.renderFields (depth + 4) (f :: fs) ++ "\n" ++ indentOf depth ++ "}"
-  | .arr [] => "[]"
-  | .arr (i :: is) =>
-    "[\n" ++ JOut.renderItems (depth + 4) (i :: is) ++ "\n" ++ indentOf depth ++ "]"
+def JsonOutput.render (depth : Nat) : JsonOutput → String
+  | .string s => quoted s
+  | .object [] => "{}"
+  | .object (f :: fs) =>
+    "{\n" ++ JsonOutput.renderFields (depth + 4) (f :: fs) ++ "\n" ++ indentOf depth ++ "}"
+  | .array [] => "[]"
+  | .array (i :: is) =>
+    "[\n" ++ JsonOutput.renderItems (depth + 4) (i :: is) ++ "\n" ++ indentOf depth ++ "]"
 
-def JOut.renderFields (depth : Nat) : List (String × JOut) → String
+def JsonOutput.renderFields (depth : Nat) : List (String × JsonOutput) → String
   | [] => ""
-  | [⟨k, v⟩] => indentOf depth ++ quoted k ++ ": " ++ JOut.render depth v
+  | [⟨k, v⟩] => indentOf depth ++ quoted k ++ ": " ++ JsonOutput.render depth v
   | ⟨k, v⟩ :: rest =>
-    indentOf depth ++ quoted k ++ ": " ++ JOut.render depth v ++ ",\n"
-      ++ JOut.renderFields depth rest
+    indentOf depth ++ quoted k ++ ": " ++ JsonOutput.render depth v ++ ",\n"
+      ++ JsonOutput.renderFields depth rest
 
-def JOut.renderItems (depth : Nat) : List JOut → String
+def JsonOutput.renderItems (depth : Nat) : List JsonOutput → String
   | [] => ""
-  | [v] => indentOf depth ++ JOut.render depth v
+  | [v] => indentOf depth ++ JsonOutput.render depth v
   | v :: rest =>
-    indentOf depth ++ JOut.render depth v ++ ",\n" ++ JOut.renderItems depth rest
+    indentOf depth ++ JsonOutput.render depth v ++ ",\n" ++ JsonOutput.renderItems depth rest
 
 end
 
-def JOut.toString (j : JOut) : String := j.render 0
+def JsonOutput.toString (j : JsonOutput) : String := j.render 0
 
 ----------------- HEX SPELLINGS ------------------
 
@@ -310,7 +310,7 @@ def hexDigits? (s : String) : Option (List Char) :=
 own `json_to_value` treatment of the empty quantity. -/
 def hexToNat? (s : String) : Option Nat := do
   let cs ← hexDigits? s
-  let ns ← cs.mapM Hexit.toNibble
+  let ns ← cs.mapM HexDigit.toNibble
   some (ns.foldl (fun acc d => acc * 16 + d.toNat) 0)
 
 def hexToBytes? (s : String) : Option Bytes := do
@@ -342,7 +342,7 @@ error there too. Silently ignoring one is how a misspelled input silently runs
 a different test. -/
 def requireKnownFields (what : String) (j : Lean.Json) (known : List String) :
     IO Unit := do
-  let ob ← j.toIoRBNode
+  let ob ← j.toIOTreeMap
   for k in ob.toArray.toList.map Prod.fst do
     if ¬ known.contains k then
       IO.throw
@@ -377,12 +377,12 @@ def readAddress (label : String) (v : Lean.Json) : IO Address :=
   | .str s => (hexToAddress? s).toIO s!"error : t8n {label} is not a 20-byte address"
   | _ => IO.throw s!"error : t8n {label} must be a 20-byte address string"
 
-def natOr (j : Lean.Json) (k : String) (dflt : Nat) : IO Nat :=
+def readNatFieldD (j : Lean.Json) (k : String) (dflt : Nat) : IO Nat :=
   match field? j k with
   | none => pure dflt
   | some v => readNat k v
 
-def natRequired (j : Lean.Json) (k : String) : IO Nat := do
+def readNatField (j : Lean.Json) (k : String) : IO Nat := do
   let v ← (field? j k).toIO s!"error : t8n input is missing the {k} field"
   readNat k v
 
@@ -391,7 +391,7 @@ def natRequired (j : Lean.Json) (k : String) : IO Nat := do
 /-- One `env.ommers` entry, the target's `Ommer`: the two fields its
 `pay_block_rewards` reads -- the ommer's age relative to the current block and
 its coinbase. -/
-structure T8nOmmer : Type where
+structure OmmerRewardInput : Type where
   delta : Nat
   address : Address
 deriving DecidableEq
@@ -402,7 +402,7 @@ block-access-list pair -- are accepted and dropped, exactly as the target
 accepts and does not consume them. `difficulty` is the target's resolved block
 difficulty (`currentDifficulty` if given, else the fork's difficulty function
 over the parent fields); only the pre-merge result document reads it. -/
-structure T8nEnv : Type where
+structure BlockEnvironment : Type where
   coinbase : Address
   gasLimit : Nat
   number : Nat
@@ -422,9 +422,9 @@ structure T8nEnv : Type where
   /-- The pre-merge `ommers` the target's reward step reads: each ommer's age
   (`delta`) and coinbase. Empty under proof of stake, where a non-empty list is
   refused. -/
-  ommers : List T8nOmmer := []
+  ommers : List OmmerRewardInput := []
 
-def envKnownFields : List String :=
+def knownEnvironmentFields : List String :=
   [ "currentCoinbase", "currentGasLimit", "currentNumber", "currentTimestamp",
     "currentRandom", "currentDifficulty", "currentBaseFee",
     "currentExcessBlobGas", "currentBlobGasUsed", "slotNumber",
@@ -442,11 +442,11 @@ def defaultTimestamp : Nat := 1000
 
 def readWithdrawal (v : Lean.Json) : IO Withdrawal := do
   requireKnownFields "withdrawal" v ["index", "validatorIndex", "address", "amount"]
-  let index ← natRequired v "index"
-  let validatorIndex ← natRequired v "validatorIndex"
+  let index ← readNatField v "index"
+  let validatorIndex ← readNatField v "validatorIndex"
   let addressJson ← (field? v "address").toIO "error : t8n withdrawal is missing address"
   let address ← readAddress "withdrawal address" addressJson
-  let amount ← natRequired v "amount"
+  let amount ← readNatField v "amount"
   requireBits "withdrawal index" 64 index
   requireBits "withdrawal validatorIndex" 64 validatorIndex
   requireBits "withdrawal amount" 64 amount
@@ -473,7 +473,7 @@ def readBlockHashes (j : Lean.Json) (number : Nat) : IO (List U256) := do
     match field? j "blockHashes" with
     | none => pure []
     | some v => do
-      let ob ← v.toIoRBNode
+      let ob ← v.toIOTreeMap
       ob.toArray.toList.mapM fun ⟨k, hv⟩ => do
         let n ← (hexToNat? k).toIO
           s!"error : t8n blockHashes key {repr k} is not a hex quantity"
@@ -493,9 +493,9 @@ def readBlockHashes (j : Lean.Json) (number : Nat) : IO (List U256) := do
 
 /-- One `env.ommers` entry: `delta` a hex quantity, `address` an address, the
 two fields the target's `_parse_ommers_from_env_json` reads. -/
-def readOmmer (v : Lean.Json) : IO T8nOmmer := do
+def readOmmer (v : Lean.Json) : IO OmmerRewardInput := do
   requireKnownFields "ommer" v ["delta", "address"]
-  let delta ← natRequired v "delta"
+  let delta ← readNatField v "delta"
   let addressJson ← (field? v "address").toIO "error : t8n ommer is missing address"
   let address ← readAddress "ommer address" addressJson
   return { delta := delta, address := address }
@@ -503,7 +503,7 @@ def readOmmer (v : Lean.Json) : IO T8nOmmer := do
 /-- `env.ommers`. Under proof of stake (`pow = none`) a non-empty list is
 refused, as it always was on this lane; under proof of work each entry is read
 for the reward step. -/
-def readOmmers (rules : ForkRules) (j : Lean.Json) : IO (List T8nOmmer) := do
+def readOmmers (rules : ForkRules) (j : Lean.Json) : IO (List OmmerRewardInput) := do
   match field? j "ommers" with
   | some (.arr a) =>
     match rules.proofOfWork with
@@ -515,23 +515,23 @@ def readOmmers (rules : ForkRules) (j : Lean.Json) : IO (List T8nOmmer) := do
     | some _ => a.toList.mapM readOmmer
   | _ => pure []
 
-def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv := do
-  requireKnownFields "env" j envKnownFields
+def decodeEnvironment (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO BlockEnvironment := do
+  requireKnownFields "env" j knownEnvironmentFields
   let ommers ← readOmmers rules j
   let coinbase ←
     match field? j "currentCoinbase" with
     | none => (hexToAddress? defaultCoinbaseHex).toIO "error : bad default coinbase"
     | some v => readAddress "env.currentCoinbase" v
-  let gasLimit ← natOr j "currentGasLimit" defaultGasLimit
-  let number ← natOr j "currentNumber" defaultNumber
-  let timestamp ← natOr j "currentTimestamp" defaultTimestamp
+  let gasLimit ← readNatFieldD j "currentGasLimit" defaultGasLimit
+  let number ← readNatFieldD j "currentNumber" defaultNumber
+  let timestamp ← readNatFieldD j "currentTimestamp" defaultTimestamp
   requireBits "env.currentTimestamp" 256 timestamp
   -- `GASLIMIT` and `NUMBER` push these. The target fails only when a transaction
   -- runs one, which a frontend cannot know before executing; `BlockContext` keeps them as
   -- `Nat`, so refusing here is the only way they are never pushed reduced.
   requireBits "env.currentGasLimit" 256 gasLimit
   requireBits "env.currentNumber" 256 number
-  let prevRandao ← natOr j "currentRandom" 0
+  let prevRandao ← readNatFieldD j "currentRandom" 0
   -- Before the merge `run` reads the difficulty instead, and so does the target.
   if rules.proofOfWork.isNone then requireBits "env.currentRandom" 256 prevRandao
   -- `currentBaseFee` if given, else the target's parent derivation. Before
@@ -546,9 +546,9 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
     match field? j "currentBaseFee" with
     | some v => readNat "env.currentBaseFee" v
     | none => do
-      let parentGasLimit ← natRequired j "parentGasLimit"
-      let parentGasUsed ← natRequired j "parentGasUsed"
-      let parentBaseFee ← natRequired j "parentBaseFee"
+      let parentGasLimit ← readNatField j "parentGasLimit"
+      let parentGasUsed ← readNatField j "parentGasUsed"
+      let parentBaseFee ← readNatField j "parentBaseFee"
       IO.ofExcept <|
         (calculateBaseFeePerGas gasLimit parentGasLimit parentGasUsed parentBaseFee).mapError
           BlockValidationError.render
@@ -566,8 +566,8 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
         match field? j "parentDifficulty" with
         | none => pure 0x20000
         | some _ => do
-          let parentDifficulty ← natOr j "parentDifficulty" 0
-          let parentTimestamp ← natOr j "parentTimestamp" 0
+          let parentDifficulty ← readNatFieldD j "parentDifficulty" 0
+          let parentTimestamp ← readNatFieldD j "parentTimestamp" 0
           let parentUncleHash ←
             match field? j "parentUncleHash" with
             | none => pure emptyOmmerHash
@@ -589,12 +589,12 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
       if rules.header.blobGas then requireBits "env.currentExcessBlobGas" 64 excessBlobGas
       pure excessBlobGas
     | none => do
-      let parentBlobGasUsed ← natOr j "parentBlobGasUsed" 0
-      let parentExcessBlobGas ← natOr j "parentExcessBlobGas" 0
+      let parentBlobGasUsed ← readNatFieldD j "parentBlobGasUsed" 0
+      let parentExcessBlobGas ← readNatFieldD j "parentExcessBlobGas" 0
       if rules.header.blobGas then
         requireBits "env.parentBlobGasUsed" 64 parentBlobGasUsed
         requireBits "env.parentExcessBlobGas" 64 parentExcessBlobGas
-      let parentBaseFee ← natOr j "parentBaseFee" 0
+      let parentBaseFee ← readNatFieldD j "parentBaseFee" 0
       let parentHeader : Header :=
         { parentHash := 0, ommersHash := 0, coinbase := coinbase, stateRoot := 0,
           transactionsRoot := 0, receiptsRoot := 0, logsBloom := List.replicate 256 0,
@@ -619,9 +619,9 @@ def decodeEnv (rules : ForkRules) (stateTest : Bool) (j : Lean.Json) : IO T8nEnv
     match field? j "withdrawals" with
     | none => pure []
     | some v => do
-      let items ← v.toIoList
+      let items ← v.toIOList
       items.mapM readWithdrawal
-  let slotNumber ← natOr j "slotNumber" 0
+  let slotNumber ← readNatFieldD j "slotNumber" 0
   -- A fork without the slot number reads nothing from this field.
   if rules.header.slotNumber then requireBits "env.slotNumber" 64 slotNumber
   return {
@@ -749,7 +749,7 @@ def txBlobVersionedHashes (j : Lean.Json) : TransactionParse (List U256) :=
       | _ => .error (.badField "blobVersionedHashes")
   | some _ => .error (.badField "blobVersionedHashes")
 
-def txAuths (j : Lean.Json) : TransactionParse (List Authorization) :=
+def txAuthorizations (j : Lean.Json) : TransactionParse (List Authorization) :=
   match field? j "authorizationList" with
   | none => .error (.missingField "authorizationList")
   | some (.arr items) =>
@@ -840,7 +840,7 @@ def decodeTransaction (j : Lean.Json) : TransactionParse Transaction := do
       let maxPriorityFee ← txNat j "maxPriorityFeePerGas"
       let maxFee ← txNat j "maxFeePerGas"
       let al ← txAccessList j
-      let auths ← txAuths j
+      let auths ← txAuthorizations j
       match receiver with
       | none =>
         .error (.validation (.type4ContractCreation
@@ -896,7 +896,7 @@ block-validation reason, not its rendering: the wire text is produced once, by
 `blockExceptionText`, at the emission boundary. -/
 structure Outcome : Type where
   state : State
-  bout : BlockOutput
+  blockOutput : BlockOutput
   rejected : List Rejection
   blockException : Option BlockValidationError
   /-- The accepted transactions, in input order: what `body` encodes. -/
@@ -920,7 +920,7 @@ trie, the receipts trie and the block-level access list alike. Rejections are
 still reported under their position in the input. This is the target's rule
 since ethereum/execution-specs#3849 (rejected transactions are numbered out)
 and #3361 (the body lists only accepted transactions). -/
-def foldTransactionsWith (step : Body.Prefix → BodyOp → Except TransitionError Body.Prefix) :
+def foldTransactionsWith (step : Body.Prefix → BodyOperation → Except TransitionError Body.Prefix) :
     List (Nat × TransactionParse Transaction) → Body.Prefix → List Rejection →
       List Transaction →
       Except TransitionError (Body.Prefix × List Rejection × List Transaction)
@@ -935,7 +935,7 @@ def foldTransactionsWith (step : Body.Prefix → BodyOp → Except TransitionErr
       else foldTransactionsWith step rest p (rej ++ [⟨i, .execution err⟩]) inc
 
 /-- The transition tool's signed-transaction fold uses the Checked body step. -/
-def foldTransactions (block : BlockContext) := foldTransactionsWith (Checked.Body.step block)
+def foldTransactions (block : BlockContext) := foldTransactionsWith (Body.step block)
 
 /-- State-test mode: exactly one transaction from the empty prefix, no system
 operations, no withdrawals, no requests. -/
@@ -973,20 +973,20 @@ each credit a `create_ether`, which is `State.addBal`. The target computes
 such an ommer before this is reached (`ommerAgesOk`). The block importer's
 `payRewards` reads ommer headers instead; the two agree on every admissible
 age, since `(8 + ommer.number - number)` is `8 - delta`. -/
-def payT8nRewards (reward : Nat) (coinbase : Address) (ommers : List T8nOmmer)
+def payBlockRewards (reward : Nat) (coinbase : Address) (ommers : List OmmerRewardInput)
     (st : State) : State :=
   let minerReward := reward + ommers.length * (reward / 32)
   ommers.foldl
-    (fun acc ommer => acc.addBal ommer.address ((8 - ommer.delta) * reward / 8).toU256)
-    (st.addBal coinbase minerReward.toU256)
+    (fun acc ommer => acc.addBalance ommer.address ((8 - ommer.delta) * reward / 8).toU256)
+    (st.addBalance coinbase minerReward.toU256)
 
 /-- Every ommer age the target's `U256` subtraction `8 - delta` can take. -/
-def ommerAgesOk (ommers : List T8nOmmer) : Bool :=
+def ommerAgesOk (ommers : List OmmerRewardInput) : Bool :=
   ommers.all (·.delta ≤ 8)
 
 /-- t8n's pre-execution system calls, in its order: history storage (with the last window hash,
 or zero for an empty window), then beacon roots. -/
-def preOps (block : BlockContext) : List BodyOp :=
+def preExecutionOperations (block : BlockContext) : List BodyOperation :=
   (if block.rules.systemCalls.historyStorage then
     [.systemCall historyStorageAddress (.ok (block.blockHashes.getLast?.getD 0).toBytes) 0]
   else []) ++
@@ -996,8 +996,8 @@ def preOps (block : BlockContext) : List BodyOp :=
 
 /-- The rewards (when resolved, `payT8nRewards`' amounts), then the withdrawals at the accepted
 count plus one. -/
-def postOps (block : BlockContext) (accepted : Nat) (wds : List Withdrawal) (reward : Option Nat)
-    (ommers : List T8nOmmer) : List BodyOp :=
+def postExecutionOperations (block : BlockContext) (accepted : Nat) (wds : List Withdrawal) (reward : Option Nat)
+    (ommers : List OmmerRewardInput) : List BodyOperation :=
   (match reward with
     | none => []
     | some r =>
@@ -1006,7 +1006,7 @@ def postOps (block : BlockContext) (accepted : Nat) (wds : List Withdrawal) (rew
   (if block.rules.header.withdrawalsRoot then [.withdrawals wds (accepted + 1)] else [])
 
 /-- The request group at the accepted count plus one. -/
-def requestOps (block : BlockContext) (accepted : Nat) : List BodyOp :=
+def requestOperations (block : BlockContext) (accepted : Nat) : List BodyOperation :=
   .depositRequests :: block.rules.requests.map fun ⟨type, address⟩ =>
     .requestCall type address (accepted + 1)
 
@@ -1030,14 +1030,14 @@ the goal, as renumbered by ethereum/execution-specs#3849). The list is built
 after the requests and the item rule is applied to it; a violation is the
 `blockException` of a result that still carries the list, as the target
 assigns `block_output.block_access_list` before validating it. -/
-def runBlockchainWith (step : Body.Prefix → BodyOp → Except TransitionError Body.Prefix)
+def runBlockchainWith (step : Body.Prefix → BodyOperation → Except TransitionError Body.Prefix)
     (block : BlockContext) (state : State) (txs : List (TransactionParse Transaction)) (wds : List Withdrawal)
-    (reward : Option Nat) (ommers : List T8nOmmer) : Except TransitionError Outcome := do
-  let p ← (preOps block).foldlM step (Body.Prefix.init state)
+    (reward : Option Nat) (ommers : List OmmerRewardInput) : Except TransitionError Outcome := do
+  let p ← (preExecutionOperations block).foldlM step (Body.Prefix.init state)
   let ⟨p, rej, inc⟩ ← foldTransactionsWith step txs.putIndex p [] []
-  let p ← (postOps block inc.length wds reward ommers).foldlM step p
+  let p ← (postExecutionOperations block inc.length wds reward ommers).foldlM step p
   let requests :=
-    if block.rules.header.requestsHash then (requestOps block inc.length).foldlM step p
+    if block.rules.header.requestsHash then (requestOperations block inc.length).foldlM step p
     else .ok p
   match requests with
   | .ok q => do
@@ -1051,9 +1051,9 @@ def runBlockchainWith (step : Body.Prefix → BodyOp → Except TransitionError 
 
 /-- Run the blockchain-mode operation sequence through the Checked body. -/
 def runBlockchain (block : BlockContext) (state : State) (txs : List (TransactionParse Transaction))
-    (wds : List Withdrawal) (reward : Option Nat := none) (ommers : List T8nOmmer := []) :
+    (wds : List Withdrawal) (reward : Option Nat := none) (ommers : List OmmerRewardInput := []) :
     Except TransitionError Outcome :=
-  runBlockchainWith (Checked.Body.step block) block state txs wds reward ommers
+  runBlockchainWith (Body.step block) block state txs wds reward ommers
 
 -- Focused EIP-7928 carry tests for the two block frontends. The request
 -- addresses are the first two pinned Amsterdam request contracts; their test
@@ -1097,7 +1097,7 @@ private def blockAccessListPipelineForwardCode (address : Address) (half : Bool)
     (if half then [0x60, 0x02, 0x47, 0x04] else [0x47]) ++ [0x73] ++ address.toBytes ++
       [0x61, 0xff, 0xff, 0xf1, 0x00]))
 
-private def balPipelineBlock : BlockContext :=
+private def blockAccessListPipelineBlock : BlockContext :=
   { fork := .amsterdam
     chainId := 1
     gasLimit := 30000000
@@ -1152,27 +1152,27 @@ private def blockAccessListPipelineBalances (list : BlockAccessList) (address : 
   | none => false
 
 private def blockAccessListPipelineRequestNetApplyBody : Bool :=
-  match Checked.applyBody balPipelineBlock blockAccessListPipelineToggleState [] [] [] with
+  match applyBody blockAccessListPipelineBlock blockAccessListPipelineToggleState [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineHelper).storage.get 0 == 0 && blockAccessListPipelineHelperNoNet bout.blockAccessList
   | .error _ => false
 
 private def blockAccessListPipelineRequestOneWriteApplyBody : Bool :=
-  match Checked.applyBody balPipelineBlock blockAccessListPipelineOneCallState [] [] [] with
+  match applyBody blockAccessListPipelineBlock blockAccessListPipelineOneCallState [] [] [] with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineHelper).storage.get 0 == 1 && blockAccessListPipelineHelperOneWrite bout.blockAccessList
   | .error _ => false
 
-private def blockAccessListPipelineRequestNetT8n : Bool :=
-  match runBlockchain balPipelineBlock blockAccessListPipelineToggleState [] [] with
+private def blockAccessListPipelineRequestNoNetWriteRunBlockchain : Bool :=
+  match runBlockchain blockAccessListPipelineBlock blockAccessListPipelineToggleState [] [] with
   | .ok out => out.blockException.isNone &&
-    (out.state.get blockAccessListPipelineHelper).storage.get 0 == 0 && blockAccessListPipelineHelperNoNet out.bout.blockAccessList
+    (out.state.get blockAccessListPipelineHelper).storage.get 0 == 0 && blockAccessListPipelineHelperNoNet out.blockOutput.blockAccessList
   | .error _ => false
 
-private def blockAccessListPipelineRequestOneWriteT8n : Bool :=
-  match runBlockchain balPipelineBlock blockAccessListPipelineOneCallState [] [] with
+private def blockAccessListPipelineRequestOneWriteRunBlockchain : Bool :=
+  match runBlockchain blockAccessListPipelineBlock blockAccessListPipelineOneCallState [] [] with
   | .ok out => out.blockException.isNone &&
-    (out.state.get blockAccessListPipelineHelper).storage.get 0 == 1 && blockAccessListPipelineHelperOneWrite out.bout.blockAccessList
+    (out.state.get blockAccessListPipelineHelper).storage.get 0 == 1 && blockAccessListPipelineHelperOneWrite out.blockOutput.blockAccessList
   | .error _ => false
 
 private def blockAccessListPipelineForwardApplyBody (half : Bool) : Bool :=
@@ -1181,7 +1181,7 @@ private def blockAccessListPipelineForwardApplyBody (half : Bool) : Bool :=
   let forwarded := if half then amount / 2 else amount
   let wds : List Withdrawal :=
     [{ index := 0, validatorIndex := 0, address := blockAccessListPipelineWithdrawalRequestsAddress, amount := 2 }]
-  match Checked.applyBody balPipelineBlock (blockAccessListPipelineForwardState half) [] [] wds with
+  match applyBody blockAccessListPipelineBlock (blockAccessListPipelineForwardState half) [] [] wds with
   | .ok ⟨state, bout⟩ =>
     (state.get blockAccessListPipelineWithdrawalRequestsAddress).balance == retained &&
       (state.get blockAccessListPipelineBeneficiary).balance == forwarded &&
@@ -1190,29 +1190,29 @@ private def blockAccessListPipelineForwardApplyBody (half : Bool) : Bool :=
       blockAccessListPipelineBalances bout.blockAccessList blockAccessListPipelineBeneficiary [(1, forwarded)]
   | .error _ => false
 
-private def blockAccessListPipelineForwardT8n (half : Bool) : Bool :=
+private def blockAccessListPipelineForwardRunBlockchain (half : Bool) : Bool :=
   let amount : U256 := 2 * (10 ^ 9).toU256
   let retained := if half then amount / 2 else 0
   let forwarded := if half then amount / 2 else amount
   let wds : List Withdrawal :=
     [{ index := 0, validatorIndex := 0, address := blockAccessListPipelineWithdrawalRequestsAddress, amount := 2 }]
-  match runBlockchain balPipelineBlock (blockAccessListPipelineForwardState half) [] wds with
+  match runBlockchain blockAccessListPipelineBlock (blockAccessListPipelineForwardState half) [] wds with
   | .ok out => out.blockException.isNone &&
     (out.state.get blockAccessListPipelineWithdrawalRequestsAddress).balance == retained &&
       (out.state.get blockAccessListPipelineBeneficiary).balance == forwarded &&
-      blockAccessListPipelineBalances out.bout.blockAccessList blockAccessListPipelineWithdrawalRequestsAddress
+      blockAccessListPipelineBalances out.blockOutput.blockAccessList blockAccessListPipelineWithdrawalRequestsAddress
         (if half then [(1, retained)] else []) &&
-      blockAccessListPipelineBalances out.bout.blockAccessList blockAccessListPipelineBeneficiary [(1, forwarded)]
+      blockAccessListPipelineBalances out.blockOutput.blockAccessList blockAccessListPipelineBeneficiary [(1, forwarded)]
   | .error _ => false
 
 #guard blockAccessListPipelineRequestNetApplyBody
 #guard blockAccessListPipelineRequestOneWriteApplyBody
-#guard blockAccessListPipelineRequestNetT8n
-#guard blockAccessListPipelineRequestOneWriteT8n
+#guard blockAccessListPipelineRequestNoNetWriteRunBlockchain
+#guard blockAccessListPipelineRequestOneWriteRunBlockchain
 #guard blockAccessListPipelineForwardApplyBody false
 #guard blockAccessListPipelineForwardApplyBody true
-#guard blockAccessListPipelineForwardT8n false
-#guard blockAccessListPipelineForwardT8n true
+#guard blockAccessListPipelineForwardRunBlockchain false
+#guard blockAccessListPipelineForwardRunBlockchain true
 
 -- Proof-of-work rewards through the blockchain frontend (`--state.reward` and
 -- `env.ommers`), on a Byzantium environment with no transactions: the system
@@ -1221,22 +1221,22 @@ private def blockAccessListPipelineForwardT8n (half : Bool) : Bool :=
 -- reward with ommers aged 1 and 2 pays the miner `3 + 2 * 3/32` ETH and the
 -- ommers 7/8 and 6/8 of 3 ETH.
 private def rewardCoinbase : Address := 0xc0
-private def rewardOmmerA : Address := 0xa1
-private def rewardOmmerB : Address := 0xa2
+private def rewardOmmerAge1 : Address := 0xa1
+private def rewardOmmerAge2 : Address := 0xa2
 
 private def rewardBlock (fork : Fork) : BlockContext :=
-  { balPipelineBlock with fork := fork, coinbase := rewardCoinbase }
+  { blockAccessListPipelineBlock with fork := fork, coinbase := rewardCoinbase }
 
-private def rewardOmmers : List T8nOmmer :=
-  [⟨1, rewardOmmerA⟩, ⟨2, rewardOmmerB⟩]
+private def rewardOmmers : List OmmerRewardInput :=
+  [⟨1, rewardOmmerAge1⟩, ⟨2, rewardOmmerAge2⟩]
 
 private def rewardBalances (fork : Fork) (reward : Option Nat) :
     Option (U256 × U256 × U256) :=
   match runBlockchain (rewardBlock fork) .empty [] [] reward rewardOmmers with
   | .ok out =>
     if out.blockException.isNone then
-      some ((out.state.get rewardCoinbase).balance, (out.state.get rewardOmmerA).balance,
-        (out.state.get rewardOmmerB).balance)
+      some ((out.state.get rewardCoinbase).balance, (out.state.get rewardOmmerAge1).balance,
+        (out.state.get rewardOmmerAge2).balance)
     else none
   | .error _ => none
 
@@ -1247,12 +1247,12 @@ private def rewardBalances (fork : Fork) (reward : Option Nat) :
 #guard rewardBalances .byzantium none = some (0, 0, 0)
 -- The two reward paths agree: the t8n step and the importer's `payRewards`
 -- on one ommer of age 1 (ommer number = block number - delta).
-#guard (payT8nRewards (3 * 10 ^ 18) rewardCoinbase [⟨1, rewardOmmerA⟩] .empty).bal
+#guard (payBlockRewards (3 * 10 ^ 18) rewardCoinbase [⟨1, rewardOmmerAge1⟩] .empty).balance
     rewardCoinbase = (3093750000000000000 : Nat).toU256
-#guard (payT8nRewards (3 * 10 ^ 18) rewardCoinbase [⟨1, rewardOmmerA⟩] .empty).bal
-    rewardOmmerA = (2625000000000000000 : Nat).toU256
+#guard (payBlockRewards (3 * 10 ^ 18) rewardCoinbase [⟨1, rewardOmmerAge1⟩] .empty).balance
+    rewardOmmerAge1 = (2625000000000000000 : Nat).toU256
 #guard ommerAgesOk rewardOmmers
-#guard ¬ ommerAgesOk [⟨9, rewardOmmerA⟩]
+#guard ¬ ommerAgesOk [⟨9, rewardOmmerAge1⟩]
 -- `--state.reward` resolution: under proof of work an absent flag is the
 -- fork's `BLOCK_REWARD`, `-1` skips, a value is paid as given, and any other
 -- negative value is refused; under proof of stake nothing is ever paid.
@@ -1322,29 +1322,29 @@ def txEncoding (tx : Transaction) : Bytes :=
 
 def txHash (tx : Transaction) : U256 := (txEncoding tx).keccak
 
-def logJson (l : Log) : JOut :=
-  .obj [
-    ⟨"address", .str (hexAddress l.address)⟩,
-    ⟨"topics", .arr (l.topics.map fun t => .str (hexU256 t))⟩,
-    ⟨"data", .str (hexBytes l.data)⟩
+def logJson (l : Log) : JsonOutput :=
+  .object [
+    ⟨"address", .string (hexAddress l.address)⟩,
+    ⟨"topics", .array (l.topics.map fun t => .string (hexU256 t))⟩,
+    ⟨"data", .string (hexBytes l.data)⟩
   ]
 
-def receiptJson (bout : BlockOutput) (key : Bytes) : Option JOut := do
+def receiptJson (bout : BlockOutput) (key : Bytes) : Option JsonOutput := do
   let tx ← bout.transactionsTrie[key]?
   let entry ← bout.receiptsTrie[key]?
   let r := entry.snd
-  some <| .obj [
-    ⟨"transactionHash", .str (hexU256 (txHash tx))⟩,
-    ⟨"status", .str (hexQuantity (if r.status then 1 else 0))⟩,
-    ⟨"cumulativeGasUsed", .str (hexQuantity r.cumulativeGasUsed)⟩,
-    ⟨"bloom", .str (hexBytes r.logsBloom)⟩,
-    ⟨"logs", .arr (r.logs.map logJson)⟩
+  some <| .object [
+    ⟨"transactionHash", .string (hexU256 (txHash tx))⟩,
+    ⟨"status", .string (hexQuantity (if r.status then 1 else 0))⟩,
+    ⟨"cumulativeGasUsed", .string (hexQuantity r.cumulativeGasUsed)⟩,
+    ⟨"bloom", .string (hexBytes r.logsBloom)⟩,
+    ⟨"logs", .array (r.logs.map logJson)⟩
   ]
 
-def rejectionJson (r : Rejection) : JOut :=
-  .obj [
-    ⟨"index", .str (hexQuantity r.index)⟩,
-    ⟨"error", .str (rejectionText r.reason)⟩
+def rejectionJson (r : Rejection) : JsonOutput :=
+  .object [
+    ⟨"index", .string (hexQuantity r.index)⟩,
+    ⟨"error", .string (rejectionText r.reason)⟩
   ]
 
 private def resultGasUsed (bout : BlockOutput) : Nat :=
@@ -1369,30 +1369,30 @@ is present exactly when the rules carry a block-level access list -- the
 list's RLP and its keccak, the empty list's `0xc0` in state-test mode, where
 the target never builds one -- and traces are not claimed by this tool at
 all. The key spellings are the ones goal B's first golden recorded. -/
-def resultJson (rules : ForkRules) (env : T8nEnv) (o : Outcome) : JOut :=
-  let logsHash := (Rlp.Item.list (o.bout.blockLogs.map Log.toRlpItem)).toBytes.keccak
-  let base : List (String × JOut) := [
-    ⟨"stateRoot", .str (hexU256 o.state.root)⟩,
-    ⟨"txRoot", .str (hexU256 (getTransactionsRoot o.bout))⟩,
-    ⟨"receiptsRoot", .str (hexU256 (getReceiptRoot o.bout))⟩,
-    ⟨"logsHash", .str (hexU256 logsHash)⟩,
-    ⟨"logsBloom", .str (hexBytes (logsBloom o.bout.blockLogs))⟩,
-    ⟨"receipts", .arr (o.bout.receiptKeys.filterMap (receiptJson o.bout))⟩,
-    ⟨"rejected", .arr (o.rejected.map rejectionJson)⟩
+def resultJson (rules : ForkRules) (env : BlockEnvironment) (o : Outcome) : JsonOutput :=
+  let logsHash := (Rlp.Item.list (o.blockOutput.blockLogs.map Log.toRlpItem)).toBytes.keccak
+  let base : List (String × JsonOutput) := [
+    ⟨"stateRoot", .string (hexU256 o.state.root)⟩,
+    ⟨"txRoot", .string (hexU256 (getTransactionsRoot o.blockOutput))⟩,
+    ⟨"receiptsRoot", .string (hexU256 (getReceiptRoot o.blockOutput))⟩,
+    ⟨"logsHash", .string (hexU256 logsHash)⟩,
+    ⟨"logsBloom", .string (hexBytes (logsBloom o.blockOutput.blockLogs))⟩,
+    ⟨"receipts", .array (o.blockOutput.receiptKeys.filterMap (receiptJson o.blockOutput))⟩,
+    ⟨"rejected", .array (o.rejected.map rejectionJson)⟩
   ]
     ++ (if rules.proofOfWork.isSome then
-      [⟨"currentDifficulty", .str (hexQuantity env.difficulty)⟩] else [])
-    ++ [⟨"gasUsed", .str (hexQuantity (resultGasUsed o.bout))⟩]
+      [⟨"currentDifficulty", .string (hexQuantity env.difficulty)⟩] else [])
+    ++ [⟨"gasUsed", .string (hexQuantity (resultGasUsed o.blockOutput))⟩]
     ++ (if rules.header.baseFee then
-      [⟨"currentBaseFee", .str (hexQuantity env.baseFeePerGas)⟩] else [])
+      [⟨"currentBaseFee", .string (hexQuantity env.baseFeePerGas)⟩] else [])
     ++ (if rules.header.withdrawalsRoot then
-      [⟨"withdrawalsRoot", .str (hexU256 (getWithdrawalsRoot o.bout))⟩] else [])
+      [⟨"withdrawalsRoot", .string (hexU256 (getWithdrawalsRoot o.blockOutput))⟩] else [])
     ++ (if rules.header.blobGas then
-      [⟨"currentExcessBlobGas", .str (hexQuantity env.excessBlobGas)⟩,
-       ⟨"blobGasUsed", .str (hexQuantity o.bout.blobGasUsed)⟩] else [])
+      [⟨"currentExcessBlobGas", .string (hexQuantity env.excessBlobGas)⟩,
+       ⟨"blobGasUsed", .string (hexQuantity o.blockOutput.blobGasUsed)⟩] else [])
     ++ (if rules.header.requestsHash then
-      [⟨"requestsHash", .str (hexU256 (computeRequestsHash o.bout.requests))⟩,
-       ⟨"requests", .arr (o.bout.requests.map fun r => .str (hexBytes r))⟩]
+      [⟨"requestsHash", .string (hexU256 (computeRequestsHash o.blockOutput.requests))⟩,
+       ⟨"requests", .array (o.blockOutput.requests.map fun r => .string (hexBytes r))⟩]
       else [])
 -- (U11a gated these same four groups; the `currentDifficulty` group above is
 -- U11b's, needed pre-merge. The kept form is the union: every group U11a
@@ -1400,20 +1400,20 @@ def resultJson (rules : ForkRules) (env : T8nEnv) (o : Outcome) : JOut :=
   let base := match rules.blockAccessListRules with
     | none => base
     | some _ => base ++ [
-      ⟨"blockAccessList", .str (hexBytes o.bout.blockAccessList.encode)⟩,
-      ⟨"blockAccessListHash", .str (hexU256 o.bout.blockAccessList.hash)⟩ ]
+      ⟨"blockAccessList", .string (hexBytes o.blockOutput.blockAccessList.encode)⟩,
+      ⟨"blockAccessListHash", .string (hexU256 o.blockOutput.blockAccessList.hash)⟩ ]
   match o.blockException with
-  | none => .obj base
-  | some e => .obj (base ++ [⟨"blockException", .str (blockExceptionText e)⟩])
+  | none => .object base
+  | some e => .object (base ++ [⟨"blockException", .string (blockExceptionText e)⟩])
 
-def acctJson (a : Account) : JOut :=
-  .obj [
-    ⟨"nonce", .str (hexPadded a.nonce.toNat)⟩,
-    ⟨"balance", .str (hexPadded a.balance.toNat)⟩,
-    ⟨"code", .str (hexBytes a.code.toList)⟩,
-    ⟨"storage", .obj <|
+def accountJson (a : Account) : JsonOutput :=
+  .object [
+    ⟨"nonce", .string (hexPadded a.nonce.toNat)⟩,
+    ⟨"balance", .string (hexPadded a.balance.toNat)⟩,
+    ⟨"code", .string (hexBytes a.code.toList)⟩,
+    ⟨"storage", .object <|
       (Std.TreeMap.toList a.storage).map fun kv =>
-        ⟨hexPadded kv.fst.toNat, .str (hexPadded kv.snd.toNat)⟩⟩
+        ⟨hexPadded kv.fst.toNat, .string (hexPadded kv.snd.toNat)⟩⟩
   ]
 
 /-- The post-state `alloc` document.
@@ -1424,8 +1424,8 @@ order instead -- the input allocation's order, then whatever its block diff
 touched. Neither order is normative and no consumer reads one, so this tool
 takes the order that is deterministic by construction; `scripts/check-t8n.sh`
 canonicalises both sides before comparing. -/
-def allocJson (st : State) : JOut :=
-  .obj <| st.toList.map fun kv => ⟨hexAddress kv.fst, acctJson kv.snd⟩
+def allocJson (st : State) : JsonOutput :=
+  .object <| st.toList.map fun kv => ⟨hexAddress kv.fst, accountJson kv.snd⟩
 
 /-- The `body` document: the RLP list of the accepted transactions, as a block
 body carries them -- a legacy transaction as its own RLP list, a typed one as
@@ -1449,13 +1449,13 @@ def version : String := "0.1.0"
 /-- What a `--state.fork` label names, read as the target's `find_fork` reads
 it: one fork, or one of its fork-block exception labels, which select a fork
 by `env.currentNumber`. -/
-inductive T8nForkLabel : Type
+inductive ForkLabel : Type
   | fork (f : Fork)
   /-- `before` below block `number`, `after` from it. -/
   | atBlock (before after : Fork) (number : Nat)
 deriving DecidableEq, Repr
 
-namespace T8nForkLabel
+namespace ForkLabel
 
 /-- The target's `--state.fork` names over the forks this build declares.
 
@@ -1468,7 +1468,7 @@ fixtures) and `Petersburg` (no target module has that name). The three
 fork-block labels are the target's `EXCEPTION_MAPS` entries whose forks are
 all declared here; `ByzantiumToConstantinopleAt5` resolves to the target's
 `constantinople` module, so its second fork is Petersburg. -/
-def ofString? : String → Option T8nForkLabel
+def ofString? : String → Option ForkLabel
   | "Constantinople" => none
   | "Petersburg" => none
   | "ByzantiumToConstantinopleAt5" => some (.atBlock .byzantium .petersburg 5)
@@ -1477,34 +1477,34 @@ def ofString? : String → Option T8nForkLabel
   | label => (Fork.ofString? label).map .fork
 
 /-- Every fork the label can select. -/
-def forks : T8nForkLabel → List Fork
+def forks : ForkLabel → List Fork
   | .fork f => [f]
   | .atBlock before after _ => [before, after]
 
 /-- The fork the label selects for a block at `number`: the target's loop over
 `fork_blocks`, keeping the last one whose block the number has reached. -/
-def select (number : Nat) : T8nForkLabel → Fork
+def select (number : Nat) : ForkLabel → Fork
   | .fork f => f
   | .atBlock before after n => if n ≤ number then after else before
 
-end T8nForkLabel
+end ForkLabel
 
 -- The twelve pre-Prague forks have target names, and they resolve to the fork
 -- the target runs; the two Jaune-only labels do not.
-#guard T8nForkLabel.ofString? "ConstantinopleFix" = some (.fork .petersburg)
-#guard T8nForkLabel.ofString? "Merge" = some (.fork .paris)
-#guard T8nForkLabel.ofString? "Paris" = some (.fork .paris)
+#guard ForkLabel.ofString? "ConstantinopleFix" = some (.fork .petersburg)
+#guard ForkLabel.ofString? "Merge" = some (.fork .paris)
+#guard ForkLabel.ofString? "Paris" = some (.fork .paris)
 #guard ["Byzantium", "ConstantinopleFix", "Istanbul", "MuirGlacier", "Berlin",
     "London", "ArrowGlacier", "GrayGlacier", "Merge", "Shanghai", "Cancun"].map
-    (fun l => (T8nForkLabel.ofString? l).map T8nForkLabel.forks)
+    (fun l => (ForkLabel.ofString? l).map ForkLabel.forks)
   = [.byzantium, .petersburg, .istanbul, .muirGlacier, .berlin, .london,
     .arrowGlacier, .grayGlacier, .paris, .shanghai, .cancun].map (some [·])
-#guard T8nForkLabel.ofString? "Constantinople" = none
-#guard T8nForkLabel.ofString? "Petersburg" = none
+#guard ForkLabel.ofString? "Constantinople" = none
+#guard ForkLabel.ofString? "Petersburg" = none
 /-- Every projected target name resolves back to its general fork. -/
-theorem targetForkName_roundtrip {f : Fork} {label : String}
+theorem targetForkName_round_trip {f : Fork} {label : String}
     (h : targetForkName? f = some label) :
-    T8nForkLabel.ofString? label = some (.fork f) := by
+    ForkLabel.ofString? label = some (.fork f) := by
   cases f <;> simp_all [targetForkName?, Fork.toString] <;> subst label <;> rfl
 
 /-- No runnable target fork is hidden by the projection. -/
@@ -1512,26 +1512,26 @@ theorem mem_advertisedForkLane (f : Fork) :
     f ∈ advertisedForkLane ↔ f ∈ Fork.supported ∧ f ≠ .constantinople := by
   cases f <;> simp [advertisedForkLane, targetForkName?, Fork.supported, Fork.rules?]
 
-#guard (T8nForkLabel.ofString? "BerlinToLondonAt5").map (T8nForkLabel.select 4)
+#guard (ForkLabel.ofString? "BerlinToLondonAt5").map (ForkLabel.select 4)
   = some .berlin
-#guard (T8nForkLabel.ofString? "BerlinToLondonAt5").map (T8nForkLabel.select 5)
+#guard (ForkLabel.ofString? "BerlinToLondonAt5").map (ForkLabel.select 5)
   = some .london
-#guard (T8nForkLabel.ofString? "ByzantiumToConstantinopleAt5").map
-    (T8nForkLabel.select 5) = some .petersburg
-#guard (T8nForkLabel.ofString? "ConstantinopleToIstanbulAt5").map
-    (T8nForkLabel.select 0) = some .petersburg
+#guard (ForkLabel.ofString? "ByzantiumToConstantinopleAt5").map
+    (ForkLabel.select 5) = some .petersburg
+#guard (ForkLabel.ofString? "ConstantinopleToIstanbulAt5").map
+    (ForkLabel.select 0) = some .petersburg
 -- U9 added the historical target labels; U11a/U11b/U11d resolved Berlin
 -- through Cancun. This candidate also resolves the pre-Berlin target labels
 -- and both endpoints of their target fork-block labels. These lookup
 -- snapshots do not establish fixture conformance.
 #guard ["Byzantium", "ConstantinopleFix", "Istanbul", "MuirGlacier",
     "ByzantiumToConstantinopleAt5", "ConstantinopleToIstanbulAt5"].all
-  (fun l => match T8nForkLabel.ofString? l with
+  (fun l => match ForkLabel.ofString? l with
     | some label => label.forks.all (fun f => f.rules?.isSome)
     | none => false)
 #guard ["Berlin", "London", "ArrowGlacier", "GrayGlacier", "Merge", "Shanghai",
     "Cancun", "BerlinToLondonAt5"].all
-  (fun l => match T8nForkLabel.ofString? l with
+  (fun l => match ForkLabel.ofString? l with
     | some label => label.forks.all (fun f => f.rules?.isSome)
     | none => false)
 
@@ -1705,7 +1705,7 @@ def run (args : List String) : IO Unit := do
     IO.throw
       s!"error : t8n requires --state.fork; there is no default fork, and the \
          runnable labels are {advertisedForkNames}"
-  let some label := T8nForkLabel.ofString? o.forkLabel
+  let some label := ForkLabel.ofString? o.forkLabel
     | IO.throw
         s!"error : t8n does not support the fork {repr o.forkLabel}; this \
            build's runnable lane is {advertisedForkNames}, and \
@@ -1729,9 +1729,9 @@ def run (args : List String) : IO Unit := do
   let preState ← allocJsonIn.toWorld
   -- A fork-block label selects its fork by the block number, as the target's
   -- `find_fork` does; a plain label ignores it.
-  let f := label.select (← natOr envJsonIn "currentNumber" defaultNumber)
+  let f := label.select (← readNatFieldD envJsonIn "currentNumber" defaultNumber)
   let rules ← IO.ofExcept (f.rules.mapError SupportError.render)
-  let env ← decodeEnv rules o.stateTest envJsonIn
+  let env ← decodeEnvironment rules o.stateTest envJsonIn
   let reward ← IO.ofExcept (resolveReward rules o.reward)
   if reward.isSome then
     IO.guard (ommerAgesOk env.ommers)
@@ -1770,9 +1770,9 @@ def run (args : List String) : IO Unit := do
   let allocText := (allocJson outcome.state).toString
   let bodyText := quoted (bodyHex outcome.included)
   let basedir : System.FilePath := o.outputBasedir
-  let mut stdoutFields : List (String × JOut) := []
+  let mut stdoutFields : List (String × JsonOutput) := []
   if o.outputBody = "stdout" then
-    stdoutFields := stdoutFields ++ [⟨"body", .str (bodyHex outcome.included)⟩]
+    stdoutFields := stdoutFields ++ [⟨"body", .string (bodyHex outcome.included)⟩]
   else if ¬ o.outputBody.isEmpty then
     IO.FS.writeFile (basedir.join o.outputBody) bodyText
   if o.outputAlloc = "stdout" then
@@ -1784,7 +1784,7 @@ def run (args : List String) : IO Unit := do
   else
     IO.FS.writeFile (basedir.join o.outputResult) resultText
   if ¬ stdoutFields.isEmpty then
-    IO.print (JOut.obj stdoutFields).toString
+    IO.print (JsonOutput.object stdoutFields).toString
 
 def usage : String :=
   s!"usage:
