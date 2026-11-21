@@ -73,7 +73,7 @@ inductive TransactionType : Type
     («to» : Address)
     (accessList : AccessList)
     (maxFeePerBlobGas : Nat)
-    (blobVersionedHashes : List U256)
+    (blobVersionedHashes : List Hash32)
   | eip7702
     (chainId : UInt64)
     (maxPriorityFeePerGas : Nat)
@@ -89,12 +89,12 @@ structure Withdrawal : Type where
   (amount : U256)
 
 structure Header : Type where
-  parentHash : U256
-  ommersHash : U256
+  parentHash : Hash32
+  ommersHash : Hash32
   coinbase : Address
-  stateRoot : U256
-  transactionsRoot : U256
-  receiptsRoot : U256
+  stateRoot : Hash32
+  transactionsRoot : Hash32
+  receiptsRoot : Hash32
   logsBloom : Bytes
   difficulty : Nat
   number : Nat
@@ -110,21 +110,21 @@ structure Header : Type where
   such field", never "the field is zero". -/
   baseFeePerGas : Option Nat
   /-- EIP-4895 (Shanghai). -/
-  withdrawalsRoot : Option U256
+  withdrawalsRoot : Option Hash32
   /-- EIP-4844 (Cancun); present exactly when `excessBlobGas` is. -/
   blobGasUsed : Option Nat
   /-- EIP-4844 (Cancun). -/
   excessBlobGas : Option Nat
   /-- EIP-4788 (Cancun). -/
-  parentBeaconBlockRoot : Option U256
-  requestsHash : Option U256
+  parentBeaconBlockRoot : Option Hash32
+  requestsHash : Option Hash32
   /-- EIP-7928: the commitment to the block-level access list.
 
   Optional in the same sense `requestsHash` is: the field exists on the wire
   only at forks that define it, and `ForkRules.header.blockAccessListHash` is
   what says which those are. `none` is "this fork has no such field", never
   "the field is zero". -/
-  blockAccessListHash : Option U256
+  blockAccessListHash : Option Hash32
   /-- EIP-7843: the consensus slot number this block was produced for, which
   `SLOTNUM` pushes. Optional on the same terms. -/
   slotNumber : Option UInt64
@@ -203,7 +203,7 @@ This is the value a child block's `parentHash` names, the key a snapshot is
 stored under, and the value `BLOCKHASH` returns. It is written out inline at
 several older call sites; those keep their spelling, and this is the name the
 checked chain vocabulary states its results about. -/
-def Header.hash (header : Header) : U256 :=
+def Header.hash (header : Header) : Hash32 :=
   (Header.toRlpItem header).toBytes.keccak
 
 structure Transaction : Type where
@@ -384,14 +384,14 @@ def TransactionType.gasPrice (baseFee : Nat) : TransactionType → Nat
   | .eip4844 _ mpf mf _ _ _ _ => min mf (baseFee + mpf)
   | .eip7702 _ mpf mf _ _ _ => min mf (baseFee + mpf)
 
-def TransactionType.blobVersionedHashes : TransactionType → List U256
+def TransactionType.blobVersionedHashes : TransactionType → List Hash32
   | .legacy _ _ => []
   | .eip2930 _ _ _ _ => []
   | .eip1559 _ _ _ _ _ => []
   | .eip4844 _ _ _ _ _ _ bhs => bhs
   | .eip7702 _ _ _ _ _ _ => []
 
-def Transaction.blobVersionedHashes (tx : Transaction) : List U256 := tx.type.blobVersionedHashes
+def Transaction.blobVersionedHashes (tx : Transaction) : List Hash32 := tx.type.blobVersionedHashes
 
 -- nibbles-to-bytes maps
 abbrev TrieBuilder := Std.TreeMap (List UInt8) (List UInt8) (@List.compare _ ⟨UInt8.compareLows⟩)
@@ -612,7 +612,7 @@ def Gas.logData : Nat := 8
 def Gas.logTopic : Nat := 375
 def depositContractAddress : Address :=
   0x00000000219ab540356cbb839cbe05303d7705fa
-def depositEventSignatureHash : U256 :=
+def depositEventSignatureHash : Hash32 :=
   0x649bbc62d0e31342afea4e5cd82d4049e7e1ee912fc0889aa790803be39038c5
 def depositEventLength : Nat := 576
 def pubkeyOffset : Nat := 160
@@ -635,7 +635,7 @@ def consolidationRequestType : Bytes := [2]
 def withdrawalRequestPredeployAddress : Address := 0x00000961Ef480Eb55e80D19ad83579A64c007002
 def consolidationRequestPredeployAddress : Address := 0x0000BBdDc7CE488642fb579F8B00f3a590007251
 def historyStorageAddress : Address := 0x0000F90827F1C53a10cb7A02335B175320002935
-def emptyOmmerHash : U256 := (Rlp.Item.list []).toBytes.keccak
+def emptyOmmerHash : Hash32 := (Rlp.Item.list []).toBytes.keccak
 def setCodeTransactionMagic : Bytes := [0x05]
 def beaconRootsAddress : Address := 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02
 def systemAddress : Address := 0xfffffffffffffffffffffffffffffffffffffffe
@@ -1328,7 +1328,7 @@ def Bytes.toRlpFixed (name : String) (n : Nat) (xs : Bytes) :
 exact-width decoder, so this adds the precise reason rather than a check. Note
 these fields are *bytes*, not scalars: a root may legitimately begin with a zero
 byte, so the canonical-scalar rule must not be applied to them. -/
-def Bytes.toRlpHash (name : String) (xs : Bytes) : Except DecodeError U256 :=
+def Bytes.toRlpHash (name : String) (xs : Bytes) : Except DecodeError Hash32 :=
   xs.toU256?.toExcept
     (.fixedWidth (.text s!"{name} must be exactly 32 bytes, but is {xs.length}"))
 

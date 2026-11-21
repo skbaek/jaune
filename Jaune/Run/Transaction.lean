@@ -68,7 +68,7 @@ open Jaune
 namespace Jaune
 /-- A blob transaction's hashes, their count and versions, and its blob fee cap. -/
 def checkTransactionBlobData (block : BlockContext) (tx : Jaune.Transaction) (maxGasFee : Nat) :
-    Except TransactionValidationError (Nat × List U256) :=
+    Except TransactionValidationError (Nat × List Hash32) :=
   match tx.type with
   | .eip4844 _ _ _ _ _ maxBlobFee blobHashes => do
     if blobHashes.isEmpty then
@@ -115,7 +115,7 @@ open Jaune
 namespace Jaune
 /-- The whole admission check against the block and the transaction-start state. -/
 def checkTransaction (block : BlockContext) (state : State) (blockOut : BlockOutput)
-    (tx : Jaune.Transaction) : Except TransitionError (Address × Nat × List U256 × Nat) := do
+    (tx : Jaune.Transaction) : Except TransitionError (Address × Nat × List Hash32 × Nat) := do
   let txBlobGasUsed ←
     Except.mapError .transaction (checkTransactionGasLimits block blockOut tx)
   Except.mapError TransitionError.transaction (checkTransactionChainId block tx)
@@ -158,7 +158,7 @@ structure Transaction.Admitted where
   blockOutput : BlockOutput
   sender : Address
   effectiveGasPrice : Nat
-  blobVersionedHashes : List U256
+  blobVersionedHashes : List Hash32
   txBlobGasUsed : Nat
   intrinsicGas : Nat
   calldataFloorGasCost : Nat
