@@ -3,7 +3,7 @@
 # selected `ForkRules.gas` record, never from the global that shadows it.
 #
 # See scripts/rule-data-allow.txt for what this inventories and why. The gate
-# is structural on purpose: with `BenvStat` carrying a `Fork`, every machine a
+# is structural on purpose: with `BlockContext` carrying a `Fork`, every machine a
 # fixture or a proof can build runs the legacy lane under `pragueGasSchedule`,
 # whose three repriced numbers equal these globals by `rfl`, so no evaluation
 # guard can distinguish a site that reads the record from one that reads the
