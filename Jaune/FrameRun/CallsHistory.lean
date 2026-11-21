@@ -6,13 +6,20 @@ import Jaune.FrameRun.Facts
 
 Wherever `Facts` lifts kept frames (`Root.frames` up to `KeptHistory.frames`), the calls
 are lifted the same way: `calls` collects every call of every entered root, and `keptCalls`
-applies the root's own settlement exactly as `Root.frames` does. A top-level frame that finished
-at entry has no root, so it contributes no call: it was sent by no running frame.
+applies the root's own settlement exactly as `Root.frames` does.
+
+No top-level frame appears in any of these `calls` or `keptCalls` lists, whether it entered code
+or finished at entry: a top-level frame was sent by no running frame, so it is not a call. The
+lists hold only the inner calls a running root spawns, at every depth. A top-level frame that
+finished at entry has no root and no run, so it spawns none. A statement about every frame of a
+history, top-level frames included, quantifies over the roots (`BlockRun.roots`) or the frames
+(`KeptHistory.frames`) as well.
 -/
 
 namespace Jaune
 
-/-- Every call of the root's run. -/
+/-- Every call of the root's run: the inner calls it spawns, at every depth. The root's own
+top-level frame is not among them. -/
 def Root.calls (root : Root) : List Frame.Run.Call := root.run.calls
 
 /-- The root's kept calls, empty when the root's own settlement does not commit, as `Root.frames`. -/
@@ -73,8 +80,11 @@ def KeptBlock.calls (block : KeptBlock) : List Frame.Run.Call := block.run.calls
 
 def KeptBlock.keptCalls (block : KeptBlock) : List Frame.Run.Call := block.run.keptCalls
 
+/-- Every call of every top-level root of the history. No top-level frame is a call. -/
 def KeptHistory.calls (blocks : List KeptBlock) : List Frame.Run.Call := blocks.flatMap KeptBlock.calls
 
+/-- The kept calls of every top-level root of the history, after each root's own settlement.
+No top-level frame is a call, and a kept call's own child may still have reverted. -/
 def KeptHistory.keptCalls (blocks : List KeptBlock) : List Frame.Run.Call :=
   blocks.flatMap KeptBlock.keptCalls
 

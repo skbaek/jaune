@@ -657,7 +657,7 @@ theorem KeptStep.gasLimit_lt {cfg : ChainConfig} {fork : Fork} {parent : BlockCh
   obtain ⟨_, hv, _⟩ := Except.bind_eq_ok h
   exact validateHeader_gasLimit_lt (Except.mapError_eq_ok_iff.mp hv)
 
-/-- The configured importer witnesses a kept step: chain identity, fork lookup and the typed
+/-- The configured transition witnesses a kept step: chain identity, fork lookup and the typed
 transition with its scheduled ommer checks. -/
 theorem KeptStep.of_transition {cfg : ChainConfig} {parent post : BlockChain} {block : Block}
     (accepted : stateTransitionUsing cfg parent block = .ok post) :

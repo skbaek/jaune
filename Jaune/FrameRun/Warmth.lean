@@ -15,7 +15,8 @@ caller's) or failed (the caller keeps the set it saved at the call) (`resume_acc
 So every address accessed when a run starts is accessed at every visit of the run
 (`Frame.Run.visits_warm`), at the start of every frame it enters (`Frame.Run.frames_warm`),
 including frames inside subtrees that later revert, and at the start of every call that ran
-(`Frame.Run.calls_ran_warm`). There is no premise on the fork: the facts hold with and without
+(`Frame.Run.calls_ran_warm`), and at the end of every same-frame prefix (`Frame.Run.Prefix.warm`).
+There is no premise on the fork: the facts hold with and without
 state gas.
 -/
 
@@ -498,6 +499,13 @@ theorem calls_ran_warm {r out} (t : Frame.Run r (.exit out)) {a : Address}
   rw [frames_eq_calls]
   exact List.mem_cons_of_mem _ (List.mem_filterMap.mpr ⟨c, hc, hran⟩)
 
+/-- Every address accessed at the start of a same-frame prefix is accessed at its end. -/
+theorem Prefix.warm {r s} (p : Prefix r s) {a : Address} (ha : a ∈ r.state.accessedAddresses) :
+    a ∈ s.state.accessedAddresses :=
+  prefix_induction (P := fun x => a ∈ x.state.accessedAddresses)
+    (fun hs ih => step_next_accessedAddresses hs ih)
+    (fun hs _ hr ih => resumeCaller_accessedAddresses hs hr ih) p ha
+
 end Frame.Run
 
 /-! ### Over top-level roots and kept histories
@@ -518,14 +526,12 @@ theorem KeptHistory.frames_warm (blocks : List KeptBlock) :
       ∀ a ∈ root.running.state.accessedAddresses, a ∈ n.start.state.accessedAddresses :=
   fun _ _ root _ _ hn _ ha => root.frames_warm ha hn
 
-/-- Every call of a kept history that ran started its child with every address accessed when
-the top-level root it belongs to started. -/
-theorem KeptHistory.calls_ran_warm {blocks : List KeptBlock} {c : Frame.Run.Call}
-    (hc : c ∈ KeptHistory.calls blocks) :
-    ∃ block ∈ blocks, ∃ root ∈ block.run.roots, c ∈ root.run.calls ∧
-      ∀ n, c.ran = some n →
-        ∀ a ∈ root.running.state.accessedAddresses, a ∈ n.start.state.accessedAddresses := by
-  obtain ⟨block, hb, root, hr, hc⟩ := KeptHistory.mem_calls.mp hc
-  exact ⟨block, hb, root, hr, hc, fun _ hran _ ha => Frame.Run.calls_ran_warm root.run ha hc hran⟩
+/-- Every call of a top-level root of a kept history that ran started its child with every
+address accessed when that root started. -/
+theorem KeptHistory.calls_ran_warm {blocks : List KeptBlock} {block : KeptBlock} (_hb : block ∈ blocks)
+    {root : Root} (_hr : root ∈ block.run.roots) {c : Frame.Run.Call} (hc : c ∈ root.run.calls)
+    {n : Frame.Run.Node} (hran : c.ran = some n) {a : Address}
+    (ha : a ∈ root.running.state.accessedAddresses) : a ∈ n.start.state.accessedAddresses :=
+  Frame.Run.calls_ran_warm root.run ha hc hran
 
 end Jaune
