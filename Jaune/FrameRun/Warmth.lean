@@ -117,11 +117,11 @@ private def DonePost (a : Address) : MessageOp.Outcome → Prop
   | .done (.ok t) => a ∈ t.accessedAddresses
   | _ => True
 
-private abbrev W (a : Address) (x : Except (ExceptionalHalt × Frame.State) MessageOp.Outcome) : Prop :=
+private abbrev DoneWalk (a : Address) (x : Except (ExceptionalHalt × Frame.State) MessageOp.Outcome) : Prop :=
   Walk (fun _ => True) (DonePost a) x
 
 private theorem ofExcept_donePost {a : Address} {x : Except (ExceptionalHalt × Frame.State) MessageOp.Outcome}
-    (hx : W a x) : DonePost a (MessageOp.Outcome.ofExcept x) := by
+    (hx : DoneWalk a x) : DonePost a (MessageOp.Outcome.ofExcept x) := by
   cases x with
   | error _ => trivial
   | ok _ => exact hx
@@ -238,9 +238,9 @@ theorem JumpOp.run_accessedAddresses {x r : Frame.Running} {j : JumpOp} (h : Jum
     exact hw
 
 private theorem walk_done {a : Address} {t : Frame.State} (h : a ∈ t.accessedAddresses) :
-    W a (pure (.done (.ok t))) := h
+    DoneWalk a (pure (.done (.ok t))) := h
 
-private theorem walk_tail {a : Address} {o : MessageOp.Outcome} (h : DonePost a o) : W a (pure o) := h
+private theorem walk_tail {a : Address} {o : MessageOp.Outcome} (h : DonePost a o) : DoneWalk a (pure o) := h
 
 private theorem prepareCall_donePost {a : Address} {ctx s gas value caller target addr transfer static
     ii il oi ol code disabled} (h : a ∈ s.accessedAddresses) :
