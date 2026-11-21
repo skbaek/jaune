@@ -47,7 +47,8 @@ def PayloadStatusKind.isInvalidated : PayloadStatusKind → Bool
   | .invalid | .invalidBlockHash => true
   | _ => false
 
-/-- An engine API `PayloadStatusV1` (`validation_error` is diagnostic only and not kept). -/
+/-- Engine API `PayloadStatusV1` (bellatrix/optimistic-sync.md) without its `validation_error`
+field, which is diagnostic only. -/
 structure PayloadStatusV1 where
   status : PayloadStatusKind
   latestValidHash : Option Hash32

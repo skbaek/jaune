@@ -636,6 +636,8 @@ def verifyKzgProof (commitment z y proof : Bytes) :
   let prf ← decodeKzgG1 proof
   pure (verifyKzgProofImpl comm zf yf prf)
 
+/-- EIP-4844 point-evaluation precompile charge, 50,000 gas; execution-specs name
+`GAS_POINT_EVALUATION`. -/
 def pointEvaluationPrecompileGas : Nat := 50000
 
 -- def point_evaluation(evm : Evm) -> None:
