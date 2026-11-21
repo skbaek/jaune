@@ -1219,6 +1219,7 @@ class Comparison:
         self.left = dict(before['constants'])
         self.right = after['constants']
         self.respelled_literals = []
+        self._respell_origin = {}  # id(respelled node) -> (respelled node, the before node it respells)
         for name in list(self.left):
             respelled = self.respell_name_literals(name, self.left[name])
             if respelled is not self.left[name]:
@@ -1305,6 +1306,7 @@ class Comparison:
                                         out = ['app', out, ['str', part]]
                                 if out is not None:
                                     self.respelled_literals.append([name, lit, new_full, why])
+                                    self._respell_origin[id(out)] = (out, cur)
                                     memo[cid] = (out, True)
                                     continue
                             # Plain Name.mkStr literal that did not change: never contains sub-literals.
@@ -1343,6 +1345,7 @@ class Comparison:
                     else:
                         if has_sp or cid in special:
                             special.add(id(out))
+                        self._respell_origin[id(out)] = (out, cur)
                         memo[cid] = (out, True)
             elif isinstance(cur, dict):
                 if not ready:
@@ -2087,6 +2090,12 @@ class Comparison:
                 stack.append(('cmp', cur_l[4], cur_r[4], (cur_p, '.syntax'), in_kernel))
                 stack.append(('cmp', cur_l[1], cur_r[1], (cur_p, '.preresolved'), in_kernel))
                 continue
+            if (isinstance(cur_l, list) and len(cur_l) == 3 and cur_l[0] == 'app' and
+                    self._is_cons_cell(cur_l)):
+                frames = self.preresolved_list_frames(cur_l, cur_r, cur_p, in_kernel)
+                if frames is not None:
+                    stack.extend(reversed(frames))
+                    continue
             if isinstance(cur_l, list) and len(cur_l) == 2 and cur_l[0] == 'name':
                 if not isinstance(cur_r, list) or len(cur_r) != 2 or cur_r[0] != 'name':
                     raise Mismatch(f'{self._fmt_path(cur_p)}: name reference changed kind')
@@ -2143,6 +2152,153 @@ class Comparison:
                     stack.append(('cmp', cur_l[i], cur_r[i], (cur_p, f'[{i}]'), in_kernel))
             elif cur_l != cur_r:
                 raise Mismatch(f'{self._fmt_path(cur_p)}: {cur_l!r} became {cur_r!r}')
+
+    PRERESOLVED = ['const', ['name', 'Lean.Syntax.Preresolved'], []]
+
+    @staticmethod
+    def _is_cons_cell(node):
+        """Whether `node` is `List.cons T e l` (a constant-time shape check)."""
+        f = node[1]
+        if not (isinstance(f, list) and len(f) == 3 and f[0] == 'app'):
+            return False
+        g = f[1]
+        if not (isinstance(g, list) and len(g) == 3 and g[0] == 'app'):
+            return False
+        h = g[1]
+        return (isinstance(h, list) and len(h) == 3 and h[0] == 'const' and
+                h[1] == ['name', 'List.cons'])
+
+    @staticmethod
+    def _list_cells(node):
+        """(element type, entries, nil node) of a fully literal `List` value
+        (`List.cons T e (... (List.nil T))`), or None."""
+        entries, element = [], None
+        cur = node
+        while True:
+            head, args = _unwind(cur)
+            if head == 'List.nil' and len(args) == 1:
+                if element is not None and args[0] != element:
+                    return None
+                return args[0], entries, cur
+            if head != 'List.cons' or len(args) != 3:
+                return None
+            if element is None:
+                element = args[0]
+            elif args[0] != element:
+                return None
+            entries.append(args[1])
+            cur = args[2]
+
+    def _coarse_candidate_set(self, cell):
+        """Coarse records only pick pairing candidates (the comparison
+        decides): a `List Lean.Syntax.Preresolved` keeps the first of equal
+        entries on either side and drops later prefixes of its first entry,
+        so a list whose map-made duplicate or implied prefix the after side
+        drops (master rulings R12, R12b) still meets its partner."""
+        if cell[1][1][2] != self.PRERESOLVED:
+            return cell
+        cells = self._list_cells(cell)
+        if cells is None:
+            return cell
+        def namespace(node):
+            head, args = _unwind(node)
+            if head != 'Lean.Syntax.Preresolved.namespace' or len(args) != 1:
+                return None
+            parts = _name(args[0])
+            return '.'.join(parts) if parts else None
+        current = namespace(cells[1][0]) if cells[1] else None
+        kept = []
+        for entry in cells[1]:
+            ns = namespace(entry) if kept else None
+            if current is not None and ns is not None and current.startswith(ns + '.'):
+                continue  # implied by the current namespace (R12b)
+            if not any(dag_equal(entry, k) for k in kept):
+                kept.append(entry)
+        if len(kept) == len(cells[1]):
+            return cell
+        cons = cell[1][1][1]
+        out = cells[2]
+        for entry in reversed(kept):
+            out = ['app', ['app', ['app', cons, cells[0]], entry], out]
+        return out
+
+    def preresolved_list_frames(self, left, right, path, in_kernel):
+        """Master ruling R12 (G2b U9). A pre-resolution list is an ordered
+        candidate set: Lean lists the current namespace and each open
+        namespace in order, and a later duplicate never changes resolution.
+        A namespace row that merges two of them (`Jaune.Checked` into
+        `Jaune`, with `open Jaune`) makes a before entry a duplicate of an
+        earlier one only through the map. When a before
+        `List Lean.Syntax.Preresolved` literal and its after list differ in
+        length, the before image (entrywise, as respelled) with every later
+        entry removed that equals an earlier one only because of the map
+        (the two were distinct before the rename, and no earlier entry was
+        already equal to it before) must be the after list, entry by entry.
+        Lists of equal length are compared as before, with no removal.
+        R12b: in the same comparison a later entry whose image is a proper
+        namespace prefix (on a dot boundary) of the first entry's image (the
+        current namespace, which keeps its place on both sides) and which was
+        distinct from it before the rename is dropped too: resolution inside
+        `N` already searches every prefix of `N`.
+        Returns the comparison frames, or None when the rule does not apply
+        (the ordinary comparison then decides)."""
+        if left[1][1][2] != self.PRERESOLVED:  # element type of this cons cell
+            return None
+        cells_l = self._list_cells(left)
+        if cells_l is None or cells_l[0] != self.PRERESOLVED:
+            return None
+        cells_r = self._list_cells(right)
+        if cells_r is None or cells_r[0] != self.PRERESOLVED or len(cells_l[1]) == len(cells_r[1]):
+            return None
+        def before_entry(node):
+            # The entry as written before the rename (held with its
+            # respelling, so an id is never reused).
+            row = self._respell_origin.get(id(node))
+            return row[1] if row is not None and row[0] is node else node
+        def namespace(node):
+            head, args = _unwind(node)
+            if head != 'Lean.Syntax.Preresolved.namespace' or len(args) != 1:
+                return None
+            parts = _name(args[0])
+            return '.'.join(parts) if parts else None
+        entries = cells_l[1]
+        # R12b: the current namespace is the first entry; it must keep its
+        # place on both sides for a prefix entry to be implied by it.
+        current = namespace(entries[0]) if entries else None
+        current_kept = (current is not None and cells_r[1] and dag_equal(cells_r[1][0], entries[0]))
+        kept = []
+        for i, entry in enumerate(entries):
+            was = before_entry(entry)
+            earlier = entries[:i]
+            image_dup = any(dag_equal(e, entry) for e in earlier)
+            before_dup = any(dag_equal(before_entry(e), was) for e in earlier)
+            if image_dup and not before_dup:
+                continue
+            ns = namespace(entry)
+            implied = bool(i > 0 and current_kept and ns is not None and current.startswith(ns + '.') and
+                           not dag_equal(before_entry(entries[0]), was))
+            kept.append((entry, implied))
+        # R12b: an entry the current namespace implies may also go, in order,
+        # where the after list does not hold it.
+        if len(kept) != len(cells_r[1]):
+            aligned, j = [], 0
+            for entry, implied in kept:
+                if implied and (j >= len(cells_r[1]) or not dag_equal(entry, cells_r[1][j])):
+                    continue
+                aligned.append((entry, implied))
+                j += 1
+            kept = aligned
+        kept = [entry for entry, _ in kept]
+        if len(kept) != len(cells_r[1]):
+            raise Mismatch(f'{self._fmt_path(path)}: pre-resolution list of {len(cells_l[1])} entries became '
+                           f'{len(cells_r[1])}; removing only the duplicates the map made leaves {len(kept)}')
+        holder = self.holders[-1] if self.holders else None
+        self.respelled_literals.append([holder, len(cells_l[1]), len(kept), 'preresolved duplicate removed'])
+        frames = [('cmp', cells_l[0], cells_r[0], (path, '.element'), in_kernel)]
+        for i, (a, b) in enumerate(zip(kept, cells_r[1])):
+            frames.append(('cmp', a, b, (path, f'.entry[{i}]'), in_kernel))
+        frames.append(('cmp', cells_l[2], cells_r[2], (path, '.nil'), in_kernel))
+        return frames
 
     def pair(self, a, b):
         left_holders, right_holders = self.all_before_holders, self.all_after_holders
@@ -2392,7 +2548,10 @@ class Comparison:
                                      else (cur[2], self.raw_marker(cur[3], cur[2])))
                     memo[cid] = ['quotedIdentifier', c1, spelling, raw, c4]
                 else:
-                    memo[cid] = [memo[id(it)] if isinstance(it, (list, dict)) else it for it in cur]
+                    new = [memo[id(it)] if isinstance(it, (list, dict)) else it for it in cur]
+                    if coarse and len(new) == 3 and new[0] == 'app' and self._is_cons_cell(new):
+                        new = self._coarse_candidate_set(new)
+                    memo[cid] = new
         return memo[id(value)]
 
     def compare_imports(self):

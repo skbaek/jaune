@@ -1518,5 +1518,108 @@ class NamingFidelityTests(unittest.TestCase):
         self.assertFalse(spelled('_root_', 'N.B.f'))
 
 
+    @staticmethod
+    def preresolved_list(*names, element='Lean.Syntax.Preresolved'):
+        T = ['const', ['name', element], []]
+        out = ['app', ['const', ['name', 'List.nil'], [['zero']]], T]
+        for n in reversed(names):
+            parts = n.split('.')
+            lit = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], []]
+            for part in parts:
+                lit = ['app', lit, ['str', part]]
+            entry = ['app', ['const', ['name', 'Lean.Syntax.Preresolved.namespace'], []], lit]
+            out = ['app', ['app', ['app', ['const', ['name', 'List.cons'], [['zero']]], T], entry], out]
+        return out
+
+    def test_preresolved_lists_drop_only_duplicates_the_map_made(self):
+        # Master ruling R12: `namespace A.C` + `open A` pre-resolve to
+        # [A.C, ..., A]; merged into `A` (and `open A` dropped) the after
+        # list is [A, ...]. A later duplicate never changes resolution.
+        rows = self.entries(('A.C', 'A', 'namespace', {}), ('A.C.R.x', 'A.R.x', 'declaration', {}))
+        def run(before, after, element='Lean.Syntax.Preresolved'):
+            gen = lambda names: dict(kernel=['definition', 'safe', ['app', ['const', ['name', 'P.ident'], []],
+                                                                     self.preresolved_list(*names, element=element)]],
+                                     attributes={})
+            self.before = snapshot({'A.C.R.x': constant(), 'gen': gen(before)}, ['A.C.R.x'])
+            self.after = snapshot({'A.R.x': constant(), 'gen': gen(after)}, ['A.R.x'])
+            self.renames = rows
+            return self.run_check()
+        # Two levels, three levels, and a duplicate that is not adjacent.
+        verdict = run(['A.C', 'A'], ['A'])
+        self.assertIn('preresolved duplicate removed', [r[3] for r in verdict['derived_literals_respelled']])
+        self.assertEqual(run(['A.C.R', 'A.C', 'A'], ['A.R', 'A'])['status'], 'OK')
+        self.assertEqual(run(['A.C', 'B.M', 'B', 'A'], ['A', 'B.M', 'B'])['status'], 'OK')
+        # Lists of equal length are compared as they are: no removal.
+        self.assertEqual(run(['A.C', 'A'], ['A', 'A'])['status'], 'OK')
+        # A duplicate already present before the rename stays.
+        self.assertEqual(run(['A', 'A', 'A.C'], ['A', 'A'])['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A', 'A', 'A.C'], ['A'])
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A', 'A', 'B'], ['A', 'B'])
+        # Control: removing an entry that is no duplicate fails.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.C', 'B'], ['A'])
+        # Control: reordering fails.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.C', 'B', 'A'], ['B', 'A'])
+        # Control: the after side never loses or gains by this rule.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A'], ['A', 'A'])
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.C', 'A'], ['A', 'A', 'A'])
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.C', 'A'], [])
+        # Control: only a list of `Lean.Syntax.Preresolved` is a candidate set.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.C', 'A'], ['A'], element='Lean.Name')
+        # Control: a namespace the rows do not merge is no duplicate.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.D', 'A'], ['A'])
+
+    def test_preresolved_lists_drop_prefixes_of_the_current_namespace(self):
+        # Master ruling R12b: inside `namespace N.C` + `open N` (+ `namespace R`)
+        # the list is [N.C.R, ..., N]; merged into `N` with the `open` dropped,
+        # `N` is a proper prefix of the current namespace `N.R` and implicitly open.
+        rows = self.entries(('N.C', 'N', 'namespace', {}), ('N.C.R.x', 'N.R.x', 'declaration', {}),
+                            ('Jaune.C', 'Jaune', 'namespace', {}), ('Jaune.C.R.y', 'Jaune.R.y', 'declaration', {}))
+        def run(before, after):
+            gen = lambda names: dict(kernel=['definition', 'safe', ['app', ['const', ['name', 'P.ident'], []],
+                                                                     self.preresolved_list(*names)]], attributes={})
+            self.before = snapshot({'N.C.R.x': constant(), 'Jaune.C.R.y': constant(2), 'gen': gen(before)},
+                                   ['N.C.R.x', 'Jaune.C.R.y'])
+            self.after = snapshot({'N.R.x': constant(), 'Jaune.R.y': constant(2), 'gen': gen(after)},
+                                  ['N.R.x', 'Jaune.R.y'])
+            self.renames = rows
+            return self.run_check()
+        self.assertEqual(run(['N.C.R', 'L.M', 'L', 'N'], ['N.R', 'L.M', 'L'])['status'], 'OK')
+        self.assertEqual(run(['N.C.R', 'N'], ['N.R'])['status'], 'OK')
+        # Equal length: nothing drops.
+        self.assertEqual(run(['N.C.R', 'N'], ['N.R', 'N'])['status'], 'OK')
+        # Control: an entry that is not a prefix of the current namespace stays.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['N.C.R', 'M'], ['N.R'])
+        # Control: a prefix must end on a dot boundary.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['Jaune.C.R', 'Jau'], ['Jaune.R'])
+        # Control: only the current namespace (the first entry, kept in place on
+        # both sides) implies its prefixes.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['L', 'N.C.R', 'N'], ['L', 'N.R'])
+        with self.assertRaises(CHECK.Mismatch):
+            run(['N.C.R', 'N'], ['N'])
+        # Control: the first entry itself never drops.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['N.C.R', 'L'], ['L'])
+        # Control: an entry already equal to the current namespace before stays.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['N.C.R', 'N.C.R', 'N'], ['N.R'])
+        # The checks that the first entry keeps its place, that the dropped entry
+        # differed from it before the rename, and that the first entry never
+        # drops are implied by the proper-prefix condition with the entrywise
+        # comparison (entry 0 never drops, so the after list must start with it;
+        # an entry equal before has an equal image, never a proper prefix). They
+        # are kept as defence in depth; no mutation of them alone can bite.
+
 if __name__ == '__main__':
     unittest.main()

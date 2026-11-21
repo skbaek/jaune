@@ -861,6 +861,31 @@ images, and each has a unit test with controls in
   `P'` is the names-only respelling of `P`, and the map takes `T.f` to
   `T'.f'` with `T'` the image of `T`. The same rule moves a golden through
   `naming-pins.py --guard-msgs`.
+- Pre-resolution candidate lists (master ruling R12). Lean pre-resolves a
+  quoted identifier to an ordered candidate list: the current namespace,
+  then each open namespace. A later duplicate never changes resolution, so
+  the list is an ordered candidate set. A namespace row that merges two of
+  its entries (`namespace Jaune.Checked` with `open Jaune`, merged into
+  `Jaune` and the `open` dropped) makes a before entry equal to an earlier
+  one only through the map. When a before `List Lean.Syntax.Preresolved`
+  literal and its after list differ in length, the before image (entrywise)
+  with each later entry removed that equals an earlier entry only because of
+  the map (distinct before the rename, adjacent or not) must equal the after
+  list entry by entry (reason `preresolved duplicate removed`). Nothing is
+  reordered, nothing else is removed, the after side never loses or gains an
+  entry, and a duplicate already present before the rename stays. Lists of
+  equal length compare as they are; lists of any other element type are
+  never candidates. In the same comparison (ruling R12b) a later entry may
+  also be dropped, in order and only where the after list does not hold it,
+  when its image is a proper namespace prefix (on a dot boundary) of the
+  first entry's image, the current namespace, which keeps its place on both
+  sides, and the two were distinct before the rename: Lean name resolution
+  inside namespace `N` already searches every prefix of `N`, so such a
+  namespace is implicitly open and listing it again cannot change
+  resolution. The checks that the first entry keeps its place, that the two
+  were distinct before, and that the first entry never drops follow from the
+  proper-prefix condition with the entrywise comparison; they are kept as
+  defence in depth, and no mutation of them alone can bite.
 - A declaration id spelled `_root_.A.b` spells the whole name `A.b` (or the
   user part of a private name): it is an authored root, not a compiler-named
   constant.
