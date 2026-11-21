@@ -911,7 +911,8 @@ coinbase pre-warmed. -/
 
 @[simp] theorem pragueRules_transactionRules_warmCoinbase : pragueRules.transactionRules.warmCoinbase = true := rfl
 
-/-- The transaction's intrinsic cost and its calldata floor.
+/-- Returns the pair (intrinsic gas, EIP-7623 calldata floor gas), as execution-specs
+`calculate_intrinsic_cost` does.
 
 The five numbers this formula reads that Amsterdam reprices arrive through
 `gas` rather than through the globals that used to hold them: the base cost,

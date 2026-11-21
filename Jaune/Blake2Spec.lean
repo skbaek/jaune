@@ -152,7 +152,11 @@ def outBytes (h : Array UInt64) : Bytes :=
 
 /-! ## RFC 7693 §3.3 — the minimal unkeyed BLAKE2b-512 wrapper -/
 
-/-- RFC 7693 §3.3: minimal unkeyed BLAKE2b-512 over `F` above. The parameter
+/-- RFC 7693 section 3.3 BLAKE2b-512 (`id-blake2b512`, RFC 7693 section 4) for a message of at most
+one 128-byte block; returns `none` for a longer message. The RFC function itself hashes any length;
+this definition covers only its single-block case.
+
+RFC 7693 §3.3: minimal unkeyed BLAKE2b-512 over `F` above. The parameter
 block is `h[0] ^= 0x01010000 ^ (kk << 8) ^ nn` with `kk = 0`, `nn = 64`; the
 message must fit in one 128-byte block, which is padded with zeros, compressed
 once with `t` set to the message length, `f` set (single final block), and the
