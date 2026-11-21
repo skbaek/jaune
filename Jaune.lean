@@ -86,6 +86,10 @@ import Jaune.FrameRun.Order
 import Jaune.FrameRun.Facts
 import Jaune.Run.Canonical
 import Jaune.FrameRun.Memory
+import Jaune.FrameRun.Calls
+import Jaune.FrameRun.CallsHistory
+import Jaune.FrameRun.Entered
+import Jaune.FrameRun.EnteredRoots
 import Jaune.SymbolicPush
 import Jaune.SymbolicArithmetic
 
