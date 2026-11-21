@@ -94,8 +94,9 @@ or one of the following community abbreviations:
 Lean's own lemma-name relation tokens are not abbreviations chosen by Jaune:
 `le`/`Le`, `lt`/`Lt`, `eq`/`Eq`, `ne`/`Ne` and their kin name the relation a
 theorem states, as in Lean core and Mathlib (`Nat.sub_le`, `List.length_le`).
-A theorem such as `HaltOp.run_gasLe` or `PlainOp.balanceCore_resultGasLe`
-(the gas after is `≤` the gas before) uses that convention, and rule 5 does
+A name such as `Frame.Run.settledGasLe` or `Frame.Exit.SettledGasLe.mono`
+(a settled frame's gas is `≤` its initial gas measure, or any larger bound)
+uses that convention, and rule 5 does
 not apply to the token (master decision 2026-11-17, after the G0a
 cross-family review, finding 19).
 
