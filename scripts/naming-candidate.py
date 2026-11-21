@@ -1328,23 +1328,10 @@ def compare_components(before, after, mapping, inventory=None, reviewed=None, co
 
     def before_references(module):
         """The compiler's resolved references recorded in `module`'s before
-        export (ilean `references`): (constant, holding declaration, start,
-        end), offsets into the module source (master ruling R20)."""
+        export (master rulings R20, R21), read on demand."""
         if module not in reference_cache:
-            rows = []
             path = before['export_paths'].get(module)
-            if path is not None:
-                data = json.loads(Path(path).read_bytes())
-                positions = FIDELITY.APPLY.Positions(data['source'])
-                for key, info in (data.get('index') or {}).get('references', {}).items():
-                    const = json.loads(key).get('c')
-                    if not const:
-                        continue
-                    for usage in info.get('usages', ()):
-                        if len(usage) == 5 and isinstance(usage[4], str):
-                            start, end = FIDELITY.APPLY.span(positions, usage[:4])
-                            rows.append((const['n'], usage[4], start, end))
-            reference_cache[module] = rows
+            reference_cache[module] = FIDELITY.export_references(path)[1] if path is not None else []
         return reference_cache[module]
     global_context['before_references'] = before_references
 
@@ -1586,6 +1573,16 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
     left, right = before['candidate'], after['candidate']
     used = set()
     roots = {renamer.module(root): root for root in before['fidelity']}
+    reference_cache = {}
+
+    def before_references(module):
+        # R20/R21: the batched and union paths read the compiler references
+        # on demand too (Neon-4 should-fix 2); `read_exports` is unchanged.
+        if module not in reference_cache:
+            path = (before.get('export_paths') or {}).get(module)
+            reference_cache[module] = FIDELITY.export_references(path)[1] if path is not None else []
+        return reference_cache[module]
+    references_context = dict(before_references=before_references)
     if batch and (reviewed is not None or [renamer.module(r) for r in before['all_environments']]
                   != after['all_environments']):
         raise ValueError('a batched compare needs unchanged environment roots and no reviewed quotations')
@@ -1600,7 +1597,8 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
         # keeps its module, so unrelated roots are not pooled.
         results = {'<union>': FIDELITY.check(union_environment(before['module_bundles']),
                                              union_environment(after['module_bundles']), mapping,
-                                             records, used, collect, plan_edits)}
+                                             records, used, collect, plan_edits,
+                                             global_context=references_context)}
     else:
         # Module rows rename roots; each environment is compared with its image.
         import gc
@@ -1629,7 +1627,8 @@ def compare(before, after, mapping, inventory=None, reviewed=None, collect=False
                 local_map = dict(mapping, entries=[row for i, row in enumerate(mapping['entries'])
                                                    if i not in scoped or i in applicable])
                 results[root] = FIDELITY.check(env, new_env, local_map,
-                                               records, used, collect, plan_edits)
+                                               records, used, collect, plan_edits,
+                                               global_context=references_context)
             except FIDELITY.Mismatch as error:
                 if not collect:
                     raise
