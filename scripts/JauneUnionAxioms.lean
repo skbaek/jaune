@@ -23,6 +23,7 @@ import Jaune.Check.PortAuditA
 import Jaune.Check.PortAuditB
 import Jaune.Check.FactPorts
 import Jaune.Check.FrameRunAudit
+import Jaune.Check.RunViewsAudit
 import Jaune.Check.SpecAudit
 import Jaune.Check.InstructionFamiliesAudit
 import Jaune.Check.Hash
