@@ -5275,6 +5275,50 @@
         "S6c (folded into G2b): stateTransitionCanonical f ch cb = stateTransitionE f ch cb.block for every input (rfl). Both sides reach stateTransitionE, which U5 (146f468d) switched to Checked.stateTransitionCoreE; the exempt row makes Mode B compare the closure up to that bridged swap (review finding 4.2).",
         "Old side in place (decision jsn-g2b-protocol-user): at_tag names the same W1 declaration, byte-identical to 40e75855 except for pure N4-certified relocations; the checkBridge row (run_cmd) in Jaune/Check/G2bBridgeAudit.lean checks that the theorem's kernel statement relates exactly old.at_tag and new.names (review finding 7)."
       ]
+    },
+    {
+      "id": "G2b-rename-map",
+      "gate": "G2b",
+      "kind": "map",
+      "theorem": null,
+      "module": null,
+      "audit": [],
+      "old": {
+        "revision": "375baf5aa3cf883ca37b71c75cd86cae0d084748",
+        "roots": [],
+        "modules": [],
+        "at_tag": [],
+        "modules_at_tag": []
+      },
+      "new": {
+        "names": [],
+        "modules": []
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-rename-delta-map.json",
+          "revision": "5c33bf17416e44584dfd0943d1879e407eb36b13",
+          "sha256": "196b969338a5125238a2a680541147e721a27e2e63fecaa84fd11fcf4b958608"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "196b969338a5125238a2a680541147e721a27e2e63fecaa84fd11fcf4b958608",
+          "before_candidate": "e74747ffc4497d4c023bcca82b87c8b5889ca8d7",
+          "after_candidate": "c989c3654b50dfcf7b8684f268b114eaaca9460b",
+          "status": "OK",
+          "environments": 313,
+          "record": "g2-plan/u9-evidence (jsn-u9z, pass 4): naming-candidate.py compare --collect-all, exit 0, component-scc, 313 active components, 375 affected modules, 15 fast-path; before snapshot 3b49eb86..., after snapshot 10c272a7..., wall 95 s"
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Names only, in both layers: the bridge is the rename map plus N4's verdict, not a Lean theorem (goal section 7). The map holds 1036 rows: the frozen 639af671... rows plus mechanical descendant rows and the R14 rows that retire the SpawnFacts short form Acc.",
+        "N4's before is e74747ffc = 375baf5aa + the N4 checker extensions (C1, C1b) + the behaviour-preserving refactor of canonical_primitive and inv_primitive (C2, master rulings R6, R6-a, R13), captured with the uncommitted 79-site scripts/naming-sites.json the planner reads.",
+        "N4's after is c989c3654 (the rename commit 5c33bf174 plus the #guard_msgs golden packet); c0836ce5a after it changes only the N3 input scripts/naming-map.json (R16), no Lean source."
+      ]
     }
   ],
   "entry_template": {
