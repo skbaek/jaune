@@ -79,6 +79,7 @@
   "Jaune.Transaction": "specification",
   "Jaune.Types": "specification",
   "Jaune.WordFacts": "proof",
+  "Jaune.WordRepresentation": "proof",
   "Main": "adapter",
   "MemoryProbe": "adapter",
   "TraceMain": "adapter",
