@@ -457,8 +457,8 @@ closure report.
   therefore proves both the strict outer-block decoder image and the exact
   `block.toRlpItem.toBytes = raw` round trip, so a hand-built
   `Block`/`Header`/`Transaction` cannot be certified through it.
-- **Raw compatibility entry points remain** — `stateTransitionWith/At/Using`,
-  `addBlockToChainWith/At/Using`, `stateTransition`, `addBlockToChain`,
+- **Raw compatibility entry points remain** — `stateTransitionAt/Using`,
+  `addBlockToChainAt/Using`, `stateTransition`, `addBlockToChain`,
   `rlpToBlock`, and friends — for existing callers and proof statements that
   name them by type. They validate configured chain-ID agreement and
   schedule usability up front, but a raw call does not itself recompute the

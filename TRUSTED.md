@@ -625,7 +625,7 @@ Keccak-p[1600, 24] of §3.3, SPONGE and pad10*1 of §4 and §5.1, `KECCAK[512](M
 256)` of §5.2, and Appendix B.1's byte/bit conversions — written from the
 published standard and citing it declaration by declaration. It shares no
 declaration with the kernel's `KECCAK` namespace. The older
-`Jaune.KECCAK.permutation_eq_referencePermutation` (`permutation ws = f roundConstants ws UInt64.leftRotation`, axioms
+`Jaune.KECCAK.permutation_eq_referencePermutation` (`permutation ws = referencePermutation roundConstants ws UInt64.leftRotation`, axioms
 `[propext, Quot.sound]`) still says only that the unrolled kernel equals the
 retained port of Andrey Jivsov's C implementation above it in `Jaune/Hash.lean`;
 it is now an intermediate, and `Keccak.FIPS.permutation_eq_keccakP` is the statement
