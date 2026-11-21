@@ -154,14 +154,17 @@ rg -n '^\s*@\[extern|^\s*axiom\s|^\s*opaque\s+\S+\s*:|\bsorry\b|^\s*partial\s+de
 ```
 
 Run the same scan unanchored — matching the bare words anywhere, comments
-included — and it returns twenty-nine hits, none of them a declaration of
-these kinds. Eighteen are `extern` inside the English word "external":
-fourteen in comments (opcode comments for `EXTCODESIZE` and its neighbours,
-and remarks about externally observed bytes and labels) and four in the name
-of the private lemma `nonspawn_external_copy` and its three uses. Ten are uses
-of "opaque" in comments (mostly typed-envelope bytes that stay undecoded), and
-one is a comment about keeping axiom sets exact. No declaration of any of
-these kinds exists.
+included — and it returns 157 hits, none of them a declaration of these kinds.
+128 are audit rows in the check modules under `Jaune/Check/`: 85
+`#expect_axioms` rows, which name the axioms a theorem is allowed, and 43
+`#union_axioms_of_modules` rows, which bound the axioms of every constant of a
+module. Thirteen are `extern` inside the English words "external" and
+"externally", in comments (opcode comments for `EXTCODESIZE` and its
+neighbours, and remarks about external labels, binaries and externally
+observed bytes). Nine are uses of "opaque" in comments (mostly typed-envelope
+bytes that stay undecoded), and seven are comments about axioms: one about
+keeping axiom sets exact, and six in the check modules' own comments, saying
+what their rows enforce. No declaration of any of these kinds exists.
 
 ```
 grep -rEn 'extern|axiom|opaque|sorry|partial def|implemented_by|native_decide|dbg_trace' Jaune/ Main.lean
