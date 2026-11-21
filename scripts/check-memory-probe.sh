@@ -26,7 +26,7 @@
 # isolation and stayed under its 3 GiB row only because its gas limit bounded
 # the recursion at roughly 65 frames. A single-family gate would have kept
 # missing that. CALLCODE and DELEGATECALL share the same specialization; they
-# are not separate points here because they share `genericCall.stepCached` with
+# are not separate points here because they share `prepareCall.stepCached` with
 # the two that are.
 #
 # WHICH MECHANISM, ON WHICH PLATFORM. The peak is the child's high-water
