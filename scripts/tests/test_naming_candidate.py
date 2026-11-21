@@ -901,6 +901,32 @@ class ComponentCompareTests(unittest.TestCase):
             with self.assertRaisesRegex(CHECK.FIDELITY.Mismatch, 'external generated constant'):
                 CHECK.compare_components(b_path, bad_path, mapping)
 
+    def test_compare_components_reports_the_respelling_audit_trail(self):
+        # Neon finding 7, R17: the landing verdict lists every derived
+        # respelling (with constant and module), the R12/R12b drops and the
+        # unhygienic respellings, which compare_components used to discard.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def pool(leaf):
+                return [['str', 'Upstream'], ['str', leaf], ['const', ['name', 'Lean.Name.mkStr2'], []],
+                        ['app', 2, 0], ['app', 3, 1], ['const', ['name', 'Lean.Name'], []]]
+            upstream = lambda leaf: dict(source=f'def {leaf} := 7\n', roots=[f'Upstream.{leaf}'],
+                                         expr_pool=[['nat', 7], ['const', ['name', 'Nat'], []]],
+                                         constants={f'Upstream.{leaf}': self._defn(1, 0)})
+            down = lambda leaf: dict(source=f'def lit := ``Upstream.{leaf}\n', imports=['Upstream'],
+                                     roots=['Downstream.lit'], expr_pool=pool(leaf),
+                                     constants={'Downstream.lit': self._defn(5, 4)})
+            row_u = dict(old='Upstream.old', new='Upstream.new', kind='declaration', layer='execution', rule='4', source='t')
+            mapping = dict(EMPTY, entries=[row_u])
+            b_path = self._build_snapshot(root / 'before', {'Upstream': upstream('old'), 'Downstream': down('old')})
+            a_path = self._build_snapshot(root / 'after', {'Upstream': upstream('new'), 'Downstream': down('new')})
+            verdict = CHECK.compare_components(b_path, a_path, mapping)
+            self.assertEqual(verdict['derived_literals_respelled'],
+                             [dict(constant='Downstream.lit', module='Downstream', old='Upstream.old',
+                                   new='Upstream.new', reason='name literal')])
+            self.assertEqual(verdict['preresolved_drops'], [])
+            self.assertEqual(verdict['unhygienic_respellings'], [])
+
     def test_global_uniform_namespace_and_multi_component_reloc_aux_controls(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

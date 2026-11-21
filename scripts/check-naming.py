@@ -133,10 +133,16 @@ def declarations(text, index):
 
 
 def spelled(text, a, b, name):
+    """Whether the range spells `name` (its last components). A declId
+    spelled from the root (`_root_.A.b`) spells the whole name: the leading
+    `_root_` is not a component, and the rest must equal the name exactly,
+    as N4's `spelled_name` reads it."""
     spans = APPLY.components(text, a, b)
     if spans is None:
         return False
     parts = [text[x:y] for x, y in spans]
+    if parts and parts[0] == '_root_':
+        return len(parts) > 1 and APPLY.split_name(name) == parts[1:]
     return APPLY.split_name(name)[-len(parts):] == parts
 
 
@@ -489,7 +495,15 @@ def binding_backs_listed_rule(name, entry, binding, policy, mapped):
     checks), and (b) every other listed rule that needs a source (1-3) is
     backed for the renamed namespace token as today: a proper prefix of the
     name bound under that rule, which the map renames with that rule listed,
-    from the prefix of the row's old name."""
+    from the prefix of the row's old name.
+
+    Hardened after the cross-family review (master ruling R17): this check
+    applies whenever a row lists more than one rule 1-3, the binding's rule
+    being the primary one included, so every listed rule 1-3 is backed. A
+    backing prefix row must rename (`old != new`), lie in the row's layer,
+    and keep the rest of the name: the components after the prefix are the
+    old ones after the prefix row's old name, except that the leaf may
+    change only when the direct binding spells the whole leaf."""
     rules = [r.strip() for r in entry['rule'].split(',')]
     if binding['rule'] not in rules:
         return False
@@ -504,9 +518,15 @@ def binding_backs_listed_rule(name, entry, binding, policy, mapped):
         for k in range(len(parts) - 1, 0, -1):
             prefix = '.'.join(parts[:k])
             base, row = policy['bindings'].get(prefix), mapped.get(prefix)
-            if (base is not None and base['rule'] == rule and row is not None and
+            if not (base is not None and base['rule'] == rule and row is not None and
+                    row['old'] != row['new'] and row['layer'] == entry['layer'] and
                     rule in [r.strip() for r in row['rule'].split(',')] and
                     entry['old'].startswith(row['old'] + '.')):
+                continue
+            old_rest = entry['old'][len(row['old']) + 1:].split('.')
+            new_rest = parts[k:]
+            if (len(old_rest) == len(new_rest) and old_rest[:-1] == new_rest[:-1] and
+                    (old_rest[-1] == new_rest[-1] or 'component' not in binding)):
                 break
         else:
             return False
@@ -1033,9 +1053,10 @@ def lint_names(names, mapping, policy, words, final=False, derived=None, referen
         entry = mapped.get(name)
         if entry and entry['rule'].split(',')[0].strip() in ('1', '2', '3'):
             binding = policy['bindings'].get(name)
-            if name not in derived and (not binding or (binding['rule'] != entry['rule'].split(',')[0].strip()
-                                                        and not binding_backs_listed_rule(name, entry, binding,
-                                                                                          policy, mapped))):
+            # Every listed rule 1-3 is backed, the primary one included
+            # (no short-circuit on a binding under the primary rule; R17).
+            if name not in derived and (not binding or not binding_backs_listed_rule(name, entry, binding,
+                                                                                     policy, mapped)):
                 problems.append(dict(name=name, location=location, reason='map requires matching source binding'))
         retired = MAP.find_retired_tokens(name, mapping['retired_tokens'])
         if retired:

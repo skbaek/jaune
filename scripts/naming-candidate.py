@@ -1405,6 +1405,11 @@ def compare_components(before, after, mapping, inventory=None, reviewed=None, co
     ignored_after_all = set()
     component_stats = []
     failures = []
+    # The audit trail of every comparison (master ruling R17): each derived
+    # respelling (R5 literals, union audit prefixes, R12/R12b drops) and each
+    # unhygienic respelling, in component order.
+    respelled_all, respelled_seen = [], set()
+    unhygienic_all = []
 
     def update_aux_tables(new_aux_pairs):
         if not new_aux_pairs:
@@ -1477,6 +1482,15 @@ def compare_components(before, after, mapping, inventory=None, reviewed=None, co
                 global_context=global_context, external=external, state=comp_state,
             )
             ign = verdict['ignored_unreferenced_realized_theorems']
+            for holder, old, new, reason in verdict['derived_literals_respelled']:
+                module = holder if reason == 'union audit module prefix' else b_owners.get(holder)
+                row = dict(constant=None if reason == 'union audit module prefix' else holder,
+                           module=module, old=old, new=new, reason=reason)
+                row_key = json.dumps(row, sort_keys=True, default=str)
+                if row_key not in respelled_seen:
+                    respelled_seen.add(row_key)
+                    respelled_all.append(row)
+            unhygienic_all.extend(verdict['unhygienic_respellings'])
             ignored_before_all.update(ign['before'])
             ignored_after_all.update(ign['after'])
             component_stats.append(dict(
@@ -1532,6 +1546,9 @@ def compare_components(before, after, mapping, inventory=None, reviewed=None, co
         after_inventory_sha256=sha(FIDELITY.encoded(right).encode()),
         affected_modules=sorted(affected),
         excluded_importers=sorted(affected & excluded),
+        derived_literals_respelled=respelled_all,
+        preresolved_drops=[r for r in respelled_all if r['reason'].startswith('preresolved ')],
+        unhygienic_respellings=unhygienic_all,
     )
     if reviewed is not None:
         result['reviewed_quotations'] = dict(sha256=sha(reviewed[0]), records=records)

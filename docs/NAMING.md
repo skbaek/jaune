@@ -521,7 +521,13 @@ policy validation already requires, and every other listed rule 1–3 must
 still be backed for the namespace token: a proper prefix of the name bound
 under that rule and renamed by a map row that lists it, from the prefix of
 the row's old name. A binding under a rule the row does not list never
-matches.
+matches. Hardened after the cross-family review (ruling R17): every listed
+rule 1–3 is backed, the binding's own rule being the primary one included;
+the backing prefix row must rename (`old != new`) and lie in the row's
+layer; and the rest of the name after the prefix is kept, except that the
+leaf may change when the direct binding spells the whole leaf (`B256.bexp`
+-> `U256.exp`). A declaration id spelled `_root_.A.b` spells the whole name
+`A.b` here as in N4, so it is linted.
 Unbound components must consist of policy words, map-approved abbreviations
 or numeric indices. Unsupported characters fail rather than disappear.
 
@@ -845,31 +851,58 @@ or `test_naming_candidate.py` that fails without it:
 G2b U9 extensions (master ruling R5, 2026-11-21); each admits only exact map
 images, and each has a unit test with controls in
 `scripts/tests/test_naming_fidelity.py` that fail without it:
-- Chained `Name` literals. Lean writes a name with a numeric component
-  (every private name's `.0.`) or more than eight components as a
-  `Name.mkStr`/`Name.mkNum` chain, and a name pattern puts a
-  `Name.str`/`Name.num` chain into a matcher type. Such a chain is decoded
-  whole and follows the `Name` literal rules above (exact old constant, else
-  rule D, with the single-backtick data guard), then is rebuilt as Lean
-  writes the new name: `mkStrN` when it fits, otherwise a chain in the same
-  encoding with the chain's own numerals. A chain mixing the two encodings,
-  a numeral that is not a literal, or a `mkStr` chain `mkStrN` could have
-  written (built by hand, runtime data) stays literal. Respellings are listed
-  in the verdict (reason `chained name literal` or `chained namespace
-  literal`). A quoted identifier's pre-resolution decodes `mkNum` too, so a
-  private declaration is compared by its full name.
+- Chained `Name` literals. A syntax quotation writes a name with a numeric
+  component (every private name's `.0.`) or more than eight components as a
+  `Name.mkStr`/`Name.mkNum` chain. Such a chain is decoded whole and follows
+  the `Name` literal rules above (exact old constant, else rule D, with the
+  single-backtick data guard), then is rebuilt as Lean writes the new name:
+  `mkStrN` when it fits, otherwise a chain in the same encoding with the
+  chain's own numerals. Hardened (ruling R17): only at the argument
+  positions where a quotation writes one, the name of a
+  `Syntax.Preresolved` and a syntax kind (`Syntax.node*`, `Syntax.isOfKind`,
+  `ParserDescr.node`, `ParserDescr.trailingNode`); a node shared with any
+  other position is data. The chain must name an existing constant or
+  namespace before, and its image one after. A constructor-form
+  (`Name.str`/`Name.num`) chain in a definition body is respelled only
+  under ruling R19: `toExpr` writes that name in constructor form (a
+  numeric or private component, or more than eight components); it decodes
+  exactly to an existing old constant whose map image is an existing after
+  constant; and the holder's source spells it as a double-backtick literal
+  ``X`` (outside comments and strings) where `X` is a dot-suffix of the
+  constant's user name that no other old constant's name ends in. The
+  holder declaration's own source range is read when the export records it
+  (reason `double-backtick name literal (declaration level)`), else the
+  module's source (`... (module level)`). Sound because a double-backtick
+  literal is elaborated as a resolved reference to the constant, so
+  respelling it to the map image is a names-only change. Hand-built `Name`
+  data (no such literal, or a name `mkStrK` could write) is never respelled. A chain mixing the two
+  encodings, a numeral that is not a raw literal or exactly
+  `OfNat.ofNat Nat n (instOfNatNat n)`, or a `mkStr` chain `mkStrN` could
+  have written (built by hand, runtime data) stays literal, and a string
+  component of all digits never decodes (so `Name.str p "0"` never reads as
+  `Name.num p 0`). Respellings are listed in the verdict (reason `chained
+  name literal` or `chained namespace literal`). A quoted identifier's
+  pre-resolution decodes `mkNum` too, so a private declaration is compared
+  by its full name.
 - `#union_axioms_of_modules P`. `P` is read with `getId` and selects every
   imported module named `P` or `P.…`. Under a module row `P -> P'` the
   before literal compares as `P'` only when the population follows the module
   rows: the holding module's imports under `P`, each mapped by its module row,
-  are exactly the renamed holding module's imports under `P'`. Otherwise it
-  stays literal (reason `union audit module prefix`).
+  are exactly the renamed holding module's imports under `P'` (reason
+  `union audit module prefix`). Hardened (ruling R17): the prefix is
+  compared as a module prefix and never mapped again by a declaration or
+  namespace row; a population that does not follow the module rows fails,
+  renamed or not; the check stays in its exact (renamed) module, never moved
+  within a relocation component; without import records only an unrenamed
+  prefix compares, as written.
 - `#guard_msgs` generalized field notation. Lean prints `T.f c` as `c.f`. A
   token `P.f`, where no constant ends with the whole token and every constant
   `P` may denote is a constructor of the inductive `T`, respells to `P'.f'`:
   `P'` is the names-only respelling of `P`, and the map takes `T.f` to
-  `T'.f'` with `T'` the image of `T`. The same rule moves a golden through
-  `naming-pins.py --guard-msgs`.
+  `T'.f'` with `T'` the image of `T`; `T.f` must take a `T` as its first
+  explicit argument, and the candidates are read in sorted order, all
+  qualifying before any respelling (ruling R17). The same rule moves a
+  golden through `naming-pins.py --guard-msgs`.
 - Pre-resolution candidate lists (master ruling R12). Lean pre-resolves a
   quoted identifier to an ordered candidate list: the current namespace,
   then each open namespace. A later duplicate never changes resolution, so
@@ -894,7 +927,20 @@ images, and each has a unit test with controls in
   resolution. The checks that the first entry keeps its place, that the two
   were distinct before, and that the first entry never drops follow from the
   proper-prefix condition with the entrywise comparison; they are kept as
-  defence in depth, and no mutation of them alone can bite.
+  defence in depth, and no mutation of them alone can bite. Hardened after
+  the cross-family review (ruling R17): both rules apply only to the
+  pre-resolution of a hygiene identifier (`Lean.Syntax.ident` whose value is
+  `Name.anonymous`, possibly under `addMacroScope`), never to another
+  `List Lean.Syntax.Preresolved` (a quoted identifier naming a namespace
+  lists competing candidates); a length change needs the map to have
+  respelled an entry of that list; an R12b entry's before value must also be
+  a proper prefix of the before current namespace and occur once in the
+  before list; the coarse pairing record applies the same reduction once to
+  the whole list. Every drop is in the verdict (reasons `preresolved
+  duplicate removed (R12)` and `preresolved implied prefix removed (R12b)`),
+  and the component compare's verdict lists `derived_literals_respelled`
+  (constant, module, old, new, reason), `preresolved_drops` and
+  `unhygienic_respellings`.
 - A declaration id spelled `_root_.A.b` spells the whole name `A.b` (or the
   user part of a private name): it is an authored root, not a compiler-named
   constant.

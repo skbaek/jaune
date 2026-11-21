@@ -170,14 +170,49 @@ NAME_NUM = ('Lean.Name.mkNum', 'Lean.Name.num')
 NAME_FAMILIES = {('Lean.Name.mkStr', 'Lean.Name.mkNum'), ('Lean.Name.str', 'Lean.Name.num')}
 
 
+def _raw_nat(e):
+    return e[1] if (isinstance(e, list) and len(e) == 2 and e[0] == 'nat' and isinstance(e[1], int)
+                    and not isinstance(e[1], bool) and e[1] >= 0) else None
+
+
 def _numeral(e):
-    """A `Nat` literal: a raw `nat` literal or `OfNat.ofNat _ (nat n) _`, else None."""
+    """A `Nat` literal: a raw `nat` literal, or exactly `OfNat.ofNat Nat n
+    (instOfNatNat n)` with the same raw literal `n` (the form `toExpr`
+    writes), else None. Another type or instance is not a literal: its value
+    is whatever the instance computes (hardened after the cross-family
+    review, master ruling R17)."""
+    n = _raw_nat(e)
+    if n is not None:
+        return n
+    head, args = _unwind(e)
+    if head == 'OfNat.ofNat' and len(args) == 3:
+        n = _raw_nat(args[1])
+        ty, ty_args = _unwind(args[0])
+        inst, inst_args = _unwind(args[2])
+        if (n is not None and ty == 'Nat' and not ty_args and inst == 'instOfNatNat' and
+                len(inst_args) == 1 and _raw_nat(inst_args[0]) == n):
+            return n
+    return None
+
+
+def _numeral_loose(e):
+    """The decoding `collect_const_refs` (capture-bound) has always used:
+    any `OfNat.ofNat _ (nat n) _`. Reading more as a reference only keeps a
+    module off the byte-identical fast path; the comparison uses `_numeral`.
+    (The body is the pre-R17 `_numeral`, unchanged.)"""
     if isinstance(e, list) and len(e) == 2 and e[0] == 'nat' and isinstance(e[1], int) and e[1] >= 0:
         return e[1]
     head, args = _unwind(e)
     if head == 'OfNat.ofNat' and len(args) == 3 and isinstance(args[1], list) and args[1][:1] == ['nat']:
-        return _numeral(args[1])
+        return _numeral_loose(args[1])
     return None
+
+
+def _string_component(part):
+    """A string component that cannot be confused with a numeric one: an
+    all-digit string (`Name.str p "0"`) decodes to nothing, so it never reads
+    like `Name.num p 0` (R17)."""
+    return part if isinstance(part, str) and not part.isdigit() else None
 
 
 def _name(e):
@@ -188,13 +223,13 @@ def _name(e):
     if head == 'Lean.Name.anonymous' and not args:
         return []
     if head in NAME_STR and len(args) == 2:
-        prefix, part = _name(args[0]), _lit(args[1])
+        prefix, part = _name(args[0]), _string_component(_lit(args[1]))
         return None if prefix is None or part is None else prefix + [part]
     if head in NAME_NUM and len(args) == 2:
         prefix, number = _name(args[0]), _numeral(args[1])
         return None if prefix is None or number is None else prefix + [str(number)]
     if head and head.startswith('Lean.Name.mkStr') and head[len('Lean.Name.mkStr'):].isdigit():
-        parts = [_lit(a) for a in args]
+        parts = [_string_component(_lit(a)) for a in args]
         return None if None in parts else parts
     return None
 
@@ -205,7 +240,7 @@ def _head_node(e):
     return e
 
 
-def _name_chain(e):
+def _name_chain(e, strict=False):
     """A chained `Name` literal down to `Lean.Name.anonymous`: Lean's
     `toExpr` writes `Name.mkStr`/`Name.mkNum` chains for a name with a numeric
     component (every private name) or more than eight components; name
@@ -215,7 +250,10 @@ def _name_chain(e):
     numeric one as its decimal spelling), the numeral node of each numeric
     value, and the head node of each kind (`str`, `num`, `anonymous`).
     Anything else, including a string component that is empty, dotted,
-    escaped or all digits, or a chain mixing the two encodings, is None."""
+    escaped or all digits, or a chain mixing the two encodings, is None.
+    `strict` (the comparison) reads numerals with `_numeral`; the default
+    keeps the decoding `collect_const_refs` was captured with."""
+    numeral = _numeral if strict else _numeral_loose
     comps, numerals, heads = [], {}, {}
     cur = e
     while True:
@@ -234,7 +272,7 @@ def _name_chain(e):
                 return None
             comps.append(part)
         else:
-            number = _numeral(args[1])
+            number = numeral(args[1])
             if number is None or numerals.setdefault(str(number), args[1]) != args[1]:
                 return None
             comps.append(str(number))
@@ -256,15 +294,83 @@ def _constructor_inductive(record):
     return None
 
 
+def _first_explicit_domain(record):
+    """The head constant of the type of the first explicit (default binder)
+    argument of a kernel record's type, else None."""
+    kernel = record.get('kernel') if isinstance(record, dict) else None
+    ty = kernel.get('type') if isinstance(kernel, dict) else None
+    while isinstance(ty, list) and len(ty) == 4 and ty[0] == 'forall':
+        if ty[1] == 'Lean.BinderInfo.default':
+            return _unwind(ty[2])[0]
+        ty = ty[3]
+    return None
+
+
 def _literal_chain(chain):
-    """Whether a decoded chain is one Lean writes for a name literal: the
-    constructor form (a name pattern), or a `toExpr` chain that `mkStrK`
-    could not express. A `mkStr` chain of at most eight string components is
-    built by hand (runtime data), never by a quotation."""
+    """Whether a decoded chain is one a syntax quotation writes for a name
+    literal: a `Name.mkStr`/`Name.mkNum` chain that `mkStrK` could not
+    express (a numeric component or more than eight). A `mkStr` chain of at
+    most eight string components is built by hand (runtime data), never by a
+    quotation; where it sits is checked by the caller (`CHAIN_LITERAL_SITES`).
+
+    Returns True for such a quotation chain, `'ctor'` for a constructor-form
+    (`Name.str`/`Name.num`) chain of a name `toExpr` writes in that form (a
+    numeric component, every private name's `.0.`, or more than eight
+    components), which the caller admits only with double-backtick evidence
+    (master ruling R19), and False otherwise: a constructor chain `mkStrK`
+    could have written is hand-built data (R17)."""
     comps, _, heads = chain
-    if 'str' in heads and heads['str'][1][1] == 'Lean.Name.mkStr' or 'num' in heads and heads['num'][1][1] == 'Lean.Name.mkNum':
-        return len(comps) > 8 or any(c.isdigit() for c in comps)
-    return True
+    str_head = heads.get('str')
+    num_head = heads.get('num')
+    to_expr_shape = len(comps) > 8 or any(c.isdigit() for c in comps)
+    if (str_head is None or str_head[1][1] == 'Lean.Name.mkStr') and (
+            num_head is None or num_head[1][1] == 'Lean.Name.mkNum'):
+        return to_expr_shape
+    if (str_head is None or str_head[1][1] == 'Lean.Name.str') and (
+            num_head is None or num_head[1][1] == 'Lean.Name.num'):
+        return 'ctor' if to_expr_shape else False
+    return False
+
+
+# Argument positions at which a syntax quotation writes a chained `Name`
+# literal (master ruling R17): the name of a pre-resolution, and a syntax
+# kind (`Syntax.node* info kind args`, `Syntax.isOfKind stx kind`,
+# `ParserDescr.node kind prec p`, `ParserDescr.trailingNode kind prec lhsPrec p`).
+CHAIN_LITERAL_SITES = frozenset(
+    [('Lean.Syntax.Preresolved.decl', 0), ('Lean.Syntax.Preresolved.namespace', 0),
+     ('Lean.Syntax.node', 1), ('Lean.Syntax.isOfKind', 1),
+     ('Lean.ParserDescr.node', 0), ('Lean.ParserDescr.trailingNode', 0)] +
+    [(f'Lean.Syntax.node{k}', 1) for k in range(1, 9)])
+
+
+def chain_literal_sites(value):
+    """(ids of nodes that sit only at a `CHAIN_LITERAL_SITES` argument,
+    ids of nodes that sit anywhere else) over the DAG `value`. A shared node
+    counts as a site only when every occurrence is one."""
+    site, other = set(), set()
+    seen = set()
+    stack = [value]
+    while stack:
+        cur = stack.pop()
+        if not isinstance(cur, (list, dict)) or id(cur) in seen:
+            continue
+        seen.add(id(cur))
+        children = cur.values() if isinstance(cur, dict) else cur
+        if isinstance(cur, list) and len(cur) == 3 and cur[0] == 'app':
+            head, args = _unwind(cur[1])
+            arg = cur[2]
+            if isinstance(arg, (list, dict)):
+                (site if (head, len(args)) in CHAIN_LITERAL_SITES else other).add(id(arg))
+            if isinstance(cur[1], (list, dict)):
+                other.add(id(cur[1]))
+            stack.append(cur[1])
+            stack.append(arg)
+            continue
+        for x in children:
+            if isinstance(x, (list, dict)):
+                other.add(id(x))
+                stack.append(x)
+    return site - other, other
 
 
 def _name_chain_expr(new_full, numerals, heads):
@@ -1159,6 +1265,7 @@ def extract_module_meta(export_path, export_sha256=None):
 
 
 class Comparison:
+    _NAMESPACES = {}  # id(constant table) -> (table, its namespaces); tables are shared across components
     def __init__(self, before, after, mapping, reviewed=None, reviewed_used=None, collect=False,
                  plan_edits=None, global_context=None, external=None):
         self.before, self.after = before, after
@@ -1264,6 +1371,7 @@ class Comparison:
             return value
         special = self._special_left
         memo = {}  # id(node) -> (out_node, lits_added_here)
+        sites = None  # chain_literal_sites(value), computed at the first chain
         stack = [(value, False)]
         while stack:
             cur, ready = stack.pop()
@@ -1279,10 +1387,28 @@ class Comparison:
                             # A chained literal (a private name's `.0.`, or a
                             # name longer than eight components): decoded
                             # whole, under the same rules, and rebuilt in its
-                            # own encoding (master ruling R5 (a), U9).
-                            chain = _name_chain(cur)
-                            if chain is not None and len(chain[0]) >= 2 and _literal_chain(chain):
-                                lit = '.'.join(chain[0])
+                            # own encoding (master ruling R5 (a), U9), only
+                            # where a quotation writes one: a pre-resolution
+                            # or a syntax kind (R17).
+                            chain = _name_chain(cur, strict=True)
+                            form = _literal_chain(chain) if chain is not None and len(chain[0]) >= 2 else False
+                            evidence = None
+                            if form == 'ctor':
+                                # R19: a constructor-form chain in a body is a
+                                # `toExpr`-written double-backtick literal only
+                                # with source evidence of that literal.
+                                evidence = self.double_backtick_literal(name, '.'.join(chain[0]))
+                                if evidence is not None:
+                                    lit = '.'.join(chain[0])
+                                else:
+                                    chain = None
+                            elif form:
+                                if sites is None:
+                                    sites = chain_literal_sites(value)[0]
+                                if cid in sites:
+                                    lit = '.'.join(chain[0])
+                                else:
+                                    chain = None
                             else:
                                 chain = None
                         if lit is not None:
@@ -1290,12 +1416,18 @@ class Comparison:
                             why = 'name literal'
                             if new_full == lit:
                                 new_full, why = self.namespace_literal(lit, name), 'namespace literal'
+                            if chain is not None and new_full != lit and not (
+                                    self.names_entity(lit, 'before') and self.names_entity(new_full, 'after')):
+                                # Rule D for a chain (R17): it names an existing
+                                # constant or namespace on each side.
+                                new_full = lit
                             if new_full != lit and '«' not in new_full and not self.data_literal(name, lit, new_full):
                                 parts = new_full.split('.')
                                 out = None
                                 if chain is not None:
                                     out = _name_chain_expr(new_full, chain[1], chain[2])
-                                    why = 'chained ' + why
+                                    why = (f'double-backtick name literal ({evidence} level)' if evidence
+                                           else 'chained ' + why)
                                 elif len(parts) <= 8:
                                     # Reach the outermost head node (`const Lean.Name.mkStrK levels`).
                                     head = cur
@@ -1386,6 +1518,68 @@ class Comparison:
         if id(value) in clean_ids:
             return value
         return memo[id(value)][0]
+
+    def double_backtick_literal(self, holder, lit):
+        """Master ruling R19: the evidence that a constructor-form chain
+        `lit` held by `holder` is a double-backtick literal ``X``, or None.
+        `lit` must be exactly an existing old constant whose map image is an
+        existing after constant, and the holder's source must spell ``X``
+        (outside comments and strings, on identifier boundaries) where `X` is
+        a dot-suffix of `lit`'s user name that resolves to `lit` alone: no
+        other old constant's user name is `X` or ends in `.X`. The range read
+        is the holder declaration's own when the export records it
+        (`'declaration'`), else its module's source (`'module'`)."""
+        if lit not in self.all_before_constants:
+            return None
+        image = self.name(lit)
+        if image == lit or image not in self.all_after_constants:
+            return None
+        module = self.holder_module(holder)
+        source = (self.before.get('module_sources') or {}).get(module) if module is not None else None
+        if source is None:
+            return None
+        cache = self.__dict__.setdefault('_double_backticks', {})
+        if module not in cache:
+            code = code_text(source)
+            cache[module] = [(m.start(), m.group(1)) for m in re.finditer(
+                r"(?<![`\w.'?!])``((?:[^\W\d][\w'?!]*)(?:\.[^\W\d][\w'?!]*)*)(?![\w.'?!])", code)]
+        span = ((self.before.get('module_decls') or {}).get(module) or {}).get(holder)
+        level = 'declaration' if span is not None else 'module'
+        private = MAP.split_private(lit) if lit.startswith('_private.') else None
+        user = private[2] if private else lit
+        parts = user.split('.')
+        suffixes = {'.'.join(parts[-k:]) for k in range(1, len(parts) + 1)}
+        users = self.__dict__.setdefault('_user_names', None)
+        if users is None:
+            users = self._user_names = {}
+            for key in self.all_before_constants:
+                split = MAP.split_private(key) if key.startswith('_private.') else None
+                users.setdefault(split[2] if split else key, []).append(key)
+        for start, spelled in cache[module]:
+            if span is not None and not (span[0] <= start < span[1]):
+                continue
+            if spelled not in suffixes:
+                continue
+            owners = [k for u, ks in users.items() if u == spelled or u.endswith('.' + spelled) for k in ks]
+            if owners == [lit]:
+                return level
+        return None
+
+    def names_entity(self, name, side):
+        """Whether `name` is a constant, or a namespace (a proper prefix of a
+        constant's name), of that side's whole environment."""
+        constants = self.all_before_constants if side == 'before' else self.all_after_constants
+        if name in constants:
+            return True
+        held = Comparison._NAMESPACES.get(id(constants))
+        if held is None or held[0] is not constants:
+            spaces = set()
+            for key in constants:
+                parts = key.split('.')
+                for k in range(1, len(parts)):
+                    spaces.add('.'.join(parts[:k]))
+            held = Comparison._NAMESPACES[id(constants)] = (constants, spaces)
+        return name in held[1]
 
     def renamed_namespace(self, namespace):
         """The new namespace, when the map renames `namespace` by a namespace
@@ -2091,10 +2285,14 @@ class Comparison:
                 stack.append(('cmp', cur_l[1], cur_r[1], (cur_p, '.preresolved'), in_kernel))
                 continue
             if (isinstance(cur_l, list) and len(cur_l) == 3 and cur_l[0] == 'app' and
-                    self._is_cons_cell(cur_l)):
-                frames = self.preresolved_list_frames(cur_l, cur_r, cur_p, in_kernel)
+                    self._hygiene_ident(cur_l) and isinstance(cur_r, list) and len(cur_r) == 3 and
+                    cur_r[0] == 'app' and self._hygiene_ident(cur_r)):
+                # R12/R12b apply only to the pre-resolution argument of a
+                # `Lean.Syntax.ident` whose value is `Name.anonymous` (R17).
+                frames = self.preresolved_list_frames(cur_l[2], cur_r[2], (cur_p, '.preresolved'), in_kernel)
                 if frames is not None:
                     stack.extend(reversed(frames))
+                    stack.append(('cmp', cur_l[1], cur_r[1], (cur_p, '[1]'), in_kernel))
                     continue
             if isinstance(cur_l, list) and len(cur_l) == 2 and cur_l[0] == 'name':
                 if not isinstance(cur_r, list) or len(cur_r) != 2 or cur_r[0] != 'name':
@@ -2155,6 +2353,36 @@ class Comparison:
 
     PRERESOLVED = ['const', ['name', 'Lean.Syntax.Preresolved'], []]
 
+    @classmethod
+    def _hygiene_ident(cls, node):
+        """Whether `node` is `Lean.Syntax.ident info raw v l` whose value `v`
+        is `Name.anonymous` (or `Lean.addMacroScope m Name.anonymous s`, the
+        hygiene ident a quotation writes) with `l` a cons cell: the
+        hygiene/binder pre-resolution, the only place R12 and R12b apply
+        (master ruling R17)."""
+        pre = node[2]
+        if not (isinstance(pre, list) and len(pre) == 3 and pre[0] == 'app' and cls._is_cons_cell(pre)):
+            return False
+        args, cur = [], node
+        while isinstance(cur, list) and len(cur) == 3 and cur[0] == 'app':
+            args.append(cur[2])
+            cur = cur[1]
+        if not (isinstance(cur, list) and len(cur) == 3 and cur[0] == 'const' and
+                cur[1] == ['name', 'Lean.Syntax.ident'] and len(args) == 4):
+            return False
+        val = args[1]  # arguments in reverse: pre-resolution, value, raw, info
+        anonymous = lambda e: (isinstance(e, list) and len(e) == 3 and e[0] == 'const' and
+                               e[1] == ['name', 'Lean.Name.anonymous'])
+        if anonymous(val):
+            return True
+        # A quotation's hygiene ident: `Lean.addMacroScope mainModule Name.anonymous scp`.
+        scoped, cur = [], val
+        while isinstance(cur, list) and len(cur) == 3 and cur[0] == 'app':
+            scoped.append(cur[2])
+            cur = cur[1]
+        return (len(scoped) == 3 and anonymous(scoped[1]) and isinstance(cur, list) and len(cur) == 3 and
+                cur[0] == 'const' and cur[1] == ['name', 'Lean.addMacroScope'])
+
     @staticmethod
     def _is_cons_cell(node):
         """Whether `node` is `List.cons T e l` (a constant-time shape check)."""
@@ -2194,7 +2422,11 @@ class Comparison:
         decides): a `List Lean.Syntax.Preresolved` keeps the first of equal
         entries on either side and drops later prefixes of its first entry,
         so a list whose map-made duplicate or implied prefix the after side
-        drops (master rulings R12, R12b) still meets its partner."""
+        drops (master rulings R12, R12b) still meets its partner. Applied
+        once to the whole pre-resolution list of a hygiene ident (R17), never
+        to its tails."""
+        if not (isinstance(cell, list) and len(cell) == 3 and cell[0] == 'app' and self._is_cons_cell(cell)):
+            return cell
         if cell[1][1][2] != self.PRERESOLVED:
             return cell
         cells = self._list_cells(cell)
@@ -2240,8 +2472,19 @@ class Comparison:
         current namespace, which keeps its place on both sides) and which was
         distinct from it before the rename is dropped too: resolution inside
         `N` already searches every prefix of `N`.
+
+        Hardened after the cross-family review (master ruling R17): the
+        caller applies this only to the pre-resolution of a hygiene ident
+        (`Lean.Syntax.ident` with value `Name.anonymous`); a length change
+        needs the map to have respelled at least one entry of the list; an
+        R12b entry's before value must also be a proper dot-boundary prefix
+        of the before current namespace, and occur once in the before list
+        (a duplicate already present before is never dropped). Every drop is
+        recorded (constant, entry, rule).
         Returns the comparison frames, or None when the rule does not apply
         (the ordinary comparison then decides)."""
+        if not (isinstance(left, list) and len(left) == 3 and left[0] == 'app' and self._is_cons_cell(left)):
+            return None
         if left[1][1][2] != self.PRERESOLVED:  # element type of this cons cell
             return None
         cells_l = self._list_cells(left)
@@ -2261,39 +2504,55 @@ class Comparison:
                 return None
             parts = _name(args[0])
             return '.'.join(parts) if parts else None
+        def spelled(node):
+            ns = namespace(node)
+            return ns if ns is not None else dag_digest(node).hex()[:16]
         entries = cells_l[1]
+        befores = [before_entry(e) for e in entries]
+        holder = self.holders[-1] if self.holders else None
+        if not any(b is not e and not dag_equal(b, e) for b, e in zip(befores, entries)):
+            raise Mismatch(f'{self._fmt_path(path)}: pre-resolution list of {len(entries)} entries became '
+                           f'{len(cells_r[1])}, but the map respelled none of its entries')
         # R12b: the current namespace is the first entry; it must keep its
         # place on both sides for a prefix entry to be implied by it.
         current = namespace(entries[0]) if entries else None
-        current_kept = (current is not None and cells_r[1] and dag_equal(cells_r[1][0], entries[0]))
+        current_was = namespace(befores[0]) if entries else None
+        current_kept = (current is not None and current_was is not None and cells_r[1] and
+                        dag_equal(cells_r[1][0], entries[0]))
         kept = []
         for i, entry in enumerate(entries):
-            was = before_entry(entry)
+            was = befores[i]
             earlier = entries[:i]
             image_dup = any(dag_equal(e, entry) for e in earlier)
-            before_dup = any(dag_equal(before_entry(e), was) for e in earlier)
+            before_dup = any(dag_equal(b, was) for b in befores[:i])
             if image_dup and not before_dup:
+                kept.append((entry, 'R12'))  # dropped below; recorded with its rule
                 continue
-            ns = namespace(entry)
-            implied = bool(i > 0 and current_kept and ns is not None and current.startswith(ns + '.') and
-                           not dag_equal(before_entry(entries[0]), was))
-            kept.append((entry, implied))
+            ns, ns_was = namespace(entry), namespace(was)
+            implied = bool(i > 0 and current_kept and ns is not None and ns_was is not None and
+                           current.startswith(ns + '.') and current_was.startswith(ns_was + '.') and
+                           sum(1 for b in befores if dag_equal(b, was)) == 1)
+            kept.append((entry, 'R12b' if implied else None))
+        drops = [(entry, 'R12') for entry, rule in kept if rule == 'R12']
+        kept = [(entry, rule) for entry, rule in kept if rule != 'R12']
         # R12b: an entry the current namespace implies may also go, in order,
         # where the after list does not hold it.
         if len(kept) != len(cells_r[1]):
             aligned, j = [], 0
-            for entry, implied in kept:
-                if implied and (j >= len(cells_r[1]) or not dag_equal(entry, cells_r[1][j])):
+            for entry, rule in kept:
+                if rule == 'R12b' and (j >= len(cells_r[1]) or not dag_equal(entry, cells_r[1][j])):
+                    drops.append((entry, 'R12b'))
                     continue
-                aligned.append((entry, implied))
+                aligned.append((entry, rule))
                 j += 1
             kept = aligned
         kept = [entry for entry, _ in kept]
         if len(kept) != len(cells_r[1]):
             raise Mismatch(f'{self._fmt_path(path)}: pre-resolution list of {len(cells_l[1])} entries became '
                            f'{len(cells_r[1])}; removing only the duplicates the map made leaves {len(kept)}')
-        holder = self.holders[-1] if self.holders else None
-        self.respelled_literals.append([holder, len(cells_l[1]), len(kept), 'preresolved duplicate removed'])
+        for entry, rule in drops:
+            why = 'preresolved duplicate removed' if rule == 'R12' else 'preresolved implied prefix removed'
+            self.respelled_literals.append([holder, spelled(before_entry(entry)), spelled(entry), f'{why} ({rule})'])
         frames = [('cmp', cells_l[0], cells_r[0], (path, '.element'), in_kernel)]
         for i, (a, b) in enumerate(zip(kept, cells_r[1])):
             frames.append(('cmp', a, b, (path, f'.entry[{i}]'), in_kernel))
@@ -2338,35 +2597,58 @@ class Comparison:
 
     UNION_AUDIT = 'Jaune.AxiomAudit.unionAxiomsOfModules'
 
-    def union_audit_prefix(self, item, module):
+    def union_audit(self, item, module, side):
         """`#union_axioms_of_modules P` reads `P` with `getId` (a literal
         name, compared as written) and audits every imported module named `P`
         or `P.…`. Under a module row `P -> P'` the before literal respells to
         `P'` exactly when that population follows the module rows: the before
         modules under `P` (imports of `module`), each mapped by its module
         row, are exactly the after modules under `P'` (imports of `module`'s
-        image). Otherwise, or without import records, it stays literal
-        (master ruling R5 (c), U9)."""
+        image) (master ruling R5 (c), U9).
+
+        Hardened after the cross-family review (master ruling R17): the
+        prefix is tagged as a module prefix, so `normalize()` never maps it
+        again by a declaration or namespace row; a population that does not
+        follow the module rows fails the item (it never falls back to
+        `normalize()`), whether or not the prefix is renamed; and the check
+        is keyed by its exact (renamed) module, never by a relocation
+        component, so the population checked is the one of the module that
+        holds the check on each side. Without import records only an
+        unrenamed prefix is compared, as written.
+
+        Returns the multiset key of the item, or None when `item` is not a
+        `#union_axioms_of_modules` with a literal prefix."""
         if not (isinstance(item, list) and len(item) == 3 and item[:2] == ['syntax', self.UNION_AUDIT] and
                 isinstance(item[2], list) and len(item[2]) >= 2 and isinstance(item[2][1], list) and
                 len(item[2][1]) == 2 and item[2][1][0] == 'name' and isinstance(item[2][1][1], str)):
-            return item
+            return None
         prefix = item[2][1][1]
+        def keyed(owner, literal):
+            tagged = [item[0], item[1], [item[2][0], ['union audit module prefix', literal]] + item[2][2:]]
+            return (f'{owner or "<module unrecorded>"} (union audit)', dag_digest(self.normalize(tagged, side)))
+        if side == 'after':
+            return keyed(module, prefix)
         new = self.mapping.module(prefix)
-        if new == prefix or module is None:
-            return item
-        before_imports = (self.before.get('import_modules') or {}).get(module)
-        after_imports = (self.after.get('import_modules') or {}).get(self.mapping.module(module))
+        owner = self.mapping.module(module) if module is not None else None
+        before_imports = (self.before.get('import_modules') or {}).get(module) if module is not None else None
+        after_imports = (self.after.get('import_modules') or {}).get(owner) if owner is not None else None
         if before_imports is None or after_imports is None:
-            return item
+            if new != prefix:
+                raise Mismatch(f'#union_axioms_of_modules {prefix} (module {module}): the module row to {new} '
+                               f'needs both import records')
+            return keyed(owner, prefix)
         def under(name, p):
             return name == p or name.startswith(p + '.')
         was = {self.mapping.module(m) for m in before_imports if under(m, prefix)}
         now = {m for m in after_imports if under(m, new)}
-        if not was or was != now:
-            return item
-        self.respelled_literals.append([module, prefix, new, 'union audit module prefix'])
-        return [item[0], item[1], [item[2][0], ['name', new]] + item[2][2:]]
+        if was != now:
+            raise Mismatch(f'#union_axioms_of_modules {prefix} (module {module}): audited population '
+                           f'{sorted(was)} under the module rows, after {new} in {owner}: {sorted(now)}')
+        if new != prefix:
+            if not was:
+                raise Mismatch(f'#union_axioms_of_modules {prefix} (module {module}): empty population')
+            self.respelled_literals.append([module, prefix, new, 'union audit module prefix'])
+        return keyed(owner, new)
 
     def respell_message(self, text, path):
         """A `#guard_msgs` expected text with every whole qualified-name token
@@ -2395,28 +2677,36 @@ class Comparison:
 
         constants = self.before.get('constants') or {}
 
+        def before_record(decl):
+            record = constants.get(decl)
+            if record is None and self._global_context and self._global_context.get('before_record'):
+                record = self._global_context['before_record'](decl)
+            return record
+
         def field_notation(token):
             """Generalized field notation (master ruling R5 (c-guard), U9):
             Lean prints `T.f c` as `c.f`. A token `P.f` whose `P` denotes a
             constructor `c` of the inductive `T` respells to `P'.f'`, where
             `P'` is the names-only respelling of `P` and the map takes
             `T.f` to `T'.f'` with `T'` the image of `T`. Every constant that
-            `P` may denote must qualify; otherwise nothing (kept as written)."""
+            `P` may denote must qualify; otherwise nothing (kept as written).
+            Hardened (master ruling R17): the candidates are taken in sorted
+            order and all must qualify before any is respelled, and `T.f`
+            must take a `T` as its first explicit argument."""
             head, leaf = token.rsplit('.', 1)
-            found = set()
-            for decl in self._suffixes.get(head, ()):
-                record = constants.get(decl)
-                if record is None and self._global_context and self._global_context.get('before_record'):
-                    record = self._global_context['before_record'](decl)
-                inductive = _constructor_inductive(record)
+            qualified = []
+            for decl in sorted(self._suffixes.get(head, ())):
+                inductive = _constructor_inductive(before_record(decl))
                 method = f'{inductive}.{leaf}' if inductive else None
                 if method is None or method not in self.all_before_constants:
+                    return set()
+                if _first_explicit_domain(before_record(method)) != inductive:
                     return set()
                 new_method = self.name(method)
                 if '.' not in new_method or new_method.rsplit('.', 1)[0] != self.name(inductive):
                     return set()
-                found.add(self.respell(head, decl, path) + '.' + new_method.rsplit('.', 1)[1])
-            return found
+                qualified.append((decl, new_method.rsplit('.', 1)[1]))
+            return {self.respell(head, decl, path) + '.' + new_leaf for decl, new_leaf in qualified}
 
         def one(match):
             token = match.group(0)
@@ -2549,8 +2839,8 @@ class Comparison:
                     memo[cid] = ['quotedIdentifier', c1, spelling, raw, c4]
                 else:
                     new = [memo[id(it)] if isinstance(it, (list, dict)) else it for it in cur]
-                    if coarse and len(new) == 3 and new[0] == 'app' and self._is_cons_cell(new):
-                        new = self._coarse_candidate_set(new)
+                    if coarse and len(new) == 3 and new[0] == 'app' and self._hygiene_ident(new):
+                        new = [new[0], new[1], self._coarse_candidate_set(new[2])]
                     memo[cid] = new
         return memo[id(value)]
 
@@ -2802,9 +3092,11 @@ class Comparison:
                 counted = Counter()
                 for index, (m, item) in enumerate(zip(owners, items)):
                     try:
-                        if key == 'checks' and side == 'before':
-                            item = self.union_audit_prefix(item, m)
-                        counted[(self.component(m, side), dag_digest(self.normalize(item, side)))] += 1
+                        audit = self.union_audit(item, m, side) if key == 'checks' else None
+                        if audit is not None:
+                            counted[audit] += 1
+                        else:
+                            counted[(self.component(m, side), dag_digest(self.normalize(item, side)))] += 1
                     except Mismatch as error:
                         if not self.collect:
                             raise

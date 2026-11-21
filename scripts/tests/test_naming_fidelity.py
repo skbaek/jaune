@@ -1378,9 +1378,13 @@ class NamingFidelityTests(unittest.TestCase):
         # the module row and the namespace row rename it as they rename the kind.
         rows = self.entries(('N.Old', 'N.New', 'namespace', {}), ('M', 'M2', 'module', {}))
         kind_b, kind_a = '_private.M.0.N.Old.tac', '_private.M2.0.N.New.tac'
-        def run(before_lit, after_lit, body=7, ofnat=False):
-            parser = lambda lit: dict(kernel=['definition', 'safe', ['app', ['const', ['name', 'P.node'], []],
-                                                                      self.name_chain(lit, ofnat=ofnat)]], attributes={})
+        def run(before_lit, after_lit, body=7, ofnat=False, head='Lean.ParserDescr.node', index=0):
+            def parser(lit):
+                fn = ['const', ['name', head], []]
+                for _ in range(index):
+                    fn = ['app', fn, ['bvar', 0]]
+                return dict(kernel=['definition', 'safe', ['app', fn, self.name_chain(lit, ofnat=ofnat)]],
+                            attributes={})
             self.before = snapshot({'N.Old.a': constant(), kind_b: constant(body), 'gen': parser(before_lit)}, ['N.Old.a'])
             self.after = snapshot({'N.New.a': constant(), kind_a: constant(7), 'gen': parser(after_lit)}, ['N.New.a'])
             self.renames = rows
@@ -1401,6 +1405,14 @@ class NamingFidelityTests(unittest.TestCase):
         # Control: a body change beside the literal still fails.
         with self.assertRaises(CHECK.Mismatch):
             run(kind_b, kind_a, body=8)
+        # R17: only where a quotation writes a chain (a pre-resolution or a
+        # syntax kind). The same chain as an ordinary argument is data.
+        for head in ('Lean.Syntax.node2', 'Lean.Syntax.isOfKind'):
+            self.assertEqual(run(kind_b, kind_a, head=head, index=1)['status'], 'OK')
+        for head, index in (('P.node', 0), ('Lean.Syntax.node2', 0), ('Lean.ParserDescr.node', 1)):
+            self.assertEqual(run(kind_b, kind_b, head=head, index=index)['status'], 'OK')
+            with self.assertRaises(CHECK.Mismatch):
+                run(kind_b, kind_a, head=head, index=index)
         # Control: a rebuilt name may use only the chain's own numerals.
         _, numerals, heads = CHECK._name_chain(self.name_chain(kind_b))
         self.assertIsNotNone(CHECK._name_chain_expr(kind_a, numerals, heads))
@@ -1421,10 +1433,14 @@ class NamingFidelityTests(unittest.TestCase):
         self.assertEqual(run('N.old')['status'], 'OK')
         with self.assertRaises(CHECK.Mismatch):
             run('N.new')
-        # The constructor form (a name pattern) is a literal at any length; a
-        # mixed chain is refused.
+        # R17/R19: a constructor-form chain `mkStrK` could write is never a
+        # literal; one `toExpr` writes in that form is only a candidate
+        # (`'ctor'`, admitted with double-backtick evidence); a mixed chain
+        # is refused.
         pattern = self.name_chain('N.old', heads=('Lean.Name.str', 'Lean.Name.num'))
-        self.assertTrue(CHECK._literal_chain(CHECK._name_chain(pattern)))
+        self.assertFalse(CHECK._literal_chain(CHECK._name_chain(pattern)))
+        self.assertEqual(CHECK._literal_chain(CHECK._name_chain(
+            self.name_chain('_private.M.0.N.old', heads=('Lean.Name.str', 'Lean.Name.num')))), 'ctor')
         mixed = self.name_chain('N.0.old', heads=('Lean.Name.str', 'Lean.Name.mkNum'))
         self.assertIsNone(CHECK._name_chain(mixed))
 
@@ -1438,6 +1454,210 @@ class NamingFidelityTests(unittest.TestCase):
         # Control: a numeric component that is not a literal does not decode.
         bad = ['app', ['app', ['const', ['name', 'Lean.Name.mkNum'], []], self.name_chain('M')], ['bvar', 0]]
         self.assertIsNone(CHECK._name(bad))
+
+    # --- R17 hardening after the cross-family review (Neon finding 3).
+
+    def gen_body(self, e):
+        return dict(kernel=['definition', 'safe', e], attributes={})
+
+    def test_constructor_form_name_chains_are_data(self):
+        # Neon counterexample 1: `def tag : Name := .str (.str .anonymous "N") "old"`
+        # under `N.old -> N.new` must not respell.
+        ctor = ('Lean.Name.str', 'Lean.Name.num')
+        def run(before_name, after_name, rows):
+            self.before = snapshot({'N.old': constant(), 'N.Old.a': constant(2),
+                                    'N.tag': self.gen_body(self.name_chain(before_name, heads=ctor))},
+                                   ['N.old', 'N.Old.a', 'N.tag'])
+            self.after = snapshot({'N.new': constant(), 'N.New.a': constant(2),
+                                   'N.tag': self.gen_body(self.name_chain(after_name, heads=ctor))},
+                                  ['N.new', 'N.New.a', 'N.tag'])
+            self.renames = self.entries(*rows)
+            return self.run_check()
+        rows = [('N.old', 'N.new', 'declaration', {}), ('N.Old', 'N.New', 'namespace', {})]
+        self.assertEqual(run('N.old', 'N.old', rows)['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run('N.old', 'N.new', rows)
+        # Neon counterexample 2: a descendant of a namespace row naming nothing.
+        self.assertEqual(run('N.Old.anything', 'N.Old.anything', rows)['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run('N.Old.anything', 'N.New.anything', rows)
+        # A private name in constructor form is data too.
+        with self.assertRaises(CHECK.Mismatch):
+            run('_private.M.0.N.old', '_private.M.0.N.new', rows)
+        # Even where a quotation would write a chain (a syntax kind), the
+        # constructor form is not one: it stays as written.
+        def at_site(before_name, after_name):
+            kind = lambda n: self.gen_body(['app', ['const', ['name', 'Lean.ParserDescr.node'], []],
+                                            self.name_chain(n, heads=ctor)])
+            self.before = snapshot({'_private.M.0.N.old': constant(), 'N.k': kind(before_name)},
+                                   ['_private.M.0.N.old', 'N.k'])
+            self.after = snapshot({'_private.M.0.N.new': constant(), 'N.k': kind(after_name)},
+                                  ['_private.M.0.N.new', 'N.k'])
+            self.renames = self.entries(('N.old', 'N.new', 'declaration', {}))
+            return self.run_check()
+        self.assertEqual(at_site('_private.M.0.N.old', '_private.M.0.N.old')['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            at_site('_private.M.0.N.old', '_private.M.0.N.new')
+
+    def test_double_backtick_private_literals_follow_the_map(self):
+        # Master ruling R19: ``canonical_push`` of a private helper elaborates to
+        # a constructor-form chain in the definition body; it respells to the
+        # helper's image only with all three conditions.
+        ctor = ('Lean.Name.str', 'Lean.Name.num')
+        old, new = '_private.M.0.N.C.helper', '_private.M2.0.N.helper'
+        rows = [('N.C', 'N', 'namespace', {}), ('M', 'M2', 'module', {})]
+        def run(before_name, after_name, source='def k := ``helper\n', decl_range=True,
+                before_consts=None, after_consts=None, outside=''):
+            lit = lambda n: self.gen_body(['app', ['app', ['const', ['name', 'Prod.mk'], []], self.name_chain(n, heads=ctor)],
+                                           ['nat', 1]])
+            self.before = snapshot(dict({'N.C.k': lit(before_name)}, **(before_consts if before_consts is not None
+                                                                       else {old: constant(3)})), ['N.C.k'])
+            self.after = snapshot(dict({'N.k': lit(after_name)}, **(after_consts if after_consts is not None
+                                                                   else {new: constant(3)})), ['N.k'])
+            self.before['owners'] = {'N.C.k': 'M', old: 'M'}
+            self.after['owners'] = {'N.k': 'M2', new: 'M2'}
+            self.before['module_sources'] = {'M': 'def other := 1\n' + source + outside}
+            if decl_range:
+                start = len('def other := 1\n')
+                self.before['module_decls'] = {'M': {'N.C.k': (start, start + len(source))}}
+            self.renames = self.entries(*rows)
+            return self.run_check()
+        verdict = run(old, new)
+        self.assertIn(['N.C.k', old, new, 'double-backtick name literal (declaration level)'],
+                      verdict['derived_literals_respelled'])
+        self.assertIn('double-backtick name literal (module level)',
+                      [r[3] for r in run(old, new, decl_range=False)['derived_literals_respelled']])
+        # (3) the same chain built by hand, with no double-backtick spelling: data.
+        hand = 'def k := Name.str (Name.num (Name.str .anonymous "M") 0) "helper"\n'
+        self.assertEqual(run(old, old, source=hand)['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(old, new, source=hand)
+        # (3) at declaration level: the spelling elsewhere in the module does not count.
+        self.assertIn('double-backtick name literal (module level)',
+                      [r[3] for r in run(old, new, source=hand, outside='def j := ``helper\n',
+                                         decl_range=False)['derived_literals_respelled']])
+        with self.assertRaises(CHECK.Mismatch):
+            run(old, new, source=hand, outside='def j := ``helper\n')
+        # (3) a commented-out or quoted spelling is no literal.
+        with self.assertRaises(CHECK.Mismatch):
+            run(old, new, source='def k := 1 -- ``helper\n')
+        # (3) a spelling that resolves to another constant as well is no evidence.
+        other = '_private.M.0.N.D.helper'
+        with self.assertRaises(CHECK.Mismatch):
+            run(old, new, before_consts={old: constant(3), other: constant(4)},
+                after_consts={new: constant(3), other.replace('M.0', 'M2.0'): constant(4)})
+        # (2) a chain naming no existing old constant.
+        missing = '_private.M.0.N.C.absent'
+        self.assertEqual(run(missing, missing, source='def k := ``absent\n')['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(missing, '_private.M2.0.N.absent', source='def k := ``absent\n')
+        run(old, new)
+        self.after['constants']['_private.M2.0.N.absent'] = constant(5)
+        self.before['module_sources'] = {'M': 'def k := ``absent ``helper\n'}
+        self.before['module_decls'] = {}
+        probe = CHECK.Comparison(self.before, self.after, self.renames)
+        self.assertEqual(probe.double_backtick_literal('N.C.k', old), 'module')
+        self.assertIsNone(probe.double_backtick_literal('N.C.k', missing))
+        # (2) an old constant whose image is no after constant (outside the
+        # compared pair, a whole-environment table) gives no evidence.
+        del self.after['constants'][new]
+        probe = CHECK.Comparison(self.before, self.after, self.renames)
+        self.assertIsNone(probe.double_backtick_literal('N.C.k', old))
+        # (2) a chain whose image is no existing after constant.
+        with self.assertRaises(CHECK.Mismatch):
+            run(old, new, after_consts={'_private.M2.0.N.elsewhere': constant(3)})
+        # (1) a constructor chain `toExpr` would write as `mkStrK` (simple, at
+        # most eight string components) is data even with a ``N.C.pub`` literal.
+        self.assertEqual(run('N.C.pub', 'N.C.pub', source='def k := ``N.C.pub\n',
+                             before_consts={'N.C.pub': constant(3)}, after_consts={'N.pub': constant(3)})['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run('N.C.pub', 'N.pub', source='def k := ``N.C.pub\n',
+                before_consts={'N.C.pub': constant(3)}, after_consts={'N.pub': constant(3)})
+
+    def test_chained_literals_only_at_quotation_sites(self):
+        # Neon counterexample 3: a toExpr-encoded chain (private, or over eight
+        # components) in an ordinary definition body is runtime data; and the
+        # inner prefix of a runtime chain is never decoded on its own.
+        kind = '_private.M.0.N.Old.tac'
+        rows = [('N.Old', 'N.New', 'namespace', {}), ('M', 'M2', 'module', {})]
+        def run(before_e, after_e):
+            self.before = snapshot({'N.Old.a': constant(), kind: constant(7), 'N.k': self.gen_body(before_e)},
+                                   ['N.Old.a', 'N.k'])
+            self.after = snapshot({'N.New.a': constant(), '_private.M2.0.N.New.tac': constant(7),
+                                   'N.k': self.gen_body(after_e)}, ['N.New.a', 'N.k'])
+            self.renames = self.entries(*rows)
+            return self.run_check()
+        new = '_private.M2.0.N.New.tac'
+        self.assertEqual(run(self.name_chain(kind), self.name_chain(kind))['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(self.name_chain(kind), self.name_chain(new))
+        dyn = lambda e: ['app', ['app', ['const', ['name', 'Lean.Name.mkStr'], []], e], ['bvar', 0]]
+        self.assertEqual(run(dyn(self.name_chain(kind)), dyn(self.name_chain(kind)))['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(dyn(self.name_chain(kind)), dyn(self.name_chain(new)))
+
+    def test_chained_literals_name_an_existing_constant_or_namespace(self):
+        # Rule D for a chain (R17): the before chain names a constant or a
+        # namespace before, and its image one after. Nine components force a chain.
+        long_old, long_new = 'N.Old.a.b.c.d.e.f.g', 'N.New.a.b.c.d.e.f.g'
+        def run(after_lit, exists):
+            parser = lambda lit: self.gen_body(['app', ['const', ['name', 'Lean.ParserDescr.node'], []],
+                                                self.name_chain(lit)])
+            before = {'N.Old.x': constant(), 'gen': parser(long_old)}
+            after = {'N.New.x': constant(), 'gen': parser(after_lit)}
+            if exists:
+                before[long_old + '.h'], after[long_new + '.h'] = constant(3), constant(3)
+            self.before = snapshot(before, ['N.Old.x'] + ([long_old + '.h'] if exists else []))
+            self.after = snapshot(after, ['N.New.x'] + ([long_new + '.h'] if exists else []))
+            self.renames = self.entries(('N.Old', 'N.New', 'namespace', {}))
+            return self.run_check()
+        self.assertEqual(run(long_new, exists=True)['status'], 'OK')
+        self.assertEqual(run(long_old, exists=False)['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(long_new, exists=False)
+
+    def test_name_and_numeral_decoding_are_exact(self):
+        nat = ['const', ['name', 'Nat'], []]
+        def ofnat(n, ty=nat, inst='instOfNatNat', m=None):
+            return ['app', ['app', ['app', ['const', ['name', 'OfNat.ofNat'], [0]], ty], ['nat', n]],
+                    ['app', ['const', ['name', inst], []], ['nat', n if m is None else m]]]
+        self.assertEqual(CHECK._numeral(['nat', 0]), 0)
+        self.assertEqual(CHECK._numeral(ofnat(3)), 3)
+        self.assertIsNone(CHECK._numeral(ofnat(3, inst='evilInst')))
+        self.assertIsNone(CHECK._numeral(ofnat(3, ty=['const', ['name', 'Int'], []])))
+        self.assertIsNone(CHECK._numeral(ofnat(3, m=4)))
+        self.assertIsNone(CHECK._numeral(['nat', -1]))
+        # `Name.str p "0"` never reads as `Name.num p 0`.
+        self.assertIsNone(CHECK._name(self.mkstr('foo', '0')))
+        self.assertEqual(CHECK._name(self.name_chain('foo.0')), ['foo', '0'])
+        str0 = ['app', ['app', ['const', ['name', 'Lean.Name.str'], []], self.mkstr('foo')], ['str', '0']]
+        self.assertIsNone(CHECK._name(str0))
+        # Neon finding 3.2 end to end: an identifier whose value changes from
+        # `foo.«0»` to `foo.0`, or whose numeral instance changes, fails.
+        def ident(val):
+            info = ['const', ['name', 'Lean.SourceInfo.none'], []]
+            raw = ['app', ['const', ['name', 'String.toRawSubstring'], []], ['str', 'foo.0']]
+            pre = ['app', ['const', ['name', 'List.nil'], [['zero']]], ['const', ['name', 'Lean.Syntax.Preresolved'], []]]
+            return ['app', ['app', ['app', ['app', ['const', ['name', 'Lean.Syntax.ident'], []], info], raw], val], pre]
+        num = lambda n: ['app', ['app', ['const', ['name', 'Lean.Name.mkNum'], []], self.mkstr('foo')], n]
+        def run(before_val, after_val):
+            self.before = snapshot({'N.old': constant(), 'N.k': self.gen_body(ident(before_val))}, ['N.old', 'N.k'])
+            self.after = snapshot({'N.new': constant(), 'N.k': self.gen_body(ident(after_val))}, ['N.new', 'N.k'])
+            self.before['constants'] = {k: CHECK.quoted_identifiers(v) for k, v in self.before['constants'].items()}
+            self.after['constants'] = {k: CHECK.quoted_identifiers(v) for k, v in self.after['constants'].items()}
+            return self.run_check()
+        self.assertEqual(run(num(ofnat(0)), num(ofnat(0)))['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(self.mkstr('foo', '0'), num(ofnat(0)))
+        with self.assertRaises(CHECK.Mismatch):
+            run(num(ofnat(0, inst='instA')), num(ofnat(0, inst='instB')))
+
+    @staticmethod
+    def mkstr(*parts):
+        e = ['const', ['name', f'Lean.Name.mkStr{len(parts)}'], []]
+        for part in parts:
+            e = ['app', e, ['str', part]]
+        return e
 
     def union_audit(self, prefix):
         return ['syntax', 'Jaune.AxiomAudit.unionAxiomsOfModules',
@@ -1473,13 +1693,75 @@ class NamingFidelityTests(unittest.TestCase):
         with self.assertRaises(CHECK.Mismatch):
             self.run_check()
 
+    def test_union_audit_prefix_is_never_mapped_twice_or_moved(self):
+        # Neon finding 2, R17: each counterexample now fails.
+        def run(rows, before_check, after_check, before_imports, after_imports,
+                before_owner='Audit', after_owner='Audit', extra_after=None):
+            self.setUp()
+            self.before['checks'], self.after['checks'] = [self.union_audit(before_check)], [self.union_audit(after_check)]
+            self.before['item_modules'] = {'checks': [before_owner]}
+            self.after['item_modules'] = {'checks': [after_owner]}
+            self.before['import_modules'] = {'Audit': list(before_imports), 'Other': ['Q']}
+            self.after['import_modules'] = dict({'Audit': list(after_imports), 'Other': ['Q']}, **(extra_after or {}))
+            self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), *rows)
+            return self.run_check()
+        # 2.1: a namespace row `Jaune.Checked -> Jaune` must not stand in for a
+        # population check that failed (B dropped from the audit).
+        ns = [('Jaune.Checked', 'Jaune', 'namespace', {}),
+              ('Jaune.Checked.A', 'Jaune.A', 'module', {}), ('Jaune.Checked.B', 'Jaune.B', 'module', {})]
+        with self.assertRaises(CHECK.Mismatch):
+            run(ns, 'Jaune.Checked', 'Jaune', ['Jaune.Checked.A', 'Jaune.Checked.B'], ['Jaune.A'])
+        # 2.2: a module row `ModA -> Foo` and a declaration row `Foo -> Bar`:
+        # the prefix is `Foo` after, never `Bar` (which audits nothing).
+        twice = [('ModA', 'Foo', 'module', {}), ('Foo', 'Bar', 'declaration', {})]
+        with self.assertRaises(CHECK.Mismatch):
+            run(twice, 'ModA', 'Bar', ['ModA'], ['Foo'])
+        self.assertEqual(run(twice, 'ModA', 'Foo', ['ModA'], ['Foo'])['status'], 'OK')
+        # 2.3: a relocation component must not move the check to a module with
+        # fewer imports (`B` audits `P2` without `P2.X`).
+        reloc = [('P', 'P2', 'module', {}), ('P.X', 'P2.X', 'module', {}),
+                 ('N.f', 'N.f', 'relocation', dict(from_module='Audit', to_module='Other'))]
+        def relocated(after_owner, other_imports):
+            self.setUp()
+            self.before['constants']['N.f'] = self.after['constants']['N.f'] = constant(3)
+            self.before['roots'].add('N.f')
+            self.after['roots'].add('N.f')
+            self.before['owners'] = {'N.old': 'Audit', 'N.f': 'Audit'}
+            self.after['owners'] = {'N.new': 'Audit', 'N.f': 'Other'}
+            self.before['checks'], self.after['checks'] = [self.union_audit('P')], [self.union_audit('P2')]
+            self.before['item_modules'] = {'checks': ['Audit']}
+            self.after['item_modules'] = {'checks': [after_owner]}
+            self.before['import_modules'] = {'Audit': ['P', 'P.X'], 'Other': ['P2']}
+            self.after['import_modules'] = {'Audit': ['P2', 'P2.X'], 'Other': other_imports}
+            self.renames = self.entries(('N.old', 'N.new', 'declaration', {}), *reloc)
+            return self.run_check()
+        self.assertEqual(relocated('Audit', ['P2'])['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            relocated('Other', ['P2'])
+        # An unrenamed prefix whose population the module rows change fails too.
+        moved = [('Q.X', 'R.X', 'module', {})]
+        with self.assertRaises(CHECK.Mismatch):
+            run(moved, 'Q', 'Q', ['Q', 'Q.X'], ['Q', 'R.X'])
+        self.assertEqual(run(moved, 'Q', 'Q', ['Q', 'Q.Y'], ['Q', 'Q.Y'])['status'], 'OK')
+        # The population is read on a dot boundary: `PX` is not under `P`.
+        dot = [('P', 'P2', 'module', {}), ('PX', 'PX2', 'module', {})]
+        self.assertEqual(run(dot, 'P', 'P2', ['P', 'PX'], ['P2', 'PX2'])['status'], 'OK')
+        # A renamed prefix with an empty population is refused.
+        with self.assertRaises(CHECK.Mismatch):
+            run([('P', 'P2', 'module', {})], 'P', 'P2', ['Q'], ['Q'])
+
     def test_guard_msgs_field_notation_follows_constructor_and_method_rows(self):
         ctor = lambda: dict(kernel=dict(type=['const', ref('N.Op'), []], universes=0,
                                         payload=['constructor', ref('N.Op'), 0, 0, 0, False]), attributes={})
-        def run(after_text, rows=None, add=ctor):
-            self.before = snapshot({'N.Op': constant(5), 'N.Op.add': add(), 'N.Op.rinst': constant(2)},
+        def method(value, domain='N.Op', binder='Lean.BinderInfo.default'):
+            # `def Op.rinst {α : Type} (o : Op) : Nat`: Op is the first explicit argument.
+            ty = ['forall', 'Lean.BinderInfo.implicit', ['sort', 1],
+                  ['forall', binder, ['const', ref(domain), []], ['const', ref('Nat'), []]]]
+            return dict(kernel=dict(type=ty, universes=0, payload=['definition', value]), attributes={})
+        def run(after_text, rows=None, add=ctor, rinst=lambda: method(2)):
+            self.before = snapshot({'N.Op': constant(5), 'N.Op.add': add(), 'N.Op.rinst': rinst()},
                                    ['N.Op', 'N.Op.add', 'N.Op.rinst'])
-            self.after = snapshot({'N.Op': constant(5), 'N.Op.plus': add(), 'N.Op.toPlain': constant(2)},
+            self.after = snapshot({'N.Op': constant(5), 'N.Op.plus': add(), 'N.Op.toPlain': rinst()},
                                   ['N.Op', 'N.Op.plus', 'N.Op.toPlain'])
             self.renames = self.entries(*(rows or [('N.Op.add', 'N.Op.plus', 'declaration', {}),
                                                    ('N.Op.rinst', 'N.Op.toPlain', 'declaration', {})]))
@@ -1498,6 +1780,22 @@ class NamingFidelityTests(unittest.TestCase):
         # Control: `P` that is not a constructor gives no field respelling.
         with self.assertRaises(CHECK.Mismatch):
             run('error: Op.plus.toPlain x-/', add=lambda: constant(3))
+        # R17 (Neon finding 8.2): `T.f` must take a `T` as its first explicit
+        # argument; a constant of T's namespace that does not is no method.
+        self.assertEqual(run('error: Op.add.rinst x-/', rinst=lambda: constant(2))['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run('error: Op.plus.toPlain x-/', rinst=lambda: constant(2))
+        with self.assertRaises(CHECK.Mismatch):
+            run('error: Op.plus.toPlain x-/', rinst=lambda: method(2, domain='Nat'))
+        with self.assertRaises(CHECK.Mismatch):
+            run('error: Op.plus.toPlain x-/', rinst=lambda: method(2, binder='Lean.BinderInfo.instImplicit'))
+        # Finding 8.1: when `P` may also denote a constant that is no
+        # constructor, the token stays as written, whatever the set order.
+        self.before = snapshot({'N.Op': constant(5), 'N.Op.add': ctor(), 'N.Op.rinst': method(2),
+                                'M.Op.add': constant(4)}, ['N.Op', 'N.Op.add', 'N.Op.rinst', 'M.Op.add'])
+        rows = [('N.Op.add', 'N.Op.plus', 'declaration', {}), ('N.Op.rinst', 'N.Op.toPlain', 'declaration', {})]
+        comparison = CHECK.Comparison(self.before, self.before, self.entries(*rows))
+        self.assertEqual(comparison.respell_message('Op.add.rinst', 'guard_msgs'), 'Op.add.rinst')
         # Control: a method moved out of the type's namespace gives none either.
         self.before = snapshot({'N.Op': constant(5), 'N.Op.add': ctor(), 'N.Op.rinst': constant(2)},
                                ['N.Op', 'N.Op.add', 'N.Op.rinst'])
@@ -1531,22 +1829,33 @@ class NamingFidelityTests(unittest.TestCase):
             out = ['app', ['app', ['app', ['const', ['name', 'List.cons'], [['zero']]], T], entry], out]
         return out
 
+    @staticmethod
+    def hygiene_ident(pre, val=None, scoped=True):
+        """`Lean.Syntax.ident info raw v pre` as a quotation writes its
+        hygiene ident: `v` = `Lean.addMacroScope m Name.anonymous s`."""
+        anonymous = ['const', ['name', 'Lean.Name.anonymous'], []]
+        if val is None:
+            val = (['app', ['app', ['app', ['const', ['name', 'Lean.addMacroScope'], []], ['bvar', 0]], anonymous],
+                    ['bvar', 1]] if scoped else anonymous)
+        info = ['const', ['name', 'Lean.SourceInfo.none'], []]
+        raw = ['app', ['const', ['name', 'String.toRawSubstring'], []], ['str', '']]
+        return ['app', ['app', ['app', ['app', ['const', ['name', 'Lean.Syntax.ident'], []], info], raw], val], pre]
+
     def test_preresolved_lists_drop_only_duplicates_the_map_made(self):
         # Master ruling R12: `namespace A.C` + `open A` pre-resolve to
         # [A.C, ..., A]; merged into `A` (and `open A` dropped) the after
         # list is [A, ...]. A later duplicate never changes resolution.
         rows = self.entries(('A.C', 'A', 'namespace', {}), ('A.C.R.x', 'A.R.x', 'declaration', {}))
         def run(before, after, element='Lean.Syntax.Preresolved'):
-            gen = lambda names: dict(kernel=['definition', 'safe', ['app', ['const', ['name', 'P.ident'], []],
-                                                                     self.preresolved_list(*names, element=element)]],
-                                     attributes={})
+            gen = lambda names: dict(kernel=['definition', 'safe', self.hygiene_ident(
+                self.preresolved_list(*names, element=element))], attributes={})
             self.before = snapshot({'A.C.R.x': constant(), 'gen': gen(before)}, ['A.C.R.x'])
             self.after = snapshot({'A.R.x': constant(), 'gen': gen(after)}, ['A.R.x'])
             self.renames = rows
             return self.run_check()
         # Two levels, three levels, and a duplicate that is not adjacent.
         verdict = run(['A.C', 'A'], ['A'])
-        self.assertIn('preresolved duplicate removed', [r[3] for r in verdict['derived_literals_respelled']])
+        self.assertIn('preresolved duplicate removed (R12)', [r[3] for r in verdict['derived_literals_respelled']])
         self.assertEqual(run(['A.C.R', 'A.C', 'A'], ['A.R', 'A'])['status'], 'OK')
         self.assertEqual(run(['A.C', 'B.M', 'B', 'A'], ['A', 'B.M', 'B'])['status'], 'OK')
         # Lists of equal length are compared as they are: no removal.
@@ -1584,8 +1893,8 @@ class NamingFidelityTests(unittest.TestCase):
         rows = self.entries(('N.C', 'N', 'namespace', {}), ('N.C.R.x', 'N.R.x', 'declaration', {}),
                             ('Jaune.C', 'Jaune', 'namespace', {}), ('Jaune.C.R.y', 'Jaune.R.y', 'declaration', {}))
         def run(before, after):
-            gen = lambda names: dict(kernel=['definition', 'safe', ['app', ['const', ['name', 'P.ident'], []],
-                                                                     self.preresolved_list(*names)]], attributes={})
+            gen = lambda names: dict(kernel=['definition', 'safe', self.hygiene_ident(self.preresolved_list(*names))],
+                                     attributes={})
             self.before = snapshot({'N.C.R.x': constant(), 'Jaune.C.R.y': constant(2), 'gen': gen(before)},
                                    ['N.C.R.x', 'Jaune.C.R.y'])
             self.after = snapshot({'N.R.x': constant(), 'Jaune.R.y': constant(2), 'gen': gen(after)},
@@ -1620,6 +1929,91 @@ class NamingFidelityTests(unittest.TestCase):
         # comparison (entry 0 never drops, so the after list must start with it;
         # an entry equal before has an equal image, never a proper prefix). They
         # are kept as defence in depth; no mutation of them alone can bite.
+
+    def test_preresolved_rules_apply_only_to_hygiene_idents_the_map_touched(self):
+        # Neon finding 1, R17. Each counterexample now fails.
+        def run(before, after, rows, wrap=None):
+            wrap = wrap or self.hygiene_ident
+            gen = lambda names: dict(kernel=['definition', 'safe', wrap(self.preresolved_list(*names))], attributes={})
+            self.before = snapshot({'A.C.R.x': constant(), 'f': gen(before)}, ['A.C.R.x', 'f'])
+            self.after = snapshot({'A.R.x': constant(), 'f': gen(after)}, ['A.R.x', 'f'])
+            self.renames = self.entries(('A.C.R.x', 'A.R.x', 'declaration', {}), *rows)
+            return self.run_check()
+        merge = [('A.C', 'A', 'namespace', {})]
+        # The rules still admit the hygiene case they were made for, with or
+        # without a macro scope on the anonymous value.
+        self.assertEqual(run(['A.C', 'A'], ['A'], merge)['status'], 'OK')
+        self.assertEqual(run(['A.C', 'A'], ['A'], merge, wrap=lambda l: self.hygiene_ident(l, scoped=False))['status'], 'OK')
+        # Counterexample 1.1: a bare list in a definition body (`([..]).length`),
+        # under an empty map: R12b no longer drops `A`.
+        bare = lambda l: ['app', ['const', ['name', 'List.length'], []], l]
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.B', 'A'], ['A.B'], [], wrap=bare)
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.C', 'A'], ['A'], merge, wrap=bare)
+        # ... nor inside a hygiene ident the map did not touch.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.B', 'A'], ['A.B'], [])
+        # Counterexample 1.2a: a quoted identifier naming a namespace (`open B`
+        # inside `namespace A.B` with `open A`): its value is not anonymous.
+        named = lambda l: self.hygiene_ident(l, val=self.mkstr('B'))
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.B.B', 'A.B'], ['A.B.B'], [])
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.C.B', 'A'], ['A.B'], merge, wrap=named)
+
+    def test_preresolved_prefix_rule_checks_the_before_side_and_duplicates(self):
+        # Neon finding 1.2b: under `Old -> N.R`, `[Old, L, N]` -> `[N.R, L]`:
+        # `N` was no prefix of `Old` before, so it was an ordinary open.
+        rows = self.entries(('Old', 'N.R', 'namespace', {}), ('Old.x', 'N.R.x', 'declaration', {}),
+                            ('N.C', 'N', 'namespace', {}), ('N.C.R.y', 'N.R.y', 'declaration', {}))
+        def run(before, after):
+            gen = lambda names: dict(kernel=['definition', 'safe', self.hygiene_ident(self.preresolved_list(*names))],
+                                     attributes={})
+            self.before = snapshot({'Old.x': constant(), 'N.C.R.y': constant(2), 'g': gen(before)}, ['Old.x', 'N.C.R.y'])
+            self.after = snapshot({'N.R.x': constant(), 'N.R.y': constant(2), 'g': gen(after)}, ['N.R.x', 'N.R.y'])
+            self.renames = rows
+            return self.run_check()
+        self.assertEqual(run(['N.C.R', 'L', 'N'], ['N.R', 'L'])['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(['Old', 'L', 'N'], ['N.R', 'L'])
+        # Finding 1.3: a duplicate already present before is never dropped by R12b.
+        with self.assertRaises(CHECK.Mismatch):
+            run(['N.C.R', 'N', 'N'], ['N.R', 'N'])
+        with self.assertRaises(CHECK.Mismatch):
+            run(['N.C.R', 'N', 'N'], ['N.R'])
+        self.assertEqual(run(['N.C.R', 'N', 'N'], ['N.R', 'N', 'N'])['status'], 'OK')
+        # Every drop is in the audit trail with its rule.
+        verdict = run(['N.C.R', 'L', 'N'], ['N.R', 'L'])
+        self.assertIn(['g', 'N', 'N', 'preresolved implied prefix removed (R12b)'], verdict['derived_literals_respelled'])
+
+    def test_preresolved_pairing_uses_the_coarse_bucket(self):
+        # Finding 6.4: generated constants whose names differ are paired only
+        # through the coarse bucket, which must see the dropped entry.
+        rows = self.entries(('A.C', 'A', 'namespace', {}), ('A.C.R.x', 'A.R.x', 'declaration', {}))
+        def run(before, after, user=None):
+            gen = lambda names: dict(kernel=['definition', 'safe', self.hygiene_ident(self.preresolved_list(*names))],
+                                     attributes={})
+            # No authored constant refers to them: only the bucket pairs them.
+            self.before = snapshot({'A.C.R.x': constant(), 'genOld': gen(before)}, ['A.C.R.x'])
+            self.after = snapshot({'A.R.x': constant(), 'genNew': gen(after)}, ['A.R.x'])
+            self.renames = rows
+            comparison = CHECK.Comparison(self.before, self.after, self.renames)
+            self.assertNotEqual(comparison.preferred_generated('genOld'), 'genNew')
+            return comparison.run()
+        self.assertEqual(run(['A.C', 'L', 'A'], ['A', 'L'])['status'], 'OK')
+        with self.assertRaises(CHECK.Mismatch):
+            run(['A.C', 'L', 'A'], ['A', 'M'])
+        # Finding 6.3: the coarse set applies to the whole list only. In
+        # `[L, A.B, A]` the tail `[A.B, A]` is not collapsed (A is no prefix of L).
+        self.before = snapshot({'k': constant()}, ['k'])
+        comparison = CHECK.Comparison(self.before, self.before, {})
+        # (Both inputs stay alive: the coarse cache is keyed by object identity.)
+        lists = [self.hygiene_ident(self.preresolved_list('L', 'A.B', 'A')),
+                 self.hygiene_ident(self.preresolved_list('A.B', 'L', 'A'))]
+        coarse = [comparison.normalize(x, 'after', coarse=True) for x in lists]
+        self.assertEqual([len(CHECK.Comparison._list_cells(c[2])[1]) for c in coarse], [3, 2])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -811,6 +811,72 @@ class NamingLintTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'spelling/case mismatch'):
             self.lint(*names)
 
+    def r15_fixture(self):
+        raw = ('protected def neg (x : BitVec n) : BitVec n := .ofNat n (2^n - x.toNat)\n'
+               'Qww Yzz Ooo GT EXP\n').encode()
+        (self.root / 'lean.txt').write_bytes(raw)
+        (self.root / 'spec.txt').write_bytes(raw)
+        self.policy['sources']['lean'] = dict(path='lean.txt', sha256=LINT.sha(raw),
+                                              citation='leanprover/lean4 v4.35.0 at ' + 'e' * 40 + ', src/Init/Prelude.lean')
+        self.policy['sources']['spec'] = dict(path='spec.txt', sha256=LINT.sha(raw), citation='Synthetic spec fixture')
+        self.policy['words'] += ['check', 'extra', 'word', 'sub', 'x', 'bad', 'old']
+        lean = dict(rule='7', source='lean', style='lowerCamel')
+        base = {'Jaune.Yzz': dict(rule='3', source='spec', spelling='Yzz', style='verbatim'),
+                'Jaune.Qww': dict(rule='1', source='spec', spelling='Qww', style='verbatim'),
+                'Jaune.Ooo': dict(rule='1', source='spec', spelling='Ooo', style='verbatim')}
+        self.policy['bindings'] = dict(base)
+        def row(old, new, rule, kind='declaration', layer='execution'):
+            return dict(old=old, new=new, kind=kind, layer=layer, rule=rule, source='synthetic')
+        def reasons(name, rows, binding):
+            self.mapping = dict(self.mapping, entries=[r for r in self.mapping['entries']
+                                                       if not r['new'].startswith(('Jaune.Yzz', 'Jaune.Qww', 'Jaune.Ooo'))] + rows)
+            self.policy['bindings'] = dict(base, **{name: binding})
+            return [p['reason'] for p in self.lint(name) if p['name'] == name]
+        return lean, row, reasons
+
+    def test_listed_rules_are_all_backed_hardened(self):
+        # Neon finding 4, R17: each counterexample now fails.
+        lean, row, reasons = self.r15_fixture()
+        bad = 'map requires matching source binding'
+        neg = dict(lean, spelling='neg')
+        yzz = row('Jaune.Zzz', 'Jaune.Yzz', '3')
+        # The cases R15 was made for still pass.
+        self.assertEqual(reasons('Jaune.Yzz.neg', [yzz, row('Jaune.Zzz.neg', 'Jaune.Yzz.neg', '3, 7')], neg), [])
+        gt = dict(rule='1', source='spec', spelling='GT', style='lowerCamel', component='gt')
+        self.assertEqual(reasons('Jaune.Yzz.gtCheck', [yzz, row('Jaune.Zzz.gtCheck', 'Jaune.Yzz.gtCheck', '3, 1, 7')],
+                                 gt), [])
+        # 4.1: a relocation prefix row (`old == new`) backs nothing.
+        reloc = row('Jaune.Ooo', 'Jaune.Ooo', '1', kind='relocation')
+        self.assertIn(bad, reasons('Jaune.Ooo.neg', [reloc, row('Jaune.Ooo.badOld', 'Jaune.Ooo.neg', '1, 7')], neg))
+        # 4.2: the prefix row's layer must be the row's.
+        self.assertIn(bad, reasons('Jaune.Yzz.neg', [row('Jaune.Zzz', 'Jaune.Yzz', '3', layer='consensus'),
+                                                     row('Jaune.Zzz.neg', 'Jaune.Yzz.neg', '3, 7')], neg))
+        # 4.2: the rest of the name is kept: no other leaf, no depth change.
+        negc = dict(lean, spelling='neg', component='neg')
+        self.assertIn(bad, reasons('Jaune.Yzz.negExtraWord',
+                                   [yzz, row('Jaune.Zzz.unrelatedOld', 'Jaune.Yzz.negExtraWord', '3, 7')], negc))
+        self.assertIn(bad, reasons('Jaune.Yzz.neg', [yzz, row('Jaune.Zzz.Sub.x', 'Jaune.Yzz.neg', '3, 7')], neg))
+        # A leaf the direct binding spells whole may change (`bexp` -> `exp`, rule 1).
+        exp = dict(rule='1', source='spec', spelling='EXP', style='lowerCamel')
+        self.assertEqual(reasons('Jaune.Yzz.exp', [yzz, row('Jaune.Zzz.bexp', 'Jaune.Yzz.exp', '1, 3, 7')], exp), [])
+        self.assertIn(bad, reasons('Jaune.Yzz.exp', [yzz, row('Jaune.Zzz.Sub.bexp', 'Jaune.Yzz.exp', '1, 3, 7')], exp))
+        # 4.3: a binding under the primary rule no longer short-circuits the
+        # other listed rules 1-3 (rule 3 has no prefix row here).
+        self.assertIn(bad, reasons('Jaune.Yzz.exp', [row('Jaune.Zzz.bexp', 'Jaune.Yzz.exp', '1, 3, 7')], exp))
+        # A single listed rule 1-3 bound under it stays as before.
+        self.assertEqual(reasons('Jaune.Yzz.exp', [row('Jaune.Zzz.bexp', 'Jaune.Yzz.exp', '1, 7')], exp), [])
+
+    def test_root_spelled_declaration_is_linted(self):
+        # Neon finding 5, R17: `_root_.N.x` spells the whole name, as N4 reads it.
+        text = 'theorem _root_.Jaune.value : True := trivial\n'
+        self.assertTrue(LINT.spelled(text, 8, 8 + len('_root_.Jaune.value'), 'Jaune.value'))
+        self.assertFalse(LINT.spelled(text, 8, 8 + len('_root_.Jaune.value'), 'Jaune.Other.value'))
+        self.assertFalse(LINT.spelled('theorem _root_.value : True', 8, 8 + len('_root_.value'), 'Jaune.value'))
+        self.assertFalse(LINT.spelled('theorem _root_ : True', 8, 14, 'Jaune.value'))
+        index = dict(version=5, module='Jaune.Test', references={},
+                     decls={'Jaune.value': [0, 0, 0, len(text) - 1, 0, 8, 0, 8 + len('_root_.Jaune.value')]})
+        self.assertEqual(LINT.declarations(text, index), {'Jaune.value': [0, 8, 0, 8 + len('_root_.Jaune.value')]})
+
     def test_malformed_policy_refused(self):
         for policy in ([], {}, dict(self.policy, words=['bal', 'bal']),
                        dict(self.policy, sources={'bad': {'citation': 1}})):
