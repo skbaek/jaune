@@ -95,8 +95,8 @@ def need {κ α : Type} [BEq κ] [ToString κ] (d : Dictionary κ α) (k : κ) (
   | some v => pure v
   | none => throw s!"KeyError: {what}[{k}]"
 
-def toVector {n : Nat} (xs : List Root) (what : String) : CollectionMonad P (SszVector Bytes32 n) :=
-  lift (SszVector.ofArray xs.toArray what) what
+def toVector {n : Nat} (xs : List Root) (what : String) : CollectionMonad P (Ssz.Vector Bytes32 n) :=
+  lift (Ssz.Vector.ofArray xs.toArray what) what
 
 /-! ## Slot helpers -/
 

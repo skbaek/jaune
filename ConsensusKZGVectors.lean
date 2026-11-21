@@ -241,7 +241,7 @@ def kzgHandler (name : String) (inp : Y) : Except String V := do
     let cis ← natList (← field inp "commitment_indices")
     let cells ← natList (← field inp "cell_indices")
     let evals ← (← asSeq (← field inp "cosets_evals")).mapM fun e => do
-      (← bytesList e).toArray.mapM fun b => pure (FinField.ofNat (os2ip b) : Fr)
+      (← bytesList e).toArray.mapM fun b => pure (FieldElement.ofNat (os2ip b) : BLSFieldElement)
     let ps ← bytesList (← field inp "proofs")
     return vOf (computeVerifyCellKzgProofBatchChallenge cs.toArray cis.toArray cells.toArray
       evals.toArray ps.toArray) fun r => vBytes (blsFieldToBytes r)

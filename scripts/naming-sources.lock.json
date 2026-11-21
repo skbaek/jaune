@@ -1,0 +1,590 @@
+{
+  "consensus-specs-v1.6.1/specs/altair/beacon-chain.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/altair/beacon-chain.md",
+    "sha256": "90f7d037c329339956d41d4da281cb82a9b004a98729121703da2e6919b59917"
+  },
+  "consensus-specs-v1.6.1/specs/altair/light-client/full-node.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/altair/light-client/full-node.md",
+    "sha256": "4a3d959469875f5a195ca9128f028f533dee35992a1ab8636c4f4554e4fbdd38"
+  },
+  "consensus-specs-v1.6.1/specs/altair/light-client/sync-protocol.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/altair/light-client/sync-protocol.md",
+    "sha256": "d54fd1d8843a36140aeef91c15a905805789506bcb3568b42f72eedb1aee9841"
+  },
+  "consensus-specs-v1.6.1/specs/capella/beacon-chain.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/capella/beacon-chain.md",
+    "sha256": "e4b43489ae8e187028f49b595a16ed41bb005a1b4931f21205697d4887aab6f6"
+  },
+  "consensus-specs-v1.6.1/specs/capella/light-client/sync-protocol.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/capella/light-client/sync-protocol.md",
+    "sha256": "eaa5a8efc6906e731ee373cfd0d7973f014cb156581e9af1b953ae309179c5c1"
+  },
+  "consensus-specs-v1.6.1/specs/deneb/polynomial-commitments.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/deneb/polynomial-commitments.md",
+    "sha256": "d93d8af9c219e7166de2382d77916c1f72e5049f7b41a5afd9b4b3dd97761d26"
+  },
+  "consensus-specs-v1.6.1/specs/electra/beacon-chain.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/electra/beacon-chain.md",
+    "sha256": "a488a6084ad4e43d4957356ce7579e9ea246e445b5f237da757d142675529eb7"
+  },
+  "consensus-specs-v1.6.1/specs/electra/light-client/fork.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/electra/light-client/fork.md",
+    "sha256": "81924e557a1aa34974ff8b2ed4e74a7f2fbf4867309fe75fa1a0a82741b9bca5"
+  },
+  "consensus-specs-v1.6.1/specs/fulu/das-core.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/fulu/das-core.md",
+    "sha256": "e91dbe5ad0ea235c35725fbeae4c53319bd218571e6e96e5ac69061f4bb2aa23"
+  },
+  "consensus-specs-v1.6.1/specs/fulu/polynomial-commitments-sampling.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/fulu/polynomial-commitments-sampling.md",
+    "sha256": "30c21ec89de3c268cee447aa225800ab18e5792a74b33f1218a5aaaebc022651"
+  },
+  "consensus-specs-v1.6.1/specs/phase0/beacon-chain.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "specs/phase0/beacon-chain.md",
+    "sha256": "190e7fd81ddf4beda0a849a8d2ade1fa20b46b4405b6100352aab9633ee9cba8"
+  },
+  "consensus-specs-v1.6.1/ssz/simple-serialize.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "ssz/simple-serialize.md",
+    "sha256": "34c206fea354c2948a97fd33c288aaf4b7aacb823e985d0bbd2b73c4e2a023fd"
+  },
+  "consensus-specs-v1.6.1/tests/formats/README.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "tests/formats/README.md",
+    "sha256": "c9f03410d32aa23ff52f17878aa5e1a9fb82049eb5e6641f5082a121dc32eb9a"
+  },
+  "consensus-specs-v1.6.1/tests/formats/ssz_generic/README.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "5fa6edcca8ab4cf548653e6680b17b9d3e04d225",
+    "path": "tests/formats/ssz_generic/README.md",
+    "sha256": "55ee20a1282c43a9b849b822c8a78f673e2be79b3e105e2b2197c871a438de45"
+  },
+  "consensus-specs-v1.7.0-beta.4/configs/mainnet.yaml": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "configs/mainnet.yaml",
+    "sha256": "30a37b4e8a53c3e9296a5b64224d8a3ca8785f7ce5f5cba157d2fc19dd6ee902"
+  },
+  "consensus-specs-v1.7.0-beta.4/presets/mainnet/electra.yaml": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "presets/mainnet/electra.yaml",
+    "sha256": "98d9d23a2bb9e9b776536c1c37eb714b9f5b91f0a3bbe9c9d441b13cf4cd477a"
+  },
+  "consensus-specs-v1.7.0-beta.4/presets/mainnet/fulu.yaml": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "presets/mainnet/fulu.yaml",
+    "sha256": "7b73bcfb577a01381fcc1a3a356d5a1325c20a439c762e2325743f95ee678016"
+  },
+  "consensus-specs-v1.7.0-beta.4/presets/mainnet/gloas.yaml": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "presets/mainnet/gloas.yaml",
+    "sha256": "da63650a971da7a05d7c1884917787665a09cd475c8e60cd42d933eeac63a514"
+  },
+  "consensus-specs-v1.7.0-beta.4/presets/mainnet/phase0.yaml": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "presets/mainnet/phase0.yaml",
+    "sha256": "026a5f7b00f4ce05ec4530de9811070be850565e2ab3ba8130eb9c30cc7708f4"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/altair/beacon-chain.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/altair/beacon-chain.md",
+    "sha256": "7479e9f279d42beebd0dc899a0742fa34a81b8adc31308ad0439215b59cfa196"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/altair/validator.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/altair/validator.md",
+    "sha256": "6b284ca669d767d7811a74855eb73c9e3a6429b6f1f3773c83365dd67467a3ed"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/electra/beacon-chain.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/electra/beacon-chain.md",
+    "sha256": "5ddb1d2cf4f181533f757977c737f294d9211034cf5fd4c259f1cb1b442d2972"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/gloas/beacon-chain.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/gloas/beacon-chain.md",
+    "sha256": "6d0cae8a5f987a7e957d463000ed2a493c88a2baa44d0f09cba0a74e93f516ca"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/gloas/fork-choice.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/gloas/fork-choice.md",
+    "sha256": "7129a03500b431cad6f8af3aad67a3fec504837a994e1b2190cc8cf3dde0b9fa"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/gloas/fork.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/gloas/fork.md",
+    "sha256": "5632b8201d016c45a0be76205a1d3a2d97a7b53a354195d0d05e6ef11c8016ef"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/gloas/light-client/fork.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/gloas/light-client/fork.md",
+    "sha256": "dde87506d99209249cfbd262f568b21e4b61c0cb09b704e370be6b973d9569df"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/gloas/light-client/sync-protocol.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/gloas/light-client/sync-protocol.md",
+    "sha256": "e0bd1537ff3bdcddafa708ddce35f97de0cac9aac19b08f022ee6c57db1b4f5e"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/phase0/beacon-chain.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/phase0/beacon-chain.md",
+    "sha256": "abacdd96d4edc49705002ea3fcd4bf5f39ea6b7b6e06a77ab8cf89e138a7d3fb"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/phase0/fast-confirmation.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/phase0/fast-confirmation.md",
+    "sha256": "2fcf54b7e715744fb11ed81f6ad4b4e9e40f62f25d88451ad112ead608d0bb19"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/phase0/fork-choice.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/phase0/fork-choice.md",
+    "sha256": "750bf5325caf222c2ce6f3507cf9b078fe5ad02d684e98035995c6eb68376894"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/phase0/validator.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/phase0/validator.md",
+    "sha256": "224009f9d15e195242721915533ea0b7be098d861c9cb105a5cfdba91653c099"
+  },
+  "eip-1153": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-1153.md",
+    "sha256": "c0e7a2e793f3fa44f048b772a3fb4779199d29b6d240c97e3723ace1e46e1c40"
+  },
+  "eip-152": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-152.md",
+    "sha256": "5ef0b093f024a65ea850c2f0b431a6c636a5b391d24b9183755e17a8eaeea913"
+  },
+  "eip-161": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-161.md",
+    "sha256": "45f6beabbf885e3f95199a7ec763a9483d6de61ad689e00fd8e6121c136e991f"
+  },
+  "eip-2200": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-2200.md",
+    "sha256": "ae8cb7fd68026b17cda1ecb22178bdaff91424939c1198dfc5a9f421df5db19a"
+  },
+  "eip-2929": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-2929.md",
+    "sha256": "177b2040bf0376b1182eb5571c7fda7a41b6f594083fa816506d65cfcf2acc4a"
+  },
+  "eip-2930": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-2930.md",
+    "sha256": "691f06ecd80a1f5ec71f169553b808c837f68e06860ffac68dd44649e93b804b"
+  },
+  "eip-3860": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-3860.md",
+    "sha256": "c28b1da260cde50902ea7dcff35fb15b394131d2fa76ff35beaa797f487b44fc"
+  },
+  "eip-4844": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-4844.md",
+    "sha256": "2772bdb675d90d89ebb4bf74269e48c8ea46745e78161c8574ffa78328b31885"
+  },
+  "eip-7623": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-7623.md",
+    "sha256": "b991940be17e3265684047d49b0f5758742c3873b88efaa9aa30e4229ea92c33"
+  },
+  "eip-7702": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-7702.md",
+    "sha256": "3d46953e13ebc7ebe229971b301ede853aad6e29f4faf4db1eb9a2085accde1b"
+  },
+  "execution-apis-base-types": {
+    "repository": "ethereum/execution-apis",
+    "revision": "68d76a5b1c09dff023782d97eec6ce87a6f6505e",
+    "path": "src/schemas/base-types.yaml",
+    "sha256": "3b34fffaea334d8a8e5f44669c10b9329195573b522f35f439cb3f7134b19205"
+  },
+  "execution-apis-block": {
+    "repository": "ethereum/execution-apis",
+    "revision": "68d76a5b1c09dff023782d97eec6ce87a6f6505e",
+    "path": "src/schemas/block.yaml",
+    "sha256": "8cab61e8a4e2771e4231fc047ac43ea9a042781511c7b813c18c16bf7e4d5b09"
+  },
+  "execution-apis-receipt": {
+    "repository": "ethereum/execution-apis",
+    "revision": "68d76a5b1c09dff023782d97eec6ce87a6f6505e",
+    "path": "src/schemas/receipt.yaml",
+    "sha256": "5b8f15e2d926d8faad8d189d141972f990ce1978176bea0c4435e700081f9979"
+  },
+  "execution-apis-transaction": {
+    "repository": "ethereum/execution-apis",
+    "revision": "68d76a5b1c09dff023782d97eec6ce87a6f6505e",
+    "path": "src/schemas/transaction.yaml",
+    "sha256": "b74544f4621cd44e940b0726fdcc73a67c9e05301d87285ab60468364bc75518"
+  },
+  "execution-apis-withdrawal": {
+    "repository": "ethereum/execution-apis",
+    "revision": "68d76a5b1c09dff023782d97eec6ce87a6f6505e",
+    "path": "src/schemas/withdrawal.yaml",
+    "sha256": "eaa368104ba7dc8e254968d80f7ef4962e930ce9977a711bfe721d01c6e83336"
+  },
+  "execution-specs-t8n-e27f097e/docs/filling_tests/transition_tool_support.md": {
+    "repository": "ethereum/execution-specs",
+    "revision": "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e",
+    "path": "docs/filling_tests/transition_tool_support.md",
+    "sha256": "55a78128d9e1f065ed5844a4433070ced20e8b365fb53ce8b9360500f0292ab8"
+  },
+  "execution-specs/src/ethereum/prague/vm/instructions/__init__.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "4198b9c5996713b268aed602739d5aa40e277694",
+    "path": "src/ethereum/prague/vm/instructions/__init__.py",
+    "sha256": "399f87d3635a7e6dd40dd354df1c54af749cb5ab925b7a9fa92c29f213ea3183"
+  },
+  "execution-specs/src/ethereum/prague/vm/interpreter.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "4198b9c5996713b268aed602739d5aa40e277694",
+    "path": "src/ethereum/prague/vm/interpreter.py",
+    "sha256": "0d2256c46b36128cd4a50f37078c7630ffb775a51840e47380cbc3d7d9c590fb"
+  },
+  "openethereum-u128": {
+    "repository": "openethereum/openethereum",
+    "revision": "6c2d392d867b058ff867c4373e40850ca3f96969",
+    "path": "crates/vm/evm/src/evm.rs",
+    "sha256": "6688c038544b780ce2615c7018dc747d651d503385154aefa0b2e21ce82c5927"
+  },
+  "reth-u128": {
+    "repository": "paradigmxyz/reth",
+    "revision": "dbe7ee9c21392f360ff01f6307480f5d7dd73a3a",
+    "path": "crates/rpc/rpc-api/src/miner.rs",
+    "sha256": "e871f24ba1273d9c3bb66ad1c50139f6e97e6e1df619b2975f817d99159ad70d"
+  },
+  "yellowpaper-rlp": {
+    "repository": "ethereum/yellowpaper",
+    "revision": "efc5f9a1f356cba376c978eedb63cb0363c2aa85",
+    "path": "Paper.tex",
+    "sha256": "e24873bc2edc6f41fad1c319299f2ceff4e21b243a0fba83a61cfed4a11eb618"
+  },
+  "lean4-std-naming": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "doc/std/naming.md",
+    "sha256": "abd1c55470ebf8a1da1c11894497ebcf19170e8c82ec6ebfcd93d33d8b797c01"
+  },
+  "lean4-nat-basic": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Init/Data/Nat/Basic.lean",
+    "sha256": "e26b5a54eab922f6b650cfe9032fe23172fa8cc0b63c75cff0c8bf99f6175289"
+  },
+  "lean4-bool": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Init/Data/Bool.lean",
+    "sha256": "182702f903573fe03983e39b23f2af383692e356ad50463eb7264c0152316c3a"
+  },
+  "lean4-elab-structure": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Lean/Elab/Structure.lean",
+    "sha256": "31355f0703fa886927216865ce891ec9a0cb2412d94552121ba330be04447f6a"
+  },
+  "lean4-prelude": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Init/Prelude.lean",
+    "sha256": "390e6b57ead28cb821a65533b21357f2f02d0a1525602f5a1ce9ee3eeb81fd12"
+  },
+  "lean4-list-lex": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Init/Data/List/Lex.lean",
+    "sha256": "47788ab104c754002cca8a2f1026f9d0eb53eb55fc1b9aa4f28a5634c44bbb24"
+  },
+  "lean4-list-lemmas": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Init/Data/List/Lemmas.lean",
+    "sha256": "9365fb1c6da0313a4c73e8cf096377e69c28ece28d38290a0423e5f8cc1fdfdb"
+  },
+  "lean4-nat-log2": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Init/Data/Nat/Log2.lean",
+    "sha256": "8a4f220b2ef46bf434e0bafd4274e9a897674d665f1863024c77e74ae16766d4"
+  },
+  "lean4-std-dhashmap": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Std/Data/DHashMap/Basic.lean",
+    "sha256": "a44e1bed6c3c6ba8eebdc741baebef7ec39362492eb62e8f35f7d76503042aa3"
+  },
+  "eip-7951": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-7951.md",
+    "sha256": "ea599f929ceaa420d83fb90ac27a1370c2c1e150a339a68a15dc721d42d50323"
+  },
+  "eip-2537": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-2537.md",
+    "sha256": "7071929b494198ebe39125c190f3442edb3c55192135b62ed2795072b87e9e53"
+  },
+  "eip-2537-field-to-curve": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "assets/eip-2537/field_to_curve.md",
+    "sha256": "ff77a5a9c3b74c1433c2f0869437175f754ffe0e2f7ef7c03bb7fbbbfd88a5ca"
+  },
+  "rfc9380-draft-source": {
+    "repository": "cfrg/draft-irtf-cfrg-hash-to-curve",
+    "revision": "664b13592116cecc9e52fb192dcde0ade36f904e",
+    "path": "draft-irtf-cfrg-hash-to-curve.md",
+    "sha256": "c144ed91519aae6b0f1e887980c42579ea49ffcae78f8b142ba23b756196150e"
+  },
+  "execution-specs/src/ethereum/crypto/blake2.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "4198b9c5996713b268aed602739d5aa40e277694",
+    "path": "src/ethereum/crypto/blake2.py",
+    "sha256": "87d7034b9a96d46957b62080e36aab4c6ba126e17033416de86e1e990e7f9281"
+  },
+  "execution-specs/src/ethereum/prague/vm/precompiled_contracts/blake2f.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "4198b9c5996713b268aed602739d5aa40e277694",
+    "path": "src/ethereum/prague/vm/precompiled_contracts/blake2f.py",
+    "sha256": "cedfd56c711d825f46ba86b1660d276b1a6c9b03e58f87f9883e6af1e1fb7a40"
+  },
+  "execution-specs-t8n-e27f097e/src/ethereum/forks/amsterdam/vm/instructions/__init__.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e",
+    "path": "src/ethereum/forks/amsterdam/vm/instructions/__init__.py",
+    "sha256": "2bef9321753167d80f62eb1f861120412de5b9561cba38b6832f96a5535f617f"
+  },
+  "execution-specs-t8n-e27f097e/src/ethereum/forks/amsterdam/vm/gas.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e",
+    "path": "src/ethereum/forks/amsterdam/vm/gas.py",
+    "sha256": "67973191c49234387186ad17316c556adab73723f782e95104dd3a949132367c"
+  },
+  "execution-specs-t8n-e27f097e/src/ethereum/forks/amsterdam/vm/precompiled_contracts/bls12_381/__init__.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e",
+    "path": "src/ethereum/forks/amsterdam/vm/precompiled_contracts/bls12_381/__init__.py",
+    "sha256": "11f02033d3ea80a1a81f388b7919d06e7a7be93010f49eed0c6711878ed0d822"
+  },
+  "execution-specs-t8n-e27f097e/src/ethereum/forks/amsterdam/vm/precompiled_contracts/p256verify.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e",
+    "path": "src/ethereum/forks/amsterdam/vm/precompiled_contracts/p256verify.py",
+    "sha256": "16cfeb2e172fb225b99999ea894d7ec1e0e641c767f6c693ac725a7e4eaebd98"
+  },
+  "execution-specs-t8n-e27f097e/src/ethereum/forks/bpo1/__init__.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e",
+    "path": "src/ethereum/forks/bpo1/__init__.py",
+    "sha256": "f480ee94451d79793c3373ddfac61ab17fe295da4bf0415888981d0487e2075e"
+  },
+  "execution-specs-t8n-e27f097e/src/ethereum/forks/bpo2/__init__.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e",
+    "path": "src/ethereum/forks/bpo2/__init__.py",
+    "sha256": "13b930ef087f33506ae197d976aa26a2669bb3e825c11203404bc4b933693851"
+  },
+  "execution-specs-t8n-e27f097e/packages/testing/src/execution_testing/evm_tools/daemon.py": {
+    "repository": "ethereum/execution-specs",
+    "revision": "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e",
+    "path": "packages/testing/src/execution_testing/evm_tools/daemon.py",
+    "sha256": "2d4d4270d18d4bb7ef545044e9a6c5f23e418c7d6b56f48ae252d3ecb56f84c9"
+  },
+  "yellowpaper-fees": {
+    "repository": "ethereum/yellowpaper",
+    "revision": "efc5f9a1f356cba376c978eedb63cb0363c2aa85",
+    "path": "Paper.tex",
+    "sha256": "e24873bc2edc6f41fad1c319299f2ceff4e21b243a0fba83a61cfed4a11eb618"
+  },
+  "yellowpaper-hex-prefix": {
+    "repository": "ethereum/yellowpaper",
+    "revision": "efc5f9a1f356cba376c978eedb63cb0363c2aa85",
+    "path": "Paper.tex",
+    "sha256": "e24873bc2edc6f41fad1c319299f2ceff4e21b243a0fba83a61cfed4a11eb618"
+  },
+  "yellowpaper-account": {
+    "repository": "ethereum/yellowpaper",
+    "revision": "efc5f9a1f356cba376c978eedb63cb0363c2aa85",
+    "path": "Paper.tex",
+    "sha256": "e24873bc2edc6f41fad1c319299f2ceff4e21b243a0fba83a61cfed4a11eb618"
+  },
+  "yellowpaper-ecrecover": {
+    "repository": "ethereum/yellowpaper",
+    "revision": "efc5f9a1f356cba376c978eedb63cb0363c2aa85",
+    "path": "Paper.tex",
+    "sha256": "e24873bc2edc6f41fad1c319299f2ceff4e21b243a0fba83a61cfed4a11eb618"
+  },
+  "execution-apis-state": {
+    "repository": "ethereum/execution-apis",
+    "revision": "68d76a5b1c09dff023782d97eec6ce87a6f6505e",
+    "path": "src/schemas/state.yaml",
+    "sha256": "91ce5545c4de43c70c405bf8d705c74023e054dbaa9d9be4145f88a15adc9710"
+  },
+  "eip-197": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-197.md",
+    "sha256": "96355ab680ea8fae76e05c69009e30bd0ec87f352bec9312515b1cbabc6fe89d"
+  },
+  "eip-8037": {
+    "repository": "ethereum/EIPs",
+    "revision": "b055feec322fbc37e9d77a393a50b3ff56b31c92",
+    "path": "EIPS/eip-8037.md",
+    "sha256": "37abe522c5dee68a47a27db6f7b88a71da5b66c8a72ebc601c467940b577b715"
+  },
+  "evmc-message": {
+    "repository": "ipsilon/evmc",
+    "revision": "496ce0f81058378b72d0b592d1c49b935bce3302",
+    "path": "include/evmc/evmc.h",
+    "sha256": "208852a7e5a39ea938bdb21395891d65390fc63c7dcdbb9a904297737a753cea"
+  },
+  "lean4-bitvec-basic": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Init/Data/BitVec/Basic.lean",
+    "sha256": "99cd942131d0fa51deb2ad9320c2fca4176a21b4250eda313b8642b6548f5197"
+  },
+  "batteries-nat-basic": {
+    "repository": "leanprover-community/batteries",
+    "revision": "66e469188fe07963e5cf666c7d4433f45b8131c5",
+    "path": "Batteries/Data/Nat/Basic.lean",
+    "sha256": "c3bda4b012ec11aa55ea1c4afcc74430ca8160fb3c7e1c09e5bd393252ff1234"
+  },
+  "mathlib-nat-dist": {
+    "repository": "leanprover-community/mathlib4",
+    "revision": "56a005855ea17e0b0958f73ec801ae140b0a1679",
+    "path": "Mathlib/Data/Nat/Dist.lean",
+    "sha256": "ed742025305237d58ed66ab4fe3a7faeddd1c71398f04ffdb0e3c8f2d88d1e9b"
+  },
+  "mathlib-control-bifunctor": {
+    "repository": "leanprover-community/mathlib4",
+    "revision": "56a005855ea17e0b0958f73ec801ae140b0a1679",
+    "path": "Mathlib/Control/Bifunctor.lean",
+    "sha256": "9662f65de8f371c44d57aede31d7a980da780cf072ecc53e41d3784e5077e908"
+  },
+  "py-ecc-bls12-381-curve": {
+    "repository": "ethereum/py_ecc",
+    "revision": "04151f01f59f902ab932a51e0ca0ebce3883fc51",
+    "path": "py_ecc/bls12_381/bls12_381_curve.py",
+    "sha256": "cd7836445fc7ea0ae1fab99bc78ca719ca6615b5c6e54431db736428e1fa0b36"
+  },
+  "consensus-specs-v1.7.0-beta.4/specs/bellatrix/optimistic-sync.md": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "specs/bellatrix/optimistic-sync.md",
+    "sha256": "4609e9758fcbd7d21dd42f32c897a45c8a5404be44d1847de1d433ac16ee54f7"
+  },
+  "consensus-specs-v1.7.0-beta.4/tests/core/pyspec/eth_consensus_specs/utils/bls.py": {
+    "repository": "ethereum/consensus-specs",
+    "revision": "aa16bb4c156184e9548a997d53efaf2a228a6304",
+    "path": "tests/core/pyspec/eth_consensus_specs/utils/bls.py",
+    "sha256": "4f16de600dc05f6c9ff917dbbd8c577a1136c5acacc903323715c462c614c904"
+  },
+  "nist-fips-202": {
+    "url": "https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf",
+    "content_sha256": "1592607831ff0908cc590632ce371c6c95e94025bb1a0c8ae90a4d0ec1ed025e",
+    "extract": {
+      "method": "pdf-text-v1",
+      "tool_sha256": "bfc727ebc643131c18b5861678850210334db45762f7aa715edaea3e676008f2"
+    },
+    "sha256": "cda1ce3ef076d34ddfd39d79b661fe1b43ef72c4339a92aa19e074c18457163b"
+  },
+  "nist-fips-202-greek-letter-names": {
+    "url": "https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf",
+    "content_sha256": "1592607831ff0908cc590632ce371c6c95e94025bb1a0c8ae90a4d0ec1ed025e",
+    "extract": {
+      "method": "pdf-text-v1",
+      "tool_sha256": "bfc727ebc643131c18b5861678850210334db45762f7aa715edaea3e676008f2",
+      "transliteration": "greek-letter-names"
+    },
+    "sha256": "76e5e7a5b7de212892bc3edde7845db641966c625e3043a1a120a02487c9dd64"
+  },
+  "nist-fips-180-4": {
+    "url": "https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf",
+    "content_sha256": "0455b406d89648d20cbde375561e19c245b9815e894164c2670772e3d54deb82",
+    "extract": {
+      "method": "pdf-text-v1",
+      "tool_sha256": "bfc727ebc643131c18b5861678850210334db45762f7aa715edaea3e676008f2"
+    },
+    "sha256": "d49595fa4e02824ca910fff36ab16ac16435bc3bd64725f02f04f635c071608f"
+  },
+  "rfc-7693": {
+    "url": "https://www.rfc-editor.org/rfc/rfc7693.txt",
+    "sha256": "c943754888364fe29bbd0bb3c71c6658ef392371497eaa4a9d9dde015b0721e5"
+  },
+  "ripemd-160-pseudocode": {
+    "url": "https://homes.esat.kuleuven.be/~bosselae/ripemd/rmd160.txt",
+    "sha256": "9bff59a94e76fd78dfc4d222685bf388d43630f60ef0b5c3275e9c6422a38634"
+  },
+  "lean4-int-basic": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Init/Data/Int/Basic.lean",
+    "sha256": "468d1f036ff16558063349347c175fa9a4f0433ba5b9e85a9c562ebcfd3ab202"
+  },
+  "lean4-decl-name-gen": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Lean/Elab/DeclNameGen.lean",
+    "sha256": "5a18ca6c1898893b8c2ca13b0ac68e73126ee8fc1deaad640195fe014c0bdb7f"
+  },
+  "lean4-elab-auxdef": {
+    "repository": "leanprover/lean4",
+    "revision": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+    "path": "src/Lean/Elab/AuxDef.lean",
+    "sha256": "56801f966e199fab594e14868283f8d76e7e8724c8a48fe6b68c90757cb9c50b"
+  }
+}

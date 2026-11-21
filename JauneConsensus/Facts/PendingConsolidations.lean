@@ -70,7 +70,7 @@ theorem processPendingConsolidations_eq (cfg : Config) (state : BeaconState P f)
       let pending ← state.pendingConsolidations
       let r ← pendingConsolidationsLoop nextEpoch pending.toArray.toList (state, 0)
       r.1.setPendingConsolidations
-        (← SszList.ofArray (pending.toArray.extract r.2 pending.length) site)) := by
+        (← Ssz.List.ofArray (pending.toArray.extract r.2 pending.length) site)) := by
   unfold processPendingConsolidations
   dsimp only
   simp only [pendingConsolidationsLoop_eq_forIn, Array.forIn_toList]
@@ -236,7 +236,7 @@ theorem processPendingConsolidations_fate (hE : f.atLeast .electra = true) {cfg 
     rw [forkField_write_eq hE] at hg; exact (Except.ok.inj hg).symm
   show (ForkField.get hE g).toArray = _
   rw [hgq, ForkField.get_mk]
-  unfold SszList.ofArray at hq
+  unfold Ssz.List.ofArray at hq
   split at hq
   · cases hq
     show (ForkField.get hE state.pending_consolidations).toArray.extract out.2

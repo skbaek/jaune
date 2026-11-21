@@ -74,9 +74,9 @@ def isIndicator (c : UInt8) : Bool :=
   c == ','.toNat.toUInt8 || c == ']'.toNat.toUInt8 || c == '}'.toNat.toUInt8 ||
   c == '['.toNat.toUInt8 || c == '{'.toNat.toUInt8
 
-@[inline] def charByte (c : Char) : UInt8 := c.toNat.toUInt8
+@[inline] def characterByte (c : Char) : UInt8 := c.toNat.toUInt8
 
-def charOf (b : UInt8) : Char := Char.ofNat b.toNat
+def byteToCharacter (b : UInt8) : Char := Char.ofNat b.toNat
 
 /-- Fold a scalar's raw text: each run of spaces around a line break becomes one space. Leading
 and trailing spaces of the whole are kept as given (callers trim plain scalars). -/
@@ -117,10 +117,10 @@ def singleQuoted : Nat → Nat → List Char → Result (String × Nat)
     match at? buf lim pos with
     | none => .error (.syntax "unterminated single-quoted scalar")
     | some c =>
-      if c == charByte '\'' then
-        if at? buf lim (pos + 1) == some (charByte '\'') then singleQuoted fuel (pos + 2) ('\'' :: acc)
+      if c == characterByte '\'' then
+        if at? buf lim (pos + 1) == some (characterByte '\'') then singleQuoted fuel (pos + 2) ('\'' :: acc)
         else .ok (foldLines acc.reverse, pos + 1)
-      else singleQuoted fuel (pos + 1) (charOf c :: acc)
+      else singleQuoted fuel (pos + 1) (byteToCharacter c :: acc)
 
 /-- A double-quoted scalar whose opening quote is at `pos - 1`. -/
 def doubleQuoted : Nat → Nat → List Char → Result (String × Nat)
@@ -129,19 +129,19 @@ def doubleQuoted : Nat → Nat → List Char → Result (String × Nat)
     match at? buf lim pos with
     | none => .error (.syntax "unterminated double-quoted scalar")
     | some c =>
-      if c == charByte '"' then .ok (foldLines acc.reverse, pos + 1)
-      else if c == charByte '\\' then
+      if c == characterByte '"' then .ok (foldLines acc.reverse, pos + 1)
+      else if c == characterByte '\\' then
         match at? buf lim (pos + 1) with
         | some e =>
           let r : Option Char :=
-            if e == charByte '\\' then some '\\' else if e == charByte '"' then some '"'
-            else if e == charByte '/' then some '/' else if e == charByte 'n' then some '\n'
-            else if e == charByte 't' then some '\t' else none
+            if e == characterByte '\\' then some '\\' else if e == characterByte '"' then some '"'
+            else if e == characterByte '/' then some '/' else if e == characterByte 'n' then some '\n'
+            else if e == characterByte 't' then some '\t' else none
           match r with
           | some d => doubleQuoted fuel (pos + 2) (d :: acc)
-          | none => .error (.syntax s!"unsupported escape \\{charOf e}")
+          | none => .error (.syntax s!"unsupported escape \\{byteToCharacter e}")
         | none => .error (.syntax "unterminated double-quoted scalar")
-      else doubleQuoted fuel (pos + 1) (charOf c :: acc)
+      else doubleQuoted fuel (pos + 1) (byteToCharacter c :: acc)
 
 /-- Scan a plain scalar in flow context starting at `pos`: up to a flow indicator, a `:`
 followed by a space, line break or the limit, or the limit. Returns the end position. -/
@@ -152,15 +152,15 @@ def plainEnd : Nat → Nat → Result Nat
     | none => .ok pos
     | some c =>
       if isFlowEnd c then .ok pos
-      else if c == charByte ':' then
+      else if c == characterByte ':' then
         match at? buf lim (pos + 1) with
         | none => .ok pos
         | some d => if isSpaceOrNewline d then .ok pos else plainEnd fuel (pos + 1)
-      else if c == charByte '#' then .error (.syntax "'#' in a plain scalar (comment) is outside the subset")
+      else if c == characterByte '#' then .error (.syntax "'#' in a plain scalar (comment) is outside the subset")
       else plainEnd fuel (pos + 1)
 
 def plainText (start stop : Nat) : String :=
-  let raw := ((List.range (stop - start)).filterMap (fun i => buf[start + i]?)).map charOf
+  let raw := ((List.range (stop - start)).filterMap (fun i => buf[start + i]?)).map byteToCharacter
   (foldLines raw).trimAscii.toString
 
 mutual
@@ -171,16 +171,16 @@ def node : Nat → Nat → Result (YamlValue × Nat)
     match at? buf lim pos with
     | none => .error (.syntax "missing value")
     | some c =>
-      if c == charByte '[' then sequenceItems fuel (skipWhitespace buf lim (lim + 1) (pos + 1)) [] true
-      else if c == charByte '{' then mapItems fuel (skipWhitespace buf lim (lim + 1) (pos + 1)) [] true
-      else if c == charByte '\'' then do
+      if c == characterByte '[' then sequenceItems fuel (skipWhitespace buf lim (lim + 1) (pos + 1)) [] true
+      else if c == characterByte '{' then mapItems fuel (skipWhitespace buf lim (lim + 1) (pos + 1)) [] true
+      else if c == characterByte '\'' then do
         let (s, p) ← singleQuoted buf lim (lim + 1) (pos + 1) []
         pure (.scalar s true, p)
-      else if c == charByte '"' then do
+      else if c == characterByte '"' then do
         let (s, p) ← doubleQuoted buf lim (lim + 1) (pos + 1) []
         pure (.scalar s true, p)
-      else if isIndicator c && !(c == charByte '-' && (at? buf lim (pos + 1)).any (fun d => charByte '0' ≤ d && d ≤ charByte '9')) then
-        .error (.syntax s!"plain scalar starts with indicator '{charOf c}'")
+      else if isIndicator c && !(c == characterByte '-' && (at? buf lim (pos + 1)).any (fun d => characterByte '0' ≤ d && d ≤ characterByte '9')) then
+        .error (.syntax s!"plain scalar starts with indicator '{byteToCharacter c}'")
       else do
         let stop ← plainEnd buf lim (lim + 1) pos
         let s := plainText buf pos stop
@@ -190,27 +190,27 @@ def node : Nat → Nat → Result (YamlValue × Nat)
 def sequenceItems : Nat → Nat → List YamlValue → Bool → Result (YamlValue × Nat)
   | 0, _, _, _ => .error .fuel
   | fuel + 1, pos, acc, first =>
-    if first && at? buf lim pos == some (charByte ']') then .ok (.sequence [], pos + 1) else do
+    if first && at? buf lim pos == some (characterByte ']') then .ok (.sequence [], pos + 1) else do
     let (v, p) ← node fuel pos
     let p := skipWhitespace buf lim (lim + 1) p
     match at? buf lim p with
     | some c =>
-      if c == charByte ',' then sequenceItems fuel (skipWhitespace buf lim (lim + 1) (p + 1)) (v :: acc) false
-      else if c == charByte ']' then .ok (.sequence (v :: acc).reverse, p + 1)
-      else .error (.syntax s!"expected ',' or ']' in flow sequence, found '{charOf c}'")
+      if c == characterByte ',' then sequenceItems fuel (skipWhitespace buf lim (lim + 1) (p + 1)) (v :: acc) false
+      else if c == characterByte ']' then .ok (.sequence (v :: acc).reverse, p + 1)
+      else .error (.syntax s!"expected ',' or ']' in flow sequence, found '{byteToCharacter c}'")
     | none => .error (.syntax "unterminated flow sequence")
 
 /-- Entries of a flow mapping; `pos` is past `{` and whitespace. -/
 def mapItems : Nat → Nat → List (String × YamlValue) → Bool → Result (YamlValue × Nat)
   | 0, _, _, _ => .error .fuel
   | fuel + 1, pos, acc, first =>
-    if first && at? buf lim pos == some (charByte '}') then .ok (.map [], pos + 1) else do
+    if first && at? buf lim pos == some (characterByte '}') then .ok (.map [], pos + 1) else do
     let (k, p) ← node fuel pos
     let key ← match k with
       | .scalar s _ => pure s
       | _ => .error (.syntax "non-scalar mapping key")
     let p := skipWhitespace buf lim (lim + 1) p
-    if at? buf lim p != some (charByte ':') then .error (.syntax s!"expected ':' after key {key}")
+    if at? buf lim p != some (characterByte ':') then .error (.syntax s!"expected ':' after key {key}")
     else if !(at? buf lim (p + 1)).any isSpaceOrNewline then
       .error (.syntax s!"expected space after ':' (key {key})")
     else if acc.any (·.1 == key) then .error (.syntax s!"duplicate key {key}")
@@ -219,9 +219,9 @@ def mapItems : Nat → Nat → List (String × YamlValue) → Bool → Result (Y
     let q := skipWhitespace buf lim (lim + 1) q
     match at? buf lim q with
     | some c =>
-      if c == charByte ',' then mapItems fuel (skipWhitespace buf lim (lim + 1) (q + 1)) ((key, v) :: acc) false
-      else if c == charByte '}' then .ok (.map ((key, v) :: acc).reverse, q + 1)
-      else .error (.syntax s!"expected ',' or '}}' in flow mapping, found '{charOf c}'")
+      if c == characterByte ',' then mapItems fuel (skipWhitespace buf lim (lim + 1) (q + 1)) ((key, v) :: acc) false
+      else if c == characterByte '}' then .ok (.map ((key, v) :: acc).reverse, q + 1)
+      else .error (.syntax s!"expected ',' or '}}' in flow mapping, found '{byteToCharacter c}'")
     | none => .error (.syntax "unterminated flow mapping")
 end
 
@@ -247,11 +247,11 @@ section Block
 variable (buf : ByteArray)
 
 def lineText (l : Line) : String :=
-  String.ofList (((List.range (l.stop - l.start)).filterMap (fun i => buf[l.start + i]?)).map charOf)
+  String.ofList (((List.range (l.stop - l.start)).filterMap (fun i => buf[l.start + i]?)).map byteToCharacter)
 
 /-- Is the line a block-sequence entry (`-` then a space or the line end)? -/
 def isDash (l : Line) : Bool :=
-  buf[l.start]? == some (charByte '-') && (l.start + 1 == l.stop || buf[l.start + 1]? == some (charByte ' '))
+  buf[l.start]? == some (characterByte '-') && (l.start + 1 == l.stop || buf[l.start + 1]? == some (characterByte ' '))
 
 /-- If the line is a block-mapping entry, its key and the position where the value text starts
 (after `: ` and spaces; equal to `stop` when the value is on following lines). A plain key is the
@@ -265,7 +265,7 @@ def mapEntry? (l : Line) : Option (String × Nat) :=
       | 0, _ => none
       | fuel + 1, i =>
         if i ≥ l.stop then none
-        else if buf[i]? == some (charByte ':') && (i + 1 == l.stop || buf[i + 1]? == some (charByte ' '))
+        else if buf[i]? == some (characterByte ':') && (i + 1 == l.stop || buf[i + 1]? == some (characterByte ' '))
           then some i
         else find fuel (i + 1)
     match find (l.stop - l.start) l.start with
@@ -275,7 +275,7 @@ def mapEntry? (l : Line) : Option (String × Nat) :=
       if key.any (· == ' ') && key.trimAsciiEnd.toString != key then none else
       let rec skip : Nat → Nat → Nat
         | 0, j => j
-        | fuel + 1, j => if j < l.stop && buf[j]? == some (charByte ' ') then skip fuel (j + 1) else j
+        | fuel + 1, j => if j < l.stop && buf[j]? == some (characterByte ' ') then skip fuel (j + 1) else j
       some (key, skip (l.stop - i) (i + 1))
 
 /-- The end of the inline text that starts on `first`: through every following line indented at
@@ -317,7 +317,7 @@ def blockSequence : Nat → Nat → List Line → List YamlValue → Result (Yam
         else
           let rec firstNonSpace : Nat → Nat → Nat
             | 0, j => j
-            | f + 1, j => if buf[j]? == some (charByte ' ') then firstNonSpace f (j + 1) else j
+            | f + 1, j => if buf[j]? == some (characterByte ' ') then firstNonSpace f (j + 1) else j
           let s := firstNonSpace (l.stop - l.start) (l.start + 1)
           let virt : Line := { column := l.column + (s - l.start), start := s, stop := l.stop }
           blockNode fuel virt ls (col + 1)

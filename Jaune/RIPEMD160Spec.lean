@@ -49,7 +49,7 @@ def f (j : Nat) (x y z : UInt32) : UInt32 :=
 
 /-- The paper §2, right line: the same five functions in reverse order,
 `f(79 − j, x, y, z)`. -/
-def fp (j : Nat) (x y z : UInt32) : UInt32 := f (79 - j) x y z
+def fRight (j : Nat) (x y z : UInt32) : UInt32 := f (79 - j) x y z
 
 /-! ## The added constants K(j) and K'(j) -/
 
@@ -64,7 +64,7 @@ def K (j : Nat) : UInt32 :=
 
 /-- The paper §2: the right-line added constants — `0x50A28BE6`, `0x5C4DD124`,
 `0x6D703EF3`, `0x7A6D76E9`, `0x00000000` by sixteen-step block. -/
-def Kp (j : Nat) : UInt32 :=
+def K' (j : Nat) : UInt32 :=
   if j < 16 then 0x50A28BE6
   else if j < 32 then 0x5C4DD124
   else if j < 48 then 0x6D703EF3
@@ -74,7 +74,7 @@ def Kp (j : Nat) : UInt32 :=
 /-! ## The message-word orders r(j), r'(j) and the rotations s(j), s'(j) -/
 
 /-- The paper §2: the left-line message-word selection `r(j)`, eighty entries. -/
-def rL : Array Nat :=
+def r : Array Nat :=
   #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
     7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8,
     3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12,
@@ -82,7 +82,7 @@ def rL : Array Nat :=
     4, 0, 5, 9, 7, 12, 2, 10, 14, 1, 3, 8, 11, 6, 15, 13]
 
 /-- The paper §2: the right-line message-word selection `r'(j)`, eighty entries. -/
-def rR : Array Nat :=
+def r' : Array Nat :=
   #[5, 14, 7, 0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12,
     6, 11, 3, 7, 0, 13, 5, 10, 14, 15, 8, 12, 4, 9, 1, 2,
     15, 5, 1, 3, 7, 14, 6, 9, 11, 8, 12, 2, 10, 0, 4, 13,
@@ -90,7 +90,7 @@ def rR : Array Nat :=
     12, 15, 10, 4, 1, 5, 8, 7, 6, 2, 13, 14, 0, 3, 9, 11]
 
 /-- The paper §2: the left-line rotation amounts `s(j)`, eighty entries. -/
-def sL : Array Nat :=
+def s : Array Nat :=
   #[11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8,
     7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15, 9, 11, 7, 13, 12,
     11, 13, 6, 7, 14, 9, 13, 15, 14, 8, 13, 6, 5, 12, 7, 5,
@@ -98,7 +98,7 @@ def sL : Array Nat :=
     9, 15, 5, 11, 6, 8, 13, 12, 5, 12, 13, 14, 11, 8, 5, 6]
 
 /-- The paper §2: the right-line rotation amounts `s'(j)`, eighty entries. -/
-def sR : Array Nat :=
+def s' : Array Nat :=
   #[8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6,
     9, 13, 15, 7, 12, 8, 9, 11, 7, 7, 12, 7, 6, 15, 13, 11,
     9, 7, 15, 11, 8, 6, 6, 14, 12, 13, 5, 14, 13, 13, 7, 5,
@@ -109,7 +109,7 @@ def sR : Array Nat :=
 
 /-- The paper §2: the initial chaining value `h0..h4` is `67452301`,
 `EFCDAB89`, `98BADCFE`, `10325476`, `C3D2E1F0`. -/
-def h0 : Array UInt32 :=
+def initialValue : Array UInt32 :=
   #[0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0]
 
 /-! ## Appendix A — the step, the block, the padding -/
@@ -131,8 +131,8 @@ def rol (x : UInt32) (c : Nat) : UInt32 :=
 `A := E; E := D; D := rol_10(C); C := B; B := T`; the right step is the same
 with `f(79 − j)`, `r'`, `s'`, `K'`. -/
 def step (X : Array UInt32) (j : Nat) (l r : State) : State × State :=
-  let tl := rol (l.a + f j l.b l.c l.d + X.getD (rL.getD j 0) 0 + K j) (sL.getD j 0) + l.e
-  let tr := rol (r.a + fp j r.b r.c r.d + X.getD (rR.getD j 0) 0 + Kp j) (sR.getD j 0) + r.e
+  let tl := rol (l.a + f j l.b l.c l.d + X.getD (Spec.r.getD j 0) 0 + K j) (s.getD j 0) + l.e
+  let tr := rol (r.a + fRight j r.b r.c r.d + X.getD (r'.getD j 0) 0 + K' j) (s'.getD j 0) + r.e
   ({ a := l.e, b := tl, c := l.b, d := rol l.c 10, e := l.d },
     { a := r.e, b := tr, c := r.b, d := rol r.c 10, e := r.d })
 
@@ -147,17 +147,17 @@ def compress (h : State) (X : Array UInt32) : State :=
     d := h.e + l.a + r.b, e := h.a + l.b + r.c }
 
 /-- Appendix A: one little-endian 32-bit word from four bytes. -/
-def wordLE (b0 b1 b2 b3 : UInt8) : UInt32 :=
+def wordLittleEndian (b0 b1 b2 b3 : UInt8) : UInt32 :=
   b0.toUInt32 ||| (b1.toUInt32 <<< 8) ||| (b2.toUInt32 <<< 16) ||| (b3.toUInt32 <<< 24)
 
 /-- Appendix A: a 64-byte block parsed as sixteen little-endian 32-bit words. -/
 def toWords (b : Bytes) : Array UInt32 :=
   ((List.range 16).map (fun i =>
-    wordLE (b.getD (4 * i) 0) (b.getD (4 * i + 1) 0)
+    wordLittleEndian (b.getD (4 * i) 0) (b.getD (4 * i + 1) 0)
       (b.getD (4 * i + 2) 0) (b.getD (4 * i + 3) 0))).toArray
 
 /-- Appendix A: the message bit length as a 64-bit little-endian integer. -/
-def bitLenLE (len : Nat) : Bytes :=
+def bitLenLittleEndian (len : Nat) : Bytes :=
   let n := 8 * len
   (List.range 8).map (fun i => ((n >>> (8 * i)) % 256).toUInt8)
 
@@ -167,12 +167,12 @@ def padZeros (len : Nat) : Nat := (119 - len % 64) % 64
 
 /-- Appendix A, MD4-style padding of the whole message. -/
 def pad (m : Bytes) : Bytes :=
-  m ++ [(0x80 : UInt8)] ++ List.replicate (padZeros m.length) (0x00 : UInt8) ++ bitLenLE m.length
+  m ++ [(0x80 : UInt8)] ++ List.replicate (padZeros m.length) (0x00 : UInt8) ++ bitLenLittleEndian m.length
 
 /-- The initial `State` from `h0`. -/
 def initState : State :=
-  { a := h0.getD 0 0, b := h0.getD 1 0, c := h0.getD 2 0,
-    d := h0.getD 3 0, e := h0.getD 4 0 }
+  { a := initialValue.getD 0 0, b := initialValue.getD 1 0, c := initialValue.getD 2 0,
+    d := initialValue.getD 3 0, e := initialValue.getD 4 0 }
 
 /-- Appendix A: run the compression over the padded blocks in order from `h0`. -/
 def hashState (m : Bytes) : State :=
@@ -181,12 +181,12 @@ def hashState (m : Bytes) : State :=
     (fun h i => compress h (toWords ((p.drop (64 * i)).take 64))) initState
 
 /-- One 32-bit word as four little-endian bytes. -/
-def wordLEBytes (w : UInt32) : Bytes :=
+def wordLittleEndianBytes (w : UInt32) : Bytes :=
   [w.toUInt8, (w >>> 8).toUInt8, (w >>> 16).toUInt8, (w >>> 24).toUInt8]
 
 /-- Appendix A: the 20-byte digest is `h0..h4` little-endian. -/
 def hash (m : Bytes) : Bytes :=
   let h := hashState m
-  wordLEBytes h.a ++ wordLEBytes h.b ++ wordLEBytes h.c ++ wordLEBytes h.d ++ wordLEBytes h.e
+  wordLittleEndianBytes h.a ++ wordLittleEndianBytes h.b ++ wordLittleEndianBytes h.c ++ wordLittleEndianBytes h.d ++ wordLittleEndianBytes h.e
 
 end Jaune.RIPEMD160.Spec

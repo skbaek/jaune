@@ -73,7 +73,7 @@ private def preservationParts (α Q : Expr) : MetaM (Expr × Expr) :=
     pure (A, ← mkLambdaFVars #[r] (qr.getArg! 4))
 
 /-- `fun r => Pres σ (g r)`, eta-reduced. -/
-private def mkPost (α σ g : Expr) : MetaM Expr := do
+private def preservationPostcondition (α σ g : Expr) : MetaM Expr := do
   let post ← withLocalDeclD `r α fun r => do
     mkLambdaFVars #[r] (← mkAppM ``Preservation #[σ, (mkApp g r).headBeta])
   pure post.eta
@@ -113,7 +113,7 @@ elab "jp_intro" : tactic => withMainContext do
     let mut σ := A
     for y in ys do
       if ← isDefEq (← inferType y) stTy then σ := y
-    let post ← mkPost α σ gf
+    let post ← preservationPostcondition α σ gf
     mkForallFVars ys (mkAppN t.getAppFn #[α, (mkAppN jp ys).headBeta, post])
   let hkTy ← mkH v
   let hk ← mkFreshExprSyntheticOpaqueMVar hkTy `jp_body
@@ -149,7 +149,7 @@ elab "jp_call" : tactic => withMainContext do
         let post ← instantiateMVars post
         let (σ, _) ← preservationParts α post
         let hp ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``Preservation #[A, σ]) `jp_pres
-        let pf ← mkAppM ``okTrans #[hp, mkAppN d.toExpr mvs]
+        let pf ← mkAppM ``ok_trans #[hp, mkAppN d.toExpr mvs]
         unless ← isDefEq (← inferType pf) t do throwError "type differs"
         g.assign (← instantiateMVars pf)
         pure (some hp.mvarId!)
@@ -207,8 +207,8 @@ elab "loop_pres " h:ident : tactic => withMainContext do
   let pf ← mkAppM lem #[π, hb, d.toExpr]
   let hp ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``Preservation #[A, π.beta #[init]]) `loop_pre
   let rest ← mkFreshExprSyntheticOpaqueMVar
-    (mkAppN t.getAppFn #[α, c, ← mkPost α (π.beta #[out]) gf]) `loop_rest
-  let full ← mkAppM ``okTrans #[← mkAppM ``Preservation.trans #[hp, pf], rest]
+    (mkAppN t.getAppFn #[α, c, ← preservationPostcondition α (π.beta #[out]) gf]) `loop_rest
+  let full ← mkAppM ``ok_trans #[← mkAppM ``Preservation.trans #[hp, pf], rest]
   unless ← isDefEq (← inferType full) t do throwError "loop_pres: type mismatch"
   g.assign full
   let (_, hbG) ← hb.mvarId!.introN 2
@@ -244,7 +244,7 @@ macro_rules | `(tactic| pstep) => `(tactic| first
   | with_reducible apply ok_bind_ite
   | (with_reducible apply ok_bind; intro _ hx; loop_pres hx; pres_close)
   | (with_reducible apply ok_bind; intro _ hx
-     first | (refine okTrans (Preservation.trans ?_ (by pres_of hx)) ?_; pres_close) | skip)
+     first | (refine ok_trans (Preservation.trans ?_ (by pres_of hx)) ?_; pres_close) | skip)
   | (with_reducible apply ok_ite <;> intro _)
   | (with_reducible apply ok_dite <;> intro _)
   | (set_option simprocs false in dsimp -zeta only)
@@ -353,7 +353,7 @@ theorem ValidatorArrayRelation.trans {A B C : Array Validator} (h1 : ValidatorAr
   obtain ⟨u, hu, hk', hx'⟩ := h1.2 j v hv
   exact ⟨u, hu, hk'.trans hk, fun h => hx (hx' h)⟩
 
-theorem validatorArrayRelation_set_effectiveBalance {V V' : SszList Validator P.VALIDATOR_REGISTRY_LIMIT} {i : Nat} {v : Validator}
+theorem validatorArrayRelation_set_effectiveBalance {V V' : Ssz.List Validator P.VALIDATOR_REGISTRY_LIMIT} {i : Nat} {v : Validator}
     {eb : Gwei} {site site' : String} (hg : V.get i site' = .ok v)
     (hs : V.set i { v with effective_balance := eb } site = .ok V') : ValidatorArrayRelation V.toArray V'.toArray := by
   obtain ⟨hi, hVe⟩ := set_ok hs
@@ -368,7 +368,7 @@ theorem validatorArrayRelation_set_effectiveBalance {V V' : SszList Validator P.
   · simp only [hj, ↓reduceIte] at hw
     exact ⟨w, hw, CredentialKeep.refl _, id⟩
 
-theorem preservation_of_validatorArrayRelation {s : BeaconState P f} {V : SszList Validator P.VALIDATOR_REGISTRY_LIMIT}
+theorem preservation_of_validatorArrayRelation {s : BeaconState P f} {V : Ssz.List Validator P.VALIDATOR_REGISTRY_LIMIT}
     (h : ValidatorArrayRelation s.validators.toArray V.toArray) : Preservation s { s with validators := V } :=
   preservation_of_validatorRelation ⟨h.1, fun j v' hv' => .inl (h.2 j v' hv')⟩ (pendingStep_same rfl)
 
@@ -380,7 +380,7 @@ theorem processEffectiveBalanceUpdates_preservation (cfg : Config) {s s' : Beaco
   repeat (first | ok_head | (with_reducible apply ok_bind; intro _ _))
   refine ok_pure (preservation_of_validatorArrayRelation ?_)
   refine list_forIn_relation
-    (fun V V' : SszList Validator P.VALIDATOR_REGISTRY_LIMIT => ValidatorArrayRelation V.toArray V'.toArray)
+    (fun V V' : Ssz.List Validator P.VALIDATOR_REGISTRY_LIMIT => ValidatorArrayRelation V.toArray V'.toArray)
     (fun _ => ValidatorArrayRelation.refl _) (fun _ _ _ => ValidatorArrayRelation.trans) _ ?_ _ _ _ (by assumption)
   intro i V r hb
   simp only [bind, Except.bind, pure, Except.pure] at hb

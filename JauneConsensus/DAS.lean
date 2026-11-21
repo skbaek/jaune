@@ -14,7 +14,7 @@ namespace JauneConsensus
 open Jaune (Bytes U256)
 
 /-- `UINT256_MAX` (`specs/fulu/das-core.md`). -/
-def UINT256_MAX : U256 := UIntN.max
+def UINT256_MAX : U256 := UnsignedInteger.max
 
 /-- `get_custody_groups(node_id, custody_group_count)` (Fulu). -/
 def getCustodyGroups (cfg : Config) (nodeId : U256) (custodyGroupCount : U64) : Fallible (Array U64) := do
@@ -30,8 +30,8 @@ def getCustodyGroups (cfg : Config) (nodeId : U256) (custodyGroupCount : U64) : 
       let v ← bytesToUint64 (h.take 8)
       let g ← U64.mod? v (← u64 groups "NUMBER_OF_CUSTODY_GROUPS") "get_custody_groups"
       let acc := if acc.contains g then acc else acc.push g
-      let next ← if currentId == UINT256_MAX then pure UIntN.zero
-        else UIntN.add? currentId ⟨1, by decide⟩ "get_custody_groups: current_id += 1"
+      let next ← if currentId == UINT256_MAX then pure UnsignedInteger.zero
+        else UnsignedInteger.add? currentId ⟨1, by decide⟩ "get_custody_groups: current_id += 1"
       loop fuel next acc
   let out ← loop (2 ^ 20) nodeId #[]
   require (out.toList.eraseDups.length == out.size) "get_custody_groups: unique"

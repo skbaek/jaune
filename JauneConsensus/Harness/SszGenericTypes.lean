@@ -26,17 +26,17 @@ ssz_container FixedTestStruct where
 
 ssz_container VarTestStruct where
   A : U16
-  B : (SszList U16 1024)
+  B : (Ssz.List U16 1024)
   C : U8
 
 ssz_container ComplexTestStruct where
   A : U16
-  B : (SszList U16 128)
+  B : (Ssz.List U16 128)
   C : U8
-  D : (SszList UInt8 256)
+  D : (Ssz.List UInt8 256)
   E : VarTestStruct
-  F : (SszVector FixedTestStruct 4)
-  G : (SszVector VarTestStruct 2)
+  F : (Ssz.Vector FixedTestStruct 4)
+  G : (Ssz.Vector VarTestStruct 2)
 
 ssz_container BitsStruct where
   A : (Bitlist 5)
@@ -80,18 +80,18 @@ ssz_progressive_container ProgressiveSingleListContainerTestStruct [0, 0, 0, 0, 
 
 ssz_progressive_container ProgressiveVarTestStruct [1, 0, 1, 0, 1] where
   A : UInt8
-  B : (SszList U16 123)
+  B : (Ssz.List U16 123)
   C : ProgressiveBitlist
 
 ssz_progressive_container ProgressiveComplexTestStruct
     [1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1] where
   A : UInt8
-  B : (SszList U16 123)
+  B : (Ssz.List U16 123)
   C : ProgressiveBitlist
   D : (ProgressiveList U64)
   E : (ProgressiveList SmallTestStruct)
   F : (ProgressiveList (ProgressiveList VarTestStruct))
-  G : (SszList ProgressiveSingleFieldContainerTestStruct 10)
+  G : (Ssz.List ProgressiveSingleFieldContainerTestStruct 10)
   H : (ProgressiveList ProgressiveVarTestStruct)
 
 yaml_container ProgressiveTestStruct [A, B, C, D]

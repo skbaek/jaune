@@ -1,12 +1,12 @@
 import Jaune.Instructions.Log
 import Jaune.Instructions.MachineSteps
-import Jaune.MessageCall.CheckedPlain
+import Jaune.MessageCall.Plain
 
 /-! The Log family's effect law, proved once, its table lemmas, and the lemma that
 `Checked.PlainOp.run` reads its rows for `LOG0`–`LOG4`, for every input and every `Fork`. The rows'
 agreement with the per-opcode arms is in `Jaune.Bridge.G2b.CheckedRowAgreement`. -/
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -27,29 +27,29 @@ theorem LogRow.step_ok {row : LogRow} {ctx : CallContext} {m out : Machine} {log
   | error e => simp [h1] at h
   | ok p1 =>
     obtain ⟨offset, m1⟩ := p1
-    obtain ⟨w1, t1, hs1, rfl, rfl⟩ := InstrStep.popToNat_eq_ok h1
+    obtain ⟨w1, t1, hs1, rfl, rfl⟩ := InstructionStep.popToNat_eq_ok h1
     simp only [h1] at h
     cases h2 : ({ m with stack := t1 } : Machine).popToNat with
     | error e => simp [h2] at h
     | ok p2 =>
       obtain ⟨size, m2⟩ := p2
-      obtain ⟨w2, t2, hs2, rfl, rfl⟩ := InstrStep.popToNat_eq_ok h2
+      obtain ⟨w2, t2, hs2, rfl, rfl⟩ := InstructionStep.popToNat_eq_ok h2
       simp only [h2] at h
-      cases h3 : ({ m with stack := t2 } : Machine).popN row.topics with
+      cases h3 : ({ m with stack := t2 } : Machine).popList row.topics with
       | error e => simp [h3] at h
       | ok p3 =>
         obtain ⟨topics, m3⟩ := p3
-        obtain ⟨rest, hs3, hlen, rfl⟩ := InstrStep.popN_eq_ok h3
+        obtain ⟨rest, hs3, hlen, rfl⟩ := InstructionStep.popList_eq_ok h3
         simp only [h3] at h
         cases h4 : ({ m with stack := rest } : Machine).chargeGas
             (row.cost { m with stack := rest } w1.toNat w2.toNat) with
         | error e => simp [h4] at h
         | ok m4 =>
-          obtain ⟨enough, rfl⟩ := InstrStep.chargeGas_eq_ok h4
+          obtain ⟨enough, rfl⟩ := InstructionStep.chargeGas_eq_ok h4
           simp only [h4] at h
           by_cases hst : ctx.isStatic
           · simp [hst, Except.assert] at h
-          · simp only [hst, Except.assert, Bool.not_false, ↓reduceIte, Machine.memRead,
+          · simp only [hst, Except.assert, Bool.not_false, ↓reduceIte, Machine.readMemory,
               Except.ok.injEq, Prod.mk.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
             refine ⟨by simpa using hst, w1, w2, topics, rest, ?_, hlen, enough, rfl, rfl⟩
@@ -77,34 +77,34 @@ theorem LogRow.step_error {row : LogRow} {ctx : CallContext} {m out : Machine}
   | error err =>
     simp only [h1] at h
     cases h
-    obtain ⟨rfl, hs, rfl⟩ := InstrStep.popToNat_eq_error h1
+    obtain ⟨rfl, hs, rfl⟩ := InstructionStep.popToNat_eq_error h1
     exact Or.inl ⟨rfl, by simp [hs], rfl⟩
   | ok p1 =>
     obtain ⟨offset, m1⟩ := p1
-    obtain ⟨w1, t1, hs1, rfl, rfl⟩ := InstrStep.popToNat_eq_ok h1
+    obtain ⟨w1, t1, hs1, rfl, rfl⟩ := InstructionStep.popToNat_eq_ok h1
     simp only [h1] at h
     cases h2 : ({ m with stack := t1 } : Machine).popToNat with
     | error err =>
       simp only [h2] at h
       cases h
-      obtain ⟨rfl, hs, rfl⟩ := InstrStep.popToNat_eq_error h2
+      obtain ⟨rfl, hs, rfl⟩ := InstructionStep.popToNat_eq_error h2
       simp only at hs
       exact Or.inl ⟨rfl, by simp [hs1, hs]; omega, rfl⟩
     | ok p2 =>
       obtain ⟨size, m2⟩ := p2
-      obtain ⟨w2, t2, hs2, rfl, rfl⟩ := InstrStep.popToNat_eq_ok h2
+      obtain ⟨w2, t2, hs2, rfl, rfl⟩ := InstructionStep.popToNat_eq_ok h2
       simp only [h2] at h
       simp only at hs2
-      cases h3 : ({ m with stack := t2 } : Machine).popN row.topics with
+      cases h3 : ({ m with stack := t2 } : Machine).popList row.topics with
       | error err =>
         simp only [h3] at h
         cases h
-        obtain ⟨rfl, hlen, rfl⟩ := InstrStep.popN_eq_error h3
+        obtain ⟨rfl, hlen, rfl⟩ := InstructionStep.popList_eq_error h3
         simp only at hlen
         exact Or.inl ⟨rfl, by simp [hs1, hs2]; omega, rfl⟩
       | ok p3 =>
         obtain ⟨topics, m3⟩ := p3
-        obtain ⟨rest, hs3, hlen, rfl⟩ := InstrStep.popN_eq_ok h3
+        obtain ⟨rest, hs3, hlen, rfl⟩ := InstructionStep.popList_eq_ok h3
         simp only [h3] at h
         simp only at hs3
         have hstack : m.stack = w1 :: w2 :: topics ++ rest := by simp [hs1, hs2, hs3]
@@ -113,17 +113,17 @@ theorem LogRow.step_error {row : LogRow} {ctx : CallContext} {m out : Machine}
         | error err =>
           simp only [h4] at h
           cases h
-          obtain ⟨rfl, hlt, rfl⟩ := InstrStep.chargeGas_eq_error h4
+          obtain ⟨rfl, hlt, rfl⟩ := InstructionStep.chargeGas_eq_error h4
           exact Or.inr (Or.inl ⟨w1, w2, topics, rest, hstack, hlen, hlt, rfl, rfl⟩)
         | ok m4 =>
-          obtain ⟨enough, rfl⟩ := InstrStep.chargeGas_eq_ok h4
+          obtain ⟨enough, rfl⟩ := InstructionStep.chargeGas_eq_ok h4
           simp only [h4] at h
           by_cases hst : ctx.isStatic
           · simp only [hst, Except.assert, Bool.not_true, Bool.false_eq_true, ↓reduceIte,
               Except.error.injEq, Prod.mk.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
             exact Or.inr (Or.inr ⟨w1, w2, topics, rest, hstack, hlen, enough, hst, rfl, rfl⟩)
-          · simp [hst, Except.assert, Machine.memRead] at h
+          · simp [hst, Except.assert, Machine.readMemory] at h
 
 /-- On the success channel a log step adds no gas and keeps state gas and return data; on the
 error channel it also keeps memory. -/
@@ -245,4 +245,4 @@ theorem PlainOp.log_run_congr_fork {op : Jaune.PlainOp} (hrow : (PlainOp.logRow?
     rw [← PlainOp.logRow?_run_eq h, ← PlainOp.logRow?_run_eq h]
     rfl
 
-end Jaune.Checked
+end Jaune

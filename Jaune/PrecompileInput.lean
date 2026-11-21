@@ -62,10 +62,10 @@ def ecrecover (input : PrecompileInput) : PrecompileResult :=
 
 /-- EIP-7951 `P256VERIFY` (0x100). The flat fee is charged before the input is read, and every
 rejection returns empty output successfully. -/
-def p256Verify (input : PrecompileInput) : PrecompileResult :=
+def p256verify (input : PrecompileInput) : PrecompileResult :=
   let data := input.calldata
-  chargeGas Gas.p256Verify input fun () =>
-    if data.length ≠ 160 then .ok Gas.p256Verify []
+  chargeGas Gas.p256verify input fun () =>
+    if data.length ≠ 160 then .ok Gas.p256verify []
     else
       let msgHash : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
       let r : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
@@ -73,9 +73,9 @@ def p256Verify (input : PrecompileInput) : PrecompileResult :=
       let qx : Nat := Bytes.toNat <| data.sliceD 96 32 (0 : UInt8)
       let qy : Nat := Bytes.toNat <| data.sliceD 128 32 (0 : UInt8)
       if secp256r1.verify msgHash r s qx qy then
-        .ok Gas.p256Verify (1 : Nat).toU256.toBytes
+        .ok Gas.p256verify (1 : Nat).toU256.toBytes
       else
-        .ok Gas.p256Verify []
+        .ok Gas.p256verify []
 
 /-- `SHA256` (0x02). -/
 def sha256 (input : PrecompileInput) : PrecompileResult :=
@@ -125,7 +125,7 @@ def modexp (input : PrecompileInput) : PrecompileResult :=
 /-- EIP-196 `ECADD` on BN254 (0x06). -/
 def ecAdd (input : PrecompileInput) : PrecompileResult :=
   let data := input.calldata
-  let g : Nat := input.rules.bn254.add
+  let g : Nat := input.rules.altBn128.add
   chargeGas g input fun () =>
     let x0 : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
     let y0 : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
@@ -134,17 +134,17 @@ def ecAdd (input : PrecompileInput) : PrecompileResult :=
     if ¬ (x0 < altBn128Prime ∧ y0 < altBn128Prime ∧ x1 < altBn128Prime ∧ y1 < altBn128Prime) then
       .error (.halt (.outOfGas .none)) g
     else
-      match Bn254G1.mk? x0 y0 with
+      match AltBn128G1.mk? x0 y0 with
       | none => .error (.halt (.outOfGas .none)) g
       | some p0 =>
-        match Bn254G1.mk? x1 y1 with
+        match AltBn128G1.mk? x1 y1 with
         | none => .error (.halt (.outOfGas .none)) g
-        | some p1 => .ok g (Bn254G1.toBytes (p0 + p1))
+        | some p1 => .ok g (AltBn128G1.toBytes (p0 + p1))
 
 /-- EIP-196 `ECMUL` on BN254 (0x07). -/
 def ecMul (input : PrecompileInput) : PrecompileResult :=
   let data := input.calldata
-  let g : Nat := input.rules.bn254.mul
+  let g : Nat := input.rules.altBn128.mul
   chargeGas g input fun () =>
     let x : Nat := Bytes.toNat <| data.sliceD 0 32 (0 : UInt8)
     let y : Nat := Bytes.toNat <| data.sliceD 32 32 (0 : UInt8)
@@ -152,9 +152,9 @@ def ecMul (input : PrecompileInput) : PrecompileResult :=
     if ¬ (x < altBn128Prime ∧ y < altBn128Prime) then
       .error (.halt (.outOfGas .none)) g
     else
-      match Bn254G1.mk? x y with
+      match AltBn128G1.mk? x y with
       | none => .error (.halt (.outOfGas .none)) g
-      | some p => .ok g (Bn254G1.toBytes (p * n))
+      | some p => .ok g (AltBn128G1.toBytes (p * n))
 
 /-- EIP-152 `BLAKE2F` (0x09). -/
 def blake2f (input : PrecompileInput) : PrecompileResult :=
@@ -166,11 +166,11 @@ def blake2f (input : PrecompileInput) : PrecompileResult :=
     chargeGas cost input fun () =>
       match fn with
       | 0 =>
-        match bCompress rounds h m t0 t1 false with
+        match Blake2.compress rounds h m t0 t1 false with
         | some output => .ok cost output
         | none => .error (.crypto (.pointCompression .none)) cost
       | 1 =>
-        match bCompress rounds h m t0 t1 true with
+        match Blake2.compress rounds h m t0 t1 true with
         | some output => .ok cost output
         | none => .error (.crypto (.pointCompression .none)) cost
       | _ => .error (.halt (.invalidParameter .none)) cost
@@ -180,19 +180,19 @@ def pointEvaluation (input : PrecompileInput) : PrecompileResult :=
   let data := input.calldata
   if data.length ≠ 192 then .error (.halt (.kzgProof .none)) 0
   else
-    chargeGas gasPointEval input fun () =>
+    chargeGas pointEvaluationPrecompileGas input fun () =>
       let versionedHash := data.take 32
       let z := (data.drop 32).take 32
       let y := (data.drop 64).take 32
       let commitment := (data.drop 96).take 48
       let proof := (data.drop 144).take 48
       if kzgCommitmentToVersionedHash commitment ≠ versionedHash then
-        .error (.halt (.kzgProof .none)) gasPointEval
+        .error (.halt (.kzgProof .none)) pointEvaluationPrecompileGas
       else
         match verifyKzgProof commitment z y proof with
         | .ok true =>
-          .ok gasPointEval ((4096 : Nat).toU256.toBytes ++ blsModulus.toU256.toBytes)
-        | _ => .error (.halt (.kzgProof .none)) gasPointEval
+          .ok pointEvaluationPrecompileGas ((4096 : Nat).toU256.toBytes ++ blsModulus.toU256.toBytes)
+        | _ => .error (.halt (.kzgProof .none)) pointEvaluationPrecompileGas
 
 /-- EIP-2537 `BLS12_G1ADD` (0x0B). -/
 def bls12G1Add (input : PrecompileInput) : PrecompileResult :=
@@ -216,7 +216,7 @@ def bls12G1Msm (input : PrecompileInput) : PrecompileResult :=
     let gasCost := (k * gasBlsG1Mul * discount) / 1000
     chargeGas gasCost input fun () =>
       match decodeG1MsmPairs data with
-      | .ok pairs => .ok gasCost (g1MsmSum pairs).toBytes
+      | .ok pairs => .ok gasCost (bls12G1MsmSum pairs).toBytes
       | .error _ => .error (.halt (.outOfGas .none)) gasCost
 
 /-- EIP-2537 `BLS12_G2ADD` (0x0D). -/
@@ -241,7 +241,7 @@ def bls12G2Msm (input : PrecompileInput) : PrecompileResult :=
     let gasCost := (k * gasBlsG2Mul * discount) / 1000
     chargeGas gasCost input fun () =>
       match decodeG2MsmPairs data with
-      | .ok pairs => .ok gasCost (g2MsmSum pairs).toBytes
+      | .ok pairs => .ok gasCost (bls12G2MsmSum pairs).toBytes
       | .error _ => .error (.halt (.outOfGas .none)) gasCost
 
 /-- EIP-2537 `BLS12_MAP_FP_TO_G1` (0x10). -/
@@ -279,9 +279,9 @@ def bls12PairingCheck (input : PrecompileInput) : PrecompileResult :=
       | .error ⟨msg, cost⟩ => .error msg cost
 
 /-- EIP-197 `ECPAIRING` on BN254 (0x08). -/
-def ecPairing (input : PrecompileInput) : PrecompileResult :=
+def ecPairingCheck (input : PrecompileInput) : PrecompileResult :=
   let data := input.calldata
-  let g := input.rules.bn254
+  let g := input.rules.altBn128
   let cost := (g.pairingPerPair * (data.length / 192)) + g.pairingBase
   chargeGas cost input fun () =>
     let inner := executePairingCheckInner data cost
@@ -299,7 +299,7 @@ def run (input : PrecompileInput) : Address → PrecompileResult
   | 5 => modexp input -- 0x5
   | 6 => ecAdd input -- 0x6
   | 7 => ecMul input -- 0x7
-  | 8 => ecPairing input --  0x8
+  | 8 => ecPairingCheck input --  0x8
   | 9 => blake2f input -- 0x9
   | 10 => pointEvaluation input -- 0xA
   | 11 => bls12G1Add input --  0xB
@@ -309,7 +309,7 @@ def run (input : PrecompileInput) : Address → PrecompileResult
   | 15 => bls12PairingCheck input -- 0xF
   | 16 => bls12MapFpToG1 input -- 0x10
   | 17 => bls12MapFp2ToG2 input -- 0x11
-  | 256 => p256Verify input -- 0x100
+  | 256 => p256verify input -- 0x100
   | n => .error (.internal (.invariant
       (.text s!"precompiled contract {n} does not exist"))) 0
 

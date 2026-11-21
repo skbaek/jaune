@@ -78,12 +78,12 @@ def benchSigV : Bool := false
 def benchScalar : Nat :=
   0xFEDCBA9876543210FEDCBA9876543210FEDCBA9876543210FEDCBA9876543210
 
-def bn254G2Generator : Bn254G2 :=
+def bn254G2Generator : AltBn128G2 :=
   ⟨
-    Bn254Fp2.mk
+    AltBn128Fp2.mk
       11559732032986387107991004021392285783925812861821192530917403151452391805634
       10857046999023057135944570762232829481370756359578518086990519993285655852781,
-    Bn254Fp2.mk
+    AltBn128Fp2.mk
       4082367875863433681332203403145435568316851327593401208105741076214120093531
       8495653923123431417604973247489272438418190587263600148770280649306958101930
   ⟩
@@ -93,7 +93,7 @@ def bn254G2Generator : Bn254G2 :=
 -- Sink mixer: order-sensitive, cheap, and independent of the values' size.
 def mix (acc : Nat) (x : Nat) : Nat := (acc * 1000003 + x) % 1000000007
 
-def fieldSink {p} {m : FinFields p} (x : GaloisField p m) : Nat :=
+def fieldSink {p} {m : PolynomialCoefficients p} (x : GaloisField p m) : Nat :=
   x.val.foldl (fun acc c => mix acc c.val) 0
 
 def drive (n : Nat) (acc : Nat) (f : Nat → Nat → Nat) : Nat :=
@@ -151,7 +151,7 @@ def main : IO UInt32 := do
       ((benchScalar + i) % secp256k1.curveOrder)).x.val)
   -- BN254 G1 uses the same generic ladder over a 254-bit base field.
   bench "bn254-g1-mul" 200 (fun i acc =>
-    mix acc ((⟨1, 2⟩ : Bn254G1).mulBy
+    mix acc ((⟨1, 2⟩ : AltBn128G1).mulBy
       ((benchScalar + i) % altBn128CurveOrder)).x.val)
   bench "bls-g1-mul" 200 (fun i acc =>
     mix acc (blsG1Generator.mulBy
@@ -164,11 +164,11 @@ def main : IO UInt32 := do
   -- corresponding `-miller` rows disable only the final exponentiation, so
   -- Step 7 can distinguish affine loop cost from the exponentiation tail.
   bench "bn254-pairing" 1 (fun _ acc =>
-    match pairing bn254G2Generator (⟨1, 2⟩ : Bn254G1) with
+    match pairing bn254G2Generator (⟨1, 2⟩ : AltBn128G1) with
     | some f => mix acc (fieldSink f)
     | none => mix acc 0)
   bench "bn254-miller" 1 (fun _ acc =>
-    match pairing bn254G2Generator (⟨1, 2⟩ : Bn254G1) false with
+    match pairing bn254G2Generator (⟨1, 2⟩ : AltBn128G1) false with
     | some f => mix acc (fieldSink f)
     | none => mix acc 0)
   bench "bls-pairing" 1 (fun _ acc =>

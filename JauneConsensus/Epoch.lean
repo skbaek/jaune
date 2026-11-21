@@ -230,7 +230,7 @@ def processSlashings (_cfg : Config) (state : BeaconState P f) : Fallible (Beaco
 def processEth1DataReset (_cfg : Config) (state : BeaconState P f) : Fallible (BeaconState P f) := do
   let nextEpoch ← (← getCurrentEpoch state).add? U64.one "process_eth1_data_reset"
   let r ← nextEpoch.mod? (← u64Checked P.EPOCHS_PER_ETH1_VOTING_PERIOD) "process_eth1_data_reset"
-  if r.toNat == 0 then pure { state with eth1_data_votes := SszList.empty }
+  if r.toNat == 0 then pure { state with eth1_data_votes := Ssz.List.empty }
   else pure state
 
 /-! ## Pending deposits, consolidations and effective balances (Electra) -/
@@ -298,7 +298,7 @@ def processPendingDeposits (ctx : Context) (state : BeaconState P f) : Fallible 
     -- Regardless of how the deposit was handled, we move on in the queue.
     nextDepositIndex := nextDepositIndex + 1
   let rest := pending.toArray.extract nextDepositIndex pending.length ++ depositsToPostpone
-  state ← state.setPendingDeposits (← SszList.ofArray rest site)
+  state ← state.setPendingDeposits (← Ssz.List.ofArray rest site)
   -- Accumulate churn only if the churn limit has been hit.
   if isChurnLimitReached then
     state.setDepositBalanceToConsume (← availableForProcessing.sub? processedAmount site)
@@ -326,7 +326,7 @@ def processPendingConsolidations (_cfg : Config) (state : BeaconState P f) :
     state ← decreaseBalance state pc.source_index sourceEffective
     state ← increaseBalance state pc.target_index sourceEffective
     next := next + 1
-  state.setPendingConsolidations (← SszList.ofArray (pending.toArray.extract next pending.length) site)
+  state.setPendingConsolidations (← Ssz.List.ofArray (pending.toArray.extract next pending.length) site)
 
 /-- `process_effective_balance_updates`: the ceiling is `get_max_effective_balance(validator)` from
 Electra (`specs/electra/beacon-chain.md`), `MAX_EFFECTIVE_BALANCE` before
@@ -394,7 +394,7 @@ def processParticipationFlagUpdates (_cfg : Config) (state : BeaconState P f) :
   pure { state with
     previous_epoch_participation := state.current_epoch_participation
     current_epoch_participation :=
-      ← SszList.ofArray (Array.replicate state.validators.toArray.size UIntN.zero) site }
+      ← Ssz.List.ofArray (Array.replicate state.validators.toArray.size UnsignedInteger.zero) site }
 
 /-- `process_sync_committee_updates` (`specs/altair/beacon-chain.md`). -/
 def processSyncCommitteeUpdates (ctx : Context) (state : BeaconState P f) :
@@ -423,7 +423,7 @@ def processProposerLookahead (_cfg : Config) (state : BeaconState P f) : Fallibl
   require (lastEpochProposers.size == la.size - lastEpochStart)
     s!"{site}: last epoch proposers fill the tail"
   state.setProposerLookahead
-    (← SszVector.ofArray (la.extract P.SLOTS_PER_EPOCH la.size ++ lastEpochProposers) site)
+    (← Ssz.Vector.ofArray (la.extract P.SLOTS_PER_EPOCH la.size ++ lastEpochProposers) site)
 
 /-! ## `process_epoch` -/
 

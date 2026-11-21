@@ -71,8 +71,8 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : ConsensusFork} {exec : Bl
             (payloadToBlock req).header.timestamp = .ok f ∧
         f.consensusFork? = some cf ∧
         checkBlockRlpSize f.ruleSet.block (payloadToBlock req).toRlpItem.toBytes.length = .ok () ∧
-        stateTransitionScheduledE cfg f exec (payloadToBlock req) = .ok (.ok post) ∧
-        ∃ st bout, Checked.applyBody (Checked.initBlockContext f exec (payloadToBlock req).header) exec.state
+        stateTransitionScheduledTyped cfg f exec (payloadToBlock req) = .ok (.ok post) ∧
+        ∃ st bout, applyBody (initBlockContext f exec (payloadToBlock req).header) exec.state
             (payloadToBlock req).transactions (payloadToBlock req).ommers (payloadToBlock req).withdrawals =
             .ok (st, bout) ∧
           bout.requests = req.executionRequests := by
@@ -122,7 +122,7 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : ConsensusFork} {exec : Bl
             have hsize' : checkBlockRlpSize f.ruleSet.block
                 (payloadToBlock req).toRlpItem.toBytes.length = .ok () :=
               Except.mapError_eq_ok_iff.mp hsize
-            cases hs : stateTransitionScheduledE cfg f exec (payloadToBlock req) with
+            cases hs : stateTransitionScheduledTyped cfg f exec (payloadToBlock req) with
             | error e =>
               simp only [hs] at h
               obtain ⟨a, ha, _⟩ := Except.bind_eq_ok h
@@ -136,7 +136,7 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : ConsensusFork} {exec : Bl
               | ok post' =>
                 simp only [hs, pure_bind] at h
                 obtain ⟨p, hp, h⟩ := Except.bind_eq_ok h
-                have hbody : Checked.applyBody (Checked.initBlockContext f exec (payloadToBlock req).header) exec.state
+                have hbody : applyBody (initBlockContext f exec (payloadToBlock req).header) exec.state
                     (payloadToBlock req).transactions (payloadToBlock req).ommers
                     (payloadToBlock req).withdrawals = .ok p :=
                   Except.mapError_eq_ok_iff.mp hp
@@ -178,7 +178,7 @@ theorem engineVerdict_ok_iff {cfg : ChainConfig} {cf : ConsensusFork} {exec : Bl
 theorem engineVerdict_requests {cfg : ChainConfig} {cf : ConsensusFork} {exec : BlockChain}
     {req : NewPayloadRequest P} {post : BlockChain}
     (h : engineVerdict cfg cf exec req = .ok post) :
-    ∃ f p, Checked.applyBody (Checked.initBlockContext f exec (payloadToBlock req).header) exec.state
+    ∃ f p, applyBody (initBlockContext f exec (payloadToBlock req).header) exec.state
       (payloadToBlock req).transactions (payloadToBlock req).ommers (payloadToBlock req).withdrawals = .ok p ∧
       p.2.requests = req.executionRequests := by
   rw [engineVerdict_ok_iff] at h
@@ -190,7 +190,7 @@ theorem engineVerdict_rejects_of_requests_ne {cfg : ChainConfig} {cf : Consensus
     {req : NewPayloadRequest P} {f : Jaune.Fork} {st : State} {bout : BlockOutput}
     (hfork : cfg.forkAt (payloadToBlock req).header.number
       (payloadToBlock req).header.timestamp = .ok f)
-    (hbody : Checked.applyBody (Checked.initBlockContext f exec (payloadToBlock req).header) exec.state
+    (hbody : applyBody (initBlockContext f exec (payloadToBlock req).header) exec.state
       (payloadToBlock req).transactions
       (payloadToBlock req).ommers (payloadToBlock req).withdrawals = .ok (st, bout))
     (hne : bout.requests ≠ req.executionRequests) :

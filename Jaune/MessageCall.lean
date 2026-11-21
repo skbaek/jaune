@@ -36,18 +36,18 @@ def World.clearStorageWritesIfEmpty (w : World) (a : Address) : World :=
 (`Benv.setStor`), then the nonce is incremented (`Benv.incrNonce`). The created-account
 insertion is not a world change; it is on the trail. -/
 def World.createSetUp (w : World) (a : Address) : World :=
-  let w := { w with state := w.state.setStor a .empty
+  let w := { w with state := w.state.setStorage a .empty
                     storageWrites := w.storageWrites.eraseAddress a }
-  ({ w with state := w.state.incrNonce a }).clearStorageWritesIfEmpty a
+  ({ w with state := w.state.incrementNonce a }).clearStorageWritesIfEmpty a
 
 /-- Debit a balance, or nothing if it is too small: `Benv.subBal` on the world. -/
 def World.subtractBalance (w : World) (a : Address) (v : U256) : Option World := do
-  let state ← w.state.subBal a v
+  let state ← w.state.subtractBalance a v
   some (({ w with state }).clearStorageWritesIfEmpty a)
 
 /-- Credit a balance: `Benv.addBal` on the world. -/
 def World.addBalance (w : World) (a : Address) (v : U256) : World :=
-  ({ w with state := w.state.addBal a v }).clearStorageWritesIfEmpty a
+  ({ w with state := w.state.addBalance a v }).clearStorageWritesIfEmpty a
 
 end Jaune
 
@@ -62,21 +62,21 @@ structure Substate : Type where
   /-- The refund counter (EIP-3155 `refund`). -/
   refund : Int
   /-- The accounts scheduled for deletion by `SELFDESTRUCT`. -/
-  selfDestructs : AdrSet
+  selfDestructs : AddressSet
   /-- EIP-2929's accessed addresses. -/
-  accessedAddresses : AdrSet
+  accessedAddresses : AddressSet
   /-- EIP-2929's accessed storage keys. -/
   accessedStorageKeys : KeySet
   /-- EIP-161's touched accounts, recorded only under rules with the touched-account sweep. -/
-  touchedAccounts : AdrSet := .emptyWithCapacity
+  touchedAccounts : AddressSet := .emptyWithCapacity
 
 /-- What a frame keeps when it fails: the caller takes the child's. Upstream says of
 `created_accounts` that they "are shared (not rolled back)". -/
 structure Trail : Type where
   /-- The accounts created in this transaction so far. -/
-  createdAccounts : AdrSet
+  createdAccounts : AddressSet
   /-- EIP-7928's account reads. -/
-  accountReads : AdrSet := .emptyWithCapacity
+  accountReads : AddressSet := .emptyWithCapacity
   /-- EIP-7928's storage reads. -/
   storageReads : KeySet := .emptyWithCapacity
   /-- Whether RIPEMD-160's address was touched in a failed frame: the one touch that survives a

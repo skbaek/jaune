@@ -45,19 +45,19 @@ def Maj (x y z : UInt32) : UInt32 := (x &&& y) ^^^ (x &&& z) ^^^ (y &&& z)
 
 /-- FIPS 180-4 §4.1.2: `Σ₀{256}(x) = ROTR²(x) ⊕ ROTR¹³(x) ⊕ ROTR²²(x)`. -/
 def Sigma0 (x : UInt32) : UInt32 :=
-  UInt32.ror x 2 ^^^ UInt32.ror x 13 ^^^ UInt32.ror x 22
+  UInt32.rightRotation x 2 ^^^ UInt32.rightRotation x 13 ^^^ UInt32.rightRotation x 22
 
 /-- FIPS 180-4 §4.1.2: `Σ₁{256}(x) = ROTR⁶(x) ⊕ ROTR¹¹(x) ⊕ ROTR²⁵(x)`. -/
 def Sigma1 (x : UInt32) : UInt32 :=
-  UInt32.ror x 6 ^^^ UInt32.ror x 11 ^^^ UInt32.ror x 25
+  UInt32.rightRotation x 6 ^^^ UInt32.rightRotation x 11 ^^^ UInt32.rightRotation x 25
 
 /-- FIPS 180-4 §4.1.2: `σ₀{256}(x) = ROTR⁷(x) ⊕ ROTR¹⁸(x) ⊕ SHR³(x)`. -/
 def sigma0 (x : UInt32) : UInt32 :=
-  UInt32.ror x 7 ^^^ UInt32.ror x 18 ^^^ (x >>> 3)
+  UInt32.rightRotation x 7 ^^^ UInt32.rightRotation x 18 ^^^ (x >>> 3)
 
 /-- FIPS 180-4 §4.1.2: `σ₁{256}(x) = ROTR¹⁷(x) ⊕ ROTR¹⁹(x) ⊕ SHR¹⁰(x)`. -/
 def sigma1 (x : UInt32) : UInt32 :=
-  UInt32.ror x 17 ^^^ UInt32.ror x 19 ^^^ (x >>> 10)
+  UInt32.rightRotation x 17 ^^^ UInt32.rightRotation x 19 ^^^ (x >>> 10)
 
 /-! ## §4.2.2 and §5.3.3 — the constants -/
 
@@ -108,12 +108,12 @@ def pad (m : List UInt8) : List UInt8 :=
       UInt64.toBytes (8 * m.length).toUInt64))
 
 /-- FIPS 180-4 §5.2.1: the padded message is parsed into `N` 512-bit blocks. -/
-def blocksN : Nat → List UInt8 → List (List UInt8)
+def blocksByCount : Nat → List UInt8 → List (List UInt8)
   | 0, _ => []
-  | n + 1, m => m.take 64 :: blocksN n (m.drop 64)
+  | n + 1, m => m.take 64 :: blocksByCount n (m.drop 64)
 
 /-- FIPS 180-4 §5.2.1: the `N = ℓ / 512` blocks of the padded message. -/
-def blocks (m : List UInt8) : List (List UInt8) := blocksN (m.length / 64) m
+def blocks (m : List UInt8) : List (List UInt8) := blocksByCount (m.length / 64) m
 
 /-- FIPS 180-4 §5.2.1: a 512-bit block is parsed as sixteen 32-bit words,
 big-endian — `M₀{i} … M₁₅{i}`. -/
@@ -140,7 +140,7 @@ def schedule (M : Vector UInt32 16) : Array UInt32 :=
 
 /-- The eight working variables `a, b, c, d, e, f, g, h` of FIPS 180-4 §6.2.2,
 step 2. -/
-structure Vars where
+structure WorkingVariables where
   a : UInt32
   b : UInt32
   c : UInt32
@@ -156,7 +156,7 @@ structure Vars where
     T₂ = Σ₀{256}(a) + Maj(a, b, c)
     h = g;  g = f;  f = e;  e = d + T₁;  d = c;  c = b;  b = a;  a = T₁ + T₂
 -/
-def step (W : Array UInt32) (v : Vars) (t : Nat) : Vars :=
+def step (W : Array UInt32) (v : WorkingVariables) (t : Nat) : WorkingVariables :=
   let T₁ : UInt32 :=
     v.h + Sigma1 v.e + Ch v.e v.f v.g + K.getD t 0 + W.getD t 0
   let T₂ : UInt32 := Sigma0 v.a + Maj v.a v.b v.c
@@ -168,7 +168,7 @@ working variables with the current hash value (step 2), run rounds `t = 0` to
 `63` (step 3), and compute the next hash value by adding the working variables
 into it (step 4). -/
 def compress (H : Vector UInt32 8) (M : Vector UInt32 16) : Vector UInt32 8 :=
-  let v : Vars :=
+  let v : WorkingVariables :=
     (List.range 64).foldl (step (schedule M))
       { a := H[0], b := H[1], c := H[2], d := H[3],
         e := H[4], f := H[5], g := H[6], h := H[7] }
@@ -208,7 +208,7 @@ bridge needs — that folding only ever appends, and that entry `t` satisfies th
 standard's recurrence. -/
 
 /-- Folding `scheduleStep` appends one entry per index. -/
-theorem size_schedFold (a : Array UInt32) (s n : Nat) :
+theorem size_scheduleFold (a : Array UInt32) (s n : Nat) :
     ((List.range' s n).foldl scheduleStep a).size = a.size + n := by
   induction n generalizing a s with
   | zero => simp
@@ -224,7 +224,7 @@ theorem getD_push_lt (a : Array UInt32) (x : UInt32) (i : Nat) (h : i < a.size) 
   simp [Array.getD, h, Nat.lt_succ_of_lt, Array.getElem_push_lt]
 
 /-- Folding `scheduleStep` never disturbs an entry already present. -/
-theorem getD_schedFold (a : Array UInt32) (s n i : Nat) (h : i < a.size) :
+theorem getD_scheduleFold (a : Array UInt32) (s n i : Nat) (h : i < a.size) :
     ((List.range' s n).foldl scheduleStep a).getD i 0 = a.getD i 0 := by
   induction n generalizing a s with
   | zero => simp
@@ -239,7 +239,7 @@ theorem getD_push_self (a : Array UInt32) (x : UInt32) :
   simp [Array.getD]
 
 /-- One more fold step computes the schedule recurrence at the array's own end. -/
-theorem getD_schedFold_self (a : Array UInt32) (n : Nat) (hn : 0 < n) :
+theorem getD_scheduleFold_self (a : Array UInt32) (n : Nat) (hn : 0 < n) :
     ((List.range' a.size n).foldl scheduleStep a).getD a.size 0 =
       sigma1 (a.getD (a.size - 2) 0) + a.getD (a.size - 7) 0 +
         sigma0 (a.getD (a.size - 15) 0) + a.getD (a.size - 16) 0 := by
@@ -247,28 +247,28 @@ theorem getD_schedFold_self (a : Array UInt32) (n : Nat) (hn : 0 < n) :
   rw [show List.range' a.size (m + 1) = a.size :: List.range' (a.size + 1) m from rfl,
     List.foldl_cons]
   simp only [scheduleStep]
-  rw [getD_schedFold _ _ _ _ (by simp)]
+  rw [getD_scheduleFold _ _ _ _ (by simp)]
   exact getD_push_self _ _
 
 /-- The schedule has the sixty-four entries FIPS 180-4 §6.2.2 gives it. -/
 theorem size_schedule (M : Vector UInt32 16) : (schedule M).size = 64 := by
-  simp [schedule, size_schedFold]
+  simp [schedule, size_scheduleFold]
 
 /-- FIPS 180-4 §6.2.2, step 1, first case: `Wₜ = Mₜ` for `0 ≤ t ≤ 15`. -/
 theorem getD_schedule_lt (M : Vector UInt32 16) (t : Nat) (h : t < 16) :
     (schedule M).getD t 0 = M.toArray.getD t 0 :=
-  getD_schedFold _ _ _ _ (by simpa using h)
+  getD_scheduleFold _ _ _ _ (by simpa using h)
 
 /-- FIPS 180-4 §6.2.2, step 1, second case: the schedule recurrence, as an
 equation about the sixty-four-entry schedule rather than about a rolling
 window. -/
-theorem getD_schedule_rec (M : Vector UInt32 16) (t : Nat)
+theorem getD_schedule_recurrence (M : Vector UInt32 16) (t : Nat)
     (h16 : 16 ≤ t) (h64 : t < 64) :
     (schedule M).getD t 0 =
       sigma1 ((schedule M).getD (t - 2) 0) + (schedule M).getD (t - 7) 0 +
         sigma0 ((schedule M).getD (t - 15) 0) + (schedule M).getD (t - 16) 0 := by
   have hAsize : ((List.range' 16 (t - 16)).foldl scheduleStep M.toArray).size = t := by
-    rw [size_schedFold]; simp; omega
+    rw [size_scheduleFold]; simp; omega
   have hsplit : List.range' 16 48
       = List.range' 16 (t - 16) ++ List.range' t (64 - t) := by
     conv_lhs => rw [show (48 : Nat) = (t - 16) + (64 - t) by omega]
@@ -282,13 +282,13 @@ theorem getD_schedule_rec (M : Vector UInt32 16) (t : Nat)
       = ((List.range' 16 (t - 16)).foldl scheduleStep M.toArray).getD i 0 := by
     intro i hi
     rw [hfold]
-    exact getD_schedFold _ _ _ _ (by omega)
+    exact getD_scheduleFold _ _ _ _ (by omega)
   rw [hpres (t - 2) (by omega), hpres (t - 7) (by omega), hpres (t - 15) (by omega),
     hpres (t - 16) (by omega), hfold]
   clear hpres hfold hsplit
   generalize (List.range' 16 (t - 16)).foldl scheduleStep M.toArray = A at hAsize ⊢
   subst hAsize
-  exact getD_schedFold_self A (64 - A.size) (by omega)
+  exact getD_scheduleFold_self A (64 - A.size) (by omega)
 
 /-! ### The sixty-four rounds
 
@@ -299,19 +299,19 @@ index per kernel step, which is what lets a single induction on `n` line the
 two up. -/
 
 /-- The kernel's eight scalar working variables, as the reference's record. -/
-def varsVec (v : FIPS.Vars) : Vector UInt32 8 :=
+def workingVariablesVector (v : FIPS.WorkingVariables) : Vector UInt32 8 :=
   #v[v.a, v.b, v.c, v.d, v.e, v.f, v.g, v.h]
 
 private def addRoundVector (H h' : Vector UInt32 8) : Vector UInt32 8 :=
   #v[H[0] + h'[0], H[1] + h'[1], H[2] + h'[2], H[3] + h'[3],
     H[4] + h'[4], H[5] + h'[5], H[6] + h'[6], H[7] + h'[7]]
 
-private def addRoundVars (H : Vector UInt32 8) (v : FIPS.Vars) : Vector UInt32 8 :=
+private def addRoundWorkingVariables (H : Vector UInt32 8) (v : FIPS.WorkingVariables) : Vector UInt32 8 :=
   #v[H[0] + v.a, H[1] + v.b, H[2] + v.c, H[3] + v.d,
     H[4] + v.e, H[5] + v.f, H[6] + v.g, H[7] + v.h]
 
-private theorem addRoundVector_varsVec (H : Vector UInt32 8) (v : FIPS.Vars) :
-    addRoundVector H (varsVec v) = addRoundVars H v := rfl
+private theorem addRoundVector_workingVariablesVector (H : Vector UInt32 8) (v : FIPS.WorkingVariables) :
+    addRoundVector H (workingVariablesVector v) = addRoundWorkingVariables H v := rfl
 
 /-- The kernel's round-constant table is the standard's `K{256}`.
 
@@ -328,22 +328,22 @@ def WindowOk (M : Vector UInt32 16) (t : Nat) (w : Vector UInt32 16) : Prop :=
     w.getD ((t - k) % 16) 0 = (FIPS.schedule M).getD (t - k) 0
 
 /-- Reading back the word a schedule write just placed. -/
-theorem getD_vset_self (w : Vector UInt32 16) (i : Nat) (x : UInt32) (h : i < 16) :
+theorem getD_set_self (w : Vector UInt32 16) (i : Nat) (x : UInt32) (h : i < 16) :
     (w.set i x h).getD i 0 = x := by
   simp [Vector.getD, Array.getD, h]
 
 /-- A schedule write leaves the other fifteen words alone. -/
-theorem getD_vset_ne (w : Vector UInt32 16) (i j : Nat) (x : UInt32) (h : i < 16)
+theorem getD_set_ne (w : Vector UInt32 16) (i j : Nat) (x : UInt32) (h : i < 16)
     (hj : j < 16) (hne : j ≠ i) :
     (w.set i x h).getD j 0 = w.getD j 0 := by
   have hne' : i ≠ j := Ne.symm hne
   simp [Vector.getD, Array.getD, hj, hne']
 
 theorem rounds_eq (p : Array UInt8) (n : Nat) :
-    ∀ (hn : n ≤ 64) (w : Vector UInt32 16) (v : FIPS.Vars),
+    ∀ (hn : n ≤ 64) (w : Vector UInt32 16) (v : FIPS.WorkingVariables),
       WindowOk (FIPS.toWords p.toList) (64 - n) w →
       rounds p n hn w v.a v.b v.c v.d v.e v.f v.g v.h
-        = varsVec (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
+        = workingVariablesVector (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
             v (List.range' (64 - n) n)) := by
   induction n with
   | zero => intro hn w v _; rfl
@@ -369,12 +369,12 @@ theorem rounds_eq (p : Array UInt8) (n : Nat) :
               (p.getD (4 * (t % 16) + 2) 0) (p.getD (4 * (t % 16) + 3) 0)
           else
             w.getD (t % 16) 0 +
-                  (UInt32.ror (w.getD ((t % 16 + 1) % 16) 0) 7 ^^^
-                      UInt32.ror (w.getD ((t % 16 + 1) % 16) 0) 18 ^^^
+                  (UInt32.rightRotation (w.getD ((t % 16 + 1) % 16) 0) 7 ^^^
+                      UInt32.rightRotation (w.getD ((t % 16 + 1) % 16) 0) 18 ^^^
                     w.getD ((t % 16 + 1) % 16) 0 >>> 3) +
                 w.getD ((t % 16 + 9) % 16) 0 +
-              (UInt32.ror (w.getD ((t % 16 + 14) % 16) 0) 17 ^^^
-                  UInt32.ror (w.getD ((t % 16 + 14) % 16) 0) 19 ^^^
+              (UInt32.rightRotation (w.getD ((t % 16 + 14) % 16) 0) 17 ^^^
+                  UInt32.rightRotation (w.getD ((t % 16 + 14) % 16) 0) 19 ^^^
                 w.getD ((t % 16 + 14) % 16) 0 >>> 10))
           = W.getD t 0 := by
       by_cases hlt : t < 16
@@ -382,7 +382,7 @@ theorem rounds_eq (p : Array UInt8) (n : Nat) :
         simp [FIPS.toWords, Nat.mod_eq_of_lt hlt, hlt]
       · rw [ite_eq_right hlt]
         have h16 : 16 ≤ t := by omega
-        rw [hW, getD_schedule_rec _ _ h16 htlt]
+        rw [hW, getD_schedule_recurrence _ _ h16 htlt]
         rw [show t % 16 = (t - 16) % 16 by omega,
           show ((t - 16) % 16 + 1) % 16 = (t - 15) % 16 by omega,
           show ((t - 16) % 16 + 9) % 16 = (t - 7) % 16 by omega,
@@ -403,9 +403,9 @@ theorem rounds_eq (p : Array UInt8) (n : Nat) :
     rcases Nat.eq_or_lt_of_le hk1 with hk | hk
     · subst hk
       simp only [Nat.add_sub_cancel]
-      rw [getD_vset_self, hW]
+      rw [getD_set_self, hW]
     · have hne : (t + 1 - k) % 16 ≠ t % 16 := by omega
-      rw [getD_vset_ne _ _ _ _ _ (by omega) hne]
+      rw [getD_set_ne _ _ _ _ _ (by omega) hne]
       have := hw (k - 1) (by omega) (by omega) (by omega)
       rw [show t - (k - 1) = t + 1 - k by omega] at this
       exact this
@@ -416,7 +416,7 @@ theorem rounds_eq' (p : Array UInt8) (n : Nat) (hn : n ≤ 64) (w : Vector UInt3
     (a b c d e f g h : UInt32)
     (hw : WindowOk (FIPS.toWords p.toList) (64 - n) w) :
     rounds p n hn w a b c d e f g h
-      = varsVec (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
+      = workingVariablesVector (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
           ⟨a, b, c, d, e, f, g, h⟩ (List.range' (64 - n) n)) :=
   rounds_eq p n hn w ⟨a, b, c, d, e, f, g, h⟩ hw
 
@@ -425,7 +425,7 @@ the fixed bound. -/
 private theorem rounds_eq_full_of_le (p : Array UInt8) (hn : 64 ≤ 64)
     (a b c d e f g h : UInt32) :
     rounds p 64 hn (Vector.replicate 16 0) a b c d e f g h
-      = varsVec (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
+      = workingVariablesVector (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
           ⟨a, b, c, d, e, f, g, h⟩ (List.range 64)) := by
   rw [List.range_eq_range']
   exact rounds_eq' p 64 hn _ a b c d e f g h (by intro k hk1 _ hkt; omega)
@@ -434,12 +434,12 @@ private theorem rounds_eq_full_of_le (p : Array UInt8) (hn : 64 ≤ 64)
 vacuous at round 0, so no hypothesis survives. -/
 theorem rounds_eq_full (p : Array UInt8) (a b c d e f g h : UInt32) :
     rounds p 64 (by omega) (Vector.replicate 16 0) a b c d e f g h
-      = varsVec (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
+      = workingVariablesVector (List.foldl (FIPS.step (FIPS.schedule (FIPS.toWords p.toList)))
           ⟨a, b, c, d, e, f, g, h⟩ (List.range 64)) :=
   rounds_eq_full_of_le p (by omega) a b c d e f g h
 
-private theorem compress_eq_addRoundVars (H : Vector UInt32 8) (M : Vector UInt32 16) :
-    FIPS.compress H M = addRoundVars H
+private theorem compress_eq_addRoundWorkingVariables (H : Vector UInt32 8) (M : Vector UInt32 16) :
+    FIPS.compress H M = addRoundWorkingVariables H
       (List.foldl (FIPS.step (FIPS.schedule M))
         { a := H[0], b := H[1], c := H[2], d := H[3],
           e := H[4], f := H[5], g := H[6], h := H[7] } (List.range 64)) := rfl
@@ -458,11 +458,11 @@ private theorem roundResult_eq_compress (H : Vector UInt32 8) (p : Array UInt8)
   change addRoundVector H (rounds p 64 hn (Vector.replicate 16 0)
     H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]) =
       FIPS.compress H (FIPS.toWords p.toList)
-  rw [compress_eq_addRoundVars]
+  rw [compress_eq_addRoundWorkingVariables]
   exact Eq.trans
     (congrArg (addRoundVector H)
       (rounds_eq_full_of_le p hn H[0] H[1] H[2] H[3] H[4] H[5] H[6] H[7]))
-    (addRoundVector_varsVec H _)
+    (addRoundVector_workingVariablesVector H _)
 
 /-- The kernel's compression of one 64-byte chunk is the standard's, on the
 sixteen words that chunk parses to. -/
@@ -495,32 +495,32 @@ theorem set_append_length {ξ : Type u} (pre : List ξ) (p : ξ) (post : List ξ
   | cons a l ih => simp
 
 /-- `List.splitToArray`'s worker at an exhausted budget returns what it holds. -/
-theorem splitToArray_aux_zero {ξ : Type u} (idx : Nat) (a : Array ξ)
+theorem splitToArray_go_zero {ξ : Type u} (idx : Nat) (a : Array ξ)
     (h : idx + 0 = a.size) (xs : List ξ) :
-    List.splitToArray.aux idx a 0 h xs = (a, xs) := by
+    List.splitToArray.go idx a 0 h xs = (a, xs) := by
   cases xs with
   | nil => rfl
   | cons y ys => rfl
 
 /-- One step of `List.splitToArray`'s worker. -/
-theorem splitToArray_aux_succ {ξ : Type u} (idx : Nat) (a : Array ξ) (n : Nat)
+theorem splitToArray_go_succ {ξ : Type u} (idx : Nat) (a : Array ξ) (n : Nat)
     (h : idx + (n + 1) = a.size) (y : ξ) (ys : List ξ) :
-    List.splitToArray.aux idx a (n + 1) h (y :: ys)
-      = List.splitToArray.aux (idx + 1) (a.set idx y (by omega)) n
+    List.splitToArray.go idx a (n + 1) h (y :: ys)
+      = List.splitToArray.go (idx + 1) (a.set idx y (by omega)) n
           (by rw [Array.size_set]; omega) ys := rfl
 
 /-- One step of `Array.writeD`. -/
-theorem writeD_cons {ξ : Type u} (a : Array ξ) (n : Nat) (y : ξ) (ys : List ξ)
+theorem writeIfInBounds_cons {ξ : Type u} (a : Array ξ) (n : Nat) (y : ξ) (ys : List ξ)
     (h : n < a.size) :
-    Array.writeD a n (y :: ys) = Array.writeD (a.set n y h) (n + 1) ys := by
-  rw [Array.writeD, dite_eq_left h]
+    Array.writeIfInBounds a n (y :: ys) = Array.writeIfInBounds (a.set n y h) (n + 1) ys := by
+  rw [Array.writeIfInBounds, dite_eq_left h]
 
 /-- `List.splitToArray`'s worker, in closed form, for as long as the list has
 entries left to give. -/
-theorem splitToArray_aux_eq {ξ : Type u} :
+theorem splitToArray_go_eq {ξ : Type u} :
     ∀ (n idx : Nat) (a : Array ξ) (h : idx + n = a.size) (xs pre post : List ξ),
       a.toList = pre ++ post → pre.length = idx → n ≤ xs.length →
-      List.splitToArray.aux idx a n h xs = (⟨pre ++ xs.take n⟩, xs.drop n) := by
+      List.splitToArray.go idx a n h xs = (⟨pre ++ xs.take n⟩, xs.drop n) := by
   intro n
   induction n with
   | zero =>
@@ -530,7 +530,7 @@ theorem splitToArray_aux_eq {ξ : Type u} :
     have hpost : post = [] := by
       apply List.eq_nil_of_length_eq_zero; omega
     subst hpost
-    rw [splitToArray_aux_zero]
+    rw [splitToArray_go_zero]
     simp [← hap]
   | succ n ih =>
     intro idx a h xs pre post hap hpre hle
@@ -542,7 +542,7 @@ theorem splitToArray_aux_eq {ξ : Type u} :
       cases post with
       | nil => simp at hlen; omega
       | cons q post' =>
-        rw [splitToArray_aux_succ]
+        rw [splitToArray_go_succ]
         rw [ih (idx + 1) (a.set idx y (by omega)) (by rw [Array.size_set]; omega) ys
               (pre ++ [y]) post'
               (by rw [Array.toList_set, hap, ← hpre, set_append_length]; simp)
@@ -554,15 +554,15 @@ has that many. -/
 theorem splitToArray_eq {ξ : Type u} (n : Nat) (xs : List ξ) (x : ξ)
     (hn : n ≤ xs.length) :
     List.splitToArray n xs x = (⟨xs.take n⟩, xs.drop n) := by
-  have h := splitToArray_aux_eq n 0 (Array.replicate n x) (by simp) xs []
+  have h := splitToArray_go_eq n 0 (Array.replicate n x) (by simp) xs []
     (List.replicate n x) (by simp) rfl hn
   simpa [List.splitToArray] using h
 
 /-- `Array.writeD` overwrites exactly the window it is pointed at. -/
-theorem writeD_eq {ξ : Type u} :
+theorem writeIfInBounds_eq {ξ : Type u} :
     ∀ (ys : List ξ) (a : Array ξ) (pre mid : List ξ) (n : Nat),
       a.toList = pre ++ mid → pre.length = n → mid.length = ys.length →
-      Array.writeD a n ys = ⟨pre ++ ys⟩ := by
+      Array.writeIfInBounds a n ys = ⟨pre ++ ys⟩ := by
   intro ys
   induction ys with
   | nil =>
@@ -570,7 +570,7 @@ theorem writeD_eq {ξ : Type u} :
     have hmid : mid = [] := by
       apply List.eq_nil_of_length_eq_zero; simpa using hm
     subst hmid
-    rw [show Array.writeD a n ([] : List ξ) = a from rfl]
+    rw [show Array.writeIfInBounds a n ([] : List ξ) = a from rfl]
     apply Array.ext'
     simpa using ha
   | cons y ys ih =>
@@ -580,7 +580,7 @@ theorem writeD_eq {ξ : Type u} :
     | cons q mid' =>
       have hsz : n < a.size := by
         rw [← Array.length_toList, ha]; simp [← hn]
-      rw [writeD_cons a n y ys hsz]
+      rw [writeIfInBounds_cons a n y ys hsz]
       rw [ih (a.set n y hsz) (pre ++ [y]) mid' (n + 1)
             (by rw [Array.toList_set, ha, ← hn, set_append_length]; simp)
             (by simp [hn]) (by simpa using hm)]
@@ -589,9 +589,9 @@ theorem writeD_eq {ξ : Type u} :
 /-- The single chunk the kernel emits for the empty message. -/
 theorem padChunk_eq (lb : List UInt8) (h8 : lb.length = 8)
     (h : 0 < (Array.replicate 64 (0x00 : UInt8)).size) :
-    Array.writeD ((Array.replicate 64 (0x00 : UInt8)).set 0 0x80 h) 56 lb
+    Array.writeIfInBounds ((Array.replicate 64 (0x00 : UInt8)).set 0 0x80 h) 56 lb
       = ⟨(0x80 : UInt8) :: (List.replicate 55 (0x00 : UInt8) ++ lb)⟩ := by
-  refine writeD_eq lb _ ((0x80 : UInt8) :: List.replicate 55 (0x00 : UInt8))
+  refine writeIfInBounds_eq lb _ ((0x80 : UInt8) :: List.replicate 55 (0x00 : UInt8))
     (List.replicate 8 (0x00 : UInt8)) 56 ?_ (by simp) (by simp [h8])
   rw [Array.toList_set, Array.toList_replicate,
     show (64 : Nat) = 63 + 1 from rfl, List.replicate_succ]
@@ -607,7 +607,7 @@ theorem blocks_append_64 (p rest : List UInt8) (hp : p.length = 64) :
     FIPS.blocks (p ++ rest) = p :: FIPS.blocks rest := by
   have hlen : (p ++ rest).length / 64 = rest.length / 64 + 1 := by
     rw [List.length_append, hp]; omega
-  rw [FIPS.blocks, hlen, FIPS.blocksN, List.take_left' hp, List.drop_left' hp,
+  rw [FIPS.blocks, hlen, FIPS.blocksByCount, List.take_left' hp, List.drop_left' hp,
     FIPS.blocks]
 
 /-- A padded message of exactly one block parses to exactly that block. -/
@@ -621,18 +621,18 @@ theorem blocks_of_length_64 (l : List UInt8) (h : l.length = 64) :
 theorem toChunks_nil (lb : Bytes) (n : Nat) (xs : Bytes)
     (h : 0 < (Array.replicate 64 (0x00 : UInt8)).size) :
     Bytes.toChunks lb n.succ xs 0
-      = [Array.writeD ((Array.replicate 64 (0x00 : UInt8)).set 0 0x80 h) 56 lb] :=
+      = [Array.writeIfInBounds ((Array.replicate 64 (0x00 : UInt8)).set 0 0x80 h) 56 lb] :=
   Bytes.toChunks.eq_2 lb xs n
 
 /-- With sixty-four or more bytes left, the kernel peels a chunk and recurses. -/
-theorem toChunks_ge_64 (lb : Bytes) (k : Nat) (xs : Bytes) (len : Nat) :
+theorem toChunks_add_64 (lb : Bytes) (k : Nat) (xs : Bytes) (len : Nat) :
     Bytes.toChunks lb k.succ xs (len + 64)
       = (List.splitToArray 64 xs 0).1
           :: Bytes.toChunks lb k (List.splitToArray 64 xs 0).2 len := rfl
 
 /-- With fifty-six to sixty-three bytes left, the length no longer fits beside
 them, so the kernel emits two chunks. -/
-theorem toChunks_ge_56 (lb : Bytes) (n j : Nat) (xs : Bytes) (hj : j < 8) :
+theorem toChunks_add_56 (lb : Bytes) (n j : Nat) (xs : Bytes) (hj : j < 8) :
     Bytes.toChunks lb n.succ xs (j + 56)
       = [⟨xs ++ (0x80 : UInt8) :: List.replicate (64 - (xs.length + 1)) (0x00 : UInt8)⟩,
          ⟨List.replicate 56 (0x00 : UInt8) ++ lb⟩] :=
@@ -682,7 +682,7 @@ theorem toChunks_eq (lenBytes : List UInt8) (h8 : lenBytes.length = 8) :
         · obtain ⟨j, rfl⟩ : ∃ j, len = j + 56 := ⟨len - 56, by omega⟩
           have hj : j < 8 := by omega
           rw [show (j + 56) / 64 = 0 from by omega,
-            toChunks_ge_56 lenBytes 0 j m hj,
+            toChunks_add_56 lenBytes 0 j m hj,
             show FIPS.padZeros (j + 56) = (7 - j) + 56 from by unfold FIPS.padZeros; omega,
             List.replicate_add, hm]
           rw [show (m ++ ((0x80 : UInt8) :: (List.replicate (7 - j) (0x00 : UInt8)
@@ -694,7 +694,7 @@ theorem toChunks_eq (lenBytes : List UInt8) (h8 : lenBytes.length = 8) :
           simp [show 64 - (j + 56 + 1) = 7 - j from by omega]
     · obtain ⟨len', rfl⟩ : ∃ len', len = len' + 64 := ⟨len - 64, by omega⟩
       rw [show (len' + 64) / 64 = (len' / 64).succ from by omega,
-        toChunks_ge_64, splitToArray_eq 64 m 0 (by omega)]
+        toChunks_add_64, splitToArray_eq 64 m 0 (by omega)]
       dsimp only
       rw [ih len' (by omega) (m.drop 64) (by simp [hm]),
         show FIPS.padZeros (len' + 64) = FIPS.padZeros len' from by

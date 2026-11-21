@@ -210,10 +210,10 @@ structure ModexpRules : Type where
   quadratic term applied at every size. -/
   flatComplexity : Option Nat
   /-- The multiplier on `words ^ 2` in the multiplication complexity. -/
-  complexityCoeff : Nat
+  complexityCoefficient : Nat
   /-- The per-byte weight of the exponent-length term beyond the first 32
   bytes. -/
-  iterationCoeff : Nat
+  iterationCoefficient : Nat
   /-- `GQUADDIVISOR`: the divisor applied to the complexity/iteration product.
   EIP-7883 removes the division by folding it into the other coefficients, so
   Osaka carries `1` rather than dropping the field. -/
@@ -229,9 +229,9 @@ structure FlatAccessGas : Type where
   /-- `BALANCE`: 400 (Byzantium), 700 (EIP-1884, Istanbul). -/
   balance : Nat
   /-- `EXTCODESIZE` and `EXTCODECOPY`'s base: 700 (EIP-150) throughout. -/
-  extCode : Nat
+  extcodesizeAndExtcodecopy : Nat
   /-- `EXTCODEHASH`: 400 (EIP-1052, Constantinople), 700 (EIP-1884). -/
-  extCodeHash : Nat
+  extcodehash : Nat
   /-- `SLOAD`, and the no-op `SSTORE` price under net metering: 200, then
   800 (EIP-1884). -/
   sload : Nat
@@ -298,7 +298,7 @@ structure CreationRules : Type where
   metered per word. When false the field is dormant. -/
   initCodeLimit : Bool
   /-- EIP-3541 (London): deposited code may not start with 0xEF. -/
-  rejectEf : Bool
+  rejectReservedFirstByte : Bool
 deriving DecidableEq, Repr
 
 /-- Proof-of-work consensus numbers (Byzantium .. Gray Glacier). `none` from
@@ -320,7 +320,7 @@ structure SystemCallRules : Type where
 deriving DecidableEq, Repr
 
 /-- alt_bn128 precompile prices (EIP-196/197, repriced by EIP-1108). -/
-structure Bn254Gas : Type where
+structure AltBn128Gas : Type where
   add : Nat
   mul : Nat
   pairingBase : Nat
@@ -345,7 +345,7 @@ structure OpcodeRules : Type where
   /-- EIP-145 `SHL`/`SHR`/`SAR` (Constantinople). -/
   shifts : Bool
   /-- EIP-1052 `EXTCODEHASH` (Constantinople). -/
-  extCodeHash : Bool
+  extcodehash : Bool
   /-- EIP-1014 `CREATE2` (Constantinople). -/
   create2 : Bool
   /-- EIP-1344 `CHAINID` (Istanbul). -/
@@ -402,7 +402,7 @@ structure GasSchedule : Type where
   EIP-8037 moves most of the creation cost into state gas. -/
   createAccess : Nat
   /-- The refund for clearing a storage slot. Prague 4800; Amsterdam 11616. -/
-  storageClearRefund : Nat
+  sstoreClearsSchedule : Nat
   /-- The intrinsic cost every transaction pays. Prague 21000; Amsterdam
   12000, with EIP-2780 charging the difference per resource instead. -/
   txBase : Nat
@@ -598,7 +598,7 @@ structure ForkRules : Type where
   /-- The pre-transaction system calls. -/
   systemCalls : SystemCallRules
   /-- alt_bn128 precompile prices. -/
-  bn254 : Bn254Gas
+  altBn128 : AltBn128Gas
   /-- `MODEXP` complexity function. -/
   modexpComplexity : ModexpComplexity
 deriving DecidableEq
@@ -692,7 +692,7 @@ instance {r : ForkRules} : Decidable r.blockAccessListRulesValid := by
 /-- A flat access schedule charges something for every family: the
 termination argument's need under the pre-Berlin shape. -/
 def FlatAccessGas.Valid (g : FlatAccessGas) : Prop :=
-  0 < g.balance ∧ 0 < g.extCode ∧ 0 < g.extCodeHash ∧ 0 < g.sload ∧ 0 < g.call
+  0 < g.balance ∧ 0 < g.extcodesizeAndExtcodecopy ∧ 0 < g.extcodehash ∧ 0 < g.sload ∧ 0 < g.call
 
 instance {g : FlatAccessGas} : Decidable g.Valid := by
   unfold FlatAccessGas.Valid; infer_instance
@@ -782,8 +782,8 @@ def pragueBlockLimits : BlockLimits :=
 def pragueModexpRules : ModexpRules := {
   maxLength := none
   flatComplexity := none
-  complexityCoeff := 1
-  iterationCoeff := 8
+  complexityCoefficient := 1
+  iterationCoefficient := 8
   gasDivisor := 3
   minGas := 200
 }
@@ -791,7 +791,7 @@ def pragueModexpRules : ModexpRules := {
 /-- Prague's opcode set: 0x1E is still an unassigned byte; every pre-Osaka
 fork-gated opcode is defined. -/
 def pragueOpcodeRules : OpcodeRules :=
-  { shifts := true, extCodeHash := true, create2 := true
+  { shifts := true, extcodehash := true, create2 := true
     chainId := true, selfBalance := true, baseFee := true, push0 := true
     transient := true, mcopy := true, blobHash := true, blobBaseFee := true
     clz := false, slotnum := false, stackAccess := false }
@@ -807,7 +807,7 @@ def pragueGasSchedule : GasSchedule := {
   coldAccountAccess := 2600
   callValue := 9000
   createAccess := 32000
-  storageClearRefund := 4800
+  sstoreClearsSchedule := 4800
   txBase := 21000
   txAccessListAddress := 2400
   txAccessListStorageKey := 1900
@@ -868,14 +868,14 @@ def praguePrecompiles : List Address := [
 
 /-- Byzantium's opcode set: nothing fork-gated after Byzantium is defined. -/
 def byzantiumOpcodeRules : OpcodeRules :=
-  { shifts := false, extCodeHash := false, create2 := false
+  { shifts := false, extcodehash := false, create2 := false
     chainId := false, selfBalance := false, baseFee := false, push0 := false
     transient := false, mcopy := false, blobHash := false, blobBaseFee := false
     clz := false, slotnum := false, stackAccess := false }
 
 /-- Constantinople/Petersburg: EIP-145, EIP-1052, EIP-1014. -/
 def petersburgOpcodeRules : OpcodeRules :=
-  { byzantiumOpcodeRules with shifts := true, extCodeHash := true, create2 := true }
+  { byzantiumOpcodeRules with shifts := true, extcodehash := true, create2 := true }
 
 /-- Istanbul (and Muir Glacier, Berlin): EIP-1344 `CHAINID` and EIP-1884
 `SELFBALANCE`. -/
@@ -918,12 +918,12 @@ def cancunHeaderRules : HeaderRules :=
 
 /-- Byzantium/Petersburg flat access prices (EIP-150, EIP-1052). -/
 def byzantiumAccessGas : FlatAccessGas :=
-  { balance := 400, extCode := 700, extCodeHash := 400, sload := 200,
+  { balance := 400, extcodesizeAndExtcodecopy := 700, extcodehash := 400, sload := 200,
     call := 700 }
 
 /-- EIP-1884's flat access prices (Istanbul, Muir Glacier). -/
 def istanbulAccessGas : FlatAccessGas :=
-  { balance := 700, extCode := 700, extCodeHash := 700, sload := 800,
+  { balance := 700, extcodesizeAndExtcodecopy := 700, extcodehash := 700, sload := 800,
     call := 700 }
 
 /-- The pre-EIP-3529 shared-formula gas numbers: Prague's schedule with the
@@ -931,14 +931,14 @@ def istanbulAccessGas : FlatAccessGas :=
 activation and carries that value (Berlin's access-list prices, Prague's
 floor token and authorisation cost), so `GasSchedule.Valid` is unchanged. -/
 def byzantiumGasSchedule : GasSchedule :=
-  { pragueGasSchedule with storageClearRefund := 15000 }
+  { pragueGasSchedule with sstoreClearsSchedule := 15000 }
 
 /-- EIP-198's `MODEXP` (Byzantium .. Muir Glacier): `GQUADDIVISOR = 20`, no
 floor, exponent weight 8. `maxLength`/`flatComplexity` are unread before
 Osaka; `complexityCoeff` is unread under `.eip198` (U8 owns that shape). -/
 def eip198ModexpRules : ModexpRules :=
-  { maxLength := none, flatComplexity := none, complexityCoeff := 1
-    iterationCoeff := 8, gasDivisor := 20, minGas := 0 }
+  { maxLength := none, flatComplexity := none, complexityCoefficient := 1
+    iterationCoefficient := 8, gasDivisor := 20, minGas := 0 }
 
 /-- Cancun's blob schedule (EIP-4844): the target, ceiling and update fraction
 are live from Cancun; the reserve price is still absent (EIP-7918, Osaka). -/
@@ -1028,15 +1028,15 @@ def cancunTransactionRules : TransactionRules :=
 
 /-- Before London: no init-code limit, no 0xEF rejection. -/
 def byzantiumCreation : CreationRules :=
-  { initCodeLimit := false, rejectEf := false }
+  { initCodeLimit := false, rejectReservedFirstByte := false }
 
 /-- London (through Shanghai's eve): EIP-3541 rejects 0xEF-leading deposits. -/
 def londonCreation : CreationRules :=
-  { initCodeLimit := false, rejectEf := true }
+  { initCodeLimit := false, rejectReservedFirstByte := true }
 
 /-- Shanghai onwards: EIP-3860 bounds and meters initcode. -/
 def shanghaiCreation : CreationRules :=
-  { initCodeLimit := true, rejectEf := true }
+  { initCodeLimit := true, rejectReservedFirstByte := true }
 
 /-- No pre-transaction system calls before Cancun. -/
 def byzantiumSystemCalls : SystemCallRules :=
@@ -1047,11 +1047,11 @@ def cancunSystemCalls : SystemCallRules :=
   { beaconRoots := true, historyStorage := false }
 
 /-- alt_bn128 prices before EIP-1108 (Istanbul). -/
-def byzantiumBn254Gas : Bn254Gas :=
+def byzantiumAltBn128Gas : AltBn128Gas :=
   { add := 500, mul := 40000, pairingBase := 100000, pairingPerPair := 80000 }
 
 /-- alt_bn128 prices from EIP-1108 (Istanbul) on. -/
-def istanbulBn254Gas : Bn254Gas :=
+def istanbulAltBn128Gas : AltBn128Gas :=
   { add := 150, mul := 6000, pairingBase := 45000, pairingPerPair := 34000 }
 
 /-- The Prague projection of the extension: every new switch at its Prague
@@ -1063,7 +1063,7 @@ def pragueTransactionRules : TransactionRules :=
   { maxType := 4, dataNonZero := 16, calldataFloor := true, warmCoinbase := true }
 def pragueCreation : CreationRules := shanghaiCreation
 def pragueSystemCalls : SystemCallRules := { beaconRoots := true, historyStorage := true }
-def pragueBn254 : Bn254Gas := istanbulBn254Gas
+def pragueAltBn128Gas : AltBn128Gas := istanbulAltBn128Gas
 
 /-- The Prague rule set. -/
 def pragueRules : ForkRules := {
@@ -1089,7 +1089,7 @@ def pragueRules : ForkRules := {
   creation := pragueCreation
   proofOfWork := none
   systemCalls := pragueSystemCalls
-  bn254 := pragueBn254
+  altBn128 := pragueAltBn128Gas
   modexpComplexity := .eip2565
 }
 
@@ -1124,7 +1124,7 @@ def byzantiumRules : ForkRules := {
   creation := byzantiumCreation
   proofOfWork := some { blockReward := 3 * 10 ^ 18, bombDelay := 3000000 }
   systemCalls := byzantiumSystemCalls
-  bn254 := byzantiumBn254Gas
+  altBn128 := byzantiumAltBn128Gas
   modexpComplexity := .eip198
 }
 
@@ -1175,7 +1175,7 @@ def istanbulRules : ForkRules := {
   creation := byzantiumCreation
   proofOfWork := some { blockReward := 2 * 10 ^ 18, bombDelay := 5000000 }
   systemCalls := byzantiumSystemCalls
-  bn254 := istanbulBn254Gas
+  altBn128 := istanbulAltBn128Gas
   modexpComplexity := .eip198
 }
 
@@ -1290,8 +1290,8 @@ lifts the floor from 200 to 500. -/
 def osakaModexpRules : ModexpRules := {
   maxLength := some 1024
   flatComplexity := some 16
-  complexityCoeff := 2
-  iterationCoeff := 16
+  complexityCoefficient := 2
+  iterationCoefficient := 16
   gasDivisor := 1
   minGas := 500
 }
@@ -1299,7 +1299,7 @@ def osakaModexpRules : ModexpRules := {
 /-- Osaka's opcode set: EIP-7939 assigns `CLZ` to 0x1E; 0x4B and 0xE6–0xE8 are
 still unassigned bytes; every pre-Osaka fork-gated opcode stays defined. -/
 def osakaOpcodeRules : OpcodeRules :=
-  { shifts := true, extCodeHash := true, create2 := true
+  { shifts := true, extcodehash := true, create2 := true
     chainId := true, selfBalance := true, baseFee := true, push0 := true
     transient := true, mcopy := true, blobHash := true, blobBaseFee := true
     clz := true, slotnum := false, stackAccess := false }
@@ -1344,7 +1344,7 @@ def osakaRules : ForkRules := {
   creation := pragueCreation
   proofOfWork := none
   systemCalls := pragueSystemCalls
-  bn254 := pragueBn254
+  altBn128 := pragueAltBn128Gas
   modexpComplexity := .eip2565
 }
 
@@ -1408,7 +1408,7 @@ def amsterdamGasSchedule : GasSchedule := {
   coldAccountAccess := 3000
   callValue := 11300
   createAccess := 12000
-  storageClearRefund := 11616
+  sstoreClearsSchedule := 11616
   txBase := 12000
   txAccessListAddress := 2900
   txAccessListStorageKey := 2000
@@ -1450,7 +1450,7 @@ def amsterdamCodeLimits : CodeLimits := {
 EIP-8024's `DUPN`/`SWAPN`/`EXCHANGE`; every pre-Osaka fork-gated opcode stays
 defined. -/
 def amsterdamOpcodeRules : OpcodeRules :=
-  { shifts := true, extCodeHash := true, create2 := true
+  { shifts := true, extcodehash := true, create2 := true
     chainId := true, selfBalance := true, baseFee := true, push0 := true
     transient := true, mcopy := true, blobHash := true, blobBaseFee := true
     clz := true, slotnum := true, stackAccess := true }
@@ -2029,7 +2029,7 @@ Split out so both `bal`-clean leaves of `defect?` share them. -/
 def ForkRules.postBlockAccessListDefect? (r : ForkRules) : Option RuleDefect :=
   match r.access with
   | .flat g =>
-    if g.balance = 0 ∨ g.extCode = 0 ∨ g.extCodeHash = 0 ∨ g.sload = 0
+    if g.balance = 0 ∨ g.extcodesizeAndExtcodecopy = 0 ∨ g.extcodehash = 0 ∨ g.sload = 0
         ∨ g.call = 0 then
       some (.zeroFlatAccessPrice g)
     else if r.settlement.refundQuotient = 0 then
@@ -2672,7 +2672,7 @@ private theorem forkAt_pairwise {cfg : ChainConfig} {n t : Nat} {f : Fork}
     | nil => simp only [ha, reduceCtorEq] at hv
     | cons a rest => simpa only [ha] using hv
 
-private theorem index_le_last {activations : List ForkActivation} {a b : ForkActivation}
+private theorem fork_index_at_most_last {activations : List ForkActivation} {a b : ForkActivation}
     (hp : activations.Pairwise (fun a b => a.fork.index < b.fork.index))
     (ha : a ∈ activations) (hb : activations.getLast? = some b) :
     a.fork.index ≤ b.fork.index := by
@@ -2697,7 +2697,7 @@ theorem forkAt_index_mono {cfg : ChainConfig} {n n' t t' : Nat} {f f' : Fork}
   have hanew : a ∈ cfg.activations.filter (·.criterion.reached n' t') :=
     List.mem_filter.mpr ⟨ham.1, reached_mono a.criterion hn ht ham.2⟩
   have hp := (forkAt_pairwise h').filter (·.criterion.reached n' t')
-  simpa only [hfa, hfb] using index_le_last hp hanew hb
+  simpa only [hfa, hfb] using fork_index_at_most_last hp hanew hb
 
 private theorem fork_index_injective : Function.Injective Fork.index := by
   intro a b
@@ -2721,7 +2721,7 @@ theorem forkAt_change {cfg : ChainConfig} {n n' t t' : Nat} {f f' : Fork}
       List.mem_filter.mpr ⟨hbm.1, hold⟩
     have hp := (forkAt_pairwise h).filter (·.criterion.reached n t)
     have hle : f'.index ≤ f.index := by
-      simpa only [hfa, hfb] using index_le_last hp hbmem ha
+      simpa only [hfa, hfb] using fork_index_at_most_last hp hbmem ha
     have hmono := forkAt_index_mono hn ht h h'
     exact False.elim (hne (fork_index_injective (Nat.le_antisymm hmono hle)))
 

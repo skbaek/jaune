@@ -66,11 +66,11 @@ instance : ToString Error where
   | none => .error (.truncated i)
 
 /-- Little-endian unsigned integer of `n` bytes at `pos` (`n ≤ 4` at every call site). -/
-def readLE (src : ByteArray) (pos : Nat) : Nat → Except Error Nat
+def readLittleEndian (src : ByteArray) (pos : Nat) : Nat → Except Error Nat
   | 0 => .ok 0
   | n + 1 => do
     let lo ← byteAt src pos
-    let hi ← readLE src (pos + 1) n
+    let hi ← readLittleEndian src (pos + 1) n
     return lo.toNat + 256 * hi
 
 /-- The varint preamble: `(value, bytes consumed)`. At most five bytes, value below `2^32`. -/
@@ -112,7 +112,7 @@ def loop (src : ByteArray) (declared : Nat) : Nat → Nat → ByteArray → Exce
         if m < 60 then pure (m + 1, pos + 1)
         else do
           let extra := m - 59
-          let v ← readLE src (pos + 1) extra
+          let v ← readLittleEndian src (pos + 1) extra
           pure (v + 1, pos + 1 + extra)
       if start + len > src.size then throw (.truncated pos)
       if out.size + len > declared then throw (.overrun pos declared)
@@ -123,10 +123,10 @@ def loop (src : ByteArray) (declared : Nat) : Nat → Nat → ByteArray → Exce
           let b ← byteAt src (pos + 1)
           pure (4 + ((tag >>> 2) &&& 7).toNat, ((tag >>> 5).toNat <<< 8) ||| b.toNat, pos + 2)
         else if kind == 2 then do
-          let o ← readLE src (pos + 1) 2
+          let o ← readLittleEndian src (pos + 1) 2
           pure ((tag >>> 2).toNat + 1, o, pos + 3)
         else do
-          let o ← readLE src (pos + 1) 4
+          let o ← readLittleEndian src (pos + 1) 4
           pure ((tag >>> 2).toNat + 1, o, pos + 5)
       if offset == 0 || offset > out.size then throw (.offset pos offset out.size)
       if out.size + len > declared then throw (.overrun pos declared)

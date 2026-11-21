@@ -1,7 +1,7 @@
 import Jaune.Instructions.Word
-import Jaune.MessageCall.CheckedPlain
+import Jaune.MessageCall.Plain
 
-namespace Jaune.Checked
+namespace Jaune
 
 open Jaune
 
@@ -563,4 +563,4 @@ theorem PlainOp.word_run_trail {op : Jaune.PlainOp}
     unfold Frame.State.liftMachine
     cases row.step r.context.block.rules.opcodes ⟨r.pc, r.context⟩ r.state.machine <;> rfl
 
-end Jaune.Checked
+end Jaune

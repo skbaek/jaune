@@ -288,16 +288,16 @@ private def meteringGuardLegacySchedule : GasSchedule :=
 -- semantically `false`.
 
 inductive ExpectedWorldState : Type
-  | wor : State → ExpectedWorldState
+  | worldState : State → ExpectedWorldState
   | root : U256 → ExpectedWorldState
 
 structure Test where
   (name : String)
   (info : Lean.Json)
   (blocks : Lean.Json)
-  (gbh : Lean.Json)
-  (grlp : Lean.Json)
-  (lbh : Lean.Json)
+  (genesisBlockHeader : Lean.Json)
+  (genesisRlp : Lean.Json)
+  (lastBlockHash : Lean.Json)
   (network : Lean.Json)
   (pre : Lean.Json)
   (post : ExpectedWorldState)

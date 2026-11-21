@@ -32,9 +32,9 @@ theorem PaymentStep.trans {p q r : JauneConsensus.Gloas.BuilderPendingPayment} (
   · subst e; exact h₂.2.2
   · exact Or.inr e
 
-theorem sszVector_get_ok {α : Type} {n : Nat} {xs : SszVector α n} {i : Nat} {site : String} {x : α}
+theorem sszVector_get_ok {α : Type} {n : Nat} {xs : Ssz.Vector α n} {i : Nat} {site : String} {x : α}
     (h : xs.get i site = .ok x) : xs.toArray[i]? = some x := by
-  unfold SszVector.get getAt at h
+  unfold Ssz.Vector.get getAt at h
   split at h
   · cases h; assumption
   · cases h
@@ -112,7 +112,7 @@ theorem processAttestation_payments (ctx : Context) (s : GloasState P)
             · cases hr; exact PaymentStep.refl _
           · cases hr; exact PaymentStep.refl _
         · cases hr; exact PaymentStep.refl _) _ _ _ hl
-    have hp0 := sszVector_get_ok ‹SszVector.get s.builder_pending_payments _ _ = Except.ok _›
+    have hp0 := sszVector_get_ok ‹Ssz.Vector.get s.builder_pending_payments _ _ = Except.ok _›
     have hf := increaseBalance_invariantFrame _ _ _ _ hinc
     obtain ⟨h1, h2⟩ := sszVector_set_ok hset
     have hpay1 : st1.builder_pending_payments = s.builder_pending_payments := by rw [hf.2.1]; split <;> rfl

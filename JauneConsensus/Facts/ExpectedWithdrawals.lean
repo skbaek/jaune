@@ -178,10 +178,10 @@ theorem getAt_ok_iff {α : Type} {xs : Array α} {i : Nat} {site : String} {x : 
       rfl
 
 /-- `SszList.get` succeeds iff the underlying array read succeeds. -/
-theorem ssz_get_ok_iff {α : Type} {n : Nat} {xs : SszList α n} {i : Nat}
+theorem ssz_get_ok_iff {α : Type} {n : Nat} {xs : Ssz.List α n} {i : Nat}
     {site : String} {x : α} :
     xs.get i site = .ok x ↔ xs.toArray[i]? = some x := by
-  unfold SszList.get
+  unfold Ssz.List.get
   exact getAt_ok_iff
 
 /-- Indexing before the appended suffix. -/
@@ -1169,11 +1169,11 @@ theorem slots_per_epoch_ge_two_mainnet : 2 ≤ Preset.mainnet.SLOTS_PER_EPOCH :=
 theorem slots_per_epoch_ge_two_minimal : 2 ≤ Preset.minimal.SLOTS_PER_EPOCH := by
   decide
 
-theorem minActivationBalance_le_maxEffectiveBalance_mainnet :
+theorem minActivationBalance_at_most_maxEffectiveBalance_mainnet :
     Preset.mainnet.MIN_ACTIVATION_BALANCE ≤ Preset.mainnet.MAX_EFFECTIVE_BALANCE_ELECTRA := by
   decide
 
-theorem minActivationBalance_le_maxEffectiveBalance_minimal :
+theorem minActivationBalance_at_most_maxEffectiveBalance_minimal :
     Preset.minimal.MIN_ACTIVATION_BALANCE ≤ Preset.minimal.MAX_EFFECTIVE_BALANCE_ELECTRA := by
   decide
 

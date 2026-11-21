@@ -1,10 +1,10 @@
-import Jaune.CheckedSymbolicPush
-import Jaune.FrameRun.CheckedAdequacy
+import Jaune.SymbolicPush
+import Jaune.FrameRun.Adequacy
 
 /- A disposable external consumer: build a complete out-of-gas run and connect
 it to the interpreter. No Blanc package or example imports are used. -/
 namespace Consumer
-open Jaune Jaune.Checked
+open Jaune Jaune
 
 def outOfGasRun {r : Frame.Running}
     (bytes : Bytes) (width : bytes.length ≤ 32)

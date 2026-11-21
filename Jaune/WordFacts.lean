@@ -104,7 +104,7 @@ theorem Nat.toU256_add_toU256 (a b : Nat) :
 theorem Nat.toU256_mul_toU256 (a b : Nat) :
     Nat.toU256 a * Nat.toU256 b = Nat.toU256 (a * b) := by
   apply U256.toNat_inj
-  simp only [U256.toNat_mul, U256.toNat_toU256, Nat.lo_eq]
+  simp only [U256.toNat_mul, U256.toNat_toU256, Nat.lowBits_eq]
   exact (Nat.mul_mod a b (2 ^ 256)).symm
 
 /-- Word subtraction of in-range naturals without underflow is natural
@@ -121,6 +121,6 @@ theorem Nat.toU256_sub_toU256 {a b : Nat} (hb : b ≤ a) (ha : a < 2 ^ 256) :
 /-- Adding a small literal to a word without overflow adds its value. -/
 theorem U256.toNat_add_toU256_of_lt {x : U256} {n : Nat} (h : x.toNat + n < 2 ^ 256) :
     (x + Nat.toU256 n).toNat = x.toNat + n := by
-  rw [U256.toNat_add, U256.toNat_toU256_of_lt (by omega), Nat.lo_eq_of_lt h]
+  rw [U256.toNat_add, U256.toNat_toU256_of_lt (by omega), Nat.lowBits_eq_of_lt h]
 
 end Jaune

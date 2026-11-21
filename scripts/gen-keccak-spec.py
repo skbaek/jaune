@@ -56,7 +56,7 @@ def col(i):
 
 def delta(i):
     """The reference's `t` for column i: bc[(i+4)%5] ^^^ rol bc[(i+1)%5] 1."""
-    return f"(({col((i + 4) % 5)}) ^^^ UInt64.rol ({col((i + 1) % 5)}) 1)"
+    return f"(({col((i + 4) % 5)}) ^^^ UInt64.leftRotation ({col((i + 1) % 5)}) 1)"
 
 
 def theta_lanes():
@@ -73,7 +73,7 @@ def rhopi_lanes():
     for i in range(24):
         j = PILN[i]
         nxt = XS[j]
-        out[j] = f"UInt64.rol ({t}) {ROTC[i]}"
+        out[j] = f"UInt64.leftRotation ({t}) {ROTC[i]}"
         t = nxt
     return out
 
@@ -92,12 +92,12 @@ def chi_lanes():
 
 def block() -> str:
     """The generated block, marker to marker, newline-terminated."""
-    fields = ", ".join(f"s.a{i}" for i in range(25))
+    fields = ", ".join(f"s.lane{i}" for i in range(25))
     etavec = ", ".join(f"v[{i}]" for i in range(25))
     ws = ", ".join(f"ws[{i}]" for i in range(25))
     chain = f"(⟨{ws}⟩ : State1600)"
     for i in range(24):
-        chain = f"(round1600 rndc[{i}] {chain})"
+        chain = f"(round1600 roundConstants[{i}] {chain})"
     eta_cases = "\n".join(f"  | {i}, _ => rfl" for i in range(25))
 
     return f"""{BEGIN}
@@ -112,45 +112,45 @@ def block() -> str:
 definitions operate on. Used by the equivalence theorems and once per
 permutation, never inside a round — the same role `Blake2.Vec.toArray` plays in
 `Jaune/Precompiles.lean`. -/
-def State1600.toVec (s : State1600) : Vector UInt64 25 :=
+def State1600.toVector (s : State1600) : Vector UInt64 25 :=
   #v[{fields}]
 
 /-- θ in closed form: lane `j` gains the column delta for column `j % 5`. -/
-theorem theta_lit ({BINDERS} : UInt64) :
-    θ UInt64.rol {vec(XS, 8)} =
+theorem theta_literal ({BINDERS} : UInt64) :
+    theta UInt64.leftRotation {vec(XS, 8)} =
     {vec(theta_lanes())} := by
-  simp [θ, θ.outer, θ.inner, xorLane]
+  simp [theta, theta.outer, theta.inner, xorLane]
 
 /-- ρπ in closed form. The reference walks a single carry `t` through the 24
 `piln` lanes; because the table's entries are distinct, the value written into
 lane `piln[i]` is a rotation of the ORIGINAL lane `piln[i-1]`. -/
-theorem rhopi_lit ({BINDERS} : UInt64) :
-    ρπ UInt64.rol {vec(XS, 8)} =
+theorem rhoPi_literal ({BINDERS} : UInt64) :
+    rhoPi UInt64.leftRotation {vec(XS, 8)} =
     {vec(rhopi_lanes())} := by
-  simp [ρπ, ρπ.aux, piln, rotc]
+  simp [rhoPi, rhoPi.go, piLaneOrder, rotationOffsets]
 
 /-- χ in closed form, row by row. Each row's five lanes are combined from the
 row's pre-update values, which the reference snapshots into `bc`. -/
-theorem chi_lit ({BINDERS} : UInt64) :
-    χ {vec(XS, 6)} =
+theorem chi_literal ({BINDERS} : UInt64) :
+    chi {vec(XS, 6)} =
     {vec(chi_lanes())} := by
-  simp [χ, χ.outer, χ.inner, xorLane]
+  simp [chi, chi.outer, chi.inner, xorLane]
 
 /-- The fused unrolled round equals ι ∘ χ ∘ ρπ ∘ θ over the reference
 transcription. This is the whole content of the equivalence: `round1600`'s
 hand-derived `b` bindings ARE the ρπ carry chain, and its `c`/`d` bindings are
 θ's column parities and deltas. -/
 theorem round_eq (r : Nat) (h : r < 24) (s : State1600) :
-    (round1600 (rndc[r]'h) s).toVec =
-      ι r h rndc (χ (ρπ UInt64.rol (θ UInt64.rol s.toVec))) := by
+    (round1600 (roundConstants[r]'h) s).toVector =
+      iota r h roundConstants (chi (rhoPi UInt64.leftRotation (theta UInt64.leftRotation s.toVector))) := by
   cases s
-  simp [State1600.toVec, round1600, rolc, theta_lit, rhopi_lit, chi_lit,
-    ι, xorLane, UInt64.rol]
+  simp [State1600.toVector, round1600, leftRotationUInt64, theta_literal, rhoPi_literal, chi_literal,
+    iota, xorLane, UInt64.leftRotation]
 
 /-- Any 25-lane vector is the vector of its own twenty-five lanes. This is what
 lets the closed forms above, stated over explicit lanes, apply to the opaque
 argument of `f1600`. -/
-theorem vec_eta (v : Vector UInt64 25) : v = #v[{etavec}] := by
+theorem vector_eta (v : Vector UInt64 25) : v = #v[{etavec}] := by
   apply Vector.ext
   intro i hi
   match i, hi with
@@ -159,19 +159,19 @@ theorem vec_eta (v : Vector UInt64 25) : v = #v[{etavec}] := by
 
 /-- `f1600` is exactly the twenty-four nested rounds, bridged out once at the
 end; the `let` chain in its body is definitionally this nesting. -/
-theorem f1600_toVec (ws : Vector UInt64 25) :
-    f1600 ws = {chain}.toVec := rfl
+theorem permutation_toVector (ws : Vector UInt64 25) :
+    permutation ws = {chain}.toVector := rfl
 
 /-- **The retained reference transcription and the production kernel compute
 the same permutation.** `f1600`'s doc comment asserted this; this is the
 proof. It says the optimization preserved the transcribed algorithm — it does
 not by itself say the transcription is FIPS 202; `Keccak.FIPS.f1600_eq_keccakP`
 in `Jaune/KeccakSpec.lean` builds on it to tie `f1600` to Keccak-p[1600, 24]. -/
-theorem f1600_eq (ws : Vector UInt64 25) :
-    f1600 ws = f rndc ws UInt64.rol := by
-  rw [f1600_toVec]
-  simp only [round_eq, f, f.aux, Nat.reduceSub]
-  rw [show State1600.toVec ⟨{ws}⟩ = ws from (vec_eta ws).symm]
+theorem permutation_eq_referencePermutation (ws : Vector UInt64 25) :
+    permutation ws = referencePermutation roundConstants ws UInt64.leftRotation := by
+  rw [permutation_toVector]
+  simp only [round_eq, referencePermutation, referencePermutation.go, Nat.reduceSub]
+  rw [show State1600.toVector ⟨{ws}⟩ = ws from (vector_eta ws).symm]
 {END}
 """
 
@@ -189,13 +189,13 @@ def read_table(text: str, name: str) -> list[int]:
 
 
 def check_tables(text: str) -> None:
-    for name, ours in (("rotc", ROTC), ("piln", PILN)):
+    for name, ours in (("rotationOffsets", ROTC), ("piLaneOrder", PILN)):
         theirs = read_table(text, name)
         if theirs != ours:
             raise SystemExit(
                 f"RED — `{name}` in Hash.lean does not match the generator's "
                 f"table.\n  Hash.lean: {theirs}\n  generator: {ours}")
-    print("OK — rotc/piln in the generator match Jaune/Hash.lean's tables")
+    print("OK — rotationOffsets/piLaneOrder in the generator match Jaune/Hash.lean's tables")
 
 
 # ---- block location ------------------------------------------------------
@@ -214,12 +214,12 @@ def split_target(text: str, target: Path) -> tuple[str, str | None, str]:
         end += len(END) + 1
         return text[:begin], text[begin:end], text[end:]
 
-    anchor = re.search(r"^def f1600 \(", text, re.MULTILINE)
+    anchor = re.search(r"^def permutation \(", text, re.MULTILINE)
     if not anchor:
-        raise SystemExit(f"RED — cannot find `def f1600 (` in {target}")
+        raise SystemExit(f"RED — cannot find `def permutation (` in {target}")
     following = re.search(r"^def ", text[anchor.end():], re.MULTILINE)
     if not following:
-        raise SystemExit(f"RED — no declaration follows `f1600` in {target}")
+        raise SystemExit(f"RED — no declaration follows `permutation` in {target}")
     at = anchor.end() + following.start()
     return text[:at], None, text[at:]
 

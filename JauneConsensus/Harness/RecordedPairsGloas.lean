@@ -74,7 +74,7 @@ private def hexDigit? (c : Char) : Option Nat :=
 
 /-- A JSON-RPC quantity (`0x`-hex) as a number. -/
 def hexNat? (s : String) : Option Nat :=
-  let t := remove0x s
+  let t := removeHexPrefix s
   if t.isEmpty then none
   else t.foldl (fun acc c => acc.bind fun n => (hexDigit? c).map (n * 16 + ·)) (some 0)
 

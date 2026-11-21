@@ -35,9 +35,9 @@ def EXECUTION_PAYLOAD_GINDEX : Nat := 25
 def floorlog2 (x : Nat) : Nat := Nat.log2 x
 
 /-- The zero byte vector. -/
-def zeroBytesVector (n : Nat) : SszVector UInt8 n := ⟨Array.replicate n 0, by simp⟩
+def zeroBytesVector (n : Nat) : Ssz.Vector UInt8 n := ⟨Array.replicate n 0, by simp⟩
 /-- The zero root vector. -/
-def zeroRootVector (n : Nat) : SszVector Root n := ⟨Array.replicate n (Jaune.Bytes.toU256 []), by simp⟩
+def zeroRootVector (n : Nat) : Ssz.Vector Root n := ⟨Array.replicate n (Jaune.Bytes.toU256 []), by simp⟩
 -- The zero root `Bytes32()` is `zeroRoot` (`Helpers.lean`).
 
 /-- `ExecutionPayloadHeader()`. -/
@@ -45,7 +45,7 @@ def defaultExecutionPayloadHeader : ExecutionPayloadHeader P :=
   { parent_hash := zeroRoot, fee_recipient := (0 : Jaune.Address), state_root := zeroRoot,
     receipts_root := zeroRoot, logs_bloom := zeroBytesVector _, prev_randao := zeroRoot,
     block_number := U64.zero, gas_limit := U64.zero, gas_used := U64.zero, timestamp := U64.zero,
-    extra_data := SszList.empty, base_fee_per_gas := UIntN.zero, block_hash := zeroRoot,
+    extra_data := Ssz.List.empty, base_fee_per_gas := UnsignedInteger.zero, block_hash := zeroRoot,
     transactions_root := zeroRoot, withdrawals_root := zeroRoot, blob_gas_used := U64.zero,
     excess_blob_gas := U64.zero }
 
@@ -67,13 +67,13 @@ ssz_container CapellaExecutionPayloadHeader (P : Preset) where
   fee_recipient : ExecutionAddress
   state_root : Bytes32
   receipts_root : Bytes32
-  logs_bloom : (SszVector UInt8 P.BYTES_PER_LOGS_BLOOM)
+  logs_bloom : (Ssz.Vector UInt8 P.BYTES_PER_LOGS_BLOOM)
   prev_randao : Bytes32
   block_number : U64
   gas_limit : U64
   gas_used : U64
   timestamp : U64
-  extra_data : (SszList UInt8 P.MAX_EXTRA_DATA_BYTES)
+  extra_data : (Ssz.List UInt8 P.MAX_EXTRA_DATA_BYTES)
   base_fee_per_gas : U256
   block_hash : Hash32
   transactions_root : Root

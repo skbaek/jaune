@@ -179,7 +179,7 @@ theorem increaseBalance_spec {s s' : BeaconState P f} {i : ValidatorIndex} {d : 
   unfold increaseBalance at h
   obtain ⟨bals, hmod, h⟩ := bind_ok_elim h
   cases h
-  unfold SszList.modify at hmod
+  unfold Ssz.List.modify at hmod
   obtain ⟨b, hget, hmod⟩ := bind_ok_elim hmod
   obtain ⟨b', hadd, hset⟩ := bind_ok_elim hmod
   obtain ⟨hi, hbals⟩ := set_ok hset
@@ -203,7 +203,7 @@ theorem decreaseBalance_spec {s s' : BeaconState P f} {i : ValidatorIndex} {d : 
   unfold decreaseBalance at h
   obtain ⟨bals, hmod, h⟩ := bind_ok_elim h
   cases h
-  unfold SszList.modify at hmod
+  unfold Ssz.List.modify at hmod
   obtain ⟨b, hget, hmod⟩ := bind_ok_elim hmod
   obtain ⟨b', hsub, hset⟩ := bind_ok_elim hmod
   obtain ⟨hi, hbals⟩ := set_ok hset
@@ -240,12 +240,12 @@ theorem applyPendingDeposit_topUp_credit {state s' : BeaconState P f} {deposit :
   rw [hs']
 
 /-- `set_or_append_list` at the list's length appends. -/
-theorem setOrAppendList_at_length {α : Type} {n : Nat} {xs ys : SszList α n} {index : ValidatorIndex}
+theorem setOrAppendList_at_length {α : Type} {n : Nat} {xs ys : Ssz.List α n} {index : ValidatorIndex}
     {v : α} {site : String} (hi : index.toNat = xs.toArray.size)
     (h : setOrAppendList xs index v site = .ok ys) : ys.toArray = xs.toArray.push v := by
   unfold setOrAppendList at h
   have hb : (index.toNat == xs.length) = true := by
-    simp only [SszList.length, hi, beq_self_eq_true]
+    simp only [Ssz.List.length, hi, beq_self_eq_true]
   rw [ite_eq_left hb] at h
   exact push_ok h
 
@@ -385,7 +385,7 @@ theorem processPendingDeposits_eq (ctx : Context) (state : BeaconState P f) :
       let r ← pendingDepositsLoop ctx nextEpoch availableForProcessing finalizedSlot requestsStart
         pending.toArray.toList (U64.zero, 0, #[], false, state)
       let rest := pending.toArray.extract r.2.1 pending.length ++ r.2.2.1
-      let st ← r.2.2.2.2.setPendingDeposits (← SszList.ofArray rest site)
+      let st ← r.2.2.2.2.setPendingDeposits (← Ssz.List.ofArray rest site)
       if r.2.2.2.1 = true then st.setDepositBalanceToConsume (← availableForProcessing.sub? r.1 site)
       else st.setDepositBalanceToConsume U64.zero) := by
   unfold processPendingDeposits
@@ -713,7 +713,7 @@ theorem processPendingDeposits_fate (hE : f.atLeast .electra = true) {ctx : Cont
   have hgq : g = ForkField.mk hE q := by
     rw [forkField_write_eq hE] at hg; exact (Except.ok.inj hg).symm
   rw [hgq, ForkField.get_mk]
-  unfold SszList.ofArray at hq
+  unfold Ssz.List.ofArray at hq
   split at hq
   · cases hq
     show (ForkField.get hE state.pending_deposits).toArray.extract out.2.1

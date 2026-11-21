@@ -41,11 +41,11 @@ abbrev Root := Jaune.U256
 abbrev Bytes32 := Jaune.U256
 abbrev Hash32 := Jaune.U256
 abbrev Domain := Jaune.U256
-abbrev Version := SszVector UInt8 4
-abbrev BLSPubkey := SszVector UInt8 48
-abbrev BLSSignature := SszVector UInt8 96
-abbrev KZGCommitment := SszVector UInt8 48
-abbrev KZGProof := SszVector UInt8 48
+abbrev Version := Ssz.Vector UInt8 4
+abbrev BLSPubkey := Ssz.Vector UInt8 48
+abbrev BLSSignature := Ssz.Vector UInt8 96
+abbrev KZGCommitment := Ssz.Vector UInt8 48
+abbrev KZGProof := Ssz.Vector UInt8 48
 /-- `ExecutionAddress` is Jaune's execution-layer address type (outcome O7). -/
 abbrev ExecutionAddress := Jaune.Address
 abbrev ParticipationFlags := U8
@@ -130,7 +130,7 @@ ssz_container AttestationData where
 /-- `specs/phase0/beacon-chain.md` (`IndexedAttestation`); the limit of `attesting_indices`
 grows at Electra (`specs/electra/beacon-chain.md`). -/
 ssz_container IndexedAttestation (P : Preset) (f : ConsensusFork) where
-  attesting_indices : (SszList ValidatorIndex (attestationBitsLimit P f))
+  attesting_indices : (Ssz.List ValidatorIndex (attestationBitsLimit P f))
   data : AttestationData
   signature : BLSSignature
 
@@ -149,8 +149,8 @@ ssz_container Eth1Data where
 
 /-- `specs/phase0/beacon-chain.md` -/
 ssz_container HistoricalBatch (P : Preset) where
-  block_roots : (SszVector Root P.SLOTS_PER_HISTORICAL_ROOT)
-  state_roots : (SszVector Root P.SLOTS_PER_HISTORICAL_ROOT)
+  block_roots : (Ssz.Vector Root P.SLOTS_PER_HISTORICAL_ROOT)
+  state_roots : (Ssz.Vector Root P.SLOTS_PER_HISTORICAL_ROOT)
 
 /-- `specs/phase0/beacon-chain.md` -/
 ssz_container DepositMessage where
@@ -205,7 +205,7 @@ ssz_container Attestation (P : Preset) (f : ConsensusFork) where
 
 /-- `specs/phase0/beacon-chain.md` -/
 ssz_container Deposit where
-  proof : (SszVector Bytes32 (DEPOSIT_CONTRACT_TREE_DEPTH + 1))
+  proof : (Ssz.Vector Bytes32 (DEPOSIT_CONTRACT_TREE_DEPTH + 1))
   data : DepositData
 
 /-- `specs/phase0/beacon-chain.md` -/
@@ -244,7 +244,7 @@ ssz_container SyncAggregate (P : Preset) where
 
 /-- `specs/altair/beacon-chain.md` -/
 ssz_container SyncCommittee (P : Preset) where
-  pubkeys : (SszVector BLSPubkey P.SYNC_COMMITTEE_SIZE)
+  pubkeys : (Ssz.Vector BLSPubkey P.SYNC_COMMITTEE_SIZE)
   aggregate_pubkey : BLSPubkey
 
 /-- `specs/altair/validator.md` -/
@@ -310,7 +310,7 @@ ssz_container HistoricalSummary where
   state_summary_root : Root
 
 /-- `Transaction` (`specs/bellatrix/beacon-chain.md`): `ByteList[MAX_BYTES_PER_TRANSACTION]`. -/
-abbrev Transaction (P : Preset) := SszList UInt8 P.MAX_BYTES_PER_TRANSACTION
+abbrev Transaction (P : Preset) := Ssz.List UInt8 P.MAX_BYTES_PER_TRANSACTION
 
 /-- `specs/deneb/beacon-chain.md` (unchanged in Electra and Fulu). -/
 ssz_container ExecutionPayload (P : Preset) where
@@ -318,17 +318,17 @@ ssz_container ExecutionPayload (P : Preset) where
   fee_recipient : ExecutionAddress
   state_root : Bytes32
   receipts_root : Bytes32
-  logs_bloom : (SszVector UInt8 P.BYTES_PER_LOGS_BLOOM)
+  logs_bloom : (Ssz.Vector UInt8 P.BYTES_PER_LOGS_BLOOM)
   prev_randao : Bytes32
   block_number : U64
   gas_limit : U64
   gas_used : U64
   timestamp : U64
-  extra_data : (SszList UInt8 P.MAX_EXTRA_DATA_BYTES)
+  extra_data : (Ssz.List UInt8 P.MAX_EXTRA_DATA_BYTES)
   base_fee_per_gas : U256
   block_hash : Hash32
-  transactions : (SszList (Transaction P) P.MAX_TRANSACTIONS_PER_PAYLOAD)
-  withdrawals : (SszList Withdrawal P.MAX_WITHDRAWALS_PER_PAYLOAD)
+  transactions : (Ssz.List (Transaction P) P.MAX_TRANSACTIONS_PER_PAYLOAD)
+  withdrawals : (Ssz.List Withdrawal P.MAX_WITHDRAWALS_PER_PAYLOAD)
   blob_gas_used : U64
   excess_blob_gas : U64
 
@@ -338,13 +338,13 @@ ssz_container ExecutionPayloadHeader (P : Preset) where
   fee_recipient : ExecutionAddress
   state_root : Bytes32
   receipts_root : Bytes32
-  logs_bloom : (SszVector UInt8 P.BYTES_PER_LOGS_BLOOM)
+  logs_bloom : (Ssz.Vector UInt8 P.BYTES_PER_LOGS_BLOOM)
   prev_randao : Bytes32
   block_number : U64
   gas_limit : U64
   gas_used : U64
   timestamp : U64
-  extra_data : (SszList UInt8 P.MAX_EXTRA_DATA_BYTES)
+  extra_data : (Ssz.List UInt8 P.MAX_EXTRA_DATA_BYTES)
   base_fee_per_gas : U256
   block_hash : Hash32
   transactions_root : Root
@@ -353,7 +353,7 @@ ssz_container ExecutionPayloadHeader (P : Preset) where
   excess_blob_gas : U64
 
 /-- `Blob` (`specs/deneb/polynomial-commitments.md`). -/
-abbrev Blob (P : Preset) := SszVector UInt8 (BYTES_PER_FIELD_ELEMENT * P.FIELD_ELEMENTS_PER_BLOB)
+abbrev Blob (P : Preset) := Ssz.Vector UInt8 (BYTES_PER_FIELD_ELEMENT * P.FIELD_ELEMENTS_PER_BLOB)
 
 /-- `specs/deneb/p2p-interface.md` -/
 ssz_container BlobIdentifier where
@@ -367,7 +367,7 @@ ssz_container BlobSidecar (P : Preset) where
   kzg_commitment : KZGCommitment
   kzg_proof : KZGProof
   signed_block_header : SignedBeaconBlockHeader
-  kzg_commitment_inclusion_proof : (SszVector Bytes32 P.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH)
+  kzg_commitment_inclusion_proof : (Ssz.Vector Bytes32 P.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH)
 
 /-! ## Electra -/
 
@@ -412,9 +412,9 @@ ssz_container ConsolidationRequest where
 
 /-- `specs/electra/beacon-chain.md` -/
 ssz_container ExecutionRequests (P : Preset) where
-  deposits : (SszList DepositRequest P.MAX_DEPOSIT_REQUESTS_PER_PAYLOAD)
-  withdrawals : (SszList WithdrawalRequest P.MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD)
-  consolidations : (SszList ConsolidationRequest P.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD)
+  deposits : (Ssz.List DepositRequest P.MAX_DEPOSIT_REQUESTS_PER_PAYLOAD)
+  withdrawals : (Ssz.List WithdrawalRequest P.MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD)
+  consolidations : (Ssz.List ConsolidationRequest P.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD)
 
 /-- `specs/electra/beacon-chain.md` -/
 ssz_container SingleAttestation where
@@ -430,7 +430,7 @@ already listed. `versioned_hashes` is Deneb's `VersionedHashes`
 (`List[VersionedHash, MAX_BLOB_COMMITMENTS_PER_BLOCK]`). -/
 ssz_container SszNewPayloadRequest (P : Preset) where
   execution_payload : (ExecutionPayload P)
-  versioned_hashes : (SszList Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  versioned_hashes : (Ssz.List Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
   parent_beacon_block_root : Root
   execution_requests : (ExecutionRequests P)
 
@@ -443,15 +443,15 @@ ssz_container BeaconBlockBody (P : Preset) (f : ConsensusFork) where
   randao_reveal : BLSSignature
   eth1_data : Eth1Data
   graffiti : Bytes32
-  proposer_slashings : (SszList ProposerSlashing P.MAX_PROPOSER_SLASHINGS)
-  attester_slashings : (SszList (AttesterSlashing P f) (maxAttesterSlashings P f))
-  attestations : (SszList (Attestation P f) (maxAttestations P f))
-  deposits : (SszList Deposit P.MAX_DEPOSITS)
-  voluntary_exits : (SszList SignedVoluntaryExit P.MAX_VOLUNTARY_EXITS)
+  proposer_slashings : (Ssz.List ProposerSlashing P.MAX_PROPOSER_SLASHINGS)
+  attester_slashings : (Ssz.List (AttesterSlashing P f) (maxAttesterSlashings P f))
+  attestations : (Ssz.List (Attestation P f) (maxAttestations P f))
+  deposits : (Ssz.List Deposit P.MAX_DEPOSITS)
+  voluntary_exits : (Ssz.List SignedVoluntaryExit P.MAX_VOLUNTARY_EXITS)
   sync_aggregate : (SyncAggregate P)
   execution_payload : (ExecutionPayload P)
-  bls_to_execution_changes : (SszList SignedBLSToExecutionChange P.MAX_BLS_TO_EXECUTION_CHANGES)
-  blob_kzg_commitments : (SszList KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  bls_to_execution_changes : (Ssz.List SignedBLSToExecutionChange P.MAX_BLS_TO_EXECUTION_CHANGES)
+  blob_kzg_commitments : (Ssz.List KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
   execution_requests : (ForkField (f.atLeast .electra) (ExecutionRequests P))
 
 /-- `specs/phase0/beacon-chain.md` -/
@@ -478,42 +478,42 @@ ssz_container BeaconState (P : Preset) (f : ConsensusFork) where
   slot : Slot
   fork : Fork
   latest_block_header : BeaconBlockHeader
-  block_roots : (SszVector Root P.SLOTS_PER_HISTORICAL_ROOT)
-  state_roots : (SszVector Root P.SLOTS_PER_HISTORICAL_ROOT)
-  historical_roots : (SszList Root P.HISTORICAL_ROOTS_LIMIT)
+  block_roots : (Ssz.Vector Root P.SLOTS_PER_HISTORICAL_ROOT)
+  state_roots : (Ssz.Vector Root P.SLOTS_PER_HISTORICAL_ROOT)
+  historical_roots : (Ssz.List Root P.HISTORICAL_ROOTS_LIMIT)
   eth1_data : Eth1Data
-  eth1_data_votes : (SszList Eth1Data (P.EPOCHS_PER_ETH1_VOTING_PERIOD * P.SLOTS_PER_EPOCH))
+  eth1_data_votes : (Ssz.List Eth1Data (P.EPOCHS_PER_ETH1_VOTING_PERIOD * P.SLOTS_PER_EPOCH))
   eth1_deposit_index : U64
-  validators : (SszList Validator P.VALIDATOR_REGISTRY_LIMIT)
-  balances : (SszList Gwei P.VALIDATOR_REGISTRY_LIMIT)
-  randao_mixes : (SszVector Bytes32 P.EPOCHS_PER_HISTORICAL_VECTOR)
-  slashings : (SszVector Gwei P.EPOCHS_PER_SLASHINGS_VECTOR)
-  previous_epoch_participation : (SszList ParticipationFlags P.VALIDATOR_REGISTRY_LIMIT)
-  current_epoch_participation : (SszList ParticipationFlags P.VALIDATOR_REGISTRY_LIMIT)
+  validators : (Ssz.List Validator P.VALIDATOR_REGISTRY_LIMIT)
+  balances : (Ssz.List Gwei P.VALIDATOR_REGISTRY_LIMIT)
+  randao_mixes : (Ssz.Vector Bytes32 P.EPOCHS_PER_HISTORICAL_VECTOR)
+  slashings : (Ssz.Vector Gwei P.EPOCHS_PER_SLASHINGS_VECTOR)
+  previous_epoch_participation : (Ssz.List ParticipationFlags P.VALIDATOR_REGISTRY_LIMIT)
+  current_epoch_participation : (Ssz.List ParticipationFlags P.VALIDATOR_REGISTRY_LIMIT)
   justification_bits : (Bitvector JUSTIFICATION_BITS_LENGTH)
   previous_justified_checkpoint : Checkpoint
   current_justified_checkpoint : Checkpoint
   finalized_checkpoint : Checkpoint
-  inactivity_scores : (SszList U64 P.VALIDATOR_REGISTRY_LIMIT)
+  inactivity_scores : (Ssz.List U64 P.VALIDATOR_REGISTRY_LIMIT)
   current_sync_committee : (SyncCommittee P)
   next_sync_committee : (SyncCommittee P)
   latest_execution_payload_header : (ExecutionPayloadHeader P)
   next_withdrawal_index : WithdrawalIndex
   next_withdrawal_validator_index : ValidatorIndex
-  historical_summaries : (SszList HistoricalSummary P.HISTORICAL_ROOTS_LIMIT)
+  historical_summaries : (Ssz.List HistoricalSummary P.HISTORICAL_ROOTS_LIMIT)
   deposit_requests_start_index : (ForkField (f.atLeast .electra) U64)
   deposit_balance_to_consume : (ForkField (f.atLeast .electra) Gwei)
   exit_balance_to_consume : (ForkField (f.atLeast .electra) Gwei)
   earliest_exit_epoch : (ForkField (f.atLeast .electra) Epoch)
   consolidation_balance_to_consume : (ForkField (f.atLeast .electra) Gwei)
   earliest_consolidation_epoch : (ForkField (f.atLeast .electra) Epoch)
-  pending_deposits : (ForkField (f.atLeast .electra) (SszList PendingDeposit P.PENDING_DEPOSITS_LIMIT))
+  pending_deposits : (ForkField (f.atLeast .electra) (Ssz.List PendingDeposit P.PENDING_DEPOSITS_LIMIT))
   pending_partial_withdrawals :
-    (ForkField (f.atLeast .electra) (SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT))
+    (ForkField (f.atLeast .electra) (Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT))
   pending_consolidations :
-    (ForkField (f.atLeast .electra) (SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT))
+    (ForkField (f.atLeast .electra) (Ssz.List PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT))
   proposer_lookahead :
-    (ForkField (f.atLeast .fulu) (SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)))
+    (ForkField (f.atLeast .fulu) (Ssz.Vector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)))
 
 /-! ## Light client (`specs/capella/light-client/sync-protocol.md`, branch depths from
 `specs/electra/light-client/sync-protocol.md`) -/
@@ -522,21 +522,21 @@ ssz_container BeaconState (P : Preset) (f : ConsensusFork) where
 ssz_container LightClientHeader (P : Preset) where
   beacon : BeaconBlockHeader
   execution : (ExecutionPayloadHeader P)
-  execution_branch : (SszVector Bytes32 executionBranchDepth)
+  execution_branch : (Ssz.Vector Bytes32 executionBranchDepth)
 
 /-- `specs/altair/light-client/sync-protocol.md`, Capella header, Electra branch depth. -/
 ssz_container LightClientBootstrap (P : Preset) (f : ConsensusFork) where
   header : (LightClientHeader P)
   current_sync_committee : (SyncCommittee P)
-  current_sync_committee_branch : (SszVector Bytes32 (syncCommitteeBranchDepth f))
+  current_sync_committee_branch : (Ssz.Vector Bytes32 (syncCommitteeBranchDepth f))
 
 /-- `specs/altair/light-client/sync-protocol.md`, Capella header, Electra branch depths. -/
 ssz_container LightClientUpdate (P : Preset) (f : ConsensusFork) where
   attested_header : (LightClientHeader P)
   next_sync_committee : (SyncCommittee P)
-  next_sync_committee_branch : (SszVector Bytes32 (syncCommitteeBranchDepth f))
+  next_sync_committee_branch : (Ssz.Vector Bytes32 (syncCommitteeBranchDepth f))
   finalized_header : (LightClientHeader P)
-  finality_branch : (SszVector Bytes32 (finalityBranchDepth f))
+  finality_branch : (Ssz.Vector Bytes32 (finalityBranchDepth f))
   sync_aggregate : (SyncAggregate P)
   signature_slot : Slot
 
@@ -544,7 +544,7 @@ ssz_container LightClientUpdate (P : Preset) (f : ConsensusFork) where
 ssz_container LightClientFinalityUpdate (P : Preset) (f : ConsensusFork) where
   attested_header : (LightClientHeader P)
   finalized_header : (LightClientHeader P)
-  finality_branch : (SszVector Bytes32 (finalityBranchDepth f))
+  finality_branch : (Ssz.Vector Bytes32 (finalityBranchDepth f))
   sync_aggregate : (SyncAggregate P)
   signature_slot : Slot
 
@@ -557,16 +557,16 @@ ssz_container LightClientOptimisticUpdate (P : Preset) where
 /-! ## Fulu -/
 
 /-- `Cell` (`specs/fulu/polynomial-commitments-sampling.md`). -/
-abbrev Cell (P : Preset) := SszVector UInt8 (BYTES_PER_FIELD_ELEMENT * P.FIELD_ELEMENTS_PER_CELL)
+abbrev Cell (P : Preset) := Ssz.Vector UInt8 (BYTES_PER_FIELD_ELEMENT * P.FIELD_ELEMENTS_PER_CELL)
 
 /-- `specs/fulu/das-core.md` -/
 ssz_container DataColumnSidecar (P : Preset) where
   index : ColumnIndex
-  column : (SszList (Cell P) P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
-  kzg_commitments : (SszList KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
-  kzg_proofs : (SszList KZGProof P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  column : (Ssz.List (Cell P) P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  kzg_commitments : (Ssz.List KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  kzg_proofs : (Ssz.List KZGProof P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
   signed_block_header : SignedBeaconBlockHeader
-  kzg_commitments_inclusion_proof : (SszVector Bytes32 P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH)
+  kzg_commitments_inclusion_proof : (Ssz.Vector Bytes32 P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH)
 
 /-- `specs/fulu/das-core.md` -/
 ssz_container MatrixEntry (P : Preset) where
@@ -578,23 +578,23 @@ ssz_container MatrixEntry (P : Preset) where
 /-- `specs/fulu/p2p-interface.md` -/
 ssz_container DataColumnsByRootIdentifier (P : Preset) where
   block_root : Root
-  columns : (SszList ColumnIndex P.NUMBER_OF_COLUMNS)
+  columns : (Ssz.List ColumnIndex P.NUMBER_OF_COLUMNS)
 
 /-- `specs/fulu/partial-columns/p2p-interface.md` (`v1.7.0-beta.4`): `kzg_commitments` is
 `BlobKZGCommitments`, `kzg_commitments_inclusion_proof` is `KZGCommitmentsInclusionProof`. -/
 ssz_container PartialDataColumnHeader (P : Preset) where
-  kzg_commitments : (SszList KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  kzg_commitments : (Ssz.List KZGCommitment P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
   signed_block_header : SignedBeaconBlockHeader
-  kzg_commitments_inclusion_proof : (SszVector Bytes32 P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH)
+  kzg_commitments_inclusion_proof : (Ssz.Vector Bytes32 P.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH)
 
 /-- `specs/fulu/partial-columns/p2p-interface.md`: `CellsBitList` is
 `BitList[MAX_BLOB_COMMITMENTS_PER_BLOCK]`, `DataColumn` and `KZGProofs` are lists of that limit,
 and `header` is `OptionalPartialDataColumnHeader` (`List[PartialDataColumnHeader, 1]`). -/
 ssz_container PartialDataColumnSidecar (P : Preset) where
   cells_present_bitmap : (Bitlist P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
-  partial_column : (SszList (Cell P) P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
-  kzg_proofs : (SszList KZGProof P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
-  header : (SszList (PartialDataColumnHeader P) 1)
+  partial_column : (Ssz.List (Cell P) P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  kzg_proofs : (Ssz.List KZGProof P.MAX_BLOB_COMMITMENTS_PER_BLOCK)
+  header : (Ssz.List (PartialDataColumnHeader P) 1)
 
 /-- `specs/fulu/partial-columns/p2p-interface.md` -/
 ssz_container PartialDataColumnPartsMetadata (P : Preset) where

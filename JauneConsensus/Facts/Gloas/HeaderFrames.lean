@@ -170,7 +170,7 @@ local macro_rules
       | exact (setEarliestConsolidationEpoch_header _ _)
       | (refine StepRelation.ok_rebase headerEq ?_ (setEarliestConsolidationEpoch_header _ _); exact (show HeaderEq _ _ from rfl)))
 
-theorem setPendingDeposits_header (s : BeaconState P f) (v : SszList PendingDeposit P.PENDING_DEPOSITS_LIMIT) :
+theorem setPendingDeposits_header (s : BeaconState P f) (v : Ssz.List PendingDeposit P.PENDING_DEPOSITS_LIMIT) :
     Ok (JauneConsensus.BeaconState.setPendingDeposits s v) (headerEq.relation s) := by
   unfold JauneConsensus.BeaconState.setPendingDeposits; gvcg
 
@@ -184,7 +184,7 @@ local macro_rules
       | exact (setPendingDeposits_header _ _)
       | (refine StepRelation.ok_rebase headerEq ?_ (setPendingDeposits_header _ _); exact (show HeaderEq _ _ from rfl)))
 
-theorem setPendingPartialWithdrawals_header (s : BeaconState P f) (v : SszList PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT) :
+theorem setPendingPartialWithdrawals_header (s : BeaconState P f) (v : Ssz.List PendingPartialWithdrawal P.PENDING_PARTIAL_WITHDRAWALS_LIMIT) :
     Ok (JauneConsensus.BeaconState.setPendingPartialWithdrawals s v) (headerEq.relation s) := by
   unfold JauneConsensus.BeaconState.setPendingPartialWithdrawals; gvcg
 
@@ -198,7 +198,7 @@ local macro_rules
       | exact (setPendingPartialWithdrawals_header _ _)
       | (refine StepRelation.ok_rebase headerEq ?_ (setPendingPartialWithdrawals_header _ _); exact (show HeaderEq _ _ from rfl)))
 
-theorem setPendingConsolidations_header (s : BeaconState P f) (v : SszList PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT) :
+theorem setPendingConsolidations_header (s : BeaconState P f) (v : Ssz.List PendingConsolidation P.PENDING_CONSOLIDATIONS_LIMIT) :
     Ok (JauneConsensus.BeaconState.setPendingConsolidations s v) (headerEq.relation s) := by
   unfold JauneConsensus.BeaconState.setPendingConsolidations; gvcg
 
@@ -212,7 +212,7 @@ local macro_rules
       | exact (setPendingConsolidations_header _ _)
       | (refine StepRelation.ok_rebase headerEq ?_ (setPendingConsolidations_header _ _); exact (show HeaderEq _ _ from rfl)))
 
-theorem setProposerLookahead_header (s : BeaconState P f) (v : SszVector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)) :
+theorem setProposerLookahead_header (s : BeaconState P f) (v : Ssz.Vector ValidatorIndex ((P.MIN_SEED_LOOKAHEAD + 1) * P.SLOTS_PER_EPOCH)) :
     Ok (JauneConsensus.BeaconState.setProposerLookahead s v) (headerEq.relation s) := by
   unfold JauneConsensus.BeaconState.setProposerLookahead; gvcg
 

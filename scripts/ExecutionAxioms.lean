@@ -1,12 +1,12 @@
 import AxiomAudit
-import Jaune.FrameRun.CheckedSettlementViews
-import Jaune.FrameRun.CheckedAdequacy
-import Jaune.FrameRun.CheckedOrder
-import Jaune.MessageCall.CheckedSpawnFacts
-import Jaune.MessageCall.CheckedMemoryAccounting
-import Jaune.CheckedSymbolicArith
-import Examples.CheckedExecution
-import Examples.CheckedArithmetic
+import Jaune.FrameRun.SettlementViews
+import Jaune.FrameRun.Adequacy
+import Jaune.FrameRun.Order
+import Jaune.MessageCall.SpawnFacts
+import Jaune.MessageCall.MemoryAccounting
+import Jaune.SymbolicArithmetic
+import Examples.Execution
+import Examples.Arithmetic
 
 /-!
 # Destination axiom audit for the canonical execution surface
@@ -35,55 +35,55 @@ the candidate. The walk is `Jaune.AxiomAudit.walk`, never
 ordinary build fails on any mismatch.
 -/
 
-#expect_axioms Jaune.Checked.Frame.raw_commits_of_settlementCommits [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.descendantFrames_callRan_of_settles [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.descendantFrames_callRan_of_not_settles [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.descendantFrames_callRan_create_codeDepositRollback [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.committedFrames_eq_nil_of_not_commits [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.settlementCommits_iff [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.settlementCommits_ofCall_of_raw_commits [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.retainedNodes_callRan_of_settles [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.retainedNodes_callRan_of_not_settles [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.stop [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.enter_run_context [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.genericCall.step_spawn_context [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.genericCreate.step_spawn_context [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.MessageOp.step_spawn_context [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.halt [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.next [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.callDoneEnd [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.callDone [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.callRanEnd [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.callRan [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.exec_iff [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.strong_rec [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.Node.strongRec [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.Node.parentNext_unique [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.rawNodes [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.retainedNodes [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.SymbolicPush.step_success [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.SymbolicPush.step_outOfGas [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.SymbolicPush.step_stackOverflow [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.SymbolicPush.prepend [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Execution.execution [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Execution.interpreter [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Execution.final_stack [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Execution.final_gas [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Execution.final_world [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Execution.final_substate_trail [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.SymbolicArith.step_eq [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.SymbolicArith.step_success [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.SymbolicArith.step_outOfGas [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.SymbolicArith.step_stackUnderflow [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.SymbolicArith.prepend [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Arithmetic.execution [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Arithmetic.next [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Arithmetic.result [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Arithmetic.interpreter [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Arithmetic.final_stack [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Arithmetic.final_sum [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Arithmetic.final_gas [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Arithmetic.final_world [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Arithmetic.final_substate_trail [Classical.choice, Quot.sound, propext]
-#expect_axioms Examples.Checked.Arithmetic.concrete [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.raw_commits_of_settlementCommits [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.descendantFrames_callRan_of_settles [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.descendantFrames_callRan_of_not_settles [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.descendantFrames_callRan_create_codeDepositRollback [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.committedFrames_eq_nil_of_not_commits [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.settlementCommits_iff [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.settlementCommits_ofCall_of_raw_commits [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.retainedNodes_callRan_of_settles [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.retainedNodes_callRan_of_not_settles [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.stop [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.enter_run_context [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.prepareCall.step_spawn_context [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.prepareCreate.step_spawn_context [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.MessageOp.step_spawn_context [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.halt [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.next [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.callDoneEnd [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.callDone [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.callRanEnd [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.callRan [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.exec_iff [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.strongRec [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.Node.strongRec [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.Node.parentNext_unique [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.rawNodes [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.retainedNodes [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicPush.step_success [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicPush.step_outOfGas [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicPush.step_stackOverflow [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicPush.prepend [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Execution.execution [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Execution.interpreter [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Execution.final_stack [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Execution.final_gas [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Execution.final_world [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Execution.final_substate_trail [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicArithmetic.step_eq [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicArithmetic.step_success [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicArithmetic.step_outOfGas [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicArithmetic.step_stackUnderflow [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.SymbolicArithmetic.prepend [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.execution [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.next [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.result [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.interpreter [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.final_stack [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.final_sum [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.final_gas [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.final_world [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.final_substate_trail [Classical.choice, Quot.sound, propext]
+#expect_axioms Examples.Arithmetic.concrete [Classical.choice, Quot.sound, propext]

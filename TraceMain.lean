@@ -1,5 +1,5 @@
-import Jaune.MessageCall.CheckedTraceJson
-import Jaune.MessageCall.CheckedTrace
+import Jaune.MessageCall.TraceJson
+import Jaune.MessageCall.Trace
 import Jaune.Adapter.IO
 
 /-! Standalone message or signed-transaction tracing. Inputs state their scope;
@@ -27,8 +27,8 @@ private def byteString (j : Json) (key : String) : IO Bytes :=
 
 private def decodeBlock (input : Json) (fork : Fork) (rules : ForkRules) : IO (BlockContext × State) := do
   let preState ← (← required input "alloc").toWorld
-  let env ← T8n.decodeEnv rules false (← required input "env")
-  let chainId ← T8n.natOr input "chainId" 1
+  let env ← T8n.decodeEnvironment rules false (← required input "env")
+  let chainId ← T8n.readNatFieldD input "chainId" 1
   if chainId ≥ 2^64 then throw (IO.userError "chainId exceeds uint64")
   let block : BlockContext := {
     fork := fork
@@ -46,7 +46,7 @@ private def decodeBlock (input : Json) (fork : Fork) (rules : ForkRules) : IO (B
   return (block, preState)
 
 private def decodeMessage (input : Json) (block : BlockContext) (preState : State) (rules : ForkRules) :
-    IO Checked.Frame := do
+    IO Frame := do
   let j ← required input "message"
   T8n.requireKnownFields "trace message" j ["kind", "caller", "address", "gas", "value",
     "input", "origin", "gasPrice", "stateGas", "static", "transferValue", "disablePrecompiles",
@@ -59,11 +59,11 @@ private def decodeMessage (input : Json) (block : BlockContext) (preState : Stat
   let origin ← match j.find? "origin" with
     | none => pure caller
     | some value => T8n.readAddress "origin" value
-  let gas ← T8n.natRequired j "gas"
-  let value ← T8n.natOr j "value" 0
+  let gas ← T8n.readNatField j "gas"
+  let value ← T8n.readNatFieldD j "value" 0
   if value ≥ 2^256 then throw (IO.userError "message.value exceeds uint256")
   let data ← byteString j "input"
-  let mut accessed : AdrSet := .emptyWithCapacity
+  let mut accessed : AddressSet := .emptyWithCapacity
   if let some values := j.find? "accessedAddresses" then
     for value in (← IO.ofExcept values.getArr?) do
       accessed := accessed.insert (← T8n.readAddress "accessedAddresses" value)
@@ -78,41 +78,41 @@ private def decodeMessage (input : Json) (block : BlockContext) (preState : Stat
   if let some values := j.find? "blobVersionedHashes" then
     for value in (← IO.ofExcept values.getArr?) do
       hashes := hashes ++ [← T8n.readU256 "blobVersionedHashes" value]
-  let stateGas ← T8n.natOr j "stateGas" 0
+  let stateGas ← T8n.readNatFieldD j "stateGas" 0
   if rules.stateGas.isNone && stateGas != 0 then
     throw (IO.userError "stateGas requires a fork with state gas")
-  let gasPrice ← T8n.natOr j "gasPrice" 0
+  let gasPrice ← T8n.readNatFieldD j "gasPrice" 0
   let transfersValue ← boolOr j "transferValue" true
   let isStatic ← boolOr j "static" false
   let disablePrecompiles ← boolOr j "disablePrecompiles" false
   let call := kind == "call"
   let target := if call then some address else none
-  let message : Checked.Message := {
+  let message : Message := {
     context := {
-      caller
+      caller := caller
       recipient := address
       value := value.toU256
       calldata := if call then data else []
       code := if call then preState.getCode address else ⟨data.toArray⟩
       depthLeft := 1024
-      isStatic
-      block
+      isStatic := isStatic
+      block := block
       tx := { origin, gasPrice, blobVersionedHashes := hashes, originalState := preState } }
     kind := if call then .call else .create
-    target
+    target := target
     codeAddress := target
-    gas
-    transfersValue
-    disablePrecompiles
+    gas := gas
+    transfersValue := transfersValue
+    disablePrecompiles := disablePrecompiles
     stateGasGrant := stateGas }
   let world : World := ⟨preState, .empty, .emptyWithCapacity⟩
   return ⟨message, message.initialCheckpoint world accessed keys .emptyWithCapacity .emptyWithCapacity⟩
 
 private inductive Input where
-  | message (frame : Checked.Frame)
+  | message (frame : Frame)
   | transaction (block : BlockContext) (preState : State) (tx : Transaction)
 
-private def writeRow (cfg : Checked.TraceJson.Config) (handle : IO.FS.Handle) (row : Json) :
+private def writeRow (cfg : TraceJson.Config) (handle : IO.FS.Handle) (row : Json) :
     IO Unit := do
   let line := row.compress ++ "\n"
   if line.utf8ByteSize > cfg.maxRowBytes then throw (IO.userError "trace: row byte limit exceeded")
@@ -143,19 +143,19 @@ def run (inputPath outputPath : String) : IO Unit := do
   let maxSteps ← match input.find? "maxSteps" with
     | none => pure none
     | some value => some <$> T8n.readNat "maxSteps" value
-  let cfg : Checked.TraceJson.Config := {
+  let cfg : TraceJson.Config := {
     runId := runId, memory := (← boolOr input "memory" false), maxSteps := maxSteps
-    maxDataBytes := (← T8n.natOr input "maxDataBytes" 1048576)
-    maxRowBytes := (← T8n.natOr input "maxRowBytes" 1048576) }
+    maxDataBytes := (← T8n.readNatFieldD input "maxDataBytes" 1048576)
+    maxRowBytes := (← T8n.readNatFieldD input "maxRowBytes" 1048576) }
   -- Exclusive directory creation refuses an existing path before opening files.
   IO.FS.createDir outputPath
   let directory : System.FilePath := outputPath
   let trace ← IO.FS.Handle.mk (directory / "trace.jsonl") .write
   let frames ← IO.FS.Handle.mk (directory / "frames.jsonl") .write
-  let state ← IO.mkRef ({} : Checked.TraceJson.State)
+  let state ← IO.mkRef ({} : TraceJson.State)
   let details ← match selected with
     | .message frame => do
-      let _ ← Checked.Trace.runFrame (Checked.TraceJson.sink cfg state trace frames) frame runId
+      let _ ← Trace.runFrame (TraceJson.sink cfg state trace frames) frame runId
       if !(← state.get).closed then throw (IO.userError "trace did not complete")
       pure [("scope", Json.str "message"), ("outcome", Json.str "executed"),
         ("traceComplete", Json.bool true),
@@ -166,8 +166,8 @@ def run (inputPath outputPath : String) : IO Unit := do
         let current ← state.get
         if current.started then throw (IO.userError "authorization refund arrived after frame entry")
         state.set { current with rootRefund := amount }
-      let sink := Checked.TraceJson.sink transactionCfg state trace frames
-      let result ← Checked.Trace.runTransaction sink refund block preState .init tx 0 runId
+      let sink := TraceJson.sink transactionCfg state trace frames
+      let result ← Trace.runTransaction sink refund block preState .init tx 0 runId
       let current ← state.get
       if current.started && !current.closed then throw (IO.userError "transaction frame did not close")
       let identity := [("scope", Json.str "transaction"), ("transactionIndex", toJson (0 : Nat)),

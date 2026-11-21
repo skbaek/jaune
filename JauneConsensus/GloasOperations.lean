@@ -42,10 +42,10 @@ variable {P : Preset}
 def DOMAIN_BUILDER_DEPOSIT : DomainType := #v[0x0E, 0x00, 0x00, 0x00]
 
 /-- `PAYLOAD_BUILDER_VERSION = Uint8(0)`. -/
-def PAYLOAD_BUILDER_VERSION : U8 := UIntN.zero
+def PAYLOAD_BUILDER_VERSION : U8 := UnsignedInteger.zero
 
 /-- The bytes of a fixed-length byte vector. -/
-def vectorBytes {n : Nat} (v : SszVector UInt8 n) : Bytes := v.toArray.toList
+def vectorBytes {n : Nat} (v : Ssz.Vector UInt8 n) : Bytes := v.toArray.toList
 
 /-! ## Attestation indices and validity -/
 
@@ -225,7 +225,7 @@ def processAttestation (ctx : Context) (state : BeaconState P) (attestation : At
   let mut numerator := U64.zero
   for index in ← getAttestingIndices state attestation do
     -- [New in Gloas:EIP7732]
-    let hadNoParticipation := (← participation.get index.toNat site) == UIntN.zero
+    let hadNoParticipation := (← participation.get index.toNat site) == UnsignedInteger.zero
     let mut willSetNewFlag := false
     for (flagIndex, weight) in
         (List.range PARTICIPATION_FLAG_WEIGHTS.length).zip PARTICIPATION_FLAG_WEIGHTS do
@@ -267,7 +267,7 @@ def getIndexedPayloadAttestation (cfg : Config) (state : BeaconState P)
   for validatorIndex in ptc.toArray do
     if ← getAt bits index site then attesting := attesting.push validatorIndex
     index := index + 1
-  pure { attesting_indices := ← SszList.ofArray (attesting.qsort (· < ·)) site
+  pure { attesting_indices := ← Ssz.List.ofArray (attesting.qsort (· < ·)) site
          data := pa.data
          signature := pa.signature }
 

@@ -1,12 +1,12 @@
 import AxiomAudit
-import Jaune.FrameRun.CheckedUnique
-import Jaune.FrameRun.CheckedFacts
-import Jaune.FrameRun.CheckedMemory
-import Jaune.CheckedSymbolicPush
-import Jaune.CheckedSymbolicArith
-import Examples.CheckedPrefix
-import Examples.CheckedExecution
-import Examples.CheckedArithmetic
+import Jaune.FrameRun.Unique
+import Jaune.FrameRun.Facts
+import Jaune.FrameRun.Memory
+import Jaune.SymbolicPush
+import Jaune.SymbolicArithmetic
+import Examples.Prefix
+import Examples.Execution
+import Examples.Arithmetic
 
 /-!
 Axiom audit for the frame-run facts that `scripts/ExecutionAxioms.lean` does not pin (goal
@@ -16,15 +16,15 @@ and the five theorems with no destination row. The other surviving rows of that 
 re-pointed rows of `scripts/ExecutionAxioms.lean`, so they are not repeated here.
 -/
 
-#union_axioms_of_modules Jaune.FrameRun.CheckedFacts
-#union_axioms_of_modules Jaune.FrameRun.CheckedMemory
-#union_axioms_of_modules Jaune.CheckedSymbolicPush
-#union_axioms_of_modules Jaune.CheckedSymbolicArith
-#union_axioms_of_modules Examples.CheckedPrefix
-#union_axioms_of_modules Examples.CheckedExecution
-#union_axioms_of_modules Examples.CheckedArithmetic
-#expect_axioms Jaune.Checked.Frame.Run.Prefix.unique [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.settledGasLe [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.memory_accounting_output [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.Node.Prefix.trans [Classical.choice, Quot.sound, propext]
-#expect_axioms Jaune.Checked.Frame.Run.Node.Prefix.lt [Classical.choice, Quot.sound, propext]
+#union_axioms_of_modules Jaune.FrameRun.Facts
+#union_axioms_of_modules Jaune.FrameRun.Memory
+#union_axioms_of_modules Jaune.SymbolicPush
+#union_axioms_of_modules Jaune.SymbolicArithmetic
+#union_axioms_of_modules Examples.Prefix
+#union_axioms_of_modules Examples.Execution
+#union_axioms_of_modules Examples.Arithmetic
+#expect_axioms Jaune.Frame.Run.Prefix.unique [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.settledGasLe [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.memory_accounting_output [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.Node.Prefix.trans [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.Node.Prefix.lt [Classical.choice, Quot.sound, propext]

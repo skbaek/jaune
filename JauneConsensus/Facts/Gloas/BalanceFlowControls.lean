@@ -111,7 +111,7 @@ built from `st` whatever its withdrawals `ws` are. No root is evaluated. -/
 theorem mutant_accepts (cfg : Config) (st : JauneConsensus.Gloas.BeaconState P)
     (e0 : SignedExecutionPayloadEnvelope P) (ws : ProgressiveListRightSpine JauneConsensus.Withdrawal)
     {pk : BLSPubkey} {d : Domain} {t : U64}
-    {vh : SszList Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK}
+    {vh : Ssz.List Bytes32 P.MAX_BLOB_COMMITMENTS_PER_BLOCK}
     (hpk : builderSigningPubkey st st.latest_execution_payload_bid.builder_index = .ok pk)
     (hdom : JauneConsensus.Gloas.getDomain st DOMAIN_BEACON_BUILDER = .ok d)
     (htime : JauneConsensus.Gloas.computeTimeAtSlot cfg st st.slot = .ok t)
@@ -141,9 +141,9 @@ theorem mutant_accepts (cfg : Config) (st : JauneConsensus.Gloas.BeaconState P)
 
 section Closed
 
-local instance {α : Type} [Inhabited α] {n : Nat} : Inhabited (SszVector α n) :=
+local instance {α : Type} [Inhabited α] {n : Nat} : Inhabited (Ssz.Vector α n) :=
   ⟨⟨Array.replicate n default, Array.size_replicate⟩⟩
-local instance {α : Type} {n : Nat} : Inhabited (SszList α n) := ⟨⟨#[], Nat.zero_le _⟩⟩
+local instance {α : Type} {n : Nat} : Inhabited (Ssz.List α n) := ⟨⟨#[], Nat.zero_le _⟩⟩
 local instance {s : Spine} {α : Type} : Inhabited (ProgressiveListOnSpine s α) := ⟨⟨#[]⟩⟩
 local instance : Inhabited ProgressiveByteList := ⟨⟨default⟩⟩
 

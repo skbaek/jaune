@@ -13,30 +13,30 @@ namespace Jaune
 
 /-! ### Big-endian bytes -/
 
-theorem Bytes.toNat.aux_eq (acc : Nat) (bs : Bytes) :
-    Bytes.toNat.aux acc bs = acc * 256 ^ bs.length + Bytes.toNat.aux 0 bs := by
+theorem Bytes.toNat.go_eq (acc : Nat) (bs : Bytes) :
+    Bytes.toNat.go acc bs = acc * 256 ^ bs.length + Bytes.toNat.go 0 bs := by
   induction bs generalizing acc with
-  | nil => simp [Bytes.toNat.aux]
+  | nil => simp [Bytes.toNat.go]
   | cons b bs ih =>
-    simp only [Bytes.toNat.aux]
+    simp only [Bytes.toNat.go]
     rw [ih, ih (0 * 256 + b.toNat)]
     simp only [List.length_cons, Nat.pow_succ, Nat.zero_mul, Nat.zero_add, Nat.add_mul]
     rw [Nat.mul_assoc, Nat.mul_comm 256 (256 ^ bs.length), Nat.add_assoc]
 
 theorem Bytes.toNat_cons (b : UInt8) (bs : Bytes) :
     Bytes.toNat (b :: bs) = b.toNat * 256 ^ bs.length + Bytes.toNat bs := by
-  show Bytes.toNat.aux 0 (b :: bs) = _
-  simp only [Bytes.toNat.aux]
-  rw [Bytes.toNat.aux_eq]
+  show Bytes.toNat.go 0 (b :: bs) = _
+  simp only [Bytes.toNat.go]
+  rw [Bytes.toNat.go_eq]
   simp [Bytes.toNat]
 
-theorem Nat.toBytes.aux_toNat :
+theorem Nat.toBytes.go_toNat :
     ∀ (n : Nat) (acc : Bytes),
-      Bytes.toNat (Nat.toBytes.aux acc n) = n * 256 ^ acc.length + Bytes.toNat acc
-  | 0, acc => by simp [Nat.toBytes.aux]
+      Bytes.toNat (Nat.toBytes.go acc n) = n * 256 ^ acc.length + Bytes.toNat acc
+  | 0, acc => by simp [Nat.toBytes.go]
   | n + 1, acc => by
-    rw [Nat.toBytes.aux]
-    have := Nat.toBytes.aux_toNat ((n + 1) / 256) (((n + 1) % 256).toUInt8 :: acc)
+    rw [Nat.toBytes.go]
+    have := Nat.toBytes.go_toNat ((n + 1) / 256) (((n + 1) % 256).toUInt8 :: acc)
     rw [this, Bytes.toNat_cons]
     have hm : (((n + 1) % 256).toUInt8).toNat = (n + 1) % 256 := by
       simp [Nat.toUInt8]
@@ -48,21 +48,21 @@ termination_by n => n
 decreasing_by omega
 
 theorem Bytes.toNat_toBytes (n : Nat) : Bytes.toNat (Nat.toBytes n) = n := by
-  have := Nat.toBytes.aux_toNat n []
-  simpa [Nat.toBytes, Bytes.toNat, Bytes.toNat.aux] using this
+  have := Nat.toBytes.go_toNat n []
+  simpa [Nat.toBytes, Bytes.toNat, Bytes.toNat.go] using this
 
 theorem Nat.toBytes_injective : Function.Injective Nat.toBytes := by
   intro m n h
   rw [← Bytes.toNat_toBytes m, ← Bytes.toNat_toBytes n, h]
 
-theorem Nat.toBytes.aux_append :
-    ∀ (n : Nat) (acc : Bytes), Nat.toBytes.aux acc n = Nat.toBytes.aux [] n ++ acc
-  | 0, acc => by simp [Nat.toBytes.aux]
+theorem Nat.toBytes.go_append :
+    ∀ (n : Nat) (acc : Bytes), Nat.toBytes.go acc n = Nat.toBytes.go [] n ++ acc
+  | 0, acc => by simp [Nat.toBytes.go]
   | n + 1, acc => by
-    conv_lhs => rw [Nat.toBytes.aux]
-    conv_rhs => rw [Nat.toBytes.aux]
-    rw [Nat.toBytes.aux_append ((n + 1) / 256) (((n + 1) % 256).toUInt8 :: acc),
-      Nat.toBytes.aux_append ((n + 1) / 256) [((n + 1) % 256).toUInt8]]
+    conv_lhs => rw [Nat.toBytes.go]
+    conv_rhs => rw [Nat.toBytes.go]
+    rw [Nat.toBytes.go_append ((n + 1) / 256) (((n + 1) % 256).toUInt8 :: acc),
+      Nat.toBytes.go_append ((n + 1) / 256) [((n + 1) % 256).toUInt8]]
     simp
 termination_by n => n
 decreasing_by all_goals omega
@@ -70,12 +70,12 @@ decreasing_by all_goals omega
 theorem Nat.toBytes_length_succ (n : Nat) :
     (Nat.toBytes (n + 1)).length = (Nat.toBytes ((n + 1) / 256)).length + 1 := by
   unfold Nat.toBytes
-  rw [Nat.toBytes.aux, Nat.toBytes.aux_append]
+  rw [Nat.toBytes.go, Nat.toBytes.go_append]
   simp
 
 theorem Nat.toBytes_length_mono : ∀ (n m : Nat), m ≤ n →
     (Nat.toBytes m).length ≤ (Nat.toBytes n).length
-  | n, 0, _ => by simp [Nat.toBytes, Nat.toBytes.aux]
+  | n, 0, _ => by simp [Nat.toBytes, Nat.toBytes.go]
   | 0, m + 1, h => by omega
   | n + 1, m + 1, h => by
     rw [Nat.toBytes_length_succ, Nat.toBytes_length_succ]

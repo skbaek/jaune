@@ -15,7 +15,7 @@ def Op.toString : Op → String
   | .jump j => j.toString
   | .halt l => l.toString
 
-def State.getStor (w : State) (a : Address) : Storage := (w.get a).storage
+def State.getStorage (w : State) (a : Address) : Storage := (w.get a).storage
 def State.getNonce (w : State) (a : Address) : UInt64 := (w.get a).nonce
 def State.getCode (w : State) (a : Address) : ByteArray := (w.get a).code
 
@@ -49,8 +49,8 @@ theorem ForkRules.delegatedCodeAddress_disabled {rules : ForkRules}
   simp only [ForkRules.delegatedCodeAddress, h, Bool.false_eq_true, ↓reduceIte]
 
 /-- Prague rejects 0xEF-leading deposits: its creation gate is on. -/
-@[simp] theorem pragueRules_creation_rejectEf :
-    pragueRules.creation.rejectEf = true := rfl
+@[simp] theorem pragueRules_creation_rejectReservedFirstByte :
+    pragueRules.creation.rejectReservedFirstByte = true := rfl
 
 def NextOp.size : NextOp → Nat
   | plain _ => 1
@@ -99,10 +99,10 @@ def Log.toRlpItem (l : Log) : Rlp.Item :=
   ]
 
 def List.putIndex {ξ : Type u} (xs : List ξ) : List (Nat × ξ) :=
-  let rec aux : Nat → List ξ → List (Nat × ξ)
+  let rec go : Nat → List ξ → List (Nat × ξ)
     | _, [] => []
-    | k, x :: xs => (k, x) :: aux (k + 1) xs
-  aux 0 xs
+    | k, x :: xs => (k, x) :: go (k + 1) xs
+  go 0 xs
 
 def Bytes.toByteArray (xs : Bytes) : ByteArray := .mk <| .mk xs
 
@@ -403,7 +403,7 @@ def accountHasCodeOrNonce (state : State) (adr : Address) : Bool :=
   state.getNonce adr > 0 || !(state.getCode adr).isEmpty
 
 def accountHasStorage (state : State) (adr : Address) : Bool :=
-  !(state.getStor adr).isEmpty
+  !(state.getStorage adr).isEmpty
 
 def Transaction.signingHash (tx : Transaction) : Option U256 :=
   match tx.type with
@@ -575,81 +575,81 @@ and delegation-access facts; the frame structure (spawns, `enter`, `settle`,
 -- projections survive normalization, but storage is cleared on deletion.
 -- Readers at another address remain unchanged.
 
-theorem State.setBal_get_self {st : Jaune.State} {adr : Address} {v : U256} :
-    (st.setBal adr v).get adr = ((st.get adr).withBalance v).clearIfEmpty :=
+theorem State.setBalance_get_self {st : Jaune.State} {adr : Address} {v : U256} :
+    (st.setBalance adr v).get adr = ((st.get adr).withBalance v).clearIfEmpty :=
   State.setAccount_get_self _ _ _
 
-theorem State.setBal_get_ne {st : Jaune.State} {adr a : Address} {v : U256} (h : adr ≠ a) :
-    (st.setBal adr v).get a = st.get a := State.setAccount_get_ne _ h _
+theorem State.setBalance_get_ne {st : Jaune.State} {adr a : Address} {v : U256} (h : adr ≠ a) :
+    (st.setBalance adr v).get a = st.get a := State.setAccount_get_ne _ h _
 
 /-- A balance update clears storage exactly when it deletes the account. -/
-theorem State.setBal_get_stor {st : Jaune.State} {b a : Address} {v : U256} :
-    ((st.setBal b v).get a).storage =
+theorem State.setBalance_get_storage {st : Jaune.State} {b a : Address} {v : U256} :
+    ((st.setBalance b v).get a).storage =
       if b = a ∧ ((st.get b).withBalance v).isEmpty then .empty else (st.get a).storage := by
   by_cases h : b = a
   · subst h
-    simp only [State.setBal_get_self, Account.clearIfEmpty_storage, eq_self, true_and]
+    simp only [State.setBalance_get_self, Account.clearIfEmpty_storage, eq_self, true_and]
     rfl
-  · simp only [State.setBal_get_ne h, h, false_and, ite_false]
+  · simp only [State.setBalance_get_ne h, h, false_and, ite_false]
 
-theorem State.setBal_get_code {st : Jaune.State} {b a : Address} {v : U256} :
-    ((st.setBal b v).get a).code = (st.get a).code := by
+theorem State.setBalance_get_code {st : Jaune.State} {b a : Address} {v : U256} :
+    ((st.setBalance b v).get a).code = (st.get a).code := by
   by_cases h : b = a
-  · subst h; rw [State.setBal_get_self, Account.clearIfEmpty_code]; rfl
-  · rw [State.setBal_get_ne h]
+  · subst h; rw [State.setBalance_get_self, Account.clearIfEmpty_code]; rfl
+  · rw [State.setBalance_get_ne h]
 
-theorem State.of_subBal {st st' : Jaune.State} {ct : Address} {wad : U256}
-    (h : st.subBal ct wad = some st') :
-    wad ≤ st.bal ct ∧ st' = st.setBal ct (st.bal ct - wad) := by
-  unfold State.subBal at h
+theorem State.of_subtractBalance {st st' : Jaune.State} {ct : Address} {wad : U256}
+    (h : st.subtractBalance ct wad = some st') :
+    wad ≤ st.balance ct ∧ st' = st.setBalance ct (st.balance ct - wad) := by
+  unfold State.subtractBalance at h
   split_ifs at h with h_lt
   cases h
   exact ⟨U256.not_lt.mp h_lt, rfl⟩
 
-theorem State.incrNonce_get_bal {st : Jaune.State} {adr a : Address} :
-    ((st.incrNonce adr).get a).balance = (st.get a).balance := by
-  rw [State.incrNonce, State.writeAccount_erase_eq_clear]
+theorem State.incrementNonce_get_balance {st : Jaune.State} {adr a : Address} :
+    ((st.incrementNonce adr).get a).balance = (st.get a).balance := by
+  rw [State.incrementNonce, State.writeAccount_erase_eq_clear]
   by_cases h : adr = a
   · subst h; rw [State.get_set_self, Account.clearIfEmpty_balance]
   · rw [State.get_set_ne _ h]
 
 /-- The general nonce mutator includes wraparound; callers rule out overflow.
 Storage is cleared exactly when its resulting account is empty. -/
-theorem State.incrNonce_get_stor {st : Jaune.State} {adr a : Address} :
-    ((st.incrNonce adr).get a).storage =
+theorem State.incrementNonce_get_storage {st : Jaune.State} {adr a : Address} :
+    ((st.incrementNonce adr).get a).storage =
       if adr = a ∧ ({st.get adr with nonce := (st.get adr).nonce + 1} : Account).isEmpty
       then .empty else (st.get a).storage := by
-  rw [State.incrNonce, State.writeAccount_erase_eq_clear]
+  rw [State.incrementNonce, State.writeAccount_erase_eq_clear]
   by_cases h : adr = a
   · subst h
     simp only [State.get_set_self, Account.clearIfEmpty_storage, eq_self, true_and]
   · simp only [State.get_set_ne _ h, h, false_and, ite_false]
 
-theorem State.incrNonce_get_code {st : Jaune.State} {adr a : Address} :
-    ((st.incrNonce adr).get a).code = (st.get a).code := by
-  rw [State.incrNonce, State.writeAccount_erase_eq_clear]
+theorem State.incrementNonce_get_code {st : Jaune.State} {adr a : Address} :
+    ((st.incrementNonce adr).get a).code = (st.get a).code := by
+  rw [State.incrementNonce, State.writeAccount_erase_eq_clear]
   by_cases h : adr = a
   · subst h; rw [State.get_set_self, Account.clearIfEmpty_code]
   · rw [State.get_set_ne _ h]
 
-theorem State.setBal_getCode (st : State) (adr a : Address) (val : U256) :
-    (st.setBal adr val).getCode a = st.getCode a :=
-  State.setBal_get_code
+theorem State.setBalance_getCode (st : State) (adr a : Address) (val : U256) :
+    (st.setBalance adr val).getCode a = st.getCode a :=
+  State.setBalance_get_code
 
-theorem State.addBal_getCode (st : State) (adr a : Address) (val : U256) :
-    (st.addBal adr val).getCode a = st.getCode a :=
-  State.setBal_getCode st adr a (st.bal adr + val)
+theorem State.addBalance_getCode (st : State) (adr a : Address) (val : U256) :
+    (st.addBalance adr val).getCode a = st.getCode a :=
+  State.setBalance_getCode st adr a (st.balance adr + val)
 
-theorem State.subBal_getCode {st st' : State} {adr a : Address} {val : U256}
-    (h : st.subBal adr val = some st') : st'.getCode a = st.getCode a := by
-  rw [(State.of_subBal h).2]
-  exact State.setBal_getCode st adr a (st.bal adr - val)
+theorem State.subtractBalance_getCode {st st' : State} {adr a : Address} {val : U256}
+    (h : st.subtractBalance adr val = some st') : st'.getCode a = st.getCode a := by
+  rw [(State.of_subtractBalance h).2]
+  exact State.setBalance_getCode st adr a (st.balance adr - val)
 
 /-- A credit clears storage at `ca` precisely when it deletes that account. -/
-theorem getStor_addBal (w : Jaune.State) (ca a : Address) (val : U256) :
-    (w.addBal a val).getStor ca =
-      if a = ca ∧ ((w.get a).withBalance (w.bal a + val)).isEmpty
-      then .empty else w.getStor ca :=
-  State.setBal_get_stor
+theorem getStorage_addBalance (w : Jaune.State) (ca a : Address) (val : U256) :
+    (w.addBalance a val).getStorage ca =
+      if a = ca ∧ ((w.get a).withBalance (w.balance a + val)).isEmpty
+      then .empty else w.getStorage ca :=
+  State.setBalance_get_storage
 
 end Jaune

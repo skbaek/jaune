@@ -1,4 +1,4 @@
-import Examples.CheckedShapePilot
-import Examples.CheckedPrefix
-import Examples.CheckedExecution
-import Examples.CheckedArithmetic
+import Examples.ShapePilot
+import Examples.Prefix
+import Examples.Execution
+import Examples.Arithmetic

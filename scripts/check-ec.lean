@@ -156,27 +156,27 @@ def refSub {F} [Neg F] [Zero F] [DecidableEq F]
   refAdd p (refNeg q)
 
 /-- Verbatim copy of `secp256k1.sqrt` as of commit 118b208. -/
-def refSqrt (x : secp256k1.Coord) : Option secp256k1.Coord :=
+def refSqrt (x : secp256k1.CoordinateField) : Option secp256k1.CoordinateField :=
   let y := x ^ secp256k1.sqrtExp
   if y * y = x then some y else none
 
 /-- Verbatim copy of `secp256k1.recover` as of commit 118b208, rewired to the
 reference point operations above. -/
 def refRecover (h : U256) (v : Bool) (r : U256) (s : U256) : Option Address := do
-  let x : secp256k1.Coord := .ofNat r.toNat
-  let ySquared : secp256k1.Coord := x ^ 3 + 7
+  let x : secp256k1.CoordinateField := .ofNat r.toNat
+  let ySquared : secp256k1.CoordinateField := x ^ 3 + 7
   let yFst ← refSqrt ySquared
-  let ySnd := FinField.neg yFst
-  let ⟨yOdd, yEven⟩ : secp256k1.Coord × secp256k1.Coord :=
+  let ySnd := FieldElement.neg yFst
+  let ⟨yOdd, yEven⟩ : secp256k1.CoordinateField × secp256k1.CoordinateField :=
     if yFst.val % 2 = 0 then ⟨ySnd, yFst⟩ else ⟨yFst, ySnd⟩
   let y := if v then yOdd else yEven
   let R : secp256k1.Point := ⟨x, y⟩
   let rInv : Nat :=
-    @FinField.val secp256k1.curveOrder <| FinField.inv <| .ofNat r.toNat
+    @FieldElement.val secp256k1.curveOrder <| FieldElement.inv <| .ofNat r.toNat
   let sR : secp256k1.Point := refMulBy R <|
-    @FinField.val secp256k1.curveOrder <| .ofNat s.toNat
+    @FieldElement.val secp256k1.curveOrder <| .ofNat s.toNat
   let zG : secp256k1.Point := refMulBy secp256k1.generator <|
-    @FinField.val secp256k1.curveOrder <| .ofNat h.toNat
+    @FieldElement.val secp256k1.curveOrder <| .ofNat h.toNat
   let O : secp256k1.Point := refSub sR zG
   if O = ⟨0, 0⟩ then none
   let Q : secp256k1.Point := refMulBy O rInv
@@ -244,14 +244,14 @@ def bigScalars (order : Nat) : List Nat :=
 def mkSecp (x y : Nat) : secp256k1.Point := ⟨.ofNat x, .ofNat y⟩
 def mkBls1 (x y : Nat) : Bls12G1 := ⟨.ofNat x, .ofNat y⟩
 def mkBls2 (x0 x1 y0 y1 : Nat) : Bls12G2 := ⟨Bls12Fp2.mk x0 x1, Bls12Fp2.mk y0 y1⟩
-def mkBn (x y : Nat) : Bn254G1 := ⟨.ofNat x, .ofNat y⟩
+def mkBn (x y : Nat) : AltBn128G1 := ⟨.ofNat x, .ofNat y⟩
 
-def bn254Generator : Bn254G1 := mkBn 1 2
+def bn254Generator : AltBn128G1 := mkBn 1 2
 
 -- Toy curve with a ≠ 0: y² = x³ + x + 999 over F_1009.  Discriminant
 -- -16(4a³+27b²) = 123 ≠ 0; 959 affine points, group order 960; three points of
 -- order two, of which (2,0) is used below.
-abbrev ToyF : Type := FinField 1009
+abbrev ToyF : Type := FieldElement 1009
 abbrev ToyP : Type := EllipticCurve ToyF (1 : ToyF) (999 : ToyF)
 
 -- Toy curve with a = 0 and a point of order two: y² = x³ + 5 over F_1013.
@@ -259,7 +259,7 @@ abbrev ToyP : Type := EllipticCurve ToyF (1 : ToyF) (999 : ToyF)
 -- 555; group order 1014 = 2·3·13².  None of secp256k1, BN254 G1, BLS12-381 G1
 -- or BLS12-381 G2 admits such a point (their group orders are odd), so this
 -- curve is the only way to reach the `y = 0` branch of the affine law.
-abbrev Toy0F : Type := FinField 1013
+abbrev Toy0F : Type := FieldElement 1013
 abbrev Toy0P : Type := EllipticCurve Toy0F (0 : Toy0F) (5 : Toy0F)
 
 def mkToy (x y : Nat) : ToyP := ⟨.ofNat x, .ofNat y⟩
@@ -271,9 +271,9 @@ def mkToy0 (x y : Nat) : Toy0P := ⟨.ofNat x, .ofNat y⟩
 mixed addition independently of the public scalar wrapper. -/
 def jacobianEdges (st : Tally) : IO Unit := do
   let inf : secp256k1.Point := ⟨0, 0⟩
-  let jInf : EllipticCurve.Jacobian.Point secp256k1.Coord :=
+  let jInf : EllipticCurve.Jacobian.Point secp256k1.CoordinateField :=
     EllipticCurve.Jacobian.infinity
-  let noncanonicalInf : EllipticCurve.Jacobian.Point secp256k1.Coord :=
+  let noncanonicalInf : EllipticCurve.Jacobian.Point secp256k1.CoordinateField :=
     ⟨.ofNat 17, .ofNat 23, 0⟩
   let g := secp256k1.generator
   let jg := EllipticCurve.Jacobian.ofAffine g
@@ -293,10 +293,10 @@ def jacobianEdges (st : Tally) : IO Unit := do
     (EllipticCurve.Jacobian.toAffine jg) g
 
   -- A nontrivial representative of G: (x*z², y*z³, z).
-  let z : secp256k1.Coord := .ofNat 11
+  let z : secp256k1.CoordinateField := .ofNat 11
   let z2 := z * z
   let z3 := z2 * z
-  let scaledG : EllipticCurve.Jacobian.Point secp256k1.Coord :=
+  let scaledG : EllipticCurve.Jacobian.Point secp256k1.CoordinateField :=
     ⟨g.x * z2, g.y * z3, z⟩
   checkPoint st "jacobian scaled representative normalizes to G"
     (EllipticCurve.Jacobian.toAffine scaledG) g
@@ -644,7 +644,7 @@ def main : IO UInt32 := do
   sweepCurve st "secp256k1" secpPoints smallScalars
   sweepCurve st "secp256k1" [("G", secp256k1.generator)]
     (bigScalars secp256k1.curveOrder)
-  let bnPoints : List (String × Bn254G1) :=
+  let bnPoints : List (String × AltBn128G1) :=
     [ ("G", bn254Generator), ("O", ⟨0, 0⟩), ("-G", -bn254Generator),
       ("2G", bn254Generator.double) ]
   sweepCurve st "bn254-g1" bnPoints smallScalars

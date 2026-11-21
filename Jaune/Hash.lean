@@ -35,10 +35,10 @@ def constantsRight : Vector UInt32 5 :=
   #v[0x50a28be6, 0x5c4dd124, 0x6d703ef3, 0x7a6d76e9, 0x00000000]
 
 -- ripemd160_fns_left
-def fnsLeft : Vector Nat 5 := #v[1, 2, 3, 4, 5]
+def leftFunctionOrder : Vector Nat 5 := #v[1, 2, 3, 4, 5]
 
 -- ripemd160_fns_right
-def fnsRight : Vector Nat 5 := #v[5, 4, 3, 2, 1]
+def rightFunctionOrder : Vector Nat 5 := #v[5, 4, 3, 2, 1]
 
 def rho : Vector (Fin 16) 16 :=
   #v[ 0x7, 0x4, 0xd, 0x1, 0xa, 0x6, 0xf, 0x3,
@@ -76,10 +76,10 @@ def computeLine (digest : Vector UInt32 5) (chunk : Vector UInt32 16)
         | 4 => (w1 &&& w3) ||| (w2 &&& ~~~ w3)
         | _ => w1 ^^^ (w2 ||| ~~~ w3)
       tmp := tmp + w0 + chunk[i.val] + k
-      tmp := UInt32.rol tmp shifts[i.val] + w4
+      tmp := UInt32.leftRotation tmp shifts[i.val] + w4
       w0 := w4
       w4 := w3
-      w3 := UInt32.rol w2 10
+      w3 := UInt32.leftRotation w2 10
       w2 := w1
       w1 := tmp
     index := index.map (fun i => rho[i.val])
@@ -88,10 +88,10 @@ def computeLine (digest : Vector UInt32 5) (chunk : Vector UInt32 16)
 def updateDigest (digest : Vector UInt32 5) (chunk : Vector UInt32 16) :
     Id (Vector UInt32 5) := do
   let wordsLeft : Vector UInt32 5 ←
-    computeLine digest chunk indexLeft shiftLists constantsLeft fnsLeft
+    computeLine digest chunk indexLeft shiftLists constantsLeft leftFunctionOrder
   let wordsRight : Vector UInt32 5 ←
     computeLine digest chunk indexRight
-      shiftLists constantsRight fnsRight
+      shiftLists constantsRight rightFunctionOrder
   return #v[
     digest[1] + wordsLeft[2] + wordsRight[3],
     digest[2] + wordsLeft[3] + wordsRight[4],
@@ -170,7 +170,7 @@ def initChunk : Vector UInt32 8 :=
 def Bytes.toChunks (lenBytes : Bytes) : Nat → Bytes → Nat → List (Array UInt8)
   | 0, _, _ => []
   | _ + 1, _, 0 =>
-    [((Array.replicate 64 (0x00 : UInt8)).set 0 0x80 (by simp)).writeD 56 lenBytes]
+    [((Array.replicate 64 (0x00 : UInt8)).set 0 0x80 (by simp)).writeIfInBounds 56 lenBytes]
   | k + 1, xs, len' + 64 =>
       let ⟨pfx, xs'⟩ := List.splitToArray 64 xs 0
       let xss := Bytes.toChunks lenBytes k xs' len'
@@ -226,18 +226,18 @@ def rounds (p : (Array UInt8)) :
         let x1 : UInt32 := w.getD ((j + 1) % 16) 0
         let x14 : UInt32 := w.getD ((j + 14) % 16) 0
         let s0 : UInt32 :=
-          (UInt32.ror x1 7) ^^^ (UInt32.ror x1 18) ^^^ (x1 >>> 3)
+          (UInt32.rightRotation x1 7) ^^^ (UInt32.rightRotation x1 18) ^^^ (x1 >>> 3)
         let s1 : UInt32 :=
-          (UInt32.ror x14 17) ^^^ (UInt32.ror x14 19) ^^^ (x14 >>> 10)
+          (UInt32.rightRotation x14 17) ^^^ (UInt32.rightRotation x14 19) ^^^ (x14 >>> 10)
         (w.getD j 0) + s0 + (w.getD ((j + 9) % 16) 0) + s1
     let w' := w.set j wj (Nat.mod_lt _ (by omega))
     let s1 : UInt32 :=
-      (UInt32.ror e 6) ^^^ (UInt32.ror e 11) ^^^ (UInt32.ror e 25)
+      (UInt32.rightRotation e 6) ^^^ (UInt32.rightRotation e 11) ^^^ (UInt32.rightRotation e 25)
     let ch : UInt32 := (e &&& f) ^^^ ((~~~ e) &&& g)
     let temp1 : UInt32 :=
       h + s1 + ch + (roundConstants[t]'(Nat.sub_lt (by omega) (by omega))) + wj
     let s0 : UInt32 :=
-      (UInt32.ror a 2) ^^^ (UInt32.ror a 13) ^^^ (UInt32.ror a 22)
+      (UInt32.rightRotation a 2) ^^^ (UInt32.rightRotation a 13) ^^^ (UInt32.rightRotation a 22)
     let maj : UInt32 := (a &&& b) ^^^ (a &&& c) ^^^ (b &&& c)
     let temp2 : UInt32 := s0 + maj
     rounds p n (by omega) w' (temp1 + temp2) a b c (d + temp1) e f g
@@ -283,7 +283,7 @@ def Bytes.sha256 : Bytes → U256 := SHA256.run
 
 namespace KECCAK
 
-@[inline] def UInt64.rol (xs : UInt64) (y : Nat) : UInt64 :=
+@[inline] def UInt64.leftRotation (xs : UInt64) (y : Nat) : UInt64 :=
   (xs <<< y.toUInt64) ||| (xs >>> (64 - y).toUInt64)
 
 /-- XOR `t` into lane `k` of a keccak state. The lane index is carried with its
@@ -310,7 +310,7 @@ whose out-of-bounds branch was the last explicit abort in the library. -/
 -- reads a lane it has not proved exists, and no `Inhabited ξ` fallback is
 -- needed any more — its former role was to supply the value of a read that
 -- could not happen.
-def θ {ξ : Type u} [XorOp ξ]
+def theta {ξ : Type u} [XorOp ξ]
   (rol : ξ → Nat → ξ) (ws : Vector ξ 25) : Vector ξ 25 :=
   let prep (x : Nat) (h : x < 5) : ξ :=
     ws[x] ^^^
@@ -334,7 +334,7 @@ def θ {ξ : Type u} [XorOp ξ]
       outer bc i (by omega) <| inner t i (by omega) 5 (by omega) ws
   outer initVec 5 (by omega) ws
 
-def rndc : Vector UInt64 24 :=
+def roundConstants : Vector UInt64 24 :=
   #v[ 0x0000000000000001, 0x0000000000008082, 0x800000000000808a, 0x8000000080008000,
       0x000000000000808b, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
       0x000000000000008a, 0x0000000000000088, 0x0000000080008009, 0x000000008000000a,
@@ -342,30 +342,30 @@ def rndc : Vector UInt64 24 :=
       0x8000000000008002, 0x8000000000000080, 0x000000000000800a, 0x800000008000000a,
       0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008 ]
 
-def rotc : Vector Nat 24 :=
+def rotationOffsets : Vector Nat 24 :=
   #v[ 1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14,
       27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44 ]
 
-def piln : Vector Nat 24 :=
+def piLaneOrder : Vector Nat 24 :=
   #v[ 10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4,
       15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1 ]
 
 /-- Every entry of the π lane table names a lane of the 25-lane state. This is
 the fact that makes `ρπ`'s data-dependent write total; it is decided from the
 table rather than assumed of it. -/
-theorem piln_lt : ∀ i, (h : i < 24) → piln[i] < 25 := by decide
+theorem piLaneOrder_lt : ∀ i, (h : i < 24) → piLaneOrder[i] < 25 := by decide
 
-def ρπ {ξ : Type u} (rol : ξ → Nat → ξ) (ws : Vector ξ 25) : Vector ξ 25 :=
-  let rec aux : (k : Nat) → k ≤ 24 → ξ → Vector ξ 25 → Vector ξ 25
+def rhoPi {ξ : Type u} (rol : ξ → Nat → ξ) (ws : Vector ξ 25) : Vector ξ 25 :=
+  let rec go : (k : Nat) → k ≤ 24 → ξ → Vector ξ 25 → Vector ξ 25
     | 0, _, _, ws => ws
     | k + 1, hk, t, ws =>
       let i := 23 - k
-      let j := piln[i]'(by omega)
-      let hj : j < 25 := piln_lt i (by omega)
-      aux k (by omega) ws[j] (ws.set j (rol t <| rotc[i]'(by omega)) hj)
-  aux 24 (by omega) ws[1] ws
+      let j := piLaneOrder[i]'(by omega)
+      let hj : j < 25 := piLaneOrder_lt i (by omega)
+      go k (by omega) ws[j] (ws.set j (rol t <| rotationOffsets[i]'(by omega)) hj)
+  go 24 (by omega) ws[1] ws
 
-def χ {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ]
+def chi {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ]
   (ws : Vector ξ 25) : Vector ξ 25 :=
   let rec inner (bc : Vector ξ 5) (j : Nat) (hj : j + 5 ≤ 25) :
       (i : Nat) → i ≤ 5 → Vector ξ 25 → Vector ξ 25
@@ -382,93 +382,93 @@ def χ {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ]
       outer k (by omega) <| inner bc (k * 5) (by omega) 5 (by omega) ws
   outer 5 (by omega) ws
 
-def ι {ξ : Type u} [XorOp ξ]
+def iota {ξ : Type u} [XorOp ξ]
   (round : Nat) (h : round < 24) (rndc : Vector ξ 24) (ws : Vector ξ 25) :
     Vector ξ 25 :=
   xorLane ws 0 (by omega) rndc[round]
 
-def f {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ]
+def referencePermutation {ξ : Type u} [XorOp ξ] [Complement ξ] [HAnd ξ ξ ξ]
   (rndc : Vector ξ 24) (ws : Vector ξ 25) (rol : ξ → Nat → ξ) : Vector ξ 25 :=
-  let rec aux : (n : Nat) → n ≤ 24 → Vector ξ 25 → Vector ξ 25
+  let rec go : (n : Nat) → n ≤ 24 → Vector ξ 25 → Vector ξ 25
     | 0, _, ws => ws
     | n + 1, hn, ws =>
-      aux n (by omega) <|
-        ι (23 - n) (by omega) rndc <| χ <| ρπ rol <| θ rol ws
-  aux 24 (by omega) ws
+      go n (by omega) <|
+        iota (23 - n) (by omega) rndc <| chi <| rhoPi rol <| theta rol ws
+  go 24 (by omega) ws
 
-@[inline] private def rolc (x : UInt64) (n : UInt64) : UInt64 :=
+@[inline] private def leftRotationUInt64 (x : UInt64) (n : UInt64) : UInt64 :=
   (x <<< n) ||| (x >>> (64 - n))
 
 /-- The 5x5 keccak lane state as 25 unboxed scalars (lane (x, y) is
 field `a(x + 5*y)`), so a round never touches the heap. -/
 structure State1600 where
-  (a0 a1 a2 a3 a4 : UInt64)
-  (a5 a6 a7 a8 a9 : UInt64)
-  (a10 a11 a12 a13 a14 : UInt64)
-  (a15 a16 a17 a18 a19 : UInt64)
-  (a20 a21 a22 a23 a24 : UInt64)
+  (lane0 lane1 lane2 lane3 lane4 : UInt64)
+  (lane5 lane6 lane7 lane8 lane9 : UInt64)
+  (lane10 lane11 lane12 lane13 lane14 : UInt64)
+  (lane15 lane16 lane17 lane18 lane19 : UInt64)
+  (lane20 lane21 lane22 lane23 lane24 : UInt64)
 
 private def round1600 (rc : UInt64) (s : State1600) : State1600 :=
-  let c0 := s.a0 ^^^ s.a5 ^^^ s.a10 ^^^ s.a15 ^^^ s.a20
-  let c1 := s.a1 ^^^ s.a6 ^^^ s.a11 ^^^ s.a16 ^^^ s.a21
-  let c2 := s.a2 ^^^ s.a7 ^^^ s.a12 ^^^ s.a17 ^^^ s.a22
-  let c3 := s.a3 ^^^ s.a8 ^^^ s.a13 ^^^ s.a18 ^^^ s.a23
-  let c4 := s.a4 ^^^ s.a9 ^^^ s.a14 ^^^ s.a19 ^^^ s.a24
-  let d0 := c4 ^^^ rolc c1 1
-  let d1 := c0 ^^^ rolc c2 1
-  let d2 := c1 ^^^ rolc c3 1
-  let d3 := c2 ^^^ rolc c4 1
-  let d4 := c3 ^^^ rolc c0 1
-  let a0 := s.a0 ^^^ d0
-  let a1 := s.a1 ^^^ d1
-  let a2 := s.a2 ^^^ d2
-  let a3 := s.a3 ^^^ d3
-  let a4 := s.a4 ^^^ d4
-  let a5 := s.a5 ^^^ d0
-  let a6 := s.a6 ^^^ d1
-  let a7 := s.a7 ^^^ d2
-  let a8 := s.a8 ^^^ d3
-  let a9 := s.a9 ^^^ d4
-  let a10 := s.a10 ^^^ d0
-  let a11 := s.a11 ^^^ d1
-  let a12 := s.a12 ^^^ d2
-  let a13 := s.a13 ^^^ d3
-  let a14 := s.a14 ^^^ d4
-  let a15 := s.a15 ^^^ d0
-  let a16 := s.a16 ^^^ d1
-  let a17 := s.a17 ^^^ d2
-  let a18 := s.a18 ^^^ d3
-  let a19 := s.a19 ^^^ d4
-  let a20 := s.a20 ^^^ d0
-  let a21 := s.a21 ^^^ d1
-  let a22 := s.a22 ^^^ d2
-  let a23 := s.a23 ^^^ d3
-  let a24 := s.a24 ^^^ d4
+  let c0 := s.lane0 ^^^ s.lane5 ^^^ s.lane10 ^^^ s.lane15 ^^^ s.lane20
+  let c1 := s.lane1 ^^^ s.lane6 ^^^ s.lane11 ^^^ s.lane16 ^^^ s.lane21
+  let c2 := s.lane2 ^^^ s.lane7 ^^^ s.lane12 ^^^ s.lane17 ^^^ s.lane22
+  let c3 := s.lane3 ^^^ s.lane8 ^^^ s.lane13 ^^^ s.lane18 ^^^ s.lane23
+  let c4 := s.lane4 ^^^ s.lane9 ^^^ s.lane14 ^^^ s.lane19 ^^^ s.lane24
+  let d0 := c4 ^^^ leftRotationUInt64 c1 1
+  let d1 := c0 ^^^ leftRotationUInt64 c2 1
+  let d2 := c1 ^^^ leftRotationUInt64 c3 1
+  let d3 := c2 ^^^ leftRotationUInt64 c4 1
+  let d4 := c3 ^^^ leftRotationUInt64 c0 1
+  let a0 := s.lane0 ^^^ d0
+  let a1 := s.lane1 ^^^ d1
+  let a2 := s.lane2 ^^^ d2
+  let a3 := s.lane3 ^^^ d3
+  let a4 := s.lane4 ^^^ d4
+  let a5 := s.lane5 ^^^ d0
+  let a6 := s.lane6 ^^^ d1
+  let a7 := s.lane7 ^^^ d2
+  let a8 := s.lane8 ^^^ d3
+  let a9 := s.lane9 ^^^ d4
+  let a10 := s.lane10 ^^^ d0
+  let a11 := s.lane11 ^^^ d1
+  let a12 := s.lane12 ^^^ d2
+  let a13 := s.lane13 ^^^ d3
+  let a14 := s.lane14 ^^^ d4
+  let a15 := s.lane15 ^^^ d0
+  let a16 := s.lane16 ^^^ d1
+  let a17 := s.lane17 ^^^ d2
+  let a18 := s.lane18 ^^^ d3
+  let a19 := s.lane19 ^^^ d4
+  let a20 := s.lane20 ^^^ d0
+  let a21 := s.lane21 ^^^ d1
+  let a22 := s.lane22 ^^^ d2
+  let a23 := s.lane23 ^^^ d3
+  let a24 := s.lane24 ^^^ d4
   let b0 := a0
-  let b10 := rolc a1 1
-  let b7 := rolc a10 3
-  let b11 := rolc a7 6
-  let b17 := rolc a11 10
-  let b18 := rolc a17 15
-  let b3 := rolc a18 21
-  let b5 := rolc a3 28
-  let b16 := rolc a5 36
-  let b8 := rolc a16 45
-  let b21 := rolc a8 55
-  let b24 := rolc a21 2
-  let b4 := rolc a24 14
-  let b15 := rolc a4 27
-  let b23 := rolc a15 41
-  let b19 := rolc a23 56
-  let b13 := rolc a19 8
-  let b12 := rolc a13 25
-  let b2 := rolc a12 43
-  let b20 := rolc a2 62
-  let b14 := rolc a20 18
-  let b22 := rolc a14 39
-  let b9 := rolc a22 61
-  let b6 := rolc a9 20
-  let b1 := rolc a6 44
+  let b10 := leftRotationUInt64 a1 1
+  let b7 := leftRotationUInt64 a10 3
+  let b11 := leftRotationUInt64 a7 6
+  let b17 := leftRotationUInt64 a11 10
+  let b18 := leftRotationUInt64 a17 15
+  let b3 := leftRotationUInt64 a18 21
+  let b5 := leftRotationUInt64 a3 28
+  let b16 := leftRotationUInt64 a5 36
+  let b8 := leftRotationUInt64 a16 45
+  let b21 := leftRotationUInt64 a8 55
+  let b24 := leftRotationUInt64 a21 2
+  let b4 := leftRotationUInt64 a24 14
+  let b15 := leftRotationUInt64 a4 27
+  let b23 := leftRotationUInt64 a15 41
+  let b19 := leftRotationUInt64 a23 56
+  let b13 := leftRotationUInt64 a19 8
+  let b12 := leftRotationUInt64 a13 25
+  let b2 := leftRotationUInt64 a12 43
+  let b20 := leftRotationUInt64 a2 62
+  let b14 := leftRotationUInt64 a20 18
+  let b22 := leftRotationUInt64 a14 39
+  let b9 := leftRotationUInt64 a22 61
+  let b6 := leftRotationUInt64 a9 20
+  let b1 := leftRotationUInt64 a6 44
   let e0 := b0 ^^^ ((~~~ b1) &&& b2)
   let e1 := b1 ^^^ ((~~~ b2) &&& b3)
   let e2 := b2 ^^^ ((~~~ b3) &&& b4)
@@ -516,38 +516,38 @@ size proof, so the runtime representation is exactly the `Array UInt64` this
 took before: the type records the size, it does not change it. (The boxed-array
 boundary this crosses per permutation is a recorded performance observation,
 in the Lean-evaluation proposal, and is deliberately not addressed here.) -/
-def f1600 (ws : Vector UInt64 25) : Vector UInt64 25 :=
+def permutation (ws : Vector UInt64 25) : Vector UInt64 25 :=
   let s : State1600 :=
     ⟨ws[0], ws[1], ws[2], ws[3], ws[4],
      ws[5], ws[6], ws[7], ws[8], ws[9],
      ws[10], ws[11], ws[12], ws[13], ws[14],
      ws[15], ws[16], ws[17], ws[18], ws[19],
      ws[20], ws[21], ws[22], ws[23], ws[24]⟩
-  let s := round1600 (rndc[0]) s
-  let s := round1600 (rndc[1]) s
-  let s := round1600 (rndc[2]) s
-  let s := round1600 (rndc[3]) s
-  let s := round1600 (rndc[4]) s
-  let s := round1600 (rndc[5]) s
-  let s := round1600 (rndc[6]) s
-  let s := round1600 (rndc[7]) s
-  let s := round1600 (rndc[8]) s
-  let s := round1600 (rndc[9]) s
-  let s := round1600 (rndc[10]) s
-  let s := round1600 (rndc[11]) s
-  let s := round1600 (rndc[12]) s
-  let s := round1600 (rndc[13]) s
-  let s := round1600 (rndc[14]) s
-  let s := round1600 (rndc[15]) s
-  let s := round1600 (rndc[16]) s
-  let s := round1600 (rndc[17]) s
-  let s := round1600 (rndc[18]) s
-  let s := round1600 (rndc[19]) s
-  let s := round1600 (rndc[20]) s
-  let s := round1600 (rndc[21]) s
-  let s := round1600 (rndc[22]) s
-  let s := round1600 (rndc[23]) s
-  #v[s.a0, s.a1, s.a2, s.a3, s.a4, s.a5, s.a6, s.a7, s.a8, s.a9, s.a10, s.a11, s.a12, s.a13, s.a14, s.a15, s.a16, s.a17, s.a18, s.a19, s.a20, s.a21, s.a22, s.a23, s.a24]
+  let s := round1600 (roundConstants[0]) s
+  let s := round1600 (roundConstants[1]) s
+  let s := round1600 (roundConstants[2]) s
+  let s := round1600 (roundConstants[3]) s
+  let s := round1600 (roundConstants[4]) s
+  let s := round1600 (roundConstants[5]) s
+  let s := round1600 (roundConstants[6]) s
+  let s := round1600 (roundConstants[7]) s
+  let s := round1600 (roundConstants[8]) s
+  let s := round1600 (roundConstants[9]) s
+  let s := round1600 (roundConstants[10]) s
+  let s := round1600 (roundConstants[11]) s
+  let s := round1600 (roundConstants[12]) s
+  let s := round1600 (roundConstants[13]) s
+  let s := round1600 (roundConstants[14]) s
+  let s := round1600 (roundConstants[15]) s
+  let s := round1600 (roundConstants[16]) s
+  let s := round1600 (roundConstants[17]) s
+  let s := round1600 (roundConstants[18]) s
+  let s := round1600 (roundConstants[19]) s
+  let s := round1600 (roundConstants[20]) s
+  let s := round1600 (roundConstants[21]) s
+  let s := round1600 (roundConstants[22]) s
+  let s := round1600 (roundConstants[23]) s
+  #v[s.lane0, s.lane1, s.lane2, s.lane3, s.lane4, s.lane5, s.lane6, s.lane7, s.lane8, s.lane9, s.lane10, s.lane11, s.lane12, s.lane13, s.lane14, s.lane15, s.lane16, s.lane17, s.lane18, s.lane19, s.lane20, s.lane21, s.lane22, s.lane23, s.lane24]
 
 -- BEGIN GENERATED (scripts/gen-keccak-spec.py) -- do not hand-edit.
 --
@@ -561,12 +561,12 @@ def f1600 (ws : Vector UInt64 25) : Vector UInt64 25 :=
 definitions operate on. Used by the equivalence theorems and once per
 permutation, never inside a round — the same role `Blake2.Vec.toArray` plays in
 `Jaune/Precompiles.lean`. -/
-def State1600.toVec (s : State1600) : Vector UInt64 25 :=
-  #v[s.a0, s.a1, s.a2, s.a3, s.a4, s.a5, s.a6, s.a7, s.a8, s.a9, s.a10, s.a11, s.a12, s.a13, s.a14, s.a15, s.a16, s.a17, s.a18, s.a19, s.a20, s.a21, s.a22, s.a23, s.a24]
+def State1600.toVector (s : State1600) : Vector UInt64 25 :=
+  #v[s.lane0, s.lane1, s.lane2, s.lane3, s.lane4, s.lane5, s.lane6, s.lane7, s.lane8, s.lane9, s.lane10, s.lane11, s.lane12, s.lane13, s.lane14, s.lane15, s.lane16, s.lane17, s.lane18, s.lane19, s.lane20, s.lane21, s.lane22, s.lane23, s.lane24]
 
 /-- θ in closed form: lane `j` gains the column delta for column `j % 5`. -/
-theorem theta_lit (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23 x24 : UInt64) :
-    θ UInt64.rol #v[x0,
+theorem theta_literal (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23 x24 : UInt64) :
+    theta UInt64.leftRotation #v[x0,
         x1,
         x2,
         x3,
@@ -591,38 +591,38 @@ theorem theta_lit (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17
         x22,
         x23,
         x24] =
-    #v[x0 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.rol (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
-      x1 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.rol (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
-      x2 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.rol (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
-      x3 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.rol (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
-      x4 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.rol (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
-      x5 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.rol (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
-      x6 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.rol (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
-      x7 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.rol (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
-      x8 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.rol (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
-      x9 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.rol (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
-      x10 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.rol (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
-      x11 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.rol (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
-      x12 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.rol (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
-      x13 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.rol (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
-      x14 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.rol (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
-      x15 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.rol (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
-      x16 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.rol (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
-      x17 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.rol (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
-      x18 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.rol (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
-      x19 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.rol (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
-      x20 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.rol (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
-      x21 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.rol (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
-      x22 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.rol (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
-      x23 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.rol (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
-      x24 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.rol (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1)] := by
-  simp [θ, θ.outer, θ.inner, xorLane]
+    #v[x0 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.leftRotation (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
+      x1 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.leftRotation (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
+      x2 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.leftRotation (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
+      x3 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.leftRotation (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
+      x4 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.leftRotation (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
+      x5 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.leftRotation (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
+      x6 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.leftRotation (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
+      x7 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.leftRotation (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
+      x8 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.leftRotation (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
+      x9 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.leftRotation (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
+      x10 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.leftRotation (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
+      x11 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.leftRotation (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
+      x12 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.leftRotation (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
+      x13 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.leftRotation (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
+      x14 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.leftRotation (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
+      x15 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.leftRotation (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
+      x16 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.leftRotation (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
+      x17 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.leftRotation (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
+      x18 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.leftRotation (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
+      x19 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.leftRotation (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1),
+      x20 ^^^ ((x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) ^^^ UInt64.leftRotation (x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) 1),
+      x21 ^^^ ((x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) ^^^ UInt64.leftRotation (x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) 1),
+      x22 ^^^ ((x1 ^^^ x6 ^^^ x11 ^^^ x16 ^^^ x21) ^^^ UInt64.leftRotation (x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) 1),
+      x23 ^^^ ((x2 ^^^ x7 ^^^ x12 ^^^ x17 ^^^ x22) ^^^ UInt64.leftRotation (x4 ^^^ x9 ^^^ x14 ^^^ x19 ^^^ x24) 1),
+      x24 ^^^ ((x3 ^^^ x8 ^^^ x13 ^^^ x18 ^^^ x23) ^^^ UInt64.leftRotation (x0 ^^^ x5 ^^^ x10 ^^^ x15 ^^^ x20) 1)] := by
+  simp [theta, theta.outer, theta.inner, xorLane]
 
 /-- ρπ in closed form. The reference walks a single carry `t` through the 24
 `piln` lanes; because the table's entries are distinct, the value written into
 lane `piln[i]` is a rotation of the ORIGINAL lane `piln[i-1]`. -/
-theorem rhopi_lit (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23 x24 : UInt64) :
-    ρπ UInt64.rol #v[x0,
+theorem rhoPi_literal (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23 x24 : UInt64) :
+    rhoPi UInt64.leftRotation #v[x0,
         x1,
         x2,
         x3,
@@ -648,36 +648,36 @@ theorem rhopi_lit (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17
         x23,
         x24] =
     #v[x0,
-      UInt64.rol (x6) 44,
-      UInt64.rol (x12) 43,
-      UInt64.rol (x18) 21,
-      UInt64.rol (x24) 14,
-      UInt64.rol (x3) 28,
-      UInt64.rol (x9) 20,
-      UInt64.rol (x10) 3,
-      UInt64.rol (x16) 45,
-      UInt64.rol (x22) 61,
-      UInt64.rol (x1) 1,
-      UInt64.rol (x7) 6,
-      UInt64.rol (x13) 25,
-      UInt64.rol (x19) 8,
-      UInt64.rol (x20) 18,
-      UInt64.rol (x4) 27,
-      UInt64.rol (x5) 36,
-      UInt64.rol (x11) 10,
-      UInt64.rol (x17) 15,
-      UInt64.rol (x23) 56,
-      UInt64.rol (x2) 62,
-      UInt64.rol (x8) 55,
-      UInt64.rol (x14) 39,
-      UInt64.rol (x15) 41,
-      UInt64.rol (x21) 2] := by
-  simp [ρπ, ρπ.aux, piln, rotc]
+      UInt64.leftRotation (x6) 44,
+      UInt64.leftRotation (x12) 43,
+      UInt64.leftRotation (x18) 21,
+      UInt64.leftRotation (x24) 14,
+      UInt64.leftRotation (x3) 28,
+      UInt64.leftRotation (x9) 20,
+      UInt64.leftRotation (x10) 3,
+      UInt64.leftRotation (x16) 45,
+      UInt64.leftRotation (x22) 61,
+      UInt64.leftRotation (x1) 1,
+      UInt64.leftRotation (x7) 6,
+      UInt64.leftRotation (x13) 25,
+      UInt64.leftRotation (x19) 8,
+      UInt64.leftRotation (x20) 18,
+      UInt64.leftRotation (x4) 27,
+      UInt64.leftRotation (x5) 36,
+      UInt64.leftRotation (x11) 10,
+      UInt64.leftRotation (x17) 15,
+      UInt64.leftRotation (x23) 56,
+      UInt64.leftRotation (x2) 62,
+      UInt64.leftRotation (x8) 55,
+      UInt64.leftRotation (x14) 39,
+      UInt64.leftRotation (x15) 41,
+      UInt64.leftRotation (x21) 2] := by
+  simp [rhoPi, rhoPi.go, piLaneOrder, rotationOffsets]
 
 /-- χ in closed form, row by row. Each row's five lanes are combined from the
 row's pre-update values, which the reference snapshots into `bc`. -/
-theorem chi_lit (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23 x24 : UInt64) :
-    χ #v[x0,
+theorem chi_literal (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23 x24 : UInt64) :
+    chi #v[x0,
       x1,
       x2,
       x3,
@@ -727,23 +727,23 @@ theorem chi_lit (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x
       x22 ^^^ ((~~~ x23) &&& x24),
       x23 ^^^ ((~~~ x24) &&& x20),
       x24 ^^^ ((~~~ x20) &&& x21)] := by
-  simp [χ, χ.outer, χ.inner, xorLane]
+  simp [chi, chi.outer, chi.inner, xorLane]
 
 /-- The fused unrolled round equals ι ∘ χ ∘ ρπ ∘ θ over the reference
 transcription. This is the whole content of the equivalence: `round1600`'s
 hand-derived `b` bindings ARE the ρπ carry chain, and its `c`/`d` bindings are
 θ's column parities and deltas. -/
 theorem round_eq (r : Nat) (h : r < 24) (s : State1600) :
-    (round1600 (rndc[r]'h) s).toVec =
-      ι r h rndc (χ (ρπ UInt64.rol (θ UInt64.rol s.toVec))) := by
+    (round1600 (roundConstants[r]'h) s).toVector =
+      iota r h roundConstants (chi (rhoPi UInt64.leftRotation (theta UInt64.leftRotation s.toVector))) := by
   cases s
-  simp [State1600.toVec, round1600, rolc, theta_lit, rhopi_lit, chi_lit,
-    ι, xorLane, UInt64.rol]
+  simp [State1600.toVector, round1600, leftRotationUInt64, theta_literal, rhoPi_literal, chi_literal,
+    iota, xorLane, UInt64.leftRotation]
 
 /-- Any 25-lane vector is the vector of its own twenty-five lanes. This is what
 lets the closed forms above, stated over explicit lanes, apply to the opaque
 argument of `f1600`. -/
-theorem vec_eta (v : Vector UInt64 25) : v = #v[v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15], v[16], v[17], v[18], v[19], v[20], v[21], v[22], v[23], v[24]] := by
+theorem vector_eta (v : Vector UInt64 25) : v = #v[v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15], v[16], v[17], v[18], v[19], v[20], v[21], v[22], v[23], v[24]] := by
   apply Vector.ext
   intro i hi
   match i, hi with
@@ -776,26 +776,26 @@ theorem vec_eta (v : Vector UInt64 25) : v = #v[v[0], v[1], v[2], v[3], v[4], v[
 
 /-- `f1600` is exactly the twenty-four nested rounds, bridged out once at the
 end; the `let` chain in its body is definitionally this nesting. -/
-theorem f1600_toVec (ws : Vector UInt64 25) :
-    f1600 ws = (round1600 rndc[23] (round1600 rndc[22] (round1600 rndc[21] (round1600 rndc[20] (round1600 rndc[19] (round1600 rndc[18] (round1600 rndc[17] (round1600 rndc[16] (round1600 rndc[15] (round1600 rndc[14] (round1600 rndc[13] (round1600 rndc[12] (round1600 rndc[11] (round1600 rndc[10] (round1600 rndc[9] (round1600 rndc[8] (round1600 rndc[7] (round1600 rndc[6] (round1600 rndc[5] (round1600 rndc[4] (round1600 rndc[3] (round1600 rndc[2] (round1600 rndc[1] (round1600 rndc[0] (⟨ws[0], ws[1], ws[2], ws[3], ws[4], ws[5], ws[6], ws[7], ws[8], ws[9], ws[10], ws[11], ws[12], ws[13], ws[14], ws[15], ws[16], ws[17], ws[18], ws[19], ws[20], ws[21], ws[22], ws[23], ws[24]⟩ : State1600))))))))))))))))))))))))).toVec := rfl
+theorem permutation_toVector (ws : Vector UInt64 25) :
+    permutation ws = (round1600 roundConstants[23] (round1600 roundConstants[22] (round1600 roundConstants[21] (round1600 roundConstants[20] (round1600 roundConstants[19] (round1600 roundConstants[18] (round1600 roundConstants[17] (round1600 roundConstants[16] (round1600 roundConstants[15] (round1600 roundConstants[14] (round1600 roundConstants[13] (round1600 roundConstants[12] (round1600 roundConstants[11] (round1600 roundConstants[10] (round1600 roundConstants[9] (round1600 roundConstants[8] (round1600 roundConstants[7] (round1600 roundConstants[6] (round1600 roundConstants[5] (round1600 roundConstants[4] (round1600 roundConstants[3] (round1600 roundConstants[2] (round1600 roundConstants[1] (round1600 roundConstants[0] (⟨ws[0], ws[1], ws[2], ws[3], ws[4], ws[5], ws[6], ws[7], ws[8], ws[9], ws[10], ws[11], ws[12], ws[13], ws[14], ws[15], ws[16], ws[17], ws[18], ws[19], ws[20], ws[21], ws[22], ws[23], ws[24]⟩ : State1600))))))))))))))))))))))))).toVector := rfl
 
 /-- **The retained reference transcription and the production kernel compute
 the same permutation.** `f1600`'s doc comment asserted this; this is the
 proof. It says the optimization preserved the transcribed algorithm — it does
 not by itself say the transcription is FIPS 202; `Keccak.FIPS.f1600_eq_keccakP`
 in `Jaune/KeccakSpec.lean` builds on it to tie `f1600` to Keccak-p[1600, 24]. -/
-theorem f1600_eq (ws : Vector UInt64 25) :
-    f1600 ws = f rndc ws UInt64.rol := by
-  rw [f1600_toVec]
-  simp only [round_eq, f, f.aux, Nat.reduceSub]
-  rw [show State1600.toVec ⟨ws[0], ws[1], ws[2], ws[3], ws[4], ws[5], ws[6], ws[7], ws[8], ws[9], ws[10], ws[11], ws[12], ws[13], ws[14], ws[15], ws[16], ws[17], ws[18], ws[19], ws[20], ws[21], ws[22], ws[23], ws[24]⟩ = ws from (vec_eta ws).symm]
+theorem permutation_eq_referencePermutation (ws : Vector UInt64 25) :
+    permutation ws = referencePermutation roundConstants ws UInt64.leftRotation := by
+  rw [permutation_toVector]
+  simp only [round_eq, referencePermutation, referencePermutation.go, Nat.reduceSub]
+  rw [show State1600.toVector ⟨ws[0], ws[1], ws[2], ws[3], ws[4], ws[5], ws[6], ws[7], ws[8], ws[9], ws[10], ws[11], ws[12], ws[13], ws[14], ws[15], ws[16], ws[17], ws[18], ws[19], ws[20], ws[21], ws[22], ws[23], ws[24]⟩ = ws from (vector_eta ws).symm]
 -- END GENERATED
 
 def Bytes.run : Fin 17 → Bytes → Vector UInt64 25 → U256
   | wc, b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: bs, ws =>
     let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
     let ws' := xorLane ws wc.val (by omega) t
-    Bytes.run (wc + 1) bs <| if wc = 16 then f1600 ws' else ws'
+    Bytes.run (wc + 1) bs <| if wc = 16 then permutation ws' else ws'
   | wc, bs, ws =>
     -- `takeD` pads to exactly eight, so the eight reads below are total
     let us : Vector UInt8 8 :=
@@ -807,9 +807,9 @@ def Bytes.run : Fin 17 → Bytes → Vector UInt64 25 → U256
     let s : UInt64 := (8 : UInt64) <<< 60
     let temp0 := xorLane ws wc.val (by omega) t
     let temp1 := xorLane temp0 16 (by omega) s
-    let ws' := f1600 temp1
-    ⟨ ⟨UInt64.byteswap (ws'[0]), UInt64.byteswap (ws'[1])⟩,
-      ⟨UInt64.byteswap (ws'[2]), UInt64.byteswap (ws'[3])⟩ ⟩
+    let ws' := permutation temp1
+    ⟨ ⟨UInt64.byteSwap (ws'[0]), UInt64.byteSwap (ws'[1])⟩,
+      ⟨UInt64.byteSwap (ws'[2]), UInt64.byteSwap (ws'[3])⟩ ⟩
 
 /-- The ranged sponge. `bnd` is the end of the range being absorbed and `n` the
 number of bytes still to absorb, so `n ≤ bnd ≤ bs.size` is the invariant that
@@ -830,15 +830,15 @@ def ByteArray.run (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
     let t : UInt64 := UInt64.ofBytes b7 b6 b5 b4 b3 b2 b1 b0
     let ws' := xorLane ws wc.val (by omega) t
     ByteArray.run bnd bs hb (n - 8) (by omega) (wc + 1) <|
-      if wc = 16 then f1600 ws' else ws'
+      if wc = 16 then permutation ws' else ws'
   else
-    let rec aux (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
+    let rec go (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
         (m : Nat) → m ≤ bnd → Nat → List UInt8
       | _, _, 0 => [] -- unreachable code
       | 0, _, n + 1 => 1 :: List.replicate n 0
       | m + 1, hm, n + 1 =>
-        bs[(bnd - (m + 1))]'(by omega) :: aux bnd bs hb m (by omega) n
-    let us := aux bnd bs hb n hn 8
+        bs[(bnd - (m + 1))]'(by omega) :: go bnd bs hb m (by omega) n
+    let us := go bnd bs hb n hn 8
     let t : UInt64 :=
       UInt64.ofBytes
         (us.getD 7 0)
@@ -852,9 +852,9 @@ def ByteArray.run (bnd : Nat) (bs : ByteArray) (hb : bnd ≤ bs.size) :
     let s : UInt64 := (8 : UInt64) <<< 60
     let temp0 := xorLane ws wc.val (by omega) t
     let temp1 := xorLane temp0 16 (by omega) s
-    let ws' := f1600 temp1
-    ⟨ ⟨UInt64.byteswap (ws'[0]), UInt64.byteswap (ws'[1])⟩,
-      ⟨UInt64.byteswap (ws'[2]), UInt64.byteswap (ws'[3])⟩ ⟩
+    let ws' := permutation temp1
+    ⟨ ⟨UInt64.byteSwap (ws'[0]), UInt64.byteSwap (ws'[1])⟩,
+      ⟨UInt64.byteSwap (ws'[2]), UInt64.byteSwap (ws'[3])⟩ ⟩
   termination_by n => n
 
 end KECCAK

@@ -42,10 +42,10 @@ open JauneConsensus
 
 section NegativeControls
 
-private def replicateVector {α : Type} (x : α) (n : Nat) : SszVector α n :=
+private def replicateVector {α : Type} (x : α) (n : Nat) : Ssz.Vector α n :=
   ⟨Array.replicate n x, Array.size_replicate⟩
 
-private def emptySsz {α : Type} (n : Nat) : SszList α n :=
+private def emptySsz {α : Type} (n : Nat) : Ssz.List α n :=
   ⟨#[], Nat.zero_le n⟩
 
 private def zeroBitvector (n : Nat) : Bitvector n :=
@@ -84,7 +84,7 @@ private def zeroPayloadHeader : ExecutionPayloadHeader Preset.minimal :=
     gas_used := U64.zero,
     timestamp := U64.zero,
     extra_data := emptySsz Preset.minimal.MAX_EXTRA_DATA_BYTES,
-    base_fee_per_gas := UIntN.zero,
+    base_fee_per_gas := UnsignedInteger.zero,
     block_hash := 0,
     transactions_root := 0,
     withdrawals_root := 0,

@@ -10,9 +10,9 @@ message-call lemmas take the `calculateMessageCallGas_*` names.
 
 section
 namespace Jaune
-theorem calculateMessageCallGas_zero_child_le (gas gasLeft memoryCost extraGas cs : Nat) :
-    (calculateMsgCallGas 0 gas gasLeft memoryCost extraGas cs).2 ≤ gas := by
-  simp only [calculateMsgCallGas]
+theorem MessageCall.gasCostAndChildGas_child_at_most_requested_of_zero_value (gas gasLeft memoryCost extraGas cs : Nat) :
+    (MessageCall.gasCostAndChildGas 0 gas gasLeft memoryCost extraGas cs).2 ≤ gas := by
+  simp only [MessageCall.gasCostAndChildGas]
   split
   · exact Nat.le_refl gas
   · exact Nat.min_le_left _ _
@@ -23,12 +23,12 @@ section
 namespace Jaune
 /-- The CALL stipend adds at most its fixed amount to a word-sized requested
 grant, including the underfunded branch of the gas calculator. -/
-theorem calculateMessageCallGas_word_child_lt_with_stipend (value gas : U256)
+theorem MessageCall.gasCostAndChildGas_child_below_word_limit_plus_stipend (value gas : U256)
     (gasLeft memoryCost extraGas : Nat) :
-    (calculateMsgCallGas value.toNat gas.toNat gasLeft memoryCost extraGas
+    (MessageCall.gasCostAndChildGas value.toNat gas.toNat gasLeft memoryCost extraGas
       Gas.callStipend).2 < 2 ^ 256 + Gas.callStipend := by
   have hg := U256.toNat_lt gas
-  unfold calculateMsgCallGas
+  unfold MessageCall.gasCostAndChildGas
   by_cases hv : value.toNat = 0
   · simp only [hv, ite_true, Nat.add_zero]
     split
@@ -67,10 +67,10 @@ end
 
 section
 namespace Jaune
-theorem calculateMessageCallGas_zero_value_cost (gas gasLeft memoryCost extraGas cs : Nat) :
-    (calculateMsgCallGas 0 gas gasLeft memoryCost extraGas cs).1 =
-      (calculateMsgCallGas 0 gas gasLeft memoryCost extraGas cs).2 + extraGas := by
-  simp only [calculateMsgCallGas]
+theorem MessageCall.gasCostAndChildGas_cost_of_zero_value (gas gasLeft memoryCost extraGas cs : Nat) :
+    (MessageCall.gasCostAndChildGas 0 gas gasLeft memoryCost extraGas cs).1 =
+      (MessageCall.gasCostAndChildGas 0 gas gasLeft memoryCost extraGas cs).2 + extraGas := by
+  simp only [MessageCall.gasCostAndChildGas]
   split <;> rfl
 end Jaune
 end
@@ -193,7 +193,7 @@ end
 section
 open Jaune
 namespace Jaune
-theorem access_cost_pos (x : Address) (a : AdrSet) : 0 < accessCost x a := by
+theorem access_cost_pos (x : Address) (a : AddressSet) : 0 < accessCost x a := by
   unfold accessCost Gas.warmStorageReadCost Gas.coldAccountAccessCost
   split <;> omega
 end Jaune
@@ -202,7 +202,7 @@ end
 section
 open Jaune
 namespace Jaune
-theorem Gas.warmStorageReadCost_le_access_cost (x : Address) (a : AdrSet) :
+theorem Gas.warmStorageReadCost_at_most_access_cost (x : Address) (a : AddressSet) :
     Gas.warmStorageReadCost ≤ accessCost x a := by
   unfold accessCost Gas.warmStorageReadCost Gas.coldAccountAccessCost
   split <;> omega
@@ -225,12 +225,12 @@ end
 section
 open Jaune
 namespace Jaune
-theorem calculateMessageCallGas_stipend_lt
+theorem MessageCall.gasCostAndChildGas_child_below_cost_plus_memory_of_stipend_bound
     {value gas gasLeft memoryCost extraGas cs : Nat}
     (hstip : (if value = 0 then 0 else cs) < extraGas + memoryCost) :
-    (calculateMsgCallGas value gas gasLeft memoryCost extraGas cs).2 <
-      (calculateMsgCallGas value gas gasLeft memoryCost extraGas cs).1 + memoryCost := by
-  unfold calculateMsgCallGas
+    (MessageCall.gasCostAndChildGas value gas gasLeft memoryCost extraGas cs).2 <
+      (MessageCall.gasCostAndChildGas value gas gasLeft memoryCost extraGas cs).1 + memoryCost := by
+  unfold MessageCall.gasCostAndChildGas
   split <;> split <;> simp_all <;> omega
 end Jaune
 end
@@ -238,12 +238,12 @@ end
 section
 open Jaune
 namespace Jaune
-theorem calculateMessageCallGas_zero_cost
+theorem MessageCall.gasCostAndChildGas_child_of_zero_memory_and_extra_cost
     (value gas gasLeft cs : Nat) :
-    (calculateMsgCallGas value gas gasLeft 0 0 cs).2 =
-      (calculateMsgCallGas value gas gasLeft 0 0 cs).1 +
+    (MessageCall.gasCostAndChildGas value gas gasLeft 0 0 cs).2 =
+      (MessageCall.gasCostAndChildGas value gas gasLeft 0 0 cs).1 +
         (if value = 0 then 0 else cs) := by
-  unfold calculateMsgCallGas
+  unfold MessageCall.gasCostAndChildGas
   split <;> split <;> simp_all
 end Jaune
 end

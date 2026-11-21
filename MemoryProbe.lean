@@ -1,4 +1,4 @@
-import Jaune.MessageCall.CheckedExec
+import Jaune.MessageCall.Exec
 
 /-!
 # Bounded call-depth / calldata-size memory probe
@@ -123,12 +123,12 @@ def probeTransaction : TransactionContext :=
 /-- The top-level frame: the recursive program installed at its own address, called by itself
 with the full call depth left, no value, no calldata and a large gas grant. Its checkpoint is the
 message's initial one over a world holding only that code. -/
-def probeFrame (family : Family) (depth inputSize : Nat) : Checked.Frame :=
+def probeFrame (family : Family) (depth inputSize : Nat) : Frame :=
   let target : Address := 0xcbbf5374fce5edbc8e2a8697c15331677e6ebf0b
   let code := recursiveCallCode family target inputSize
-  let message : Checked.Message :=
+  let message : Message :=
     { context :=
-        { caller := target, recipient := target, value := 0, calldata := [], code
+        { caller := target, recipient := target, value := 0, calldata := [], code := code
           depthLeft := depth, isStatic := false, tx := probeTransaction, block := probeBlock }
       kind := .call
       codeAddress := some target
@@ -146,10 +146,10 @@ def run (family : Family) (depth inputSize : Nat) :
   -- The top frame's raw result: enter it from its checkpoint, run `Checked.exec`, and read the
   -- final machine's memory. A settled `Frame.Result` carries no memory.
   let frame := probeFrame family depth inputSize
-  match Checked.enterWith frame frame.checkpoint with
+  match enterWith frame frame.checkpoint with
   | .done _ => .error .frameSettlement
   | .run r =>
-    match Checked.exec r with
+    match exec r with
     | .ok (.halted ..) | .ok (.reverted ..) => .error .settledHalt
     | .error _ => .error .frameSettlement
     | .ok (.finished _ s) =>

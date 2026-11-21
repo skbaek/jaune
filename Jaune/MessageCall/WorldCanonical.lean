@@ -12,7 +12,7 @@ open Jaune
 namespace Jaune
 theorem World.Canonical.createSetUp {w : World} (h : w.Canonical) (a : Address) :
     (w.createSetUp a).Canonical :=
-  ⟨State.Canonical.incrNonce (State.Canonical.setStor h.1 a Storage.canonical_empty) a, h.2⟩
+  ⟨State.Canonical.incrementNonce (State.Canonical.setStorage h.1 a Storage.canonical_empty) a, h.2⟩
 end Jaune
 end
 
@@ -22,12 +22,12 @@ namespace Jaune
 theorem World.Canonical.subtractBalance {w w' : World} (h : w.Canonical) {a : Address} {v : U256}
     (hw : w.subtractBalance a v = some w') : w'.Canonical := by
   unfold World.subtractBalance at hw
-  cases hs : w.state.subBal a v with
+  cases hs : w.state.subtractBalance a v with
   | none => rw [hs] at hw; nomatch hw
   | some st =>
     rw [hs] at hw
     cases hw
-    exact ⟨State.Canonical.subBal h.1 hs, h.2⟩
+    exact ⟨State.Canonical.subtractBalance h.1 hs, h.2⟩
 end Jaune
 end
 
@@ -36,7 +36,7 @@ open Jaune
 namespace Jaune
 theorem World.Canonical.addBalance {w : World} (h : w.Canonical) (a : Address) (v : U256) :
     (w.addBalance a v).Canonical :=
-  ⟨State.Canonical.addBal h.1 a v, h.2⟩
+  ⟨State.Canonical.addBalance h.1 a v, h.2⟩
 end Jaune
 end
 

@@ -29,8 +29,8 @@ def getValidatorFromDeposit (P : Preset) (f : ConsensusFork) (pubkey : BLSPubkey
   pure { v with effective_balance := if rounded < maxEb then rounded else maxEb }
 
 /-- `set_or_append_list` (Altair). -/
-def setOrAppendList {α : Type} {n : Nat} (xs : SszList α n) (index : ValidatorIndex) (v : α)
-    (site : String) : Fallible (SszList α n) :=
+def setOrAppendList {α : Type} {n : Nat} (xs : Ssz.List α n) (index : ValidatorIndex) (v : α)
+    (site : String) : Fallible (Ssz.List α n) :=
   if index.toNat == xs.length then xs.push v site else xs.set index.toNat v site
 
 /-- `add_validator_to_registry` (Electra; Altair to Deneb differ only in `get_validator_from_deposit`). -/
@@ -39,7 +39,7 @@ def addValidatorToRegistry (state : BeaconState P f) (pubkey : BLSPubkey) (wc : 
   let site := "add_validator_to_registry"
   let index ← U64.ofNat? state.validators.length "get_index_for_new_validator"
   let validator ← getValidatorFromDeposit P f pubkey wc amount
-  let zeroFlags : ParticipationFlags := UIntN.zero
+  let zeroFlags : ParticipationFlags := UnsignedInteger.zero
   pure { state with
     validators := ← setOrAppendList state.validators index validator site
     balances := ← setOrAppendList state.balances index amount site

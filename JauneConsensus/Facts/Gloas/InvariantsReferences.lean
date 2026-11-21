@@ -63,7 +63,7 @@ theorem list_sum_le_of_entries {α : Type} (f : α → Nat) :
       (fun j a b ha hb => hle (j + 1) a b (by simpa using ha) (by simpa using hb))
     omega
 
-theorem pendingPaymentBalance_le_of_entries {a b : SszVector JauneConsensus.Gloas.BuilderPendingPayment (2 * P.SLOTS_PER_EPOCH)}
+theorem pendingPaymentBalance_le_of_entries {a b : Ssz.Vector JauneConsensus.Gloas.BuilderPendingPayment (2 * P.SLOTS_PER_EPOCH)}
     (hle : ∀ (j : Nat) (x y : JauneConsensus.Gloas.BuilderPendingPayment),
       a.toArray[j]? = some x → b.toArray[j]? = some y →
       ∀ i, withdrawalAmount i y.withdrawal ≤ withdrawalAmount i x.withdrawal) (i : Nat) :
@@ -93,7 +93,7 @@ theorem references_of_invariant {s s' : GloasState P} (hf : InvariantFrame s s')
     PendingReferencesInRange s' := by
   unfold PendingReferencesInRange; rw [hf.1, hf.2.1, hf.2.2.1]; exact h
 
-theorem mem_of_getElem?' {α : Type} {a : Array α} {j : Nat} {x : α} (h : a[j]? = some x) :
+theorem mem_toList_of_getElem? {α : Type} {a : Array α} {j : Nat} {x : α} (h : a[j]? = some x) :
     x ∈ a.toList := by
   rw [Array.mem_toList_iff]; exact Array.mem_of_getElem? h
 
@@ -122,13 +122,13 @@ theorem settle_references_pendingBalance {s x : GloasState P} {idx : U64}
         simp only [ProgressiveListOnSpine.push, Array.toList_push, List.mem_append, List.mem_singleton] at hw
         rcases hw with hw | rfl
         · exact hr.1 w hw
-        · exact hr.2 p (mem_of_getElem?' hp) (ne_empty_of_amount ha)
+        · exact hr.2 p (mem_toList_of_getElem? hp) (ne_empty_of_amount ha)
       · rw [hnpos ha] at hw; exact hr.1 w hw
     · rw [hb]
       obtain ⟨j, hj⟩ := getElem?_of_mem' hq
       by_cases hji : j = idx.toNat
       · subst hji; rw [hemp] at hj; cases hj; exact absurd rfl hne
-      · rw [hoth j hji] at hj; exact hr.2 q (mem_of_getElem?' hj) hne
+      · rw [hoth j hji] at hj; exact hr.2 q (mem_toList_of_getElem? hj) hne
   · have e := hP i
     rw [withdrawalAmount_empty] at e
     unfold pendingBalance
@@ -165,7 +165,7 @@ theorem references_transfer {s s' : GloasState P} (hsz : s.builders.toArray.size
     · exact hw
   · obtain ⟨j, hj⟩ := getElem?_of_mem' hp'
     rcases hP j p' hj hne with ⟨p, hp, hpn, he⟩ | hlt
-    · rw [← he]; exact Nat.lt_of_lt_of_le (h.2 p (mem_of_getElem?' hp) hpn) hsz
+    · rw [← he]; exact Nat.lt_of_lt_of_le (h.2 p (mem_toList_of_getElem? hp) hpn) hsz
     · exact hlt
 
 /-- Transfer of G3-03 when only the registry changes, and grows. -/

@@ -120,7 +120,7 @@ section
 open Jaune
 namespace Jaune
 /-- One operation of a block body. -/
-inductive BodyOp : Type where
+inductive BodyOperation : Type where
   /-- An unchecked system call to `address` with `data` (whose failure fails the body before the
   call), incorporated into the block access list at `index`. -/
   | systemCall (address : Address) (data : Except TransitionError Bytes) (index : Nat)
@@ -146,7 +146,7 @@ open Jaune
 namespace Jaune
 /-- Credit each `(address, amount)` in turn (`create_ether`). -/
 def creditAll (credits : List (Address × Nat)) (state : State) : State :=
-  credits.foldl (fun acc c => acc.addBal c.1 c.2.toU256) state
+  credits.foldl (fun acc c => acc.addBalance c.1 c.2.toU256) state
 end Jaune
 end
 
@@ -154,7 +154,7 @@ section
 open Jaune
 namespace Jaune
 /-- The transactions, each at its position. -/
-def Body.transactionOps (txs : List Transaction) : List BodyOp :=
+def Body.transactionOperations (txs : List Transaction) : List BodyOperation :=
   txs.putIndex.map fun ⟨i, tx⟩ => .transaction tx i
 end Jaune
 end
@@ -291,6 +291,6 @@ theorem State.Canonical.creditAll {state : State} (h : state.Canonical)
   unfold Jaune.creditAll
   induction credits generalizing state with
   | nil => exact h
-  | cons c cs ih => exact ih (State.Canonical.addBal h _ _)
+  | cons c cs ih => exact ih (State.Canonical.addBalance h _ _)
 end Jaune
 end

@@ -1138,7 +1138,7 @@ theorem processPendingConsolidations_full_law (hf : f.atLeast .electra = true) {
   have hq_arr : q.toArray =
       (ForkField.get hf state.pending_consolidations).toArray.extract out.2
         (ForkField.get hf state.pending_consolidations).length := by
-    unfold SszList.ofArray at hq
+    unfold Ssz.List.ofArray at hq
     split at hq
     · cases hq; rfl
     · cases hq
@@ -1160,7 +1160,7 @@ theorem processPendingConsolidations_full_law (hf : f.atLeast .electra = true) {
     rw [hgq, ForkField.get_mk, hq_arr, hn, Nat.zero_add, Array.toList_extract]
     have hsz : (ForkField.get hf state.pending_consolidations).length =
         (ForkField.get hf state.pending_consolidations).toArray.toList.length := by
-      simp [SszList.length]
+      simp [Ssz.List.length]
     rw [hsz]
     have hdrop_len :
         ((ForkField.get hf state.pending_consolidations).toArray.toList.drop d).length ≤

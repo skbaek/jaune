@@ -215,10 +215,10 @@ def cmdBenchStateRoot (file : String) : IO UInt32 := do
   let rm := JauneConsensus.serialize s.randao_mixes
   let vs := JauneConsensus.serialize s.validators
   let t8 ← IO.monoMsNow
-  let .ok (_ : JauneConsensus.SszVector JauneConsensus.Bytes32 65536) := (JauneConsensus.deserialize rm : JauneConsensus.Fallible _)
+  let .ok (_ : JauneConsensus.Ssz.Vector JauneConsensus.Bytes32 65536) := (JauneConsensus.deserialize rm : JauneConsensus.Fallible _)
     | IO.println "randao decode failed"; return 1
   let t9 ← IO.monoMsNow
-  let .ok (_ : JauneConsensus.SszList JauneConsensus.Validator 1099511627776) := (JauneConsensus.deserialize vs : JauneConsensus.Fallible _)
+  let .ok (_ : JauneConsensus.Ssz.List JauneConsensus.Validator 1099511627776) := (JauneConsensus.deserialize vs : JauneConsensus.Fallible _)
     | IO.println "validators decode failed"; return 1
   let t10 ← IO.monoMsNow
   let _ := JauneConsensus.serialize s.randao_mixes

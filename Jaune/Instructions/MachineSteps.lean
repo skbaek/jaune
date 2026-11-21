@@ -1,11 +1,11 @@
-import Jaune.MessageCall.CheckedState
+import Jaune.MessageCall.State
 
 /-! Outcomes of the checked machine's primitive steps (`chargeGas`, `pop`, `popToNat`, `popN`,
 `push`), on both channels. The family laws of `Jaune.Instructions` are read off these. They sit
 in their own namespace `InstrStep` so that they cannot collide with `Machine.*` lemmas elsewhere;
 they are candidates for a shared module beside `CheckedState`. -/
 
-namespace Jaune.Checked.InstrStep
+namespace Jaune.InstructionStep
 
 open Jaune
 
@@ -71,16 +71,16 @@ theorem popToNat_eq_error {m out : Machine} {e : ExceptionalHalt}
     exact pop_eq_error hp
   · contradiction
 
-theorem popN_eq_ok {n : Nat} {m out : Machine} {xs : List U256}
-    (h : m.popN n = .ok (xs, out)) :
+theorem popList_eq_ok {n : Nat} {m out : Machine} {xs : List U256}
+    (h : m.popList n = .ok (xs, out)) :
     ∃ rest, m.stack = xs ++ rest ∧ xs.length = n ∧ out = { m with stack := rest } := by
   induction n generalizing m xs with
   | zero =>
-    simp only [Machine.popN, Except.ok.injEq, Prod.mk.injEq] at h
+    simp only [Machine.popList, Except.ok.injEq, Prod.mk.injEq] at h
     rcases h with ⟨rfl, rfl⟩
     exact ⟨m.stack, rfl, rfl, rfl⟩
   | succ n ih =>
-    unfold Machine.popN at h
+    unfold Machine.popList at h
     split at h
     · contradiction
     · rename_i x m' hp
@@ -94,13 +94,13 @@ theorem popN_eq_ok {n : Nat} {m out : Machine} {xs : List U256}
         simp only at hs'
         simp [hs, hs']
 
-theorem popN_eq_error {n : Nat} {m out : Machine} {e : ExceptionalHalt}
-    (h : m.popN n = .error (e, out)) :
+theorem popList_eq_error {n : Nat} {m out : Machine} {e : ExceptionalHalt}
+    (h : m.popList n = .error (e, out)) :
     e = .stackUnderflow .none ∧ m.stack.length < n ∧ out = { m with stack := [] } := by
   induction n generalizing m with
-  | zero => simp [Machine.popN] at h
+  | zero => simp [Machine.popList] at h
   | succ n ih =>
-    unfold Machine.popN at h
+    unfold Machine.popList at h
     split at h
     · rename_i err hp
       cases h
@@ -133,4 +133,4 @@ theorem push_eq_error {m out : Machine} {x : U256} {e : ExceptionalHalt}
   · cases h
     exact ⟨rfl, Nat.le_of_not_lt ‹_›, rfl⟩
 
-end Jaune.Checked.InstrStep
+end Jaune.InstructionStep

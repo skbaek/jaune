@@ -90,7 +90,7 @@ def containerRoot (roots : List (Option Jaune.U256)) : Jaune.U256 :=
 @[inline] def fieldPart {α : Type} [Ssz α] (x : α) : Part :=
   match Ssz.fixedSize? α with
   | some _ => .fixed (serialize x)
-  | none => .var (serialize x)
+  | none => .variableSize (serialize x)
 
 /-- `ssz_container Name where f₁ : T₁ f₂ : T₂ ...` declares `structure Name` with those fields
 and its `Ssz` instance. Containers with no fields are illegal ("Illegal types"), so the

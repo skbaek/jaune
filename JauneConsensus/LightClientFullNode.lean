@@ -75,11 +75,11 @@ def ProofTree.ofProgressive (fields : List (Jaune.U256 × Option ProofTree)) : P
 /-- The tree of a `List[T, N]` of composite `T`: `mix_in_length(merkleize(roots, limit=N), len)`,
 that is a node over the data root (expanded into the `N` element roots, zero-padded) and the
 length chunk. -/
-def ProofTree.ofCompositeList {α : Type} [Ssz α] {n : Nat} (xs : SszList α n) : ProofTree :=
+def ProofTree.ofCompositeList {α : Type} [Ssz α] {n : Nat} (xs : Ssz.List α n) : ProofTree :=
   let roots := xs.toArray.toList.map hashTreeRoot
   let data := roots ++ List.replicate (n - roots.length) zeroChunk
   .node [(merkleizeDepth roots (depthOf n), some (.ofChunks data)),
-         (Jaune.Bytes.toU256 (leBytes 32 roots.length), none)]
+         (Jaune.Bytes.toU256 (littleEndianBytes 32 roots.length), none)]
 
 /-- The proof at generalized index `g` of a tree: below the tree's own depth it descends into
 the expanded chunk, concatenating the inner proof (deeper nodes first) with the proof of that
@@ -135,23 +135,23 @@ def normalizeMerkleBranch (branch : List Bytes32) (gindex : GeneralizedIndex) : 
 def defaultBeaconBlockBody : BeaconBlockBody P f :=
   { randao_reveal := zeroBytesVector 96,
     eth1_data := { deposit_root := zeroRoot, deposit_count := U64.zero, block_hash := zeroRoot },
-    graffiti := zeroRoot, proposer_slashings := SszList.empty, attester_slashings := SszList.empty,
-    attestations := SszList.empty, deposits := SszList.empty, voluntary_exits := SszList.empty,
+    graffiti := zeroRoot, proposer_slashings := Ssz.List.empty, attester_slashings := Ssz.List.empty,
+    attestations := Ssz.List.empty, deposits := Ssz.List.empty, voluntary_exits := Ssz.List.empty,
     sync_aggregate := { sync_committee_bits := ⟨Array.replicate P.SYNC_COMMITTEE_SIZE false, by simp⟩,
                         sync_committee_signature := zeroBytesVector 96 },
     execution_payload :=
       { parent_hash := zeroRoot, fee_recipient := (0 : Jaune.Address), state_root := zeroRoot,
         receipts_root := zeroRoot, logs_bloom := zeroBytesVector _, prev_randao := zeroRoot,
         block_number := U64.zero, gas_limit := U64.zero, gas_used := U64.zero,
-        timestamp := U64.zero, extra_data := SszList.empty, base_fee_per_gas := UIntN.zero,
-        block_hash := zeroRoot, transactions := SszList.empty, withdrawals := SszList.empty,
+        timestamp := U64.zero, extra_data := Ssz.List.empty, base_fee_per_gas := UnsignedInteger.zero,
+        block_hash := zeroRoot, transactions := Ssz.List.empty, withdrawals := Ssz.List.empty,
         blob_gas_used := U64.zero, excess_blob_gas := U64.zero },
-    bls_to_execution_changes := SszList.empty, blob_kzg_commitments := SszList.empty,
-    execution_requests := gatedDefault
-      { deposits := SszList.empty, withdrawals := SszList.empty, consolidations := SszList.empty } }
+    bls_to_execution_changes := Ssz.List.empty, blob_kzg_commitments := Ssz.List.empty,
+    execution_requests := forkFieldDefault
+      { deposits := Ssz.List.empty, withdrawals := Ssz.List.empty, consolidations := Ssz.List.empty } }
 where
   /-- A gated field's default: the value from its fork, the absent field before. -/
-  gatedDefault {α : Type} {c : Bool} (x : α) : ForkField c α :=
+  forkFieldDefault {α : Type} {c : Bool} (x : α) : ForkField c α :=
     match c with
     | true => x
     | false => ()
@@ -181,7 +181,7 @@ def blockToLightClientHeader (cfg : Config) (block : SignedBeaconBlock P f) :
                                  excess_blob_gas := payload.excess_blob_gas }
         else executionHeader
       let branch ← computeMerkleProof block.message.body.proofTree EXECUTION_PAYLOAD_GINDEX
-      pure (executionHeader, ← SszVector.ofArray branch.toArray "ExecutionBranch")
+      pure (executionHeader, ← Ssz.Vector.ofArray branch.toArray "ExecutionBranch")
     else
       pure (defaultExecutionPayloadHeader, zeroRootVector _)
   pure { beacon := { slot := block.message.slot, proposer_index := block.message.proposer_index,
@@ -209,7 +209,7 @@ def createLightClientBootstrap (cfg : Config) (state : BeaconState P f)
     (← currentSyncCommitteeGindexAtSlot cfg P state.slot)
   pure { header := ← blockToLightClientHeader cfg block,
          current_sync_committee := state.current_sync_committee,
-         current_sync_committee_branch := ← SszVector.ofArray branch.toArray
+         current_sync_committee_branch := ← Ssz.Vector.ofArray branch.toArray
            s!"{site}: CurrentSyncCommitteeBranch" }
 
 /-- `LightClientUpdate()`. -/
@@ -247,7 +247,7 @@ def createLightClientUpdate (cfg : Config) (state : BeaconState P f) (block : Si
       (← nextSyncCommitteeGindexAtSlot cfg P attestedState.slot)
     update := { update with
       next_sync_committee := attestedState.next_sync_committee
-      next_sync_committee_branch := ← SszVector.ofArray branch.toArray
+      next_sync_committee_branch := ← Ssz.Vector.ofArray branch.toArray
         s!"{site}: NextSyncCommitteeBranch" }
   -- Indicate finality whenever possible
   if let some finalizedBlock := finalizedBlock then
@@ -260,7 +260,7 @@ def createLightClientUpdate (cfg : Config) (state : BeaconState P f) (block : Si
     let branch ← computeMerkleProof attestedState.proofTree
       (← finalizedRootGindexAtSlot cfg P attestedState.slot)
     update := { update with
-      finality_branch := ← SszVector.ofArray branch.toArray s!"{site}: FinalityBranch" }
+      finality_branch := ← Ssz.Vector.ofArray branch.toArray s!"{site}: FinalityBranch" }
   pure { update with sync_aggregate := block.message.body.sync_aggregate,
                      signature_slot := block.message.slot }
 
