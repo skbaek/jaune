@@ -14766,8 +14766,8 @@
       "new": "Jaune.U256.gtCheck",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 1, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B] The leaf `gt` is the EELS opcode `GT` (execution-specs src/ethereum/prague/vm/instructions/__init__.py, rule 1; master ruling R16)."
     },
     {
       "old": "Jaune.B256.gtCheck_eq_zero_iff",
@@ -14782,8 +14782,8 @@
       "new": "Jaune.U256.gtCheck_eq_zero_of_toNat_le",
       "kind": "declaration",
       "layer": "execution",
-      "rule": "3, 7",
-      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B]"
+      "rule": "3, 1, 7",
+      "source": "Derived by token (rule 7: descendants and theorems follow their definitions): `B256` -> `U256` (alloy `U256` is the number; EELS `U256`; execution-apis `uint256`) [B] The leaf `gt` is the EELS opcode `GT` (execution-specs src/ethereum/prague/vm/instructions/__init__.py, rule 1; master ruling R16)."
     },
     {
       "old": "Jaune.B256.gtCheck_ne_zero_iff",
