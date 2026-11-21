@@ -3,17 +3,22 @@ import Jaune.FrameRun.Calls
 import Jaune.FrameRun.CallsHistory
 import Jaune.FrameRun.Entered
 import Jaune.FrameRun.EnteredRoots
+import Jaune.FrameRun.Warmth
+import Jaune.FrameRun.KindCoherence
 import Examples.RunCalls
 
 /-!
-Axiom audit for the run views of G2b unit U102: the calls of a frame run with their lifts, and
-entered frames with their propagation and top-level bounds.
+Axiom audit for the run views of G2b units U102 and U103: the calls of a frame run with their
+lifts, entered frames with their propagation and top-level bounds, warm addresses over a run,
+and the kind coherence of the built top-level inputs.
 -/
 
 #union_axioms_of_modules Jaune.FrameRun.Calls
 #union_axioms_of_modules Jaune.FrameRun.CallsHistory
 #union_axioms_of_modules Jaune.FrameRun.Entered
 #union_axioms_of_modules Jaune.FrameRun.EnteredRoots
+#union_axioms_of_modules Jaune.FrameRun.Warmth
+#union_axioms_of_modules Jaune.FrameRun.KindCoherence
 #union_axioms_of_modules Examples.RunCalls
 #expect_axioms Jaune.Frame.Run.callsFrom_valid [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Frame.Run.calls_valid [Classical.choice, Quot.sound, propext]
@@ -75,3 +80,17 @@ entered frames with their propagation and top-level bounds.
 #expect_axioms Examples.RunCalls.calls_length [Classical.choice, Quot.sound, propext]
 #expect_axioms Examples.RunCalls.entry_call [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.KeptStep.of_transition [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Family.run_accessedAddresses [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.JumpOp.run_accessedAddresses [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.MessageOp.step_done_accessedAddresses [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.step_next_accessedAddresses [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.resume_accessedAddresses [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.resumeCaller_accessedAddresses [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.visits_warm [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.frames_warm [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Frame.Run.calls_ran_warm [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Root.frames_warm [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.KeptHistory.frames_warm [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.KeptHistory.calls_ran_warm [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Transaction.prepare_kindCoherent [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.TopLevel.systemInput_kindCoherent [Classical.choice, Quot.sound, propext]

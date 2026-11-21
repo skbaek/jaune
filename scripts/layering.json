@@ -136,6 +136,8 @@
   "Jaune.FrameRun.CallsHistory": "proof",
   "Jaune.FrameRun.Entered": "proof",
   "Jaune.FrameRun.EnteredRoots": "proof",
+  "Jaune.FrameRun.Warmth": "proof",
+  "Jaune.FrameRun.KindCoherence": "proof",
   "Examples.RunCalls": "check",
   "Jaune.SymbolicPush": "proof",
   "Jaune.SymbolicArithmetic": "proof",

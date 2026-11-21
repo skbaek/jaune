@@ -91,6 +91,8 @@ import Jaune.FrameRun.Calls
 import Jaune.FrameRun.CallsHistory
 import Jaune.FrameRun.Entered
 import Jaune.FrameRun.EnteredRoots
+import Jaune.FrameRun.Warmth
+import Jaune.FrameRun.KindCoherence
 import Jaune.SymbolicPush
 import Jaune.SymbolicArithmetic
 
