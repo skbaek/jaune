@@ -22,9 +22,7 @@ former `Blanc.*` names; the fourteenth, `benvAfterTransfer_stat`, needs no row
 (the value transfer now returns only a world, and `Frame.enter_run_context`
 covers entry), and its place audits the run constructor `Frame.Run.stop`.
 The rest bind the canonical `Frame.Run` type and its constructors, adequacy,
-the run order and node views, symbolic PUSH rules and the PUSH example.
-Until the post-delete rename strips it, every audited name carries the
-`Checked` prefix. The last
+the run order and node views, symbolic PUSH rules and the PUSH example. The last
 fifteen, added with the declarations they audit (unit
 `jaune-c6-surface-20260924`), bind the symbolic arithmetic rules and the
 composed arithmetic example. `scripts/assurance-manifest.json` records each

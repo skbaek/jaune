@@ -19,7 +19,7 @@
 #
 # WHAT IT CARRIES. The proposition is `execFueled = execFueledCached`, a fully
 # proved theorem, not an assertion. Its proof is `execFueledCachedCore_fst`,
-# which chains up from `CalldataCache.get_fst` through `genericCall.stepCached_fst`,
+# which chains up from `CalldataCache.get_fst` through `prepareCall.stepCached_fst`,
 # `MessageOp.stepCached_fst`, `NextOp.stepCached_fst` and `stepCached_fst`. The
 # cache structure itself carries a proof field
 # `valid : calldata = key.data.sliceD key.inputIndex key.inputSize 0`, erased by
@@ -28,7 +28,7 @@
 #
 # WHY IT IS ALLOWED RATHER THAN REMOVED. It is the landed fix for the
 # depth-1024 one-megabyte calldata retention defect (goal
-# `jaune-linux-16gb-memory-v1`): `genericCall.step` evaluated a fresh
+# `jaune-linux-16gb-memory-v1`): `prepareCall.step` evaluated a fresh
 # million-byte `Bytes` slice per frame and `execFueled` kept every ancestor's
 # copy live, ~32 MB of list cells per live call. Sharing the evaluated slice is
 # what makes the former offender run in 0.32 s at 57 MB.
