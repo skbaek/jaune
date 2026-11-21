@@ -154,9 +154,9 @@ rg -n '^\s*@\[extern|^\s*axiom\s|^\s*opaque\s+\S+\s*:|\bsorry\b|^\s*partial\s+de
 ```
 
 Run the same scan unanchored — matching the bare words anywhere, comments
-included — and it returns 157 hits, none of them a declaration of these kinds.
-128 are audit rows in the check modules under `Jaune/Check/`: 85
-`#expect_axioms` rows, which name the axioms a theorem is allowed, and 43
+included — and it returns 243 hits, none of them a declaration of these kinds.
+214 are audit rows in the check modules under `Jaune/Check/`: 164
+`#expect_axioms` rows, which name the axioms a theorem is allowed, and 50
 `#union_axioms_of_modules` rows, which bound the axioms of every constant of a
 module. Thirteen are `extern` inside the English words "external" and
 "externally", in comments (opcode comments for `EXTCODESIZE` and its
@@ -295,13 +295,13 @@ an unclassified defect — but it is an exception, and 56 of them is the honest
 count of places where the strong reading of "no raw bang operations, no
 stringly-typed errors" does not literally hold.
 
-**Thirty-seven `Jaune/` modules are outside the gate's closure.** None is in
+**Thirty-eight `Jaune/` modules are outside the gate's closure.** None is in
 `Jaune.lean`'s transitive import closure, so R2 and R3 do not inventory them:
 the runner-side adapters (`Jaune/ChainStore.lean`, `Jaune/FixtureException.lean`,
 `Jaune/FixtureTransition.lean`, `Jaune/T8n.lean`, `Jaune/MessageCall/Trace.lean`,
 `Jaune/MessageCall/TraceJson.lean`, `Jaune/MessageCall/TraceEvent.lean`,
 `Jaune/Run/BodyFactsT8n.lean`, `Jaune/Adapter/IO.lean`) and the executable
-checks (`Jaune/BLSGuards.lean` and the twenty-seven `Jaune/Check/*.lean`
+checks (`Jaune/BLSGuards.lean` and the twenty-eight `Jaune/Check/*.lean`
 modules, library `JauneChecks`). `scripts/layering.json` classifies each. This is deliberate — none is
 consensus surface, and no module of the closure imports one — and R1 and the
 hygiene gate reach all of them, R4 reaches `Jaune/ChainStore.lean` and
