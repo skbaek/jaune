@@ -258,7 +258,7 @@ def legacyPayloadExample : NewPayloadRequest Preset.mainnet :=
         receipts_root := zeroRoot, logs_bloom := ⟨Array.replicate 256 0, Array.size_replicate⟩,
         prev_randao := zeroRoot, block_number := U64.zero, gas_limit := U64.zero,
         gas_used := U64.zero, timestamp := U64.zero, extra_data := ⟨#[], Nat.zero_le _⟩,
-        base_fee_per_gas := UnsignedInteger.zero, block_hash := zeroRoot,
+        base_fee_per_gas := UnsignedIntegerOfBytes.zero, block_hash := zeroRoot,
         transactions := ⟨#[⟨legacyTransactionExample.toArray, by decide⟩], by decide⟩,
         withdrawals := ⟨#[], Nat.zero_le _⟩, blob_gas_used := U64.zero,
         excess_blob_gas := U64.zero }

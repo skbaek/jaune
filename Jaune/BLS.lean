@@ -97,10 +97,10 @@ def blsG2Generator : Bls12G2 :=
 -- EC.lean next to their BN254 counterparts.
 
 -- py_ecc.bls12_381.bls12_381_pairing.ate_loop_count
-def blsMillerLoopScalar : Nat := 15132376222941642752
+def blsMillerLoopScalarMagnitude : Nat := 15132376222941642752
 
 -- py_ecc.bls12_381.bls12_381_pairing.log_ate_loop_count
-def blsMillerLoopScalarTopBit : Nat := 62
+def blsMillerLoopStartBit : Nat := 62
 
 -- def cast_point_to_fq12(pt: Point2D[FQ]) -> Point2D[FQ12]:
 def Bls12G1.toBls12Fp12Pair : Bls12G1 → Bls12Fp12Pair
@@ -157,13 +157,13 @@ def blsMillerLoop (q p : Bls12Fp12Pair) (finalExp : Bool := true) : Option Bls12
   let mut fNum : Bls12Fp12 := 1
   let mut fDen : Bls12Fp12 := 1
   -- for i in range(log_ate_loop_count, -1, -1):
-  for i in (List.range (blsMillerLoopScalarTopBit + 1)).reverse do
+  for i in (List.range (blsMillerLoopStartBit + 1)).reverse do
     let ⟨_n, _d⟩ := blsLinefunc r r p
     fNum := fNum * fNum * _n
     fDen := fDen * fDen * _d
     r := r.double
     -- if ate_loop_count & (2**i):
-    if blsMillerLoopScalar.testBit i then
+    if blsMillerLoopScalarMagnitude.testBit i then
       let ⟨_n, _d⟩ := blsLinefunc r q p
       fNum := fNum * _n
       fDen := fDen * _d
@@ -350,10 +350,10 @@ no division anywhere). -/
 def blsMillerLoopFast (q : Bls12G2) (p : Bls12G1) : Bls12Fp12 := Id.run do
   let mut t : Bls12G2Jacobian := EllipticCurve.Jacobian.ofAffine q
   let mut f : Bls12Fp12 := 1
-  for i in (List.range (blsMillerLoopScalarTopBit + 1)).reverse do
+  for i in (List.range (blsMillerLoopStartBit + 1)).reverse do
     f := f * f * blsLineDoubleJacobian t p
     t := EllipticCurve.Jacobian.double t
-    if blsMillerLoopScalar.testBit i then
+    if blsMillerLoopScalarMagnitude.testBit i then
       f := f * blsLineAddJacobian t q p
       t := EllipticCurve.Jacobian.mixedAdd t q
   return f

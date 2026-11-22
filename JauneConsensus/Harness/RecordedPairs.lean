@@ -66,7 +66,7 @@ private def jsonU64 (j : Json) (k : String) : Except RecordedPairsError U64 := d
 
 private def jsonU256 (j : Json) (k : String) : Except RecordedPairsError U256 := do
   let n ← jsonDecimal j k
-  (UnsignedInteger.ofNat? n k : Fallible U256).mapError (fun _ => s!"field '{k}' overflows uint256")
+  (UnsignedIntegerOfBytes.ofNat? n k : Fallible U256).mapError (fun _ => s!"field '{k}' overflows uint256")
 
 /-- An exact-size byte vector, checked against `n`. -/
 private def checkedVector (n : Nat) (bs : Bytes) (what : String) :

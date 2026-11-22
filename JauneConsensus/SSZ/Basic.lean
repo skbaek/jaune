@@ -125,7 +125,7 @@ instance : Ssz U64 where
   hashTreeRoot x := chunkOf (littleEndianBytes 8 x.toNat)
 
 /-- `uintN` for `N = 8 * n` ("Serialization", `uintN`): `value.to_bytes(n, "little")`. -/
-instance {n : Nat} : Ssz (UnsignedInteger n) where
+instance {n : Nat} : Ssz (UnsignedIntegerOfBytes n) where
   fixedSize? := some n
   isBasic := true
   serialize x := littleEndianBytes n x.toNat

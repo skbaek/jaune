@@ -160,8 +160,8 @@ The touch guards of `Jaune/Check/Transaction.lean` over the Checked top-level ru
 Glacier (the last rule set that sweeps) against Prague (which does not). -/
 
 private def touchParent : Address := 0x1000
-private def checkedTouchEmptyAccount : Address := 0x2000
-private def checkedTouchCodeAccount : Address := 0x4000
+private def topLevelTouchEmptyAccount : Address := 0x2000
+private def topLevelTouchCodeAccount : Address := 0x4000
 
 /-- `CALL(gas, to, 0, 0, 0, 0, 0)`, then `POP` the success word. -/
 private def touchCall (dest gas : Nat) : List UInt8 :=
@@ -172,9 +172,9 @@ private def touchCall (dest gas : Nat) : List UInt8 :=
 private def touchRevert : List UInt8 := [0x60, 0, 0x60, 0, 0xFD]
 
 private def touchState (parentCode cCode : List UInt8) : State :=
-  let st := (State.setStorageValue .empty checkedTouchEmptyAccount 1 1).setStorageValue ripemd160Address 1 1
+  let st := (State.setStorageValue .empty topLevelTouchEmptyAccount 1 1).setStorageValue ripemd160Address 1 1
   let st := State.setCode st touchParent ⟨parentCode.toArray⟩
-  State.setCode st checkedTouchCodeAccount ⟨cCode.toArray⟩
+  State.setCode st topLevelTouchCodeAccount ⟨cCode.toArray⟩
 
 /-- `touchMsg`: a call from 0x5000 to the parent at depth left 8 with 200,000 gas, over `state`,
 which is also the original state. -/
@@ -201,18 +201,18 @@ private def touchedOf (fork : Fork) (parentCode : List UInt8)
   | none => none
 
 -- A successful child's empty target is touched; Prague records nothing.
-#guard touchedOf .grayGlacier (touchCall 0x2000 1000 ++ [0x00]) = some [checkedTouchEmptyAccount]
+#guard touchedOf .grayGlacier (touchCall 0x2000 1000 ++ [0x00]) = some [topLevelTouchEmptyAccount]
 #guard touchedOf .prague (touchCall 0x2000 1000 ++ [0x00]) = some []
 -- A zero `SELFDESTRUCT` credit to the storage-only `touchE`: before Paris it is kept and
 -- touched; from Paris the credit erases it at once and nothing is touched.
 private def touchSelfdestruct (fork : Fork) : Option (Bool × U256 × List Address) :=
   match guardSettle (touchInput fork [0x61, 0x20, 0x00, 0xFF] []) with
   | some run =>
-    some (run.state[checkedTouchEmptyAccount]?.isSome, (run.state.get checkedTouchEmptyAccount).storage.get 1,
+    some (run.state[topLevelTouchEmptyAccount]?.isSome, (run.state.get topLevelTouchEmptyAccount).storage.get 1,
       run.touchedAccounts.toList)
   | none => none
-#guard touchSelfdestruct .berlin = some (true, 1, [checkedTouchEmptyAccount])
-#guard touchSelfdestruct .grayGlacier = some (true, 1, [checkedTouchEmptyAccount])
+#guard touchSelfdestruct .berlin = some (true, 1, [topLevelTouchEmptyAccount])
+#guard touchSelfdestruct .grayGlacier = some (true, 1, [topLevelTouchEmptyAccount])
 #guard touchSelfdestruct .paris = some (false, 0, [])
 #guard touchSelfdestruct .prague = some (false, 0, [])
 -- A failed child's touches die with it ...
@@ -246,7 +246,7 @@ private def touchSelfdestructThenFund (fork : Fork) : Option (U256 × U256) :=
   match guardSettle input with
   | some run =>
     let state := sweepTouchedAccounts (Fork.ruleSet fork) run.touchedAccounts.toList run.state
-    some ((state.get checkedTouchEmptyAccount).balance, (state.get checkedTouchEmptyAccount).storage.get 1)
+    some ((state.get topLevelTouchEmptyAccount).balance, (state.get topLevelTouchEmptyAccount).storage.get 1)
   | none => none
 #guard touchSelfdestructThenFund .berlin = some (1, 1)
 #guard touchSelfdestructThenFund .grayGlacier = some (1, 1)

@@ -394,7 +394,7 @@ def processParticipationFlagUpdates (_cfg : Config) (state : BeaconState P f) :
   pure { state with
     previous_epoch_participation := state.current_epoch_participation
     current_epoch_participation :=
-      ← Ssz.List.ofArray (Array.replicate state.validators.toArray.size UnsignedInteger.zero) site }
+      ← Ssz.List.ofArray (Array.replicate state.validators.toArray.size UnsignedIntegerOfBytes.zero) site }
 
 /-- `process_sync_committee_updates` (`specs/altair/beacon-chain.md`). -/
 def processSyncCommitteeUpdates (ctx : Context) (state : BeaconState P f) :

@@ -143,12 +143,12 @@ def computeActivationExitEpoch (P : Preset) (epoch : U64) : Fallible U64 := do
 /-- `add_flag(flags, flag_index)`: `flag = ParticipationFlags(2**flag_index)`, which rejects when
 `flag_index ≥ 8`; then `flags | flag`. -/
 def addFlag (flags : U8) (flagIndex : Nat) : Fallible U8 := do
-  let flag : U8 ← UnsignedInteger.ofNat? (2 ^ flagIndex) "add_flag: ParticipationFlags(2**flag_index)"
-  UnsignedInteger.ofNat? (flags.toNat ||| flag.toNat) "add_flag: flags | flag"
+  let flag : U8 ← UnsignedIntegerOfBytes.ofNat? (2 ^ flagIndex) "add_flag: ParticipationFlags(2**flag_index)"
+  UnsignedIntegerOfBytes.ofNat? (flags.toNat ||| flag.toNat) "add_flag: flags | flag"
 
 /-- `has_flag(flags, flag_index)`: `flags & flag == flag`. -/
 def hasFlag (flags : U8) (flagIndex : Nat) : Fallible Bool := do
-  let flag : U8 ← UnsignedInteger.ofNat? (2 ^ flagIndex) "has_flag: ParticipationFlags(2**flag_index)"
+  let flag : U8 ← UnsignedIntegerOfBytes.ofNat? (2 ^ flagIndex) "has_flag: ParticipationFlags(2**flag_index)"
   pure (flags.toNat &&& flag.toNat == flag.toNat)
 
 /-! ## Deneb misc (`specs/deneb/beacon-chain.md`, "Misc") -/
@@ -207,10 +207,10 @@ private def sqrt? (n : Nat) : Option Nat := ((integerSquareroot (u64Literal n)).
 #guard (computeStartSlotAtEpoch .mainnet (u64Literal (2 ^ 60))).toBool == false
 #guard ((computeActivationExitEpoch .mainnet (u64Literal 10)).toOption.map (·.toNat)) == some 15
 #guard (computeActivationExitEpoch .mainnet FAR_FUTURE_EPOCH).toBool == false
-#guard ((addFlag UnsignedInteger.zero 2).toOption.map (·.toNat)) == some 4
-#guard (addFlag UnsignedInteger.zero 8).toBool == false
-#guard (((addFlag UnsignedInteger.zero 1).toOption).bind (fun f => (hasFlag f 1).toOption)) == some true
-#guard (((addFlag UnsignedInteger.zero 1).toOption).bind (fun f => (hasFlag f 0).toOption)) == some false
+#guard ((addFlag UnsignedIntegerOfBytes.zero 2).toOption.map (·.toNat)) == some 4
+#guard (addFlag UnsignedIntegerOfBytes.zero 8).toBool == false
+#guard (((addFlag UnsignedIntegerOfBytes.zero 1).toOption).bind (fun f => (hasFlag f 1).toOption)) == some true
+#guard (((addFlag UnsignedIntegerOfBytes.zero 1).toOption).bind (fun f => (hasFlag f 0).toOption)) == some false
 #guard isCompoundingWithdrawalCredential (Bytes32.ofBytes (0x02 :: List.replicate 31 0))
 #guard !isCompoundingWithdrawalCredential (Bytes32.ofBytes (0x01 :: List.replicate 31 0))
 -- a depth-1 branch: root = hash(leaf ++ sibling) at index 0, hash(sibling ++ leaf) at index 1

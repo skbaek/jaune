@@ -41,6 +41,6 @@ def g2Psi (p : Bls12G2) : Bls12G2 :=
 
 /-- G2 membership for a point of `E'`: `psi(P) = [t] P` with `t = -blsAteLoopCount`. -/
 def g2SubgroupCheckFast (p : Bls12G2) : Bool :=
-  g2Psi p = -(p.mulBy blsMillerLoopScalar)
+  g2Psi p = -(p.mulBy blsMillerLoopScalarMagnitude)
 
 end JauneConsensus

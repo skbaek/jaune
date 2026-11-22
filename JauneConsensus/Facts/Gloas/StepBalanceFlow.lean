@@ -434,7 +434,7 @@ theorem empty_weight : Gloas.BuilderPendingPayment.empty.weight = U64.zero := rf
 
 /-- The epoch rotation appends only withdrawals of non-empty payments (weight at least the quorum,
 which is positive) and shifts the payments down, filling with empty entries. -/
-theorem sourceLe_rotation (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT) {cfg : Config}
+theorem noNewSource_rotation (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT) {cfg : Config}
     {a b : Gloas.BeaconState P} (h : Gloas.processBuilderPendingPayments cfg a = .ok b) :
     NoNewSource a b := by
   obtain ⟨-, q, hqh, hW, hP⟩ := processBuilderPendingPayments_frame h
@@ -467,7 +467,7 @@ theorem sourceLe_rotation (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_IN
   · rw [hL] at hv hx; exact Or.inr (Or.inr ⟨hv, hx⟩)
 
 /-- `process_slots` creates no source. -/
-theorem sourceLe_processSlots (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT) {ctx : Context}
+theorem noNewSource_processSlots (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANCE_INCREMENT) {ctx : Context}
     {s s' : Gloas.BeaconState P} {slot : U64} (h : Gloas.processSlots ctx s slot = .ok s') :
     NoNewSource s s' :=
   processSlots_induction (ctx := ctx) (fun m => NoNewSource s m)
@@ -477,7 +477,7 @@ theorem sourceLe_processSlots (hq : 2 * P.SLOTS_PER_EPOCH ≤ P.EFFECTIVE_BALANC
         · exact noNewSource_of_invariant f1
         · obtain ⟨a, b, fa, hb, fb⟩ := processEpoch_phases he
           exact (noNewSource_of_invariant f1).trans ((noNewSource_of_invariant fa).trans
-            ((sourceLe_rotation hq hb).trans (noNewSource_of_invariant fb)))
+            ((noNewSource_rotation hq hb).trans (noNewSource_of_invariant fb)))
       exact hI.trans (hs.trans (noNewSource_of_equalities rfl rfl rfl))) h (NoNewSource.refl s)
 
 /-- The parent settlement creates no source: `settle_builder_payment` moves a non-empty payment's
@@ -975,7 +975,7 @@ theorem GloasStepView.source_step
         · rw [hw'] at hy; exact Or.inl (List.mem_of_mem_drop hy)
         · rw [hp'] at hy; exact Or.inr (Or.inl hy)
         · rw [w3.1] at hv hy; exact Or.inr (Or.inr ⟨hv, hy⟩)
-    exact (sourceLe_processSlots quorumPositive V.slots).trans ((noNewSource_parent h1).trans
+    exact (noNewSource_processSlots quorumPositive V.slots).trans ((noNewSource_parent h1).trans
       ((noNewSource_of_equalities (by rw [hm2]) (by rw [hm2]) (by rw [hm2])).trans hw3))
   have hpost : NoNewSource s4 postB :=
     (noNewSource_of_invariant (processRandao_invariantFrame _ _ _ _ h5)).trans
@@ -1022,7 +1022,7 @@ theorem GloasStepView.debit_provenance
     have vb' : s3.validators.toArray.size = s2.validators.toArray.size :=
       processWithdrawals_validatorsLength _ _ h3
     omega
-  have hsrc : NoNewSource preB s2 := (sourceLe_processSlots quorumPositive V.slots).trans
+  have hsrc : NoNewSource preB s2 := (noNewSource_processSlots quorumPositive V.slots).trans
     ((noNewSource_parent h1).trans (noNewSource_of_equalities (by rw [hm2]) (by rw [hm2]) (by rw [hm2])))
   simp only [stepWithdrawals, h1, h2, bind, Except.bind] at hws
   split at hws

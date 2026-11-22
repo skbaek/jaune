@@ -97,7 +97,7 @@ same point `h_eff * P` from two 64-bit scalar multiplications and the endomorphi
 `#guard`s against `clearCofactorG2Ref` in HashToCurveVectors.lean. -/
 def clearCofactorG2 (p : Bls12G2) : Bls12G2 :=
   -- c1 = -0xd201000000010000, so c1 * X = -(|c1| * X)
-  let mulC1 (x : Bls12G2) : Bls12G2 := -(x.mulBy blsMillerLoopScalar)
+  let mulC1 (x : Bls12G2) : Bls12G2 := -(x.mulBy blsMillerLoopScalarMagnitude)
   let t1 := mulC1 p                       -- 1. t1 = c1 * P
   let t2 := g2Psi p                       -- 2. t2 = psi(P)
   let t3 := p + p                         -- 3. t3 = 2 * P

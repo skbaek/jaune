@@ -348,7 +348,7 @@ def processParticipationFlagUpdates (_cfg : Config) (state : BeaconState P) :
   pure { state with
     previous_epoch_participation := state.current_epoch_participation
     current_epoch_participation :=
-      ProgressiveListOnSpine.ofArray (Array.replicate state.validators.toArray.size UnsignedInteger.zero) }
+      ProgressiveListOnSpine.ofArray (Array.replicate state.validators.toArray.size UnsignedIntegerOfBytes.zero) }
 
 /-- `process_sync_committee_updates` (Altair), with the Gloas next sync committee. -/
 def processSyncCommitteeUpdates (ctx : Context) (state : BeaconState P) : Fallible (BeaconState P) := do

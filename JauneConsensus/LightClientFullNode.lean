@@ -143,7 +143,7 @@ def defaultBeaconBlockBody : BeaconBlockBody P f :=
       { parent_hash := zeroRoot, fee_recipient := (0 : Jaune.Address), state_root := zeroRoot,
         receipts_root := zeroRoot, logs_bloom := zeroBytesVector _, prev_randao := zeroRoot,
         block_number := U64.zero, gas_limit := U64.zero, gas_used := U64.zero,
-        timestamp := U64.zero, extra_data := Ssz.List.empty, base_fee_per_gas := UnsignedInteger.zero,
+        timestamp := U64.zero, extra_data := Ssz.List.empty, base_fee_per_gas := UnsignedIntegerOfBytes.zero,
         block_hash := zeroRoot, transactions := Ssz.List.empty, withdrawals := Ssz.List.empty,
         blob_gas_used := U64.zero, excess_blob_gas := U64.zero },
     bls_to_execution_changes := Ssz.List.empty, blob_kzg_commitments := Ssz.List.empty,

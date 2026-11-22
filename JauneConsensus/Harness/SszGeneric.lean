@@ -39,7 +39,7 @@ instance : FromYaml U64 where
     let n ← natOf y
     if h : n < 2 ^ 64 then pure (U64.ofNatLt n h) else throw (.shape "uint64 out of range")
 
-instance {n : Nat} : FromYaml (UnsignedInteger n) where
+instance {n : Nat} : FromYaml (UnsignedIntegerOfBytes n) where
   fromYaml y := do
     let v ← natOf y
     if h : v < 2 ^ (8 * n) then pure ⟨v, h⟩ else throw (.shape "uintN out of range")
@@ -200,23 +200,23 @@ def withBasic (name : String)
     Option TypeChecks :=
   match name with
   | "bool" => some (k Bool)
-  | "uint8" => some (k (UnsignedInteger 1))
-  | "uint16" => some (k (UnsignedInteger 2))
-  | "uint32" => some (k (UnsignedInteger 4))
+  | "uint8" => some (k (UnsignedIntegerOfBytes 1))
+  | "uint16" => some (k (UnsignedIntegerOfBytes 2))
+  | "uint32" => some (k (UnsignedIntegerOfBytes 4))
   | "uint64" => some (k U64)
-  | "uint128" => some (k (UnsignedInteger 16))
-  | "uint256" => some (k (UnsignedInteger 32))
+  | "uint128" => some (k (UnsignedIntegerOfBytes 16))
+  | "uint256" => some (k (UnsignedIntegerOfBytes 32))
   | _ => none
 
 /-- The `uintN` type for `uint_{N}`. -/
 def uintChecks (bits : String) : Option TypeChecks :=
   match bits with
-  | "8" => some (.of (UnsignedInteger 1))
-  | "16" => some (.of (UnsignedInteger 2))
-  | "32" => some (.of (UnsignedInteger 4))
+  | "8" => some (.of (UnsignedIntegerOfBytes 1))
+  | "16" => some (.of (UnsignedIntegerOfBytes 2))
+  | "32" => some (.of (UnsignedIntegerOfBytes 4))
   | "64" => some (.of U64)
-  | "128" => some (.of (UnsignedInteger 16))
-  | "256" => some (.of (UnsignedInteger 32))
+  | "128" => some (.of (UnsignedIntegerOfBytes 16))
+  | "256" => some (.of (UnsignedIntegerOfBytes 32))
   | _ => none
 
 /-- The type of a case, from its handler and directory name

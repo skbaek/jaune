@@ -42,7 +42,7 @@ variable {P : Preset}
 def DOMAIN_BUILDER_DEPOSIT : DomainType := #v[0x0E, 0x00, 0x00, 0x00]
 
 /-- `PAYLOAD_BUILDER_VERSION = Uint8(0)`. -/
-def PAYLOAD_BUILDER_VERSION : U8 := UnsignedInteger.zero
+def PAYLOAD_BUILDER_VERSION : U8 := UnsignedIntegerOfBytes.zero
 
 /-- The bytes of a fixed-length byte vector. -/
 def vectorBytes {n : Nat} (v : Ssz.Vector UInt8 n) : Bytes := v.toArray.toList
@@ -225,7 +225,7 @@ def processAttestation (ctx : Context) (state : BeaconState P) (attestation : At
   let mut numerator := U64.zero
   for index in ← getAttestingIndices state attestation do
     -- [New in Gloas:EIP7732]
-    let hadNoParticipation := (← participation.get index.toNat site) == UnsignedInteger.zero
+    let hadNoParticipation := (← participation.get index.toNat site) == UnsignedIntegerOfBytes.zero
     let mut willSetNewFlag := false
     for (flagIndex, weight) in
         (List.range PARTICIPATION_FLAG_WEIGHTS.length).zip PARTICIPATION_FLAG_WEIGHTS do

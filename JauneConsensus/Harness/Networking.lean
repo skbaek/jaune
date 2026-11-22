@@ -38,7 +38,7 @@ def networkingCase (cfg : Config) (c : Case) : IO (Except String Unit) := do
         v.expectKeys ["node_id", "custody_group_count", "result"] |>.mapError toString
         let nodeId ← nat v "node_id"
         let count ← nat v "custody_group_count"
-        let some nid := (UnsignedInteger.ofNat? nodeId : Fallible U256).toOption | throw "node_id out of range"
+        let some nid := (UnsignedIntegerOfBytes.ofNat? nodeId : Fallible U256).toOption | throw "node_id out of range"
         let some cnt := (U64.ofNat? count).toOption | throw "count out of range"
         match getCustodyGroups cfg nid cnt with
         | .ok r => pure (r.toList.map (·.toNat))

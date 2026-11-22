@@ -123,69 +123,69 @@ end U64
 /-! ## `uintN` as a bounded natural number -/
 
 /-- The unsigned integer of `n` bytes (`8 * n` bits). -/
-structure UnsignedInteger (n : Nat) where
+structure UnsignedIntegerOfBytes (n : Nat) where
   toNat : Nat
   isLt : toNat < 2 ^ (8 * n)
 
-namespace UnsignedInteger
+namespace UnsignedIntegerOfBytes
 
 variable {n : Nat}
 
-theorem ext : ∀ {a b : UnsignedInteger n}, a.toNat = b.toNat → a = b
+theorem ext : ∀ {a b : UnsignedIntegerOfBytes n}, a.toNat = b.toNat → a = b
   | ⟨_, _⟩, ⟨_, _⟩, rfl => rfl
 
-instance : DecidableEq (UnsignedInteger n) := fun a b =>
+instance : DecidableEq (UnsignedIntegerOfBytes n) := fun a b =>
   if h : a.toNat = b.toNat then isTrue (ext h) else isFalse (fun e => h (e ▸ rfl))
 
-instance : Repr (UnsignedInteger n) := ⟨fun x _ => repr x.toNat⟩
-instance : ToString (UnsignedInteger n) := ⟨fun x => toString x.toNat⟩
+instance : Repr (UnsignedIntegerOfBytes n) := ⟨fun x _ => repr x.toNat⟩
+instance : ToString (UnsignedIntegerOfBytes n) := ⟨fun x => toString x.toNat⟩
 
 /-- `uintN(v)`: rejects with `Reject.overflow` when `v ≥ 2^(8n)`. -/
-@[inline] def ofNat? (v : Nat) (site : String := "uintN") : Fallible (UnsignedInteger n) :=
+@[inline] def ofNat? (v : Nat) (site : String := "uintN") : Fallible (UnsignedIntegerOfBytes n) :=
   if h : v < 2 ^ (8 * n) then pure ⟨v, h⟩ else throw (.overflow site)
 
-def zero : UnsignedInteger n := ⟨0, Nat.two_pow_pos _⟩
+def zero : UnsignedIntegerOfBytes n := ⟨0, Nat.two_pow_pos _⟩
 
-instance : Inhabited (UnsignedInteger n) := ⟨zero⟩
+instance : Inhabited (UnsignedIntegerOfBytes n) := ⟨zero⟩
 
 /-- The largest value, `2^(8n) - 1` (for example pyspec `UINT256_MAX`). -/
-def max : UnsignedInteger n := ⟨2 ^ (8 * n) - 1, Nat.sub_lt (Nat.two_pow_pos _) (by decide)⟩
+def max : UnsignedIntegerOfBytes n := ⟨2 ^ (8 * n) - 1, Nat.sub_lt (Nat.two_pow_pos _) (by decide)⟩
 
-@[inline] def add? (a b : UnsignedInteger n) (site : String := "uintN add") : Fallible (UnsignedInteger n) :=
+@[inline] def add? (a b : UnsignedIntegerOfBytes n) (site : String := "uintN add") : Fallible (UnsignedIntegerOfBytes n) :=
   ofNat? (a.toNat + b.toNat) site
 
-@[inline] def sub? (a b : UnsignedInteger n) (site : String := "uintN sub") : Fallible (UnsignedInteger n) :=
+@[inline] def sub? (a b : UnsignedIntegerOfBytes n) (site : String := "uintN sub") : Fallible (UnsignedIntegerOfBytes n) :=
   if b.toNat ≤ a.toNat then pure ⟨a.toNat - b.toNat, Nat.lt_of_le_of_lt (Nat.sub_le _ _) a.isLt⟩
   else throw (.underflow site)
 
-@[inline] def mul? (a b : UnsignedInteger n) (site : String := "uintN mul") : Fallible (UnsignedInteger n) :=
+@[inline] def mul? (a b : UnsignedIntegerOfBytes n) (site : String := "uintN mul") : Fallible (UnsignedIntegerOfBytes n) :=
   ofNat? (a.toNat * b.toNat) site
 
-@[inline] def div? (a b : UnsignedInteger n) (site : String := "uintN div") : Fallible (UnsignedInteger n) :=
+@[inline] def div? (a b : UnsignedIntegerOfBytes n) (site : String := "uintN div") : Fallible (UnsignedIntegerOfBytes n) :=
   if b.toNat = 0 then throw (.divByZero site)
   else pure ⟨a.toNat / b.toNat, Nat.lt_of_le_of_lt (Nat.div_le_self _ _) a.isLt⟩
 
-@[inline] def mod? (a b : UnsignedInteger n) (site : String := "uintN mod") : Fallible (UnsignedInteger n) :=
+@[inline] def mod? (a b : UnsignedIntegerOfBytes n) (site : String := "uintN mod") : Fallible (UnsignedIntegerOfBytes n) :=
   if b.toNat = 0 then throw (.divByZero site)
   else pure ⟨a.toNat % b.toNat, Nat.lt_of_le_of_lt (Nat.mod_le _ _) a.isLt⟩
 
-instance : LT (UnsignedInteger n) := ⟨fun a b => a.toNat < b.toNat⟩
-instance : LE (UnsignedInteger n) := ⟨fun a b => a.toNat ≤ b.toNat⟩
-instance (a b : UnsignedInteger n) : Decidable (a < b) := inferInstanceAs (Decidable (a.toNat < b.toNat))
-instance (a b : UnsignedInteger n) : Decidable (a ≤ b) := inferInstanceAs (Decidable (a.toNat ≤ b.toNat))
+instance : LT (UnsignedIntegerOfBytes n) := ⟨fun a b => a.toNat < b.toNat⟩
+instance : LE (UnsignedIntegerOfBytes n) := ⟨fun a b => a.toNat ≤ b.toNat⟩
+instance (a b : UnsignedIntegerOfBytes n) : Decidable (a < b) := inferInstanceAs (Decidable (a.toNat < b.toNat))
+instance (a b : UnsignedIntegerOfBytes n) : Decidable (a ≤ b) := inferInstanceAs (Decidable (a.toNat ≤ b.toNat))
 
-end UnsignedInteger
+end UnsignedIntegerOfBytes
 
 /-- `uint8` as a number (`byte` is `UInt8`, opaque data). -/
-abbrev U8 := UnsignedInteger 1
+abbrev U8 := UnsignedIntegerOfBytes 1
 /-- `uint16`. -/
-abbrev U16 := UnsignedInteger 2
+abbrev U16 := UnsignedIntegerOfBytes 2
 /-- `uint32`. -/
-abbrev U32 := UnsignedInteger 4
+abbrev U32 := UnsignedIntegerOfBytes 4
 /-- `uint128`. -/
-abbrev U128 := UnsignedInteger 16
+abbrev U128 := UnsignedIntegerOfBytes 16
 /-- `uint256`. -/
-abbrev U256 := UnsignedInteger 32
+abbrev U256 := UnsignedIntegerOfBytes 32
 
 /-! ## Reading a word from a byte array
 

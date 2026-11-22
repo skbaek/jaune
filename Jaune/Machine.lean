@@ -528,11 +528,11 @@ def Storage.toTrieBuilder (s : Storage) : TrieBuilder :=
         ((Rlp.Item.toBytes <| .bytes <| Bytes.sig <| v.toBytes))
   Std.TreeMap.foldl f TrieBuilder.empty s
 
-def U256.leadingZeroByteCount (x : U256) : Nat → Nat
+def U256.leadingZeroBytesWithin (x : U256) : Nat → Nat
   | 0 => 0
-  | k + 1 => if x = 0 then k + 1 else U256.leadingZeroByteCount (x >>> 8) k
+  | k + 1 => if x = 0 then k + 1 else U256.leadingZeroBytesWithin (x >>> 8) k
 
-def U256.significantByteCount (x : U256) : Nat := 32 - (U256.leadingZeroByteCount x 32)
+def U256.significantByteCount (x : U256) : Nat := 32 - (U256.leadingZeroBytesWithin x 32)
 
 /-- Leading zero bits of one 64-bit limb; 64 for zero. -/
 def UInt64.leadingZeros (x : UInt64) : Nat :=

@@ -39,7 +39,7 @@ def addValidatorToRegistry (state : BeaconState P f) (pubkey : BLSPubkey) (wc : 
   let site := "add_validator_to_registry"
   let index ← U64.ofNat? state.validators.length "get_index_for_new_validator"
   let validator ← getValidatorFromDeposit P f pubkey wc amount
-  let zeroFlags : ParticipationFlags := UnsignedInteger.zero
+  let zeroFlags : ParticipationFlags := UnsignedIntegerOfBytes.zero
   pure { state with
     validators := ← setOrAppendList state.validators index validator site
     balances := ← setOrAppendList state.balances index amount site
