@@ -5359,6 +5359,49 @@
         "N4's before is e74747ffc = 375baf5aa + the N4 checker extensions (C1, C1b) + the behaviour-preserving refactor of canonical_primitive and inv_primitive (C2, master rulings R6, R6-a, R13), captured with the uncommitted 79-site scripts/naming-sites.json the planner reads.",
         "N4's after is c989c3654 (the rename commit 5c33bf174 plus the #guard_msgs golden packet); c0836ce5a after it changes only the N3 input scripts/naming-map.json (R16), no Lean source."
       ]
+    },
+    {
+      "id": "G2b-n2-fix-map",
+      "gate": "G2b",
+      "kind": "map",
+      "theorem": null,
+      "module": null,
+      "audit": [],
+      "old": {
+        "revision": "37638e3214ebecd4adfa7f722376a12855a1b518",
+        "roots": [],
+        "modules": [],
+        "at_tag": [],
+        "modules_at_tag": []
+      },
+      "new": {
+        "names": [],
+        "modules": []
+      },
+      "exempt": [],
+      "maps": [
+        {
+          "path": "scripts/maps/g2b-n2-fix-delta-map.json",
+          "revision": "d0f05e65883fe1c39bafaa35023d397f7f1a3335",
+          "sha256": "29e5da91f3e6c11bdfde96249b193a870bb4328ec3f7396f5b885a3727cababf"
+        }
+      ],
+      "n4_receipts": [
+        {
+          "map_sha256": "29e5da91f3e6c11bdfde96249b193a870bb4328ec3f7396f5b885a3727cababf",
+          "before_candidate": "37638e3214ebecd4adfa7f722376a12855a1b518",
+          "after_candidate": "d0f05e65883fe1c39bafaa35023d397f7f1a3335",
+          "status": "OK",
+          "environments": 288,
+          "record": "jsn-u105 (master ruling R23, user decision 2026-11-22): before capture of 37638e321 (snapshot 13428c166a6aab19cca61edcafc63a1f4822bad4347272c83be87ac13dd61055, all 339 modules reused from the X2f capture of 039589265, same Lean), after capture of d0f05e658 (snapshot a01e264bd36047f190539ea2edef1f4027807b4c1bc636325aa60bee7075ed4f; reuse of capture-0395 and u9z2/after; 279 modules re-elaborated, 56 reused, 4 export-only reused), compared by the tools of 37638e321 (check-naming-fidelity.py 7278dbe0..., naming-candidate.py b438547b..., unchanged since): naming-candidate.py compare --plan --inventory scripts/naming-inventory.json --collect-all (no R19 sites file: this map has no R19 site), exit 0, OK, component-scc, 288 active components, 284 affected modules, 51 fast-path, 1 excluded importer (flatten-pilot), wall 54 s; verdict JSON sha256 48230b5fa0e7dab897548cca4c8a9cee9320c97bbbef30c23d35fbff48506dc9. Audit trail: derived_literals_respelled 0, preresolved_drops 0, unhygienic_respellings 0: only the 8 map rows and their descendants. Plan: 23 files, 86 edits, 0 unresolved."
+        }
+      ],
+      "accepted": [],
+      "gaps": [],
+      "notes": [
+        "Names only, in both layers: the bridge is the rename map plus N4's verdict, not a Lean theorem (goal section 7). The map holds the 8 rows of the N2 review fixes (WRONG blsMillerLoopScalarTopBit, MISLEADING blsMillerLoopScalar, UnsignedInteger, leadingZeroByteCount, checkedTouchEmptyAccount, checkedTouchCodeAccount, and the incomplete NoNewSource family), applied after G2b-rename-map.",
+        "N4's before is 37638e321, the landing candidate; N4's after is the rename commit d0f05e658."
+      ]
     }
   ],
   "entry_template": {
