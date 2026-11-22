@@ -26,7 +26,7 @@ individual declarations one by one.
 
 | class | meaning | what it covers |
 |---|---|---|
-| **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The canonical execution modules: `Jaune.FrameRun.Basic`, `Jaune.FrameRun.Adequacy`, `Jaune.FrameRun.Prefix`, `Jaune.FrameRun.Views`, `Jaune.FrameRun.SettlementViews`, `Jaune.FrameRun.Order`, `Jaune.FrameRun.Decompose`, `Jaune.SymbolicPush`, `Jaune.SymbolicArithmetic`. Also the entry-point families named in sections 3–5, such as `exec`, `Frame.runTop`, `TopLevel.run`, `Transaction.run`, the checked chain types, and `State`/`Storage` access, and the lemma families and modules named in section 6. |
+| **supported** | Intended entry point for a task in this guide. Exercised at this revision by a checked example, a gate or the fixture runner. | The canonical execution modules: `Jaune.FrameRun.Basic`, `Jaune.FrameRun.Adequacy`, `Jaune.FrameRun.Prefix`, `Jaune.FrameRun.Views`, `Jaune.FrameRun.SettlementViews`, `Jaune.FrameRun.Order`, `Jaune.FrameRun.Decompose`, `Jaune.FrameRun.Calls`, `Jaune.FrameRun.CallsHistory`, `Jaune.FrameRun.Entered`, `Jaune.FrameRun.EnteredRoots`, `Jaune.FrameRun.Warmth`, `Jaune.FrameRun.KindCoherence`, `Jaune.SymbolicPush`, `Jaune.SymbolicArithmetic`. Also the entry-point families named in sections 3–5, such as `exec`, `Frame.runTop`, `TopLevel.run`, `Transaction.run`, the checked chain types, and `State`/`Storage` access, and the lemma families and modules named in section 6. |
 | **incidental** | Public only because Lean cannot hide it. It may be renamed, restated or removed in any commit, without notice. | Every other public declaration (section 6 lifts named families out of this class) in the `Jaune` library closure, such as interpreter internals in `Jaune.Machine`, `Jaune.Execution` and `Jaune.MessageCall.Totality`, and helper lemmas in `Jaune.Basic` and `Jaune.Types`. Also the `Fueled` residue lemmas in `Jaune.Fuel`, and the cached driver `Jaune.Implementation.CachedDriver` (an implementation module with the public `execFueledCached` and private equation `execFueled_eq_cached`, reached through `Jaune.MessageCall.Exec`). Runner-side modules outside `import Jaune` (`Jaune.T8n`, `Jaune.ChainStore`, `Jaune.FixtureException`, `Jaune.FixtureTransition`, `Jaune.MessageCall.Trace`, `Jaune.MessageCall.TraceJson`, `Jaune.MessageCall.TraceEvent`, `Jaune.Run.BodyFactsT8n`, `Jaune.Adapter.IO`, `Main`, `MemoryProbe`, `TraceMain`) are adapters, and the executable checks (`Jaune.BLSGuards` and the `Jaune.Check.*` modules, library `JauneChecks`) are checks; neither is proof surface. `scripts/layering.json` classifies every module. |
 | **experimental** | Implemented and gated, but expected to change as its upstream target moves. | The Amsterdam lane: `amsterdamRules`, the `StateGasRules` / `stateGas` dimension, `prepareCallAmsterdam` / `prepareCreateAmsterdam` and their lemmas, the state-gas arms of `settle` and `resume`, and the `BlockAccessList` / `BlockAccessList*` family. Also the reusable axiom-audit command `#expect_axioms` (`scripts/AxiomAudit.lean`, library `Assurance`). |
 
@@ -178,6 +178,113 @@ resumed. `Frame.Run.append` follows a prefix with a run from its endpoint, with 
 property of every endpoint from a same-frame step case and a call case, and
 `Frame.Run.exec_of_prefix` says the interpreter gives one outcome from both ends of a
 prefix. A prefix carries no step count, and it does not stop inside a child.
+
+### Calls, entered frames and warm addresses
+
+**Imports.** `import Jaune.FrameRun.Calls` gives the calls of a frame run;
+`Jaune.FrameRun.CallsHistory` lifts them to messages, transactions, bodies,
+blocks and kept histories. `Jaune.FrameRun.Entered` gives entered frames and
+their propagation over a run; `Jaune.FrameRun.EnteredRoots` proves that every
+top-level frame a validated block enters is entered. `Jaune.FrameRun.Warmth`
+gives warm (EIP-2929 accessed) addresses over a run, and
+`Jaune.FrameRun.KindCoherence` discharges the kind-coherence premise of a
+top-level input's preparation for both input builders.
+
+**Calls.** `Frame.Run.calls t` lists every message the run `t` sent, at every
+depth and in execution order. Each `Frame.Run.Call` records the caller's visit
+(`site`), the call's position among its caller's calls (`index`), the child
+frame (`child`, whose `message` is what was sent), the result the caller
+resumed with (`result : Except Fault Frame.Result`) and the child's own run
+(`ran : Option Node`). A child that finished at entry, such as a precompile or
+a failed value transfer, is a call with `ran = none`; it appears in no node
+view. Reverted calls are included. The root frame of `t` is not a call.
+
+`Frame.Run.keptCalls t` keeps the calls whose caller step survives the
+settlements of the frames enclosing it inside `t`, and is empty for a root that
+does not finish, as `retainedNodes` is. It filters on the caller's survival
+only: a kept call's own child may have reverted, halted or failed its code
+deposit, and `c.result` says which. Unlike `committedFrames` and
+`descendantFrames`, it does not check the child's settlement, so a statement
+about effects that persist filters `keptCalls` further on `c.result`. The
+root's own settlement, such as a top-level creation's code deposit, is applied
+by `Root.keptCalls`, not by `Frame.Run.keptCalls`. A premise over `calls`
+speaks of every call, a premise over `keptCalls` only of calls whose caller
+step survives; they give different theorems.
+
+What each call records: `calls_childResult` (`Frame.ChildResult c.child
+c.result`), `calls_ran_eq_none_iff` (no run exactly when `enter` finished the
+child with the result), `calls_ran_eq_some` (a run starts where `enter` put the
+child, and the result is its settled outcome), `calls_step_spawn` (the caller
+stepped to the spawn) and `calls_index` (the calls a run makes at one path have
+the indices `0, 1, 2, …` in execution order, entry-finished calls included, so
+a call's index is the number of calls its caller frame made before it).
+
+How calls relate to the other views: `calls_complete` says the calls are
+exactly the call steps among `visits`, in order and with their children, so
+`calls_length` counts the spawn steps. `Visit.spawned?_eq_some_iff` (and
+`Node.spawned?_eq_some_iff`) says a visit is a call step spawning `f` exactly
+when its first step spawns `f`, and `calls_of_visit_spawn` turns a visit and
+its spawn step into the call, with no matching on `Frame.Run`'s constructors.
+`calls_frameStarts` and `frames_eq_calls` say the frames of a run are its root
+followed by the runs of its calls, at the same paths (`Call.path`).
+`keptCalls_site_mem_retainedNodes` places every kept call's caller among the
+retained nodes.
+
+The lifts follow the frame lifts: `Root.calls`, `TopLevel.Run.calls`,
+`TransactionRun.calls`, `BodyPhase.calls`, `BodyRun.calls`, `BlockRun.calls`,
+`KeptBlock.calls` and `KeptHistory.calls`, each with a `keptCalls` twin that
+applies the root's own settlement as `Root.frames` does. No top-level frame
+appears in any of these lists, whether it entered code or finished at entry:
+a top-level frame was sent by no running frame, so it is not a call. The lists
+hold only the inner calls a running root spawns. A statement about every frame
+of a history, top-level frames included, also quantifies over the roots
+(`BlockRun.roots`) or the frames (`KeptHistory.frames`).
+
+**Entered frames.** `Frame.Running.Entered r` says `r` is a running frame
+exactly as the semantics enters one: program counter zero, empty stack,
+memory and return buffer, calldata shorter than `2 ^ 256` bytes (what
+`CALLDATASIZE` needs to report its length faithfully), and a gas measure below
+`2 ^ 63`, the cap header validation puts on a block's gas limit
+(`checkGasLimit`, `gasLimitMaximum`). `Frame.enter_run_entered` and
+`step_spawn_enter_entered` give it at a child's entry; `visits_entered`,
+`frames_entered` and `calls_ran_entered` propagate it from an entered root to
+every frame start of the run and to the run of every call.
+`KeptHistory.roots_entered`, `KeptHistory.frames_entered` and
+`KeptHistory.calls_ran_entered` discharge it for every frame of a kept history
+with no premise beyond the history itself. `KeptStep.of_transition` gives a
+kept step from every successful configured transition
+(`stateTransitionUsing`), so kept histories are inhabited by the importer's
+own runs.
+
+A function-level statement of the form "a call to this code with this input
+and enough gas returns this" can therefore assume one hypothesis, `r.Entered`,
+and apply at every call site of every kept history: if every frame a call
+runs starts entered, a callee specification over entered frames composes with
+its caller by lemma application. `Examples.RunCalls` shows a property over
+`calls` that counts the children answered at entry.
+
+**Warm addresses.** EIP-2929's accessed-address set only grows while a frame
+runs: `step_next_accessedAddresses` (an instruction that goes on in the same
+frame), `step_spawn_child_warm` (a spawned child starts with its caller's set)
+and `resumeCaller_accessedAddresses` (a caller resumes with every address it
+had at the call, whether the child succeeded or failed). Over a run,
+`Frame.Run.visits_warm`, `Frame.Run.frames_warm` and `Frame.Run.calls_ran_warm`
+say every address accessed when a run starts is accessed at every visit, at
+the start of every frame it enters (inside reverted subtrees too) and at the
+start of every call that ran; `Frame.Run.Prefix.warm` says the same at the end
+of a same-frame prefix. `Root.frames_warm`, `KeptHistory.frames_warm` and
+`KeptHistory.calls_ran_warm` lift them to top-level roots: for a root of a kept
+history, a call of that root that ran, and an address in that root's starting
+set, the address is in the call's starting set. None of these facts has a fork
+or state-gas premise.
+
+**Kind coherence.** `TopLevel.prepare_kindCoherent` needs the input message to
+carry a creation kind exactly when its code address is absent.
+`Transaction.prepare_kindCoherent` (a transaction's input is a creation exactly
+when it has no destination) and `TopLevel.systemInput_kindCoherent` (a system
+call's input is a call with its recipient as code address) discharge it for the
+two builders of a top-level input. They do not lift kind coherence to
+`TopLevel.run`, `BlockRun` or `KeptHistory`.
 
 ## 3. Frame, message and transaction execution
 
