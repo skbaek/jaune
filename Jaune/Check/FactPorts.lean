@@ -18,6 +18,8 @@ frame): each module's constants reach only the three standard axioms. -/
 #expect_axioms Jaune.MemoryEffect.apply_digest [Quot.sound, propext]
 #expect_axioms Jaune.PlainOp.runCore_keccak256_eq_reference [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.NextOp.staticcall_run_effects [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.NextOp.call_run_effects [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.NextOp.call_run_stack [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.MessageOp.step_staticcall_not_run_of_precompile [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.MessageExecution.runTop_eq_settle_exec_of_enter [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.MessageExecution.enterWith_eq_run_of_notPrecompile [Classical.choice, Quot.sound, propext]
