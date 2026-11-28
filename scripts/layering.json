@@ -80,6 +80,8 @@
   "Jaune.Types": "specification",
   "Jaune.WordFacts": "proof",
   "Jaune.WordRepresentation": "proof",
+  "Jaune.WordBits": "proof",
+  "Jaune.SignedWord": "proof",
   "Main": "adapter",
   "MemoryProbe": "adapter",
   "TraceMain": "adapter",
