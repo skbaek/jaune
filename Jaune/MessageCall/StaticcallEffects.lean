@@ -360,4 +360,41 @@ theorem NextOp.call_run_stack {ctx : CallContext} {pre post : Frame.State}
     (run : NextOp.Run ctx pre (.message .call) post) : ∃ flag, post.stack = flag :: rest :=
   (NextOp.call_run_effects stack run).1
 
+/-- Every CALLCODE run over the checked frame leaves the stack below its seven operands unchanged
+and pushes one status word, on every fork: the CALLCODE counterpart of
+`Jaune.NextOp.call_run_stack`. -/
+theorem NextOp.callcode_run_stack {ctx : CallContext} {pre post : Frame.State}
+    {gas target value ii size oi os : U256} {rest : List U256}
+    (stack : pre.stack = gas :: target :: value :: ii :: size :: oi :: os :: rest)
+    (run : NextOp.Run ctx pre (.message .callcode) post) : ∃ flag, post.stack = flag :: rest := by
+  sorry
+
+/-- Every DELEGATECALL run over the checked frame leaves the stack below its six operands
+unchanged and pushes one status word, on every fork: the DELEGATECALL counterpart of
+`Jaune.NextOp.call_run_stack`. -/
+theorem NextOp.delegatecall_run_stack {ctx : CallContext} {pre post : Frame.State}
+    {gas target ii size oi os : U256} {rest : List U256}
+    (stack : pre.stack = gas :: target :: ii :: size :: oi :: os :: rest)
+    (run : NextOp.Run ctx pre (.message .delegatecall) post) :
+    ∃ flag, post.stack = flag :: rest := by
+  sorry
+
+/-- Every CREATE run over the checked frame leaves the stack below its three operands unchanged
+and pushes one word (the new address, or zero), on every fork: the CREATE counterpart of
+`Jaune.NextOp.call_run_stack`. -/
+theorem NextOp.create_run_stack {ctx : CallContext} {pre post : Frame.State}
+    {endowment ii size : U256} {rest : List U256}
+    (stack : pre.stack = endowment :: ii :: size :: rest)
+    (run : NextOp.Run ctx pre (.message .create) post) : ∃ w, post.stack = w :: rest := by
+  sorry
+
+/-- Every CREATE2 run over the checked frame leaves the stack below its four operands unchanged
+and pushes one word (the new address, or zero), on every fork: the CREATE2 counterpart of
+`Jaune.NextOp.call_run_stack`. -/
+theorem NextOp.create2_run_stack {ctx : CallContext} {pre post : Frame.State}
+    {endowment ii size salt : U256} {rest : List U256}
+    (stack : pre.stack = endowment :: ii :: size :: salt :: rest)
+    (run : NextOp.Run ctx pre (.message .create2) post) : ∃ w, post.stack = w :: rest := by
+  sorry
+
 end Jaune
