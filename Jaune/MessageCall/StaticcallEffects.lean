@@ -367,7 +367,48 @@ theorem NextOp.callcode_run_stack {ctx : CallContext} {pre post : Frame.State}
     {gas target value ii size oi os : U256} {rest : List U256}
     (stack : pre.stack = gas :: target :: value :: ii :: size :: oi :: os :: rest)
     (run : NextOp.Run ctx pre (.message .callcode) post) : ∃ flag, post.stack = flag :: rest := by
-  sorry
+  have run := outcomeRuns_of_run run
+  rcases pre with ⟨⟨operands, memory, gasLeft, stateGas, returnData⟩, world, substate, trail⟩
+  change operands = _ at stack
+  subst operands
+  simp only [MessageOp.step, bind, Except.bind, Frame.State.pop, Frame.State.popToNat,
+    Frame.State.popToAddress, Frame.State.liftMachineValue, Machine.popToNat,
+    Machine.popToAddress, Machine.pop, Frame.State.withMachine] at run
+  cases stateGas : ctx.block.rules.stateGas with
+  | none =>
+    simp only [stateGas] at run
+    split at run
+    · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+    · rename_i v charge
+      obtain ⟨chargedStack, -⟩ := charge_effects charge
+      rw [accessDelegation_machine] at chargedStack
+      replace chargedStack : v.machine.stack = rest := by
+        rw [chargedStack]; cases ctx.block.rules.access <;> rfl
+      split at run
+      · split at run
+        · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+        · rename_i pushed hpush
+          obtain ⟨pushedStack, -⟩ := push_effects hpush
+          rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+          exact ⟨0, pushedStack.trans (congrArg _ chargedStack)⟩
+      · simp only [pure, Except.pure, MessageOp.Outcome.ofExcept] at run
+        obtain ⟨⟨flag, hs⟩, -⟩ := generic_call_runs_effects (state := none)
+          (reservoir := 0) (charged := false) (insufficient := false) run
+        exact ⟨flag, hs.trans (congrArg _ chargedStack)⟩
+  | some state =>
+    simp only [stateGas] at run
+    split at run
+    · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+    · split at run
+      · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+      · split at run
+        · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+        · rename_i v charge
+          obtain ⟨chargedStack, -⟩ := charge_effects charge
+          rw [completeDelegation_machine] at chargedStack
+          simp only [pure, Except.pure, MessageOp.Outcome.ofExcept] at run
+          obtain ⟨⟨flag, hs⟩, -⟩ := generic_call_runs_effects (state := some state) run
+          exact ⟨flag, hs.trans (congrArg _ chargedStack)⟩
 
 /-- Every DELEGATECALL run over the checked frame leaves the stack below its six operands
 unchanged and pushes one status word, on every fork: the DELEGATECALL counterpart of
@@ -377,7 +418,109 @@ theorem NextOp.delegatecall_run_stack {ctx : CallContext} {pre post : Frame.Stat
     (stack : pre.stack = gas :: target :: ii :: size :: oi :: os :: rest)
     (run : NextOp.Run ctx pre (.message .delegatecall) post) :
     ∃ flag, post.stack = flag :: rest := by
-  sorry
+  have run := outcomeRuns_of_run run
+  rcases pre with ⟨⟨operands, memory, gasLeft, stateGas, returnData⟩, world, substate, trail⟩
+  change operands = _ at stack
+  subst operands
+  simp only [MessageOp.step, bind, Except.bind, Frame.State.pop, Frame.State.popToNat,
+    Frame.State.popToAddress, Frame.State.liftMachineValue, Machine.popToNat,
+    Machine.popToAddress, Machine.pop, Frame.State.withMachine] at run
+  cases stateGas : ctx.block.rules.stateGas with
+  | none =>
+    simp only [stateGas] at run
+    split at run
+    · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+    · rename_i v charge
+      obtain ⟨chargedStack, -⟩ := charge_effects charge
+      rw [accessDelegation_machine] at chargedStack
+      replace chargedStack : v.machine.stack = rest := by
+        rw [chargedStack]; cases ctx.block.rules.access <;> rfl
+      simp only [pure, Except.pure, MessageOp.Outcome.ofExcept] at run
+      obtain ⟨⟨flag, hs⟩, -⟩ := generic_call_runs_effects (state := none)
+        (reservoir := 0) (charged := false) (insufficient := false) run
+      exact ⟨flag, hs.trans (congrArg _ chargedStack)⟩
+  | some state =>
+    simp only [stateGas] at run
+    split at run
+    · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+    · split at run
+      · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+      · split at run
+        · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+        · rename_i v charge
+          obtain ⟨chargedStack, -⟩ := charge_effects charge
+          rw [completeDelegation_machine] at chargedStack
+          simp only [pure, Except.pure, MessageOp.Outcome.ofExcept] at run
+          obtain ⟨⟨flag, hs⟩, -⟩ := generic_call_runs_effects (state := some state) run
+          exact ⟨flag, hs.trans (congrArg _ chargedStack)⟩
+
+/-- A creation tail that brings the creator to `post` pushes one word on the stack it was given:
+a refused or colliding creation pushes zero in place, a spawned child resumes the creator with
+its status. -/
+private theorem create_runs_stack {ctx : CallContext} {s post : Frame.State} {endowment : U256}
+    {newAddress : Address} {memoryIndex memorySize : Nat} (state : Option StateGasRules)
+    (h : OutcomeRuns ctx.block.rules (match state with
+      | none => prepareCreate.step ctx s endowment newAddress memoryIndex memorySize
+      | some state =>
+        prepareCreateAmsterdam.step ctx state s endowment newAddress memoryIndex memorySize)
+      post) :
+    ∃ w, post.stack = w :: s.stack := by
+  rcases h with h | ⟨child, pending, r, h, hr⟩
+  · cases state with
+    | none =>
+      simp only [prepareCreate.step, MessageOp.Outcome.ofExcept, bind, Except.bind, pure,
+        Except.pure] at h
+      split at h
+      · cases h
+      · rename_i hp
+        subst h
+        repeat' split at hp
+        all_goals
+          first
+          | (cases hp; done)
+          | (rename_i hpush; cases hp; exact ⟨0, (push_effects hpush).1⟩)
+    | some state =>
+      simp only [prepareCreateAmsterdam.step, MessageOp.Outcome.ofExcept, bind, Except.bind, pure,
+        Except.pure] at h
+      split at h
+      · cases h
+      · rename_i hp
+        subst h
+        repeat' split at hp
+        all_goals
+          first
+          | (cases hp; done)
+          | (rename_i hpush; cases hp; exact ⟨0, (push_effects hpush).1⟩)
+          | (rename_i hcharge _ _ _ hpush
+             cases hp
+             exact ⟨0, (push_effects hpush).1.trans (congrArg _ (chargeStateGas_effects hcharge).1)⟩)
+  · obtain ⟨hstack, -⟩ := resume_ok_effects hr
+    refine ⟨_, hstack.trans (congrArg _ ?_)⟩
+    cases state with
+    | none =>
+      simp only [prepareCreate.step, MessageOp.Outcome.ofExcept, bind, Except.bind, pure,
+        Except.pure] at h
+      split at h
+      · cases h
+      · rename_i hp
+        subst h
+        repeat' split at hp
+        all_goals first | (cases hp; done) | (cases hp; rfl)
+    | some state =>
+      simp only [prepareCreateAmsterdam.step, MessageOp.Outcome.ofExcept, bind, Except.bind, pure,
+        Except.pure] at h
+      split at h
+      · cases h
+      · rename_i hp
+        subst h
+        repeat' split at hp
+        all_goals
+          first
+          | (cases hp; done)
+          | (cases hp; rfl)
+          | (rename_i hcharge _
+             cases hp
+             exact (chargeStateGas_effects hcharge).1)
 
 /-- Every CREATE run over the checked frame leaves the stack below its three operands unchanged
 and pushes one word (the new address, or zero), on every fork: the CREATE counterpart of
@@ -386,7 +529,33 @@ theorem NextOp.create_run_stack {ctx : CallContext} {pre post : Frame.State}
     {endowment ii size : U256} {rest : List U256}
     (stack : pre.stack = endowment :: ii :: size :: rest)
     (run : NextOp.Run ctx pre (.message .create) post) : ∃ w, post.stack = w :: rest := by
-  sorry
+  have run := outcomeRuns_of_run run
+  rcases pre with ⟨⟨operands, memory, gasLeft, stateGas, returnData⟩, world, substate, trail⟩
+  change operands = _ at stack
+  subst operands
+  simp only [MessageOp.step, bind, Except.bind, Frame.State.pop, Frame.State.popToNat,
+    Frame.State.liftMachineValue, Machine.popToNat, Machine.pop, Frame.State.withMachine] at run
+  cases stateGas : ctx.block.rules.stateGas with
+  | none =>
+    simp only [stateGas] at run
+    split at run
+    · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+    · rename_i v charge
+      simp only [pure, Except.pure, MessageOp.Outcome.ofExcept] at run
+      obtain ⟨w, hs⟩ := create_runs_stack (state := none) run
+      exact ⟨w, hs.trans (congrArg _ (charge_effects charge).1)⟩
+  | some state =>
+    simp only [stateGas] at run
+    split at run
+    · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+    · split at run
+      · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+      · rename_i v charge
+        split at run
+        · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+        · simp only [pure, Except.pure, MessageOp.Outcome.ofExcept] at run
+          obtain ⟨w, hs⟩ := create_runs_stack (state := some state) run
+          exact ⟨w, hs.trans (congrArg _ (charge_effects charge).1)⟩
 
 /-- Every CREATE2 run over the checked frame leaves the stack below its four operands unchanged
 and pushes one word (the new address, or zero), on every fork: the CREATE2 counterpart of
@@ -395,6 +564,34 @@ theorem NextOp.create2_run_stack {ctx : CallContext} {pre post : Frame.State}
     {endowment ii size salt : U256} {rest : List U256}
     (stack : pre.stack = endowment :: ii :: size :: salt :: rest)
     (run : NextOp.Run ctx pre (.message .create2) post) : ∃ w, post.stack = w :: rest := by
-  sorry
+  have run := outcomeRuns_of_run run
+  rcases pre with ⟨⟨operands, memory, gasLeft, stateGas, returnData⟩, world, substate, trail⟩
+  change operands = _ at stack
+  subst operands
+  simp only [MessageOp.step, bind, Except.bind, Frame.State.pop, Frame.State.popToNat,
+    Frame.State.liftMachineValue, Machine.popToNat, Machine.pop, Frame.State.withMachine] at run
+  split at run
+  on_goal 2 => rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+  cases stateGas : ctx.block.rules.stateGas with
+  | none =>
+    simp only [stateGas] at run
+    split at run
+    · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+    · rename_i v charge
+      simp only [pure, Except.pure, MessageOp.Outcome.ofExcept] at run
+      obtain ⟨w, hs⟩ := create_runs_stack (state := none) run
+      exact ⟨w, hs.trans (congrArg _ (charge_effects charge).1)⟩
+  | some state =>
+    simp only [stateGas] at run
+    split at run
+    · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+    · split at run
+      · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+      · rename_i v charge
+        split at run
+        · rcases run with h | ⟨_, _, _, h, _⟩ <;> cases h
+        · simp only [pure, Except.pure, MessageOp.Outcome.ofExcept] at run
+          obtain ⟨w, hs⟩ := create_runs_stack (state := some state) run
+          exact ⟨w, hs.trans (congrArg _ (charge_effects charge).1)⟩
 
 end Jaune
