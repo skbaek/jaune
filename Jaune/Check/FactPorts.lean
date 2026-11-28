@@ -5,6 +5,7 @@ import Jaune.MessageCall.NativePrecompile
 import Jaune.MessageCall.MessageExecution
 import Jaune.MessageCall.AccountWriteFacts
 import Jaune.Run.PrepareFacts
+import Jaune.SignedWord
 
 /-! Axiom audit for the jsn-u97 fact ports (the KECCAK256 reference digest, the STATICCALL run
 effects and native entry, and the message-execution entry and outcome forms over the checked
@@ -41,3 +42,47 @@ frame): each module's constants reach only the three standard axioms. -/
 #expect_axioms Jaune.State.Protected.creditBeneficiary [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.Frame.State.creditBeneficiary_storage_of_protected [Classical.choice, Quot.sound, propext]
 #expect_axioms Jaune.TopLevel.prepare_kindCoherent [Classical.choice, Quot.sound, propext]
+
+-- The number meaning of the bit and signed word operations (`jaune-word-bridge`): every public
+-- fact of the two modules, each at the set its build reports.
+#union_axioms_of_modules Jaune.WordBits
+#union_axioms_of_modules Jaune.SignedWord
+#expect_axioms Jaune.U128.toNat_and [Quot.sound, propext]
+#expect_axioms Jaune.U128.toNat_or [Quot.sound, propext]
+#expect_axioms Jaune.U128.toNat_xor [Quot.sound, propext]
+#expect_axioms Jaune.U128.toNat_complement [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_and [Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_or [Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_xor [Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_complement [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U128.toNat_shiftRight [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U128.toNat_shiftLeft [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_shiftRight [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_shiftLeft [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.shiftRight_eq_zero_of_le [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.shiftLeft_eq_zero_of_le [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.UInt8.toNat_toU256 [Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_getD_toBytes [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_toU256_getD_toBytes [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Nat.two_pow_sub_two_pow_eq_shiftLeft [propext]
+#expect_axioms Jaune.U256.toNat_max_shiftLeft [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_max_shiftRight [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.Nat.two_pow_sub_two_pow_or [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_signextend [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toInt_lt [Quot.sound, propext]
+#expect_axioms Jaune.U256.le_toInt [Quot.sound, propext]
+#expect_axioms Jaune.U256.isNegative_eq_true_iff [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.isNegative_eq_true_iff_toInt_neg [Classical.choice,
+ Quot.sound,
+ propext]
+#expect_axioms Jaune.U256.signedLt_iff_toInt_lt [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.signedGt_iff_toInt_lt [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.sltCheck_ne_zero_iff [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.sltCheck_eq_zero_iff [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.sgtCheck_ne_zero_iff [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.sgtCheck_eq_zero_iff [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toNat_arithmeticShiftRight [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toInt_arithmeticShiftRight [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toInt_signextend [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toInt_sdiv [Classical.choice, Quot.sound, propext]
+#expect_axioms Jaune.U256.toInt_smod [Classical.choice, Quot.sound, propext]
